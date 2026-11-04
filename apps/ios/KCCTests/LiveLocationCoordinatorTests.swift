@@ -260,6 +260,8 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         XCTAssertEqual(repository.startedDurations, [.sixHours])
         XCTAssertEqual(repository.startedVehicleIds, [nil])
         XCTAssertEqual(coordinator.actionStatus, .idle)
+        // Wait for an active session snapshot before disabling auto-lock.
+        XCTAssertFalse(coordinator.keepsScreenAwake)
     }
 
     @MainActor
@@ -295,12 +297,50 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())
         coordinator.start()
         XCTAssertFalse(coordinator.isSharing)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
 
         repository.emitSession(activeSession())
         await waitUntil { coordinator.isSharing }
+        XCTAssertTrue(coordinator.keepsScreenAwake)
 
         repository.emitSession(nil)
         await waitUntil { !coordinator.isSharing }
+        XCTAssertFalse(coordinator.keepsScreenAwake)
+    }
+
+    @MainActor
+    func testRestoredSessionKeepsScreenAwakeWithoutFixesOrStartFeatureFlag() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider, canShare: false)
+        coordinator.start()
+        defer { coordinator.shutdown() }
+
+        // A restored session must work without a local Start tap or GPS fix.
+        repository.emitSession(activeSession())
+        await waitUntil { coordinator.keepsScreenAwake }
+        XCTAssertTrue(repository.startedDurations.isEmpty)
+        XCTAssertTrue(repository.publishedCoordinates.isEmpty)
+    }
+
+    @MainActor
+    func testTerminalSnapshotsReleaseScreenAwakeDemand() async {
+        let terminalSessions: [LiveSessionInfo?] = [
+            nil,
+            LiveSessionInfo(sessionId: "session-1", status: .stopped, duration: .sixHours, expiresAt: nil),
+            LiveSessionInfo(sessionId: "session-1", status: .expired, duration: .sixHours, expiresAt: nil)
+        ]
+        for terminalSession in terminalSessions {
+            let repository = FakeLiveLocationRepository()
+            let coordinator = makeCoordinator(repository: repository, provider: StubLocationProvider())
+            coordinator.start()
+            repository.emitSession(activeSession())
+            await waitUntil { coordinator.keepsScreenAwake }
+
+            repository.emitSession(terminalSession)
+            await waitUntil { !coordinator.keepsScreenAwake }
+            coordinator.shutdown()
+        }
     }
 
     @MainActor
@@ -316,6 +356,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(result, .success)
         XCTAssertEqual(repository.stopCount, 1)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
         // The stream is torn down BEFORE the callable resolves server-side —
         // the GPS must not wait for the session echo.
         await waitUntil { provider.activeFixStreamCount == 0 }
@@ -332,6 +373,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         coordinator.standDownForRestrictedAccess()
 
+        XCTAssertFalse(coordinator.keepsScreenAwake)
         await waitUntil { provider.activeFixStreamCount == 0 }
         XCTAssertFalse(coordinator.canShare)
         let result = await coordinator.hideMeNow()
@@ -366,10 +408,12 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         coordinator.shutdown()
 
+        XCTAssertFalse(coordinator.keepsScreenAwake)
         await waitUntil { provider.activeFixStreamCount == 0 }
         repository.emitSession(activeSession(id: "session-after-sign-out"))
         await Task.yield()
         XCTAssertEqual(provider.activeFixStreamCount, 0)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
     }
 
     @MainActor
@@ -491,6 +535,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         clock.advance(by: 120)
 
         await waitUntil { provider.activeFixStreamCount == 0 }
+        XCTAssertFalse(coordinator.keepsScreenAwake)
         XCTAssertTrue(repository.publishedCoordinates.isEmpty)
         XCTAssertNil(coordinator.readout.startedAt)
     }
@@ -632,6 +677,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(result, .success)
         XCTAssertEqual(repository.hideCount, 1)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
         await waitUntil { provider.activeFixStreamCount == 0 }
     }
 
@@ -648,6 +694,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         let result = await coordinator.hideMeNow()
 
         XCTAssertEqual(result, .failed)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
         await waitUntil { provider.activeFixStreamCount == 0 }
         repository.emitSession(nil)
         repository.emitSession(activeSession())
@@ -669,15 +716,18 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(result, .failed)
         XCTAssertEqual(coordinator.actionStatus, .failed)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
         // A stop tap is a local privacy boundary even if the callable fails.
         // Re-emitting the same active backend session must not restart GPS.
         repository.emitSession(activeSession())
         await Task.yield()
         XCTAssertEqual(provider.activeFixStreamCount, 0)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
 
         // A genuinely new session gets fresh user intent and may publish.
         repository.emitSession(activeSession(id: "session-2"))
         await waitUntil { provider.activeFixStreamCount == 1 }
+        XCTAssertTrue(coordinator.keepsScreenAwake)
 
         coordinator.reset()
         XCTAssertEqual(coordinator.actionStatus, .idle)
@@ -699,6 +749,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(result, .failed)
         XCTAssertEqual(coordinator.actionStatus, .failed)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
     }
 
     @MainActor
