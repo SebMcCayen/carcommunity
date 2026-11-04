@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ANR_ISSUE_LABEL,
   CRASH_ISSUE_LABEL,
+  IOS_CRASH_ISSUE_LABEL,
   CRASHLYTICS_ISSUE_LINKS_COLLECTION,
   MAX_ISSUE_TITLE_LENGTH,
   REGRESSION_ISSUE_LABEL,
@@ -21,8 +22,11 @@ const FIXED_TS = 'TS';
 const ts = () => FIXED_TS;
 const META = { firstSeenIso: '2026-08-06T00:00:00.000Z', count: 3 };
 const APP_ID = '1:1234567890:android:abcdef';
+const IOS_APP_ID = '1:1234567890:ios:abcdef';
 
-function fatalPayload(overrides: Partial<CrashAlertPayloadLike['issue']> = {}): CrashAlertPayloadLike {
+function fatalPayload(
+  overrides: Partial<CrashAlertPayloadLike['issue']> = {},
+): CrashAlertPayloadLike {
   return {
     issue: {
       id: 'abc123',
@@ -39,6 +43,7 @@ describe('normalizeCrashAlert', () => {
     const alert = normalizeCrashAlert('fatal', fatalPayload(), APP_ID, 'my-project');
     expect(alert).not.toBeNull();
     expect(alert?.kind).toBe('fatal');
+    expect(alert?.platform).toBe('android');
     expect(alert?.issueId).toBe('abc123');
     expect(alert?.title).toBe('NullPointerException in FooActivity.onCreate');
     expect(alert?.subtitle).toBe('FooActivity.kt line 42');
@@ -142,13 +147,13 @@ describe('crashlyticsIssueDeepLink', () => {
 
 describe('fatal-vs-ANR-vs-regression branching', () => {
   it('labels fatal crashes with android-crash + auto-generated', () => {
-    expect(crashIssueLabels('fatal')).toEqual([CRASH_ISSUE_LABEL, AUTO_GENERATED_LABEL]);
+    expect(crashIssueLabels('fatal', 'android')).toEqual([CRASH_ISSUE_LABEL, AUTO_GENERATED_LABEL]);
   });
   it('labels ANRs with anr + auto-generated', () => {
-    expect(crashIssueLabels('anr')).toEqual([ANR_ISSUE_LABEL, AUTO_GENERATED_LABEL]);
+    expect(crashIssueLabels('anr', 'android')).toEqual([ANR_ISSUE_LABEL, AUTO_GENERATED_LABEL]);
   });
   it('labels regressions with android-crash + regression + auto-generated', () => {
-    expect(crashIssueLabels('regression')).toEqual([
+    expect(crashIssueLabels('regression', 'android')).toEqual([
       CRASH_ISSUE_LABEL,
       REGRESSION_ISSUE_LABEL,
       AUTO_GENERATED_LABEL,
@@ -178,16 +183,19 @@ describe('fatal-vs-ANR-vs-regression branching', () => {
     expect(body).toContain('Last resolved before re-emerging');
     expect(body).toContain('2026-01-01T00:00:00Z');
 
-    const fatalBody = buildCrashIssueBody(normalizeCrashAlert('fatal', fatalPayload(), APP_ID)!, META);
+    const fatalBody = buildCrashIssueBody(
+      normalizeCrashAlert('fatal', fatalPayload(), APP_ID)!,
+      META,
+    );
     expect(fatalBody).not.toContain('Last resolved before re-emerging');
   });
 });
 
 describe('buildCrashIssueTitle', () => {
   it('uses title, then subtitle, then issue id as the summary', () => {
-    expect(
-      buildCrashIssueTitle(normalizeCrashAlert('fatal', fatalPayload(), APP_ID)!),
-    ).toContain('NullPointerException in FooActivity.onCreate');
+    expect(buildCrashIssueTitle(normalizeCrashAlert('fatal', fatalPayload(), APP_ID)!)).toContain(
+      'NullPointerException in FooActivity.onCreate',
+    );
     expect(
       buildCrashIssueTitle(
         normalizeCrashAlert('fatal', { issue: { id: 'i', subtitle: 'sub only' } }, APP_ID)!,
@@ -200,7 +208,11 @@ describe('buildCrashIssueTitle', () => {
 
   it('collapses a long multi-line summary to a single line bounded under GitHub cap', () => {
     const longSubtitle = ('line-a\nline-b\t' + 'x'.repeat(600)).slice(0, 600);
-    const alert = normalizeCrashAlert('regression', { issue: { id: 'i', subtitle: longSubtitle } }, APP_ID)!;
+    const alert = normalizeCrashAlert(
+      'regression',
+      { issue: { id: 'i', subtitle: longSubtitle } },
+      APP_ID,
+    )!;
     const title = buildCrashIssueTitle(alert);
     expect(title.length).toBeLessThanOrEqual(MAX_ISSUE_TITLE_LENGTH);
     expect(title).not.toMatch(/[\n\t]/);
@@ -209,7 +221,11 @@ describe('buildCrashIssueTitle', () => {
   });
 
   it('defangs @mentions and #refs in the title', () => {
-    const alert = normalizeCrashAlert('fatal', { issue: { id: 'i', title: '@maintainer #1' } }, APP_ID)!;
+    const alert = normalizeCrashAlert(
+      'fatal',
+      { issue: { id: 'i', title: '@maintainer #1' } },
+      APP_ID,
+    )!;
     const title = buildCrashIssueTitle(alert);
     expect(title).not.toMatch(/@maintainer/);
     expect(title).toContain('​');
@@ -217,7 +233,10 @@ describe('buildCrashIssueTitle', () => {
 });
 
 describe('buildCrashIssueBody', () => {
-  const body = buildCrashIssueBody(normalizeCrashAlert('fatal', fatalPayload(), APP_ID, 'p')!, META);
+  const body = buildCrashIssueBody(
+    normalizeCrashAlert('fatal', fatalPayload(), APP_ID, 'p')!,
+    META,
+  );
 
   it('is honest that the full stack trace is not in the payload', () => {
     expect(body).toContain('NOT in the Crashlytics alert payload');
@@ -232,7 +251,10 @@ describe('buildCrashIssueBody', () => {
     expect(body).toContain(`Occurrences (seen by this bridge): ${META.count}`);
   });
   it('renders unknown for absent optional fields', () => {
-    const sparse = buildCrashIssueBody(normalizeCrashAlert('fatal', { issue: { id: 'i' } }, APP_ID)!, META);
+    const sparse = buildCrashIssueBody(
+      normalizeCrashAlert('fatal', { issue: { id: 'i' } }, APP_ID)!,
+      META,
+    );
     expect(sparse).toContain('- Subtitle: unknown');
     expect(sparse).toContain('- App version: unknown');
   });
@@ -240,10 +262,60 @@ describe('buildCrashIssueBody', () => {
 
 describe('buildCrashIssuePayload', () => {
   it('assembles title + body + per-kind labels', () => {
-    const payload = buildCrashIssuePayload(normalizeCrashAlert('anr', fatalPayload(), APP_ID)!, META);
+    const payload = buildCrashIssuePayload(
+      normalizeCrashAlert('anr', fatalPayload(), APP_ID)!,
+      META,
+    );
     expect(payload.title).toMatch(/^\[ANR\] /);
     expect(payload.labels).toEqual([ANR_ISSUE_LABEL, AUTO_GENERATED_LABEL]);
     expect(payload.body).toContain('abc123');
+  });
+
+  it.each(['fatal', 'regression'] as const)('labels an iOS %s from the event app id', (kind) => {
+    const alert = normalizeCrashAlert(kind, fatalPayload(), IOS_APP_ID)!;
+    const payload = buildCrashIssuePayload(alert, META);
+    expect(alert.platform).toBe('ios');
+    expect(payload.labels).toEqual([
+      IOS_CRASH_ISSUE_LABEL,
+      ...(kind === 'regression' ? [REGRESSION_ISSUE_LABEL] : []),
+      AUTO_GENERATED_LABEL,
+    ]);
+    expect(payload.labels).not.toContain(CRASH_ISSUE_LABEL);
+    expect(payload.body).toContain('- Platform: ios');
+    expect(payload.body).toContain(`/app/${IOS_APP_ID}/issues/abc123`);
+    expect(buildNewCrashIssueLink(alert, ts).issueId).toBe('abc123');
+  });
+
+  it.each([
+    undefined,
+    null,
+    '',
+    'unknown',
+    '1:1234567890:web:abcdef',
+    'prefix:1:1234567890:ios:abcdef',
+    '1:1234567890:ios:abcdef:extra',
+    '1:project:ios:abcdef',
+    '1:1234567890:ios:',
+    '1:1234567890:android:abc/def',
+  ])('keeps an unknown app id (%s) out of platform crash labels', (appId) => {
+    for (const kind of ['fatal', 'regression'] as const) {
+      const alert = normalizeCrashAlert(kind, fatalPayload({ title: 'ios android-crash' }), appId)!;
+      const payload = buildCrashIssuePayload(alert, META);
+      expect(alert.platform).toBe('unknown');
+      expect(payload.labels).toEqual([
+        ...(kind === 'regression' ? [REGRESSION_ISSUE_LABEL] : []),
+        AUTO_GENERATED_LABEL,
+      ]);
+      expect(payload.body).toContain('- Platform: unknown');
+    }
+  });
+
+  it.each([APP_ID, IOS_APP_ID, undefined])('preserves ANR labels for app id %s', (appId) => {
+    const alert = normalizeCrashAlert('anr', fatalPayload(), appId)!;
+    expect(buildCrashIssuePayload(alert, META).labels).toEqual([
+      ANR_ISSUE_LABEL,
+      AUTO_GENERATED_LABEL,
+    ]);
   });
 });
 
