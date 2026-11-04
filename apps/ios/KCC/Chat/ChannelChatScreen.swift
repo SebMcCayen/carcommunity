@@ -84,7 +84,8 @@ struct ChannelChatScreen: View {
             ForEach(coordinator.messages) { message in
                 MessageRow(
                     message: message,
-                    isOwn: message.senderUid == coordinator.currentUserId
+                    isOwn: message.senderUid == coordinator.currentUserId,
+                    coordinator: coordinator
                 )
                 .id(message.id)
                 .contextMenu { messageActions(message, coordinator: coordinator) }
@@ -259,17 +260,18 @@ struct ChannelComposer: View {
 struct MessageRow: View {
     let message: ChannelMessage
     let isOwn: Bool
+    let coordinator: ChannelChatCoordinator?
+
+    init(message: ChannelMessage, isOwn: Bool, coordinator: ChannelChatCoordinator? = nil) {
+        self.message = message
+        self.isOwn = isOwn
+        self.coordinator = coordinator
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: KccSpacing.s3) {
             if !isOwn {
-                // No per-message Storage lookup: use the native fallback until
-                // an authorized, resolved avatar is supplied by the data layer.
-                Image(systemName: "person.fill")
-                    .foregroundStyle(KccTheme.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(KccTheme.subtle, in: Circle())
-                    .accessibilityHidden(true)
+                ChannelSenderAvatar(avatarPath: message.senderAvatarPath, coordinator: coordinator)
             }
             VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
                 if !isOwn {
@@ -328,6 +330,35 @@ struct MessageRow: View {
         case .invalid: return "dm.sendErrorInvalid"
         case .cannotDeliver: return "dm.sendErrorCannotDeliver"
         case .generic, .none: return "dm.statusFailedRetry"
+        }
+    }
+}
+
+/// Resolve only visible incoming avatars, using the channel's shared URL cache.
+private struct ChannelSenderAvatar: View {
+    let avatarPath: String?
+    let coordinator: ChannelChatCoordinator?
+    @State private var url: URL?
+
+    var body: some View {
+        AsyncImage(url: url) { phase in
+            if let image = phase.image {
+                image.resizable().scaledToFill()
+            } else {
+                Image(systemName: "person.fill")
+                    .foregroundStyle(KccTheme.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(KccTheme.subtle)
+            }
+        }
+        .frame(width: 32, height: 32)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+        .task(id: avatarPath) {
+            url = nil
+            let resolved = await coordinator?.avatarURL(for: avatarPath)
+            guard !Task.isCancelled else { return }
+            url = resolved
         }
     }
 }

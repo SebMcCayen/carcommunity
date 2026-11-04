@@ -43,6 +43,10 @@ protocol ConvoyChatRepository: AnyObject, Sendable {
     /// the convoy repo so ``ConvoyChatScreen`` stays self-contained.
     func report(convoyId: String, messageId: String, reason: ChatReportReason) async -> ChannelReportResult
 
+    /// Resolves the server-stamped sender avatar through authenticated Storage.
+    /// Missing or inaccessible images return nil so the row keeps its fallback.
+    func avatarDownloadURL(for avatarPath: String) async -> URL?
+
     /// The signed-in user's uid, or nil with no session.
     func currentUserId() -> String?
 }

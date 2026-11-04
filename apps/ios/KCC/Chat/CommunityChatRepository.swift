@@ -43,6 +43,10 @@ protocol CommunityChatRepository: AnyObject, Sendable {
     /// `report`.
     func report(messageId: String, reason: ChatReportReason) async -> ChannelReportResult
 
+    /// Resolves the server-stamped sender avatar through authenticated Storage.
+    /// Missing or inaccessible images return nil so the row keeps its fallback.
+    func avatarDownloadURL(for avatarPath: String) async -> URL?
+
     /// The signed-in user's uid, or nil with no session — the Firebase seam owns
     /// identity so coordinators stay Firebase-free (as in ``EventsRepository``).
     func currentUserId() -> String?

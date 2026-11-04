@@ -21,6 +21,25 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         private var olderGated = false
         private var olderGateContinuation: CheckedContinuation<Void, Never>?
 
+        private var avatarRequests: [String] = []
+        private var avatarResult: URL?
+        private var avatarGated = false
+        private var avatarGates: [CheckedContinuation<Void, Never>] = []
+        var requestedAvatars: [String] { lock.withLock { avatarRequests } }
+
+        func scriptAvatar(_ result: URL?, gated: Bool = false) {
+            lock.withLock { avatarResult = result; avatarGated = gated }
+        }
+        func releaseAvatar() {
+            let continuations = lock.withLock {
+                let current = avatarGates
+                avatarGates = []
+                avatarGated = false
+                return current
+            }
+            for continuation in continuations { continuation.resume() }
+        }
+
         let uid: String?
         private(set) var subscribeCount = 0
         private(set) var markReadCount = 0
@@ -86,7 +105,81 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         }
         func markRead() async { lock.withLock { markReadCount += 1 } }
         func report(messageId: String, reason: ChatReportReason) async -> ChannelReportResult { .reported }
+        func avatarDownloadURL(for avatarPath: String) async -> URL? {
+            await withCheckedContinuation { continuation in
+                let gated = lock.withLock {
+                    avatarRequests.append(avatarPath)
+                    if avatarGated { avatarGates.append(continuation) }
+                    return avatarGated
+                }
+                if !gated { continuation.resume() }
+            }
+            return lock.withLock { avatarResult }
+        }
         func currentUserId() -> String? { uid }
+    }
+
+    // MARK: - Sender avatars
+
+    @MainActor
+    func testMissingAvatarDoesNotReadStorage() async {
+        let source = FakeChatSource()
+        let coordinator = ChannelChatCoordinator(source: source)
+        let missing = await coordinator.avatarURL(for: nil)
+        let blank = await coordinator.avatarURL(for: "  ")
+        XCTAssertNil(missing)
+        XCTAssertNil(blank)
+        XCTAssertTrue(source.requestedAvatars.isEmpty)
+    }
+
+    @MainActor
+    func testRepeatedAndConcurrentRowsShareOneAvatarResolution() async {
+        let source = FakeChatSource()
+        let url = URL(string: "https://example.invalid/avatar.jpg")!
+        source.scriptAvatar(url, gated: true)
+        let coordinator = ChannelChatCoordinator(source: source)
+        let first = Task { await coordinator.avatarURL(for: "profileImages/member/photo.jpg") }
+        await waitUntil { source.requestedAvatars.count == 1 }
+        let second = Task { await coordinator.avatarURL(for: "profileImages/member/photo.jpg") }
+        // Keep the Storage request suspended while another row asks for it.
+        await Task.yield()
+        source.releaseAvatar()
+        let firstURL = await first.value
+        let secondURL = await second.value
+        let repeated = await coordinator.avatarURL(for: "profileImages/member/photo.jpg")
+        XCTAssertEqual(firstURL, url)
+        XCTAssertEqual(secondURL, url)
+        XCTAssertEqual(repeated, url)
+        XCTAssertEqual(source.requestedAvatars, ["profileImages/member/photo.jpg"])
+    }
+
+    @MainActor
+    func testUnavailableAvatarKeepsFallbackAndCanRetryAfterReload() async {
+        let source = FakeChatSource()
+        let coordinator = ChannelChatCoordinator(source: source)
+        let failed = await coordinator.avatarURL(for: "profileImages/member/photo.jpg")
+        let repeated = await coordinator.avatarURL(for: "profileImages/member/photo.jpg")
+        XCTAssertNil(failed)
+        XCTAssertNil(repeated)
+        XCTAssertEqual(source.requestedAvatars.count, 1)
+        let url = URL(string: "https://example.invalid/recovered.jpg")!
+        source.scriptAvatar(url)
+        coordinator.reload()
+        let recovered = await coordinator.avatarURL(for: "profileImages/member/photo.jpg")
+        XCTAssertEqual(recovered, url)
+        XCTAssertEqual(source.requestedAvatars.count, 2)
+    }
+
+    @MainActor
+    func testChangedAvatarPathResolvesIndependentlyOfOldFailure() async {
+        let source = FakeChatSource()
+        let coordinator = ChannelChatCoordinator(source: source)
+        _ = await coordinator.avatarURL(for: "profileImages/member/old.jpg")
+        let url = URL(string: "https://example.invalid/new.jpg")!
+        source.scriptAvatar(url)
+        let changed = await coordinator.avatarURL(for: "profileImages/member/new.jpg")
+        XCTAssertEqual(changed, url)
+        XCTAssertEqual(source.requestedAvatars, ["profileImages/member/old.jpg", "profileImages/member/new.jpg"])
     }
 
     // MARK: - Helpers
