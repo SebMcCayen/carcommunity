@@ -61,6 +61,32 @@ class ClubPageStructureTest {
         return results
     }
 
+    @Test fun pendingInvitationsShowDatesAndRequireConfirmationBeforeRevocation() {
+        val repo = ClubPageTestRepository()
+        show(repo)
+        compose.onNodeWithText(text(R.string.clubs_pendingInvitations)).performScrollTo().performClick()
+        compose.onNodeWithText("Invited Friend").assertIsDisplayed()
+        val sentDate = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
+            .format(java.util.Date(clubInstant("2026-11-01T10:00:00.000Z")!!))
+        compose.onNodeWithText(compose.activity.getString(R.string.clubs_invitedAt, sentDate)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.clubs_revokeInvitation)).performClick()
+        compose.onNodeWithText(text(R.string.clubs_cancel)).performClick()
+        compose.runOnIdle { assertTrue(repo.mutations.isEmpty()) }
+        compose.onNodeWithText(text(R.string.clubs_revokeInvitation)).performClick()
+        compose.onNodeWithTag("club-invitation-confirm-revoke").performClick()
+        compose.waitUntil(5_000) { compose.runOnIdle { repo.mutations.size == 1 } }
+        compose.runOnIdle {
+            assertEquals("revokeInvitation", repo.mutations.single().action)
+            assertEquals(mapOf("clubId" to "club", "targetUid" to "invitee", "createdAt" to "2026-11-01T10:00:00.000Z"), repo.mutations.single().fields)
+        }
+        compose.onNodeWithText(text(R.string.clubs_noPendingInvitations)).assertIsDisplayed()
+    }
+
+    @Test fun ordinaryMemberCannotOpenSentInvitations() {
+        show(ClubPageTestRepository(role = ClubRole.Member))
+        compose.onNodeWithText(text(R.string.clubs_pendingInvitations)).assertDoesNotExist()
+    }
+
     @Test fun nameAndAvatarTapNavigateThroughActualRouteCallbackWithRecipientUid() {
         show(ClubPageTestRepository())
         compose.onNodeWithText("Robin Andersson", useUnmergedTree = true).performScrollTo().performTouchInput { click() }
@@ -228,6 +254,10 @@ private class ClubPageTestRepository(role: ClubRole = ClubRole.Owner, moderatorC
     override suspend fun directory(cursor: String?) = ClubPage<Club>(emptyList(), null)
     override suspend fun get(clubId: String) = club
     override suspend fun members(clubId: String, cursor: String?): ClubPage<ClubMember> { memberLoads++; return ClubPage(roster, null) }
+    override suspend fun sentInvitations(clubId: String, cursor: String?): ClubPage<SentClubInvitation> =
+        ClubPage(if (mutations.any { it.action == "revokeInvitation" }) emptyList() else listOf(
+            SentClubInvitation("invitee", "Invited Friend", "2026-11-01T10:00:00.000Z", "2099-11-08T10:00:00.000Z")
+        ), null)
     override suspend fun events(clubId: String, cursor: String?) = ClubPage<ClubEvent>(emptyList(), null)
     override suspend fun manage(action: String, fields: Map<String, Any?>, operationId: String): Map<String, Any?> {
         mutations += ClubPageTestMutation(action, fields, operationId)

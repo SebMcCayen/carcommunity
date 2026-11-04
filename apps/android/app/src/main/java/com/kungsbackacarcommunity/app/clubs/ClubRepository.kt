@@ -13,6 +13,8 @@ interface ClubRepository {
     suspend fun state(): ClubState
     suspend fun get(clubId: String): Club
     suspend fun members(clubId: String, cursor: String? = null): ClubPage<ClubMember>
+    suspend fun sentInvitations(clubId: String, cursor: String? = null): ClubPage<SentClubInvitation> =
+        throw ClubException("unavailable")
     /** Optional asynchronous public-avatar overlay, bounded to one 25-member roster page. */
     suspend fun memberAvatars(clubId: String, uids: Set<String>): Map<String, ClubMemberAvatar> = emptyMap()
     suspend fun manage(action: String, fields: Map<String, Any?> = emptyMap(), operationId: String): Map<String, Any?>

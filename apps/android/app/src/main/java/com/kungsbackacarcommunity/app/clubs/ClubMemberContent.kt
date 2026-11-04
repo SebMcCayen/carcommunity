@@ -29,6 +29,7 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     var error by remember { mutableStateOf<Throwable?>(null) }
     var edit by remember { mutableStateOf(false) }
     var invite by remember { mutableStateOf(false) }
+    var sentInvitations by remember { mutableStateOf(false) }
     var disband by remember { mutableStateOf(false) }
     var confirmation by remember { mutableStateOf<Pair<ClubMemberAction, ClubMember>?>(null) }
     val scope = rememberCoroutineScope()
@@ -74,8 +75,11 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     ClubStatistics(club.stats)
     ClubCalendar(repository, club.id, membership.role.managesMembers, onOpenEvent)
     Text(stringResource(R.string.clubs_members), style = MaterialTheme.typography.titleMedium)
-    if (membership.role.managesMembers && club.visibility == "closed") {
-        OutlinedButton(onClick = { invite = true }, enabled = !busy) { Text(stringResource(R.string.clubs_invite)) }
+    if (membership.role.managesMembers) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (club.visibility == "closed") OutlinedButton(onClick = { invite = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.clubs_invite)) }
+            OutlinedButton(onClick = { sentInvitations = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.clubs_pendingInvitations)) }
+        }
     }
     if (loadingMembers && members.items.isEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
     else if (members.items.isEmpty()) {
@@ -114,6 +118,7 @@ internal fun ClubMemberContent(uid: String, club: Club, membership: ClubMembersh
     }
     if (edit) ClubEditor(club, busy, { edit = false }, error = error) { fields -> action("update", fields) { edit = false } }
     if (invite) ClubInviteDialog(busy, { invite = false }) { target -> action("invite", mapOf("targetUid" to target)) { invite = false } }
+    if (sentInvitations) ClubSentInvitationsDialog(club.id, repository) { sentInvitations = false }
     if (disband) AlertDialog(onDismissRequest = { disband = false }, title = { Text(stringResource(R.string.clubs_disband)) },
         text = { Text(stringResource(R.string.clubs_disbandConfirm)) }, confirmButton = { TextButton(onClick = { disband = false; action("disband") }, enabled = !busy) { Text(stringResource(R.string.clubs_confirm)) } },
         dismissButton = { TextButton(onClick = { disband = false }) { Text(stringResource(R.string.clubs_cancel)) } })

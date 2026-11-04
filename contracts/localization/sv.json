@@ -2302,7 +2302,13 @@
     "invalidForm": "Ange namn (3–60 tecken), presentation (10–500) och ort (2–80).",
     "logoError": "Bilden kunde inte förberedas. Välj en annan bild.",
     "reportConfirm": "Skicka en rapport om detta meddelande till administratörerna?",
-    "noAttending": "Inga klubbar anmälda ännu."
+    "noAttending": "Inga klubbar anmälda ännu.",
+    "pendingInvitations": "Väntande inbjudningar",
+    "noPendingInvitations": "Inga väntande inbjudningar.",
+    "invitedAt": "Inbjuden %1$s",
+    "revokeInvitation": "Dra tillbaka inbjudan",
+    "revokeInvitationConfirm": "Vill du dra tillbaka inbjudan till %1$s?",
+    "refreshInvitations": "Uppdatera"
   },
   "accountWarnings": {
     "title": "Varningar från administratör",
