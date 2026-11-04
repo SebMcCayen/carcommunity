@@ -2174,7 +2174,10 @@
     "release010Build9Chat": "Chattens extra rubrik är borttagen. Bakåtpilen vid Gemenskap tar dig till kartan.",
     "release010Build9Live": "Livefältet visar tid, aktuell hastighet och körd sträcka. Tryck på fältet för fler kontroller. Stoppknappen visar bara en ikon.",
     "release010Build9Profiles": "Öppna medlemsprofilen med Besök profil när du väljer en liveförare på kartan.",
-    "release010Build9Map": "Mapboxs logga och informationsknapp ligger nu till vänster och flyttas undan från livefältet."
+    "release010Build9Map": "Mapboxs logga och informationsknapp ligger nu till vänster och flyttas undan från livefältet.",
+    "release010Build10Highlight": "En renare karta efter livekörning.",
+    "release010Build10Drives": "Mina körningar finns kvar under Profil, utan en extra knapp på kartan efter en livesession.",
+    "release010Build10Create": "Plusknappen visar nu bara sin ikon."
   },
   "driver": {
     "feed": {

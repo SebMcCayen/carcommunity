@@ -36194,6 +36194,57 @@
         }
       }
     },
+    "whatsNew.release010Build10Create": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plusknappen visar nu bara sin ikon."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plus button now shows only its icon."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build10Drives": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mina körningar finns kvar under Profil, utan en extra knapp på kartan efter en livesession."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My drives stays in the Profile menu, without an extra button appearing on the map after a live session."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build10Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En renare karta efter livekörning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A cleaner map after live driving."
+          }
+        }
+      }
+    },
     "whatsNew.release010Build2Highlight": {
       "extractionState": "manual",
       "localizations": {
