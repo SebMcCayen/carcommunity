@@ -2,14 +2,14 @@ import FirebaseAuth
 import FirebaseFirestore
 import Foundation
 
-/// Public club presentation and the authenticated owner's membership state.
-/// No private roster/chat/history is downloaded or cached by this surface.
+/// Server callables own public presentation, membership and private manager invitations.
 @MainActor
 protocol ClubsRepository: AnyObject {
     func enabledUpdates() -> AsyncStream<Bool>
     func state() async throws -> CommunityClubState
     func directory(after cursor: String?) async throws -> ClubDirectoryPage
     func get(id: String) async throws -> CommunityClub?
+    func sentInvitations(clubID: String, after cursor: String?) async throws -> SentClubInvitationsPage
     func manage(action: String, fields: [String: String], operationID: String) async throws
 }
 
@@ -55,6 +55,13 @@ final class FirebaseClubsRepository: ClubsRepository {
     func get(id: String) async throws -> CommunityClub? {
         let raw = try await call("clubsGet", fields: ["clubId": id])
         return (raw["club"] as? [String: Any]).flatMap(CommunityClub.decode)
+    }
+    func sentInvitations(clubID: String, after cursor: String?) async throws -> SentClubInvitationsPage {
+        var fields = ["clubId": clubID]
+        fields["cursor"] = cursor
+        let raw = try await call("clubsInvitations", fields: fields)
+        return SentClubInvitationsPage(items: (raw["items"] as? [[String: Any]] ?? []).prefix(25).compactMap(SentClubInvitation.decode),
+                                       nextCursor: raw["nextCursor"] as? String)
     }
     func manage(action: String, fields: [String: String], operationID: String) async throws {
         var request = fields

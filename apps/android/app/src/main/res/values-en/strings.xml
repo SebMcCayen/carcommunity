@@ -2151,6 +2151,12 @@
     <string name="clubs_logoError">Could not prepare this image. Choose another image.</string>
     <string name="clubs_reportConfirm">Send a report about this message to the administrators?</string>
     <string name="clubs_noAttending">No clubs registered yet.</string>
+    <string name="clubs_pendingInvitations">Pending invitations</string>
+    <string name="clubs_noPendingInvitations">No pending invitations.</string>
+    <string name="clubs_invitedAt">Invited %1$s</string>
+    <string name="clubs_revokeInvitation">Withdraw invitation</string>
+    <string name="clubs_revokeInvitationConfirm">Withdraw the invitation to %1$s?</string>
+    <string name="clubs_refreshInvitations">Refresh</string>
     <string name="accountWarnings_title">Warnings from an administrator</string>
     <string name="accountWarnings_loading">Loading warnings…</string>
     <string name="accountWarnings_error">Warnings could not be loaded. Please retry.</string>

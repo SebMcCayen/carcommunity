@@ -2305,7 +2305,13 @@
     "invalidForm": "Enter a name (3–60 characters), description (10–500), and location (2–80).",
     "logoError": "Could not prepare this image. Choose another image.",
     "reportConfirm": "Send a report about this message to the administrators?",
-    "noAttending": "No clubs registered yet."
+    "noAttending": "No clubs registered yet.",
+    "pendingInvitations": "Pending invitations",
+    "noPendingInvitations": "No pending invitations.",
+    "invitedAt": "Invited %1$s",
+    "revokeInvitation": "Withdraw invitation",
+    "revokeInvitationConfirm": "Withdraw the invitation to %1$s?",
+    "refreshInvitations": "Refresh"
   },
   "accountWarnings": {
     "title": "Warnings from an administrator",

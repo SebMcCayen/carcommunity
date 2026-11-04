@@ -2261,7 +2261,7 @@ struct ShellView: View {
             locationPermissionCoordinator = permissionCoordinator
         }
         if let uid {
-            let clubs = ClubsCoordinator(repository: FirebaseClubsRepository.createIfAvailable(uid: uid))
+            let clubs = ClubsCoordinator(repository: FirebaseClubsRepository.createIfAvailable(uid: uid), friendsRepository: friends)
             clubs.start()
             clubsCoordinator = clubs
         }

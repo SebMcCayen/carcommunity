@@ -107,6 +107,10 @@ class FirebaseClubRepository private constructor(
             }
         }, data.nullableText("nextCursor"))
     }
+    override suspend fun sentInvitations(clubId: String, cursor: String?): ClubPage<SentClubInvitation> {
+        val data = call("clubsInvitations", mapOf("clubId" to clubId, "cursor" to cursor, "limit" to 25).filterValues { it != null })
+        return ClubPage(data.items("items").take(25).mapNotNull(::parseSentClubInvitation), data.nullableText("nextCursor"))
+    }
     override suspend fun memberAvatars(clubId: String, uids: Set<String>): Map<String, ClubMemberAvatar> = avatarReads.withPermit {
         loadClubMemberAvatars(uid, uids, currentUid = { auth.currentUser?.uid }, read = { ids ->
             // At most three bounded public-user queries for a 25-member page;
