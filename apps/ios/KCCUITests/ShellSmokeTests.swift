@@ -75,14 +75,22 @@ final class ShellSmokeTests: XCTestCase {
             // newest message must remain readable through normal scrolling,
             // including when large text puts them outside the current viewport.
             let thread = element("chat.thread.messages", in: app)
+            // The scroll view's AX frame extends behind the safe-area composer.
+            // Keep touch coordinates above that overlay, inside readable rows.
+            let threadFrame = thread.frame
+            let footerTop = element("chat.quickEmoji.row", in: app).frame.minY
+            let visibleHeight = min(threadFrame.maxY, footerTop) - threadFrame.minY
+            XCTAssertGreaterThan(visibleHeight, 44)
+            let visibleFraction = visibleHeight / threadFrame.height
+            let start = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: visibleFraction * 0.8))
+            let end = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: visibleFraction * 0.25))
+            print("CHAT_SERIES_VIEWPORT thread=\(threadFrame) footerTop=\(footerTop) visibleHeight=\(visibleHeight)")
             for id in ["fixture-37", "fixture-39"] {
                 let message = app.staticTexts["chat.message.text." + id]
-                for _ in 0..<10 {
+                for _ in 0..<16 {
                     if message.exists && message.isHittable { break }
-                    // Advance in small steps so a full swipe cannot skip the
-                    // target row at the largest accessibility text size.
-                    let start = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
-                    let end = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                    // Overlapping viewport steps keep each target discoverable
+                    // at the largest accessibility text size.
                     start.press(forDuration: 0.1, thenDragTo: end)
                 }
                 let exists = message.waitForExistence(timeout: 15)

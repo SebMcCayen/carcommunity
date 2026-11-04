@@ -91,10 +91,11 @@ jobs:
       # Builds WITHOUT GoogleService-Info.plist (it is gitignored and no
       # secret is injected here) — this is deliberate: it continuously proves
       # the config-less-build seam that FirebaseBootstrap provides.
-      # Run the reported iPhone regression first; fail with geometry and
-      # synthetic screenshot evidence before spending time on the full suite.
-      # The complete unit/UI, optimized Release and native SDK gates remain below.
-      - name: Composer keyboard and map dock acceptance (config-less)
+      # Run the two changed Community regressions first, with geometry and
+      # synthetic screenshot evidence. Every UI case (including the map/dock
+      # scenarios) still runs in the unfiltered full unit/UI suite below.
+      # Optimized Release, native SDK and unsigned device gates also remain.
+      - name: Community composer and expansion acceptance (config-less)
         run: |
           DEST=$(xcrun simctl list devices available --json | python3 -c '
           import json, sys
@@ -108,16 +109,8 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
             ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
             -parallel-testing-enabled NO \
-            -only-testing:KCCUITests/ShellSmokeTests/testClubsMenuRemainsDiscoverableWithoutBackendActivation \
-            -only-testing:KCCUITests/ShellSmokeTests/testChatBackLiveMetricsProfileAndStopMatchAndroid \
-            -only-testing:KCCUITests/ShellSmokeTests/testSearchSelectionOffersExplicitNavigationAndKeepsTheMap \
-            -only-testing:KCCUITests/ShellSmokeTests/testNavigationHandoffFailureKeepsTheDestinationAvailable \
-            -only-testing:KCCUITests/ShellSmokeTests/testCommunityOpensAtLatestWithAccessibleText \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityComposerStaysVisibleWithKeyboard \
-            -only-testing:KCCUITests/ShellSmokeTests/testSocialAndGarageDragHandlesReturnToTheRetainedMap \
-            -only-testing:KCCUITests/ShellSmokeTests/testTrafficMarkersStayBelowMapControlsInBothThemes \
-            -only-testing:KCCUITests/ShellSmokeTests/testCrownTilePaletteFollowsMapAppearanceOverride \
-            -only-testing:KCCUITests/ShellSmokeTests/testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable \
+            -only-testing:KCCUITests/ShellSmokeTests/testCommunitySpamSeriesExpandsWithoutHidingTheNewestMessage \
             -resultBundlePath "${RUNNER_TEMP}/ios-chat-smoke.xcresult" \
             test
 
