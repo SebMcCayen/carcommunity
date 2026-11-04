@@ -105,3 +105,7 @@ the real `src/nav` implementation, not only the token-free stub. It keeps the
 existing fork/Dependabot guards and environment boundary. It materializes no
 keystore or production Firebase configuration and uploads no package. Await
 the current-head job result before claiming the nav-enabled R8 gate passed.
+
+The nav-enabled release packaging step is explicitly excluded from manual
+`source_only: true` runs. That separate job now also asserts that no APK/AAB
+was created, so the no-package contract is checked in both build jobs.
