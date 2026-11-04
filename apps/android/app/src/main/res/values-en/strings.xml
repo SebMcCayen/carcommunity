@@ -180,8 +180,8 @@
     <string name="coachMark_exploreBody">Open the menu for Crown Hunt, events, your profile and settings.</string>
     <string name="coachMark_historyTitle">Your drives</string>
     <string name="coachMark_historyBody">Your recorded drives are saved and shown here.</string>
-    <string name="url_terms">https://kungsbacka-car-community.web.app/terms</string>
-    <string name="url_privacy">https://kungsbacka-car-community.web.app/privacy</string>
+    <string name="url_terms">https://kungsbackacarcommunity.se/anvandarvillkor.html</string>
+    <string name="url_privacy">https://kungsbackacarcommunity.se/integritetspolicy.html</string>
     <string name="url_instagram">https://www.instagram.com/kungsbackacarcommunity</string>
     <string name="settingsMenu_title">Settings</string>
     <string name="settingsMenu_accountSection">Account</string>

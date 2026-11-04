@@ -139,6 +139,7 @@ class LocationSharingService : Service() {
      * by construction.
      */
     private val rejectionLog = LivePositionRejectionLog()
+    private val rejectionWindow = LivePositionFailureWindow()
 
     /**
      * Sink for the ONE aggregate report a burst of rejections files. Built lazily
@@ -227,6 +228,7 @@ class LocationSharingService : Service() {
                     recordPublishRejection(verdict, fix, accuracy, now)
                     return
                 }
+                rejectionWindow.reset()
                 lastObservedLatitude = fix.latitude
                 lastObservedLongitude = fix.longitude
                 lastObservedAtMillis = fix.time
@@ -262,8 +264,8 @@ class LocationSharingService : Service() {
      *   the last believed fix, the interval between the two, the implied speed,
      *   and the platform's mock-provider flag. That is enough to answer "why did
      *   my marker misbehave" after the fact.
-     * - **Remotely**, at most once per service run and only once discards pass
-     *   [LivePositionRejectionLog.ESCALATE_AFTER_REJECTIONS]: one
+     * - **Remotely**, at most once per service run and only after a continuous
+     *   failure episode reaches [LivePositionFailureWindow.MIN_FAILURE_MS]: one
      *   `errors-reportClientError` carrying a bucketed, coordinate-free summary
      *   line. The backend deduplicates by fingerprint and rate-limits 30/hour, so
      *   there is no client-side throttle on top of it.
@@ -315,9 +317,10 @@ class LocationSharingService : Service() {
                         ),
                     mockProvider = isMockFix(fix),
                 ),
+                escalationAllowed = rejectionWindow.onRejected(verdict, nowMillis, fix.time),
             )
         if (!burst) return
-        val summary = rejectionLog.summary()
+        val summary = rejectionLog.reportSummary()
         errorReporter?.report(
             feature = LivePositionRejectionReport.FEATURE,
             message = LivePositionRejectionReport.message(LiveFixSource.PUBLISH, summary),
@@ -434,6 +437,7 @@ class LocationSharingService : Service() {
         lastObservedLongitude = null
         lastObservedAtMillis = null
         rejectionLog.reset()
+        rejectionWindow.reset()
         promptMode = SharingPromptMode.NORMAL
         shownPromptMode = null
         synchronized(stationaryLock) { stationaryMonitor.reset() }
@@ -444,7 +448,17 @@ class LocationSharingService : Service() {
 
         // Post the notification and enter the foreground FIRST: the platform
         // requires startForeground within a few seconds of the start request.
-        postNotification(foreground = true)
+        if (!ForegroundPromotion.attempt(
+                onRefused = {
+                    // Refusal here is asynchronous to the controller's start
+                    // call, so its catch cannot protect this callback (#1103).
+                    // Do not request GPS or observe/publish after failed promotion.
+                    stopSharingLocally()
+                    BackgroundLocationController.deferPromotion(applicationContext, uid)
+                },
+                promote = { postNotification(foreground = true) },
+            )
+        ) return START_NOT_STICKY
 
         if (!startLocationUpdates()) return START_NOT_STICKY
 
@@ -541,6 +555,7 @@ class LocationSharingService : Service() {
                             lastObservedLongitude = null
                             lastObservedAtMillis = null
                             rejectionLog.reset()
+                            rejectionWindow.reset()
                             synchronized(stationaryLock) { stationaryMonitor.reset() }
                         }
                         // Track whether the live session is convoy-tied so the

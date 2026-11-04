@@ -2,6 +2,7 @@ import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
 import FirebaseFunctions
+import FirebaseStorage
 import Foundation
 
 /// ``ConvoyChatRepository`` backed by the member-readable
@@ -19,10 +20,12 @@ import Foundation
 final class FirebaseConvoyChatRepository: ConvoyChatRepository, @unchecked Sendable {
     private let firestore: Firestore
     private let functions: Functions
+    private let storage: Storage
 
-    private init(firestore: Firestore, functions: Functions) {
+    private init(firestore: Firestore, functions: Functions, storage: Storage) {
         self.firestore = firestore
         self.functions = functions
+        self.storage = storage
     }
 
     func listConvoys() async -> ConvoyListState {
@@ -101,6 +104,10 @@ final class FirebaseConvoyChatRepository: ConvoyChatRepository, @unchecked Senda
         }
     }
 
+    func avatarDownloadURL(for avatarPath: String) async -> URL? {
+        try? await storage.reference(withPath: avatarPath).downloadURL()
+    }
+
     func currentUserId() -> String? {
         Auth.auth().currentUser?.uid
     }
@@ -141,7 +148,7 @@ final class FirebaseConvoyChatRepository: ConvoyChatRepository, @unchecked Senda
         ) {
             functions.useEmulator(withHost: emulator.host, port: emulator.port)
         }
-        let repository = FirebaseConvoyChatRepository(firestore: firestore, functions: functions)
+        let repository = FirebaseConvoyChatRepository(firestore: firestore, functions: functions, storage: Storage.storage())
         cached = repository
         return repository
     }

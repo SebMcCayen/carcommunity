@@ -6,6 +6,7 @@ import com.kungsbackacarcommunity.app.location.LiveFixSource
 import com.kungsbackacarcommunity.app.location.LiveFixVerdict
 import com.kungsbackacarcommunity.app.location.LivePositionQuality
 import com.kungsbackacarcommunity.app.location.LivePositionRejectionLog
+import com.kungsbackacarcommunity.app.location.LivePositionFailureWindow
 import com.kungsbackacarcommunity.app.location.LivePositionRejectionReport
 
 /**
@@ -276,6 +277,7 @@ class LiveMarkerSmoother(
     )
 
     private val tracks = HashMap<String, Track>()
+    private val rejectionWindows = HashMap<String, LivePositionFailureWindow>()
 
     /**
      * Feed a fresh roster snapshot, at wall time [nowMillis].
@@ -320,6 +322,7 @@ class LiveMarkerSmoother(
                     )
                     continue
                 }
+                rejectionWindows.remove(member.uid)
                 tracks[member.uid] =
                     Track(
                         fromLatitude = member.latitude,
@@ -368,6 +371,7 @@ class LiveMarkerSmoother(
                 )
                 continue
             }
+            rejectionWindows.remove(member.uid)
             track.pendingLatitude = null
             track.pendingLongitude = null
 
@@ -415,6 +419,7 @@ class LiveMarkerSmoother(
         if (tracks.isNotEmpty()) {
             tracks.keys.retainAll { uid -> members.any { it.uid == uid } }
         }
+        rejectionWindows.keys.retainAll { uid -> members.any { it.uid == uid } }
     }
 
     /**
@@ -466,9 +471,12 @@ class LiveMarkerSmoother(
                             distance?.let { LivePositionQuality.impliedSpeedMps(it, delta) },
                         ),
                 ),
+                escalationAllowed = rejectionWindows.getOrPut(member.uid) {
+                    LivePositionFailureWindow()
+                }.onRejected(verdict, nowMillis, member.updatedAtMillis),
             )
         if (!burst) return
-        val summary = rejectionLog.summary()
+        val summary = rejectionLog.reportSummary()
         onRejectionBurst?.invoke(
             LivePositionRejectionReport.message(LiveFixSource.RENDER, summary),
             LivePositionRejectionReport.code(summary),

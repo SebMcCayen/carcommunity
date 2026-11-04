@@ -1,4 +1,5 @@
 import XCTest
+import AuthenticationServices
 
 @testable import KCC
 
@@ -92,6 +93,35 @@ final class SignInCoordinatorTests: XCTestCase {
         XCTAssertEqual(status, .idle)
         XCTAssertEqual(repository.signInCalls, 0)
         XCTAssertTrue(reporter.reports.isEmpty)
+    }
+
+    func testAppleNSErrorCancellationNeverExchangesOrReports() async {
+        let source = NSError(domain: ASAuthorizationErrorDomain, code: ASAuthorizationError.Code.canceled.rawValue)
+        let (coordinator, repository, reporter) = await makeCoordinator(
+            provider: .failure(AppleSignInProvider.signInError(from: source))
+        )
+        await coordinator.signIn()
+        let status = await coordinator.status
+        XCTAssertEqual(status, .idle)
+        XCTAssertEqual(repository.signInCalls, 0)
+        XCTAssertTrue(reporter.reports.isEmpty)
+    }
+
+    func testAppleFailureReportsCredentialFetchWithAStableCodeAndCanRetry() async {
+        let source = NSError(domain: ASAuthorizationErrorDomain, code: ASAuthorizationError.Code.invalidResponse.rawValue)
+        let (coordinator, repository, reporter) = await makeCoordinator(
+            provider: .failure(AppleSignInProvider.signInError(from: source))
+        )
+        await coordinator.signIn()
+        let failed = await coordinator.status
+        XCTAssertEqual(failed, .failed(.generic))
+        XCTAssertEqual(repository.signInCalls, 0)
+        XCTAssertEqual(reporter.reports, [SignInFailureDetails(
+            errorType: "SignInFailedError", step: .credentialFetch, statusCode: "appleInvalidResponse"
+        )])
+        await coordinator.resetFailure()
+        let reset = await coordinator.status
+        XCTAssertEqual(reset, .idle)
     }
 
     func testUnavailableConfigurationFailsWithoutAReport() async {

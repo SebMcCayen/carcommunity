@@ -44,26 +44,49 @@ final class SettingsScreenTests: XCTestCase {
     func testLegalLinksRequireCanonicalHTTPSOriginAndExactPath() {
         XCTAssertEqual(
             SettingsLegalLinkPolicy.validatedURL(
-                "https://kungsbacka-car-community.web.app/privacy",
-                expectedPath: "/privacy"
+                "https://kungsbackacarcommunity.se/integritetspolicy.html",
+                expectedPath: "/integritetspolicy.html"
             )?.absoluteString,
-            "https://kungsbacka-car-community.web.app/privacy"
+            "https://kungsbackacarcommunity.se/integritetspolicy.html"
         )
         XCTAssertNil(SettingsLegalLinkPolicy.validatedURL(
-            "http://kungsbacka-car-community.web.app/privacy",
-            expectedPath: "/privacy"
+            "http://kungsbackacarcommunity.se/integritetspolicy.html",
+            expectedPath: "/integritetspolicy.html"
         ))
         XCTAssertNil(SettingsLegalLinkPolicy.validatedURL(
-            "https://kungsbacka-car-community.web.app.evil.example/privacy",
-            expectedPath: "/privacy"
+            "https://kungsbackacarcommunity.se.evil.example/integritetspolicy.html",
+            expectedPath: "/integritetspolicy.html"
         ))
         XCTAssertNil(SettingsLegalLinkPolicy.validatedURL(
-            "https://kungsbacka-car-community.web.app/terms",
-            expectedPath: "/privacy"
+            "https://kungsbackacarcommunity.se/anvandarvillkor.html",
+            expectedPath: "/integritetspolicy.html"
         ))
         XCTAssertNil(SettingsLegalLinkPolicy.validatedURL(
-            "https://user@kungsbacka-car-community.web.app/privacy",
-            expectedPath: "/privacy"
+            "https://user@kungsbackacarcommunity.se/integritetspolicy.html",
+            expectedPath: "/integritetspolicy.html"
         ))
+        for suffix in [":443/integritetspolicy.html", "/integritetspolicy.html?x=1", "/integritetspolicy.html#x"] {
+            XCTAssertNil(SettingsLegalLinkPolicy.validatedURL(
+                "https://kungsbackacarcommunity.se\(suffix)",
+                expectedPath: "/integritetspolicy.html"
+            ))
+        }
+        XCTAssertNil(SettingsLegalLinkPolicy.validatedURL(
+            "https://kungsbacka-car-community.web.app/privacy",
+            expectedPath: "/integritetspolicy.html"
+        ))
+    }
+
+    func testBundledLegalLinksAreAcceptedByTheSettingsPolicy() {
+        let links: [(String.LocalizationValue, String)] = [
+            ("url.privacy", "/integritetspolicy.html"),
+            ("url.terms", "/anvandarvillkor.html"),
+        ]
+        for (key, path) in links {
+            XCTAssertNotNil(SettingsLegalLinkPolicy.validatedURL(
+                String(localized: key),
+                expectedPath: path
+            ))
+        }
     }
 }

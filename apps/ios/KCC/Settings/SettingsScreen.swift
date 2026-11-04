@@ -135,14 +135,14 @@ struct SettingsScreen: View {
                     legalLink(
                         title: "settingsMenu.privacy",
                         urlKey: "url.privacy",
-                        expectedPath: "/privacy",
+                        expectedPath: "/integritetspolicy.html",
                         icon: "lock.shield",
                         identifier: "settings.privacyPolicy"
                     )
                     legalLink(
                         title: "settingsMenu.terms",
                         urlKey: "url.terms",
-                        expectedPath: "/terms",
+                        expectedPath: "/anvandarvillkor.html",
                         icon: "doc.text",
                         identifier: "settings.terms"
                     )
@@ -212,7 +212,7 @@ struct SettingsScreen: View {
 }
 
 enum SettingsLegalLinkPolicy {
-    private static let host = "kungsbacka-car-community.web.app"
+    private static let host = "kungsbackacarcommunity.se"
 
     /// Legal destinations are bundled localization data, but still cross an
     /// app-to-browser trust boundary. Keep them on the canonical HTTPS origin

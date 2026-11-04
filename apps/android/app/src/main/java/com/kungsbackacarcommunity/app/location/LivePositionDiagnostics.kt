@@ -67,7 +67,7 @@ data class LiveFixRejectionSummary(
  *   debugging and for a future diagnostics dump.
  * - **One aggregate report per run**, and only when rejections become
  *   MEANINGFUL: [record] returns true exactly once, the first time the count
- *   crosses [ESCALATE_AFTER_REJECTIONS], and the caller then fires a single
+ *   crosses [ESCALATE_AFTER_REJECTIONS] for reportable rejections, and the caller fires a single
  *   `errors-reportClientError`. One bad fix is weather; a burst is a fault. The
  *   backend deduplicates by fingerprint and rate-limits 30/hour on top, so there
  *   is deliberately no second client-side throttle.
@@ -86,6 +86,7 @@ class LivePositionRejectionLog(
 ) {
     private val entries = ArrayDeque<LiveFixRejection>(capacity)
     private var total = 0
+    private var reportableTotal = 0
     private var escalated = false
     private val lock = Any()
 
@@ -93,19 +94,29 @@ class LivePositionRejectionLog(
      * Records [rejection], evicting the oldest entry once [capacity] is reached.
      *
      * @return true exactly once per [reset] cycle — the first time the running
-     *   count reaches [ESCALATE_AFTER_REJECTIONS] — so the caller can escalate
+     *   reportable count reaches [ESCALATE_AFTER_REJECTIONS] — so the caller can escalate
      *   without keeping its own "have I reported this yet" flag.
      */
     fun record(rejection: LiveFixRejection): Boolean = synchronized(lock) {
         entries.addLast(rejection)
         while (entries.size > capacity) entries.removeFirst()
         total++
-        if (!escalated && total >= ESCALATE_AFTER_REJECTIONS) {
+        if (rejection.isReportable()) reportableTotal++
+        if (!escalated && reportableTotal >= ESCALATE_AFTER_REJECTIONS && rejection.isReportable()) {
             escalated = true
             true
         } else {
             false
         }
+    }
+
+    /** Record local evidence while allowing the caller to defer the once-per-run report. */
+    fun record(rejection: LiveFixRejection, escalationAllowed: Boolean): Boolean = synchronized(lock) {
+        val report = record(rejection)
+        // No external report has happened yet. Release this call's claim when
+        // its episode is too short, under the same reentrant lock as record().
+        if (report && !escalationAllowed) escalated = false
+        report && escalationAllowed
     }
 
     /** The retained rejections, oldest first. A copy — the caller cannot mutate the log. */
@@ -130,10 +141,26 @@ class LivePositionRejectionLog(
         )
     }
 
+    /** Duplicate timestamps remain available locally but cannot create a public fault report. */
+    fun reportSummary(): LiveFixRejectionSummary = synchronized(lock) {
+        val reportable = entries.filter { it.isReportable() }
+        LiveFixRejectionSummary(
+            total = reportableTotal,
+            byVerdict = reportable.groupingBy { it.verdict }.eachCount(),
+            worstAccuracyMeters = reportable.mapNotNull { it.accuracyMeters }.maxOrNull(),
+            largestJumpMeters = reportable.mapNotNull { it.distanceMeters }.maxOrNull(),
+            mockProviderSeen = reportable.any { it.mockProvider == true },
+        )
+    }
+
+    private fun LiveFixRejection.isReportable(): Boolean =
+        verdict != LiveFixVerdict.REJECT_NOT_NEWER && verdict != LiveFixVerdict.ACCEPT
+
     /** Clears the buffer, the count and the escalation flag (a fresh session/run). */
     fun reset() = synchronized(lock) {
         entries.clear()
         total = 0
+        reportableTotal = 0
         escalated = false
     }
 
@@ -146,7 +173,8 @@ class LivePositionRejectionLog(
         const val DEFAULT_CAPACITY = 32
 
         /**
-         * Rejections in one run before a single aggregate report is filed.
+         * Reportable rejections in one run before a single aggregate report is filed.
+         * Duplicate/stale timestamps remain local evidence and do not count.
          *
          * One rejected fix is normal — a tunnel mouth, a cold start, a moment of
          * multipath — and reporting it would be noise plus a wasted slice of the

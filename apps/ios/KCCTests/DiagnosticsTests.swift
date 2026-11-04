@@ -1,4 +1,5 @@
 import XCTest
+import AuthenticationServices
 import FirebaseFirestore
 import Security
 
@@ -247,6 +248,31 @@ final class DiagnosticsTests: XCTestCase {
 
         XCTAssertEqual(sink.reports.first?.safeMessage, "Sign-in failed: A0Exception")
         XCTAssertEqual(sink.reports.first?.errorCode, "A0Exception")
+    }
+
+    func testAppleProviderFailurePayloadNeverIncludesRawNSErrorFields() throws {
+        let sink = RecordingDiagnosticsReporter()
+        let reporter = DiagnosticsSignInFailureReporter(
+            reporter: sink,
+            environment: DiagnosticsEnvironment(
+                appVersion: "1.0", buildNumber: "2", osVersion: "iOS", deviceModel: "iPhone"
+            )
+        )
+        let source = NSError(domain: "synthetic.private-domain", code: 987654321, userInfo: [
+            NSLocalizedDescriptionKey: "user@example.com synthetic-private-token",
+            "credential": "synthetic-credential"
+        ])
+        reporter.reportSignInFailure(SignInCoordinator.describeFailure(
+            AppleSignInProvider.signInError(from: source), step: .credentialFetch
+        ))
+        let report = try XCTUnwrap(sink.reports.first)
+        XCTAssertEqual(report.errorCode, "SignInFailedError")
+        XCTAssertEqual(report.metadata?["signInStep"], .string("credential_fetch"))
+        XCTAssertEqual(report.metadata?["errorStatus"], .string("appleProviderFailure"))
+        let payload = String(describing: report.payload)
+        for sensitive in [source.domain, "987654321", "user@example.com", "synthetic-private-token", "synthetic-credential"] {
+            XCTAssertFalse(payload.contains(sensitive), sensitive)
+        }
     }
 
     func testAuthenticatedErrorReporterUsesContractAndRedactsBeforeTransport() async {
