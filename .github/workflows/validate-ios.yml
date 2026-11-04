@@ -42,10 +42,10 @@ jobs:
     # the final unsigned generic-device build still targets arm64. Keep all gates.
     # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
     runs-on: macos-26-intel
-    # The usual full sequence takes ~88 minutes. A loaded hosted worker took
-    # twice as long for the UI gate; retain every gate with enough time for
-    # that slower worker rather than cancelling during the remaining suites.
-    timeout-minutes: 180
+    # The measured Intel run spent over 150 minutes in Debug build/unit/UI gates
+    # before optimized Release, native Firebase and unsigned arm64 compilation.
+    # Retain every gate and leave time for those remaining builds on this pool.
+    timeout-minutes: 240
 
     steps:
       - name: Checkout

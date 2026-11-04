@@ -66,9 +66,32 @@ final class ShellSmokeTests: XCTestCase {
                 element("chat.thread.messages", in: app).swipeDown()
             }
             XCTAssertTrue(toggle.isHittable)
+            let collapsedLabel = toggle.label
             toggle.tap()
-            XCTAssertTrue(app.staticTexts["chat.message.text.fixture-37"].exists)
-            XCTAssertTrue(app.staticTexts["chat.message.text.fixture-39"].exists)
+            let expanded = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "label != %@", collapsedLabel), object: toggle)
+            XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 15), .completed)
+            // Expansion grows this lazy scroll row. Earlier messages and the
+            // newest message must remain readable through normal scrolling,
+            // including when large text puts them outside the current viewport.
+            let thread = element("chat.thread.messages", in: app)
+            for id in ["fixture-37", "fixture-39"] {
+                let message = app.staticTexts["chat.message.text." + id]
+                for _ in 0..<10 {
+                    if message.exists && message.isHittable { break }
+                    // Advance in small steps so a full swipe cannot skip the
+                    // target row at the largest accessibility text size.
+                    let start = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+                    let end = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                    start.press(forDuration: 0.1, thenDragTo: end)
+                }
+                let exists = message.waitForExistence(timeout: 15)
+                if !exists || !message.isHittable {
+                    chatProof(app, name: "community-series-expansion-failure", tree: true)
+                }
+                XCTAssertTrue(exists)
+                XCTAssertTrue(message.isHittable)
+            }
             attach(app, name: largeText ? "community-series-accessibility" : "community-series")
             app.terminate()
         }
@@ -943,16 +966,16 @@ final class ShellSmokeTests: XCTestCase {
 
     private func assertComposerDraft(_ text: String, present: Bool, in app: XCUIApplication,
                                      file: StaticString = #filePath, line: UInt = #line) {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            let candidates = app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-                + app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-            guard let editor = candidates.first(where: { $0.isHittable }) else { return false }
-            let value = editor.value as? String ?? ""
-            return value.contains(text) == present
-        }, object: app)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        // Resolve the current visible widget once per assertion. Repeatedly
+        // enumerating both editor types and querying hit targets can consume
+        // the polling deadline even while the expected draft is on screen.
+        let editor = composerInput(in: app)
+        let predicate = NSPredicate(format: present ? "value CONTAINS %@" : "NOT (value CONTAINS %@)", text)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: editor)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 15)
         if result != .completed { chatProof(app, name: "chat-draft-value-failure", tree: true) }
         XCTAssertEqual(result, .completed, "Visible editor must preserve the expected draft until Send", file: file, line: line)
+        XCTAssertTrue(editor.isHittable, "Draft assertion must inspect the visible editor", file: file, line: line)
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
