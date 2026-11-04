@@ -30,7 +30,15 @@ object CurrentLocation {
         val last =
             runCatchingCancellable {
                 suspendCancellableCoroutine<LatLng?> { cont ->
-                    client.lastLocation
+                    val task =
+                        try {
+                            client.lastLocation
+                        } catch (_: SecurityException) {
+                            // Permission may be absent or revoked before the call.
+                            cont.resume(null)
+                            return@suspendCancellableCoroutine
+                        }
+                    task
                         .addOnSuccessListener { loc ->
                             if (!cont.isActive) return@addOnSuccessListener
                             cont.resume(loc?.let { LatLng(it.longitude, it.latitude) })
@@ -80,7 +88,15 @@ object CurrentLocation {
 
         return runCatchingCancellable {
             suspendCancellableCoroutine<LatLng?> { cont ->
-                client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                val task =
+                    try {
+                        client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                    } catch (_: SecurityException) {
+                        // Permission may be absent or revoked before the call.
+                        cont.resume(null)
+                        return@suspendCancellableCoroutine
+                    }
+                task
                     .addOnSuccessListener { loc ->
                         if (!cont.isActive) return@addOnSuccessListener
                         cont.resume(loc?.let { LatLng(it.longitude, it.latitude) })

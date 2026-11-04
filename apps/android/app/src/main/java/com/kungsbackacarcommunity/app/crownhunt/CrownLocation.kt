@@ -65,8 +65,15 @@ object CrownLocation {
             }
         return runCatching {
             suspendCancellableCoroutine { continuation ->
-                client
-                    .getCurrentLocation(priority, null)
+                val task =
+                    try {
+                        client.getCurrentLocation(priority, null)
+                    } catch (_: SecurityException) {
+                        // Permission may be absent or revoked before the call.
+                        continuation.resume(null)
+                        return@suspendCancellableCoroutine
+                    }
+                task
                     .addOnSuccessListener { location ->
                         if (!continuation.isActive) return@addOnSuccessListener
                         continuation.resume(
