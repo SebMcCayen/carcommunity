@@ -52,3 +52,14 @@ is not device acceptance or confirmation that Play has rescanned a new bundle.
 - [Android 15 edge-to-edge behavior](https://developer.android.com/about/versions/15/behavior-changes-15#edge-to-edge)
 - [AndroidX EdgeToEdge implementation](https://android.googlesource.com/platform/frameworks/support/+/androidx-main/activity/activity/src/main/java/androidx/activity/EdgeToEdge.kt)
 - [Compose window insets](https://developer.android.com/develop/ui/compose/system/insets)
+
+### Local Android 14 compatibility check (2026-11-04)
+
+The AGP 9.1.1 debug app and test APK compiled successfully. The three focused
+native tests passed on a disposable API-34 emulator (3 tests, no failures).
+The map fixture uses a stub map with production controls/sheets; this verifies
+window/layout behavior, not remote map tiles. The first fixture run exposed a
+wrong selector for the merged selected-tab semantics; the corrected test uses
+the actual labelled clickable tab and checks the open sheet above the footer.
+Landscape navigation-mode detection checks side insets as well as the bottom.
+Android 15/16 results remain pending in CI.

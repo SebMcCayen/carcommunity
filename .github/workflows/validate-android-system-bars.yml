@@ -53,6 +53,7 @@ jobs:
           working-directory: apps/android
           script: |
             bash -euo pipefail -c '
+              adb shell wm dismiss-keyguard
               adb shell cmd overlay enable --user 0 com.android.internal.display.cutout.emulation.corner
               adb shell settings put system accelerometer_rotation 0
               for orientation in portrait landscape; do

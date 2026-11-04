@@ -32,6 +32,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.*
 import com.kungsbackacarcommunity.app.redesign.MapShellCataloguePreview
+import com.kungsbackacarcommunity.app.redesign.MAP_CATALOGUE_FOOTER_TAG
+import com.kungsbackacarcommunity.app.shell.MAP_HOME_LAYERS_POPUP_TAG
 import java.io.File
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.*
@@ -82,6 +84,8 @@ class SystemBarsNativeTest {
         }
         assertStyle(true)
         val input = compose.onNodeWithTag(CHANNEL_INPUT_TEST_TAG)
+        input.assertIsDisplayed()
+        capture("chat-before-keyboard")
         input.performClick().performTextInput("Utkast med åäö 🚗")
         compose.waitUntil(10_000) { insets().isVisible(WindowInsetsCompat.Type.ime()) }
         compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).assertDoesNotExist()
@@ -112,11 +116,20 @@ class SystemBarsNativeTest {
             compose.runOnIdle { dark = mode }
             compose.waitForIdle()
             assertStyle(mode)
+            val panel = compose.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG)
+            panel.assertIsDisplayed()
+            val footer = compose.onNodeWithTag(MAP_CATALOGUE_FOOTER_TAG).fetchSemanticsNode().boundsInRoot
+            assertTrue("Map panel must stay above footer", panel.fetchSemanticsNode().boundsInRoot.bottom <= footer.top + 2f)
             val rootHeight = compose.onRoot().fetchSemanticsNode().boundsInRoot.height
             val bars = insets().getInsets(WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.displayCutout())
             val rootWidth = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
             for (label in listOf(R.string.shell_tabMap, R.string.shell_tabCreate)) {
-                val button = compose.onNodeWithContentDescription(context.getString(label))
+                val button = if (label == R.string.shell_tabCreate) {
+                    compose.onNodeWithContentDescription(context.getString(label))
+                } else {
+                    // NavigationBar merges the selected icon into its labelled tab.
+                    compose.onNode(hasText(context.getString(label)) and hasClickAction())
+                }
                 button.assertIsDisplayed()
                 val bounds = button.fetchSemanticsNode().boundsInRoot
                 assertTrue("Footer action overlaps bottom navigation", bounds.bottom <= rootHeight - bars.bottom + 2f)
@@ -143,7 +156,8 @@ class SystemBarsNativeTest {
             "portrait" -> assertEquals(Configuration.ORIENTATION_PORTRAIT, compose.activity.resources.configuration.orientation)
             "landscape" -> assertEquals(Configuration.ORIENTATION_LANDSCAPE, compose.activity.resources.configuration.orientation)
         }
-        val tappable = insets().getInsets(WindowInsetsCompat.Type.tappableElement()).bottom
+        val tappableInsets = insets().getInsets(WindowInsetsCompat.Type.tappableElement())
+        val tappable = maxOf(tappableInsets.left, tappableInsets.right, tappableInsets.bottom)
         when (arguments.getString("navigationMode")) {
             "gesture" -> assertEquals("Gesture navigation must be active", 0, tappable)
             "threebutton" -> assertTrue("Three-button navigation must be active", tappable > 0)
