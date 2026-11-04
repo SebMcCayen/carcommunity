@@ -317,7 +317,7 @@ class LocationSharingService : Service() {
                 ),
             )
         if (!burst) return
-        val summary = rejectionLog.summary()
+        val summary = rejectionLog.reportSummary()
         errorReporter?.report(
             feature = LivePositionRejectionReport.FEATURE,
             message = LivePositionRejectionReport.message(LiveFixSource.PUBLISH, summary),
