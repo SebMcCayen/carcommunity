@@ -287,13 +287,9 @@ jobs:
     # versions under us — a moving image is itself an emulator-boot flake source,
     # and it keeps the cached AVD snapshot matched to a stable environment.
     runs-on: ubuntu-24.04
-    # Phase 17: Compose UI tests on an emulator. Emulator CI is
-    # environment-sensitive (KVM, boot, Compose timing) and cannot be
-    # validated outside GitHub Actions, so this job is INFORMATIONAL
-    # (non-blocking) until it has a proven track record — it still runs
-    # and surfaces results, but does not gate the PR. Promote to required
-    # once green across several runs.
-    continue-on-error: true
+    # The remaining device suite is blocking (#759). The bounded boot/test
+    # retry below absorbs a transient emulator failure; a failed final attempt
+    # must fail this workflow rather than be converted to a successful check.
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -414,12 +410,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Upload instrumentation results on failure
-        if: failure()
+      - name: Upload instrumentation results
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: connected-test-reports
-          path: apps/android/app/build/reports/androidTests/
+          path: |
+            apps/android/app/build/reports/androidTests/
+            apps/android/app/build/outputs/androidTest-results/
           retention-days: 14
 
   native-member-acceptance:
