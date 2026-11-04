@@ -3,7 +3,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -185,8 +184,9 @@ android {
     namespace = "com.kungsbackacarcommunity.app"
     // compileSdk 36 is required by core-ktx 1.18 / activity-compose 1.13 (their
     // AAR metadata declares minCompileSdk=36). We deliberately cap at that line:
-    // core 1.19 / lifecycle 2.11 would require compileSdk 37 + AGP 9.x, a larger
-    // toolchain jump out of scope here. targetSdk is 36 to meet Google Play's
+    // core 1.19 / lifecycle 2.11 would require compileSdk 37; this build-tool
+    // migration preserves the current SDK and runtime dependencies.
+    // targetSdk is 36 to meet Google Play's
     // API-level requirement (target API 36 by 31 Aug 2026). Android 16 enforces
     // edge-to-edge (no opt-out); the app already calls enableEdgeToEdge() and
     // handles window insets, so no opt-out path exists to break.
@@ -300,6 +300,8 @@ android {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            // AGP 9+ enables optimized resource shrinking automatically with
+            // isShrinkResources below; no android.r8 opt-in flag is required.
             // R8 code + resource shrinking on release. Produces a mapping.txt:
             // AGP embeds it in the AAB at bundleRelease, which clears the Play
             // Console "no deobfuscation file" warning and de-obfuscates Play crash
@@ -336,6 +338,8 @@ android {
 
     buildFeatures {
         compose = true
+        // AGP 9 defaults this off; the Mapbox token uses resValue in both variants.
+        resValues = true
         // Phase 15: App Check init reads BuildConfig.DEBUG to pick the provider.
         buildConfig = true
     }
@@ -362,10 +366,10 @@ android {
     sourceSets {
         // The same Follow-me integration tests run under Robolectric and on a
         // native emulator; no duplicated protocol fixture or assertion set.
-        getByName("testDebug").java.srcDir("src/sharedDebugTest/java")
-        getByName("androidTest").java.srcDir("src/sharedDebugTest/java")
+        getByName("testDebug").kotlin.directories.add("src/sharedDebugTest/java")
+        getByName("androidTest").kotlin.directories.add("src/sharedDebugTest/java")
         getByName("main") {
-            java.srcDir(if (navSdkEnabled) "src/nav/java" else "src/noNav/java")
+            kotlin.directories.add(if (navSdkEnabled) "src/nav/java" else "src/noNav/java")
         }
     }
 }
