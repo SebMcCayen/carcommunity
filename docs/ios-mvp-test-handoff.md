@@ -20,6 +20,24 @@ services have been tested.
   subscription, create cloud resources, or upload to Apple as part of these tests
   without the relevant owner approval. Mapbox rendering is not exercised by CI.
 
+### Standard Intel runner during ARM64 capacity shortages
+
+`Validate iOS` uses the standard `macos-26-intel` runner to avoid depending on
+the ARM64 pool that failed to allocate a runner for the post-merge #1324 checks.
+GitHub lists this as a [standard public-repository runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
+and its [macOS 26 image](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md#xcode)
+includes Xcode 26 and iOS simulators. This does not guarantee immediate capacity.
+
+All validation steps remain enabled: config-less unit/UI tests, optimized Release
+shell tests, simulator identity/Keychain checks, native Firebase emulator acceptance
+and the unsigned arm64 device build. Simulator execution now covers x86_64; the
+device build compiles arm64 but does not execute tests on an arm64 device.
+The existing 180-minute job timeout and 120-second Functions discovery/startup
+wait are retained because earlier Intel attempts hit runtime/startup limits.
+Changing the runner does not authorize paid/larger runners, artifact storage,
+signing, deployment or distribution. A complete green Intel run is still needed
+before treating this runner change as validated.
+
 ## Automated coverage and its limits
 
 | Check                                         | Evidence                                                                                                                           | Still needs manual/device testing                                     |

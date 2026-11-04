@@ -37,10 +37,13 @@ jobs:
     name: validate-ios
     # macOS minutes bill at a 10x multiplier on private repos — this job is
     # paths-filtered above so it runs for iOS, its contracts, and admin/backend configuration changes.
-    # Pin the standard Apple Silicon image. Intel fallback exhausted worker
-    # startup margins under the combined simulator/emulator workload.
+    # Use the standard Intel pool while macOS ARM64 runner capacity is constrained.
+    # Keep macOS 26 / Xcode 26; all validation steps also run on Intel.
+    # The existing 180-minute job budget and 120-second Functions startup wait
+    # remain in place after the earlier Intel timeout/startup failures.
+    # Simulator tests use x86_64; the unsigned device build still targets arm64.
     # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
-    runs-on: macos-26
+    runs-on: macos-26-intel
     # The usual full sequence takes ~88 minutes. A loaded hosted worker took
     # twice as long for the UI gate; retain every gate with enough time for
     # that slower worker rather than cancelling during the remaining suites.
