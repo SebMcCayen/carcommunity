@@ -110,6 +110,15 @@ class LivePositionRejectionLog(
         }
     }
 
+    /** Record local evidence while allowing the caller to defer the once-per-run report. */
+    fun record(rejection: LiveFixRejection, escalationAllowed: Boolean): Boolean = synchronized(lock) {
+        val report = record(rejection)
+        // No external report has happened yet. Release this call's claim when
+        // its episode is too short, under the same reentrant lock as record().
+        if (report && !escalationAllowed) escalated = false
+        report && escalationAllowed
+    }
+
     /** The retained rejections, oldest first. A copy — the caller cannot mutate the log. */
     fun snapshot(): List<LiveFixRejection> = synchronized(lock) { entries.toList() }
 
