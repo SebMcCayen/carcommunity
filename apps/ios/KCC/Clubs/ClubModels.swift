@@ -109,3 +109,18 @@ struct ClubForm: Equatable, Sendable {
             && (2...80).contains(fields["location"]!.unicodeScalars.count)
     }
 }
+
+/// Public users/{uid}.clubBadge projection; this ID never grants private access.
+func publicClubAffiliationID(_ value: Any?) -> String? {
+    guard let badge = value as? [String: Any],
+          Set(badge.keys).isSubset(of: ["clubId", "clubName", "logoUrl"]),
+          let id = badge["clubId"] as? String,
+          id.range(of: "\\A[A-Za-z0-9_-]{1,128}\\z", options: .regularExpression) != nil,
+          let name = badge["clubName"] as? String,
+          name == name.trimmingCharacters(in: .whitespacesAndNewlines),
+          (3...60).contains(name.utf16.count),
+          name.rangeOfCharacter(from: .controlCharacters) == nil,
+          badge["logoUrl"] == nil || badge["logoUrl"] is NSNull || badge["logoUrl"] is String
+    else { return nil }
+    return id
+}

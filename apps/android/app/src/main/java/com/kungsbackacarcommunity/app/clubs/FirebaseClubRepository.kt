@@ -55,6 +55,13 @@ class FirebaseClubRepository private constructor(
         .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true && it.snapshot?.getTimestamp("activatedAt") != null }
         .distinctUntilChanged()
 
+    override fun observeAffiliation(memberUid: String): Flow<String?> = observeEnabled().flatMapLatest { enabled ->
+        if (!enabled || memberUid.isBlank()) flowOf(null)
+        else document("users/$memberUid").map { result ->
+            com.kungsbackacarcommunity.app.profile.ClubBadge.fromField(result.snapshot?.get("clubBadge"))?.clubId
+        }
+    }.distinctUntilChanged()
+
     override fun observePublicAttendanceReady(): Flow<Boolean> = document("config/sharedClubs")
         .map { it.confirmed && it.snapshot?.getBoolean("enabled") == true && it.snapshot?.getTimestamp("activatedAt") != null && it.snapshot?.getBoolean("publicAttendanceReady") == true }
         .distinctUntilChanged()

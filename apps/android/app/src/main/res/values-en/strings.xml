@@ -662,6 +662,7 @@
     <string name="nearby_visitProfile">Visit profile</string>
     <string name="nearby_sharerPoints">%1$s %2$s</string>
     <string name="nearby_sharerPopupClose">Close</string>
+    <string name="nearby_visitClub">Visit club</string>
     <string name="convoy_title">Convoys</string>
     <string name="convoy_createAction">Create a convoy</string>
     <string name="convoy_invitesTitle">Convoy invites</string>
@@ -2151,6 +2152,9 @@
     <string name="clubs_logoError">Could not prepare this image. Choose another image.</string>
     <string name="clubs_reportConfirm">Send a report about this message to the administrators?</string>
     <string name="clubs_noAttending">No clubs registered yet.</string>
+    <string name="clubs_myClub">My club</string>
+    <string name="clubs_allClubs">All clubs</string>
+    <string name="clubs_noMembership">You are not a member of a club yet.</string>
     <string name="clubs_pendingInvitations">Pending invitations</string>
     <string name="clubs_noPendingInvitations">No pending invitations.</string>
     <string name="clubs_invitedAt">Invited %1$s</string>

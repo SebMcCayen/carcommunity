@@ -94,6 +94,8 @@ struct NearbySharerDetail: View {
     let uid: String
     let onUnavailable: () -> Void
     var onViewProfile: ((String, String?) -> Void)? = nil
+    var clubsCoordinator: ClubsCoordinator? = nil
+    var onViewClub: ((String) -> Void)? = nil
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -103,6 +105,11 @@ struct NearbySharerDetail: View {
                     NearbySharerIdentity(
                         marker: marker,
                         imageURL: marker.imagePath.flatMap { coordinator.imageURLs[$0] },
+                        clubsCoordinator: clubsCoordinator,
+                        onVisitClub: onViewClub.map { action in { clubID in
+                            guard coordinator.profileTarget(uid: uid) != nil else { onUnavailable(); return }
+                            action(clubID)
+                        } },
                         onVisitProfile: onViewProfile.map { action in {
                             // Re-check the authorized, fresh roster at the tap,
                             // not only when this card was rendered.
@@ -124,7 +131,10 @@ struct NearbySharerDetail: View {
 struct NearbySharerIdentity: View {
     let marker: LiveMarker
     let imageURL: URL?
+    var clubsCoordinator: ClubsCoordinator? = nil
+    var onVisitClub: ((String) -> Void)? = nil
     var onVisitProfile: (() -> Void)? = nil
+    @State private var affiliation: (memberID: String, clubID: String)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
@@ -157,7 +167,23 @@ struct NearbySharerIdentity: View {
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .accessibilityIdentifier("nearby.visitProfile")
             }
+            if clubsCoordinator?.enabled == true, let affiliation, affiliation.memberID == marker.uid,
+               let onVisitClub {
+                Button { onVisitClub(affiliation.clubID) } label: {
+                    Text("nearby.visitClub").frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .kccPrimaryAction()
+                .accessibilityIdentifier("nearby.visitClub")
+            }
         }
         .accessibilityElement(children: .contain)
+        .task(id: "\(marker.uid):\(clubsCoordinator?.enabled == true)") {
+            affiliation = nil
+            guard let clubsCoordinator, clubsCoordinator.enabled else { return }
+            for await clubID in clubsCoordinator.affiliationUpdates(memberID: marker.uid) {
+                guard !Task.isCancelled else { return }
+                affiliation = clubID.map { (marker.uid, $0) }
+            }
+        }
     }
 }

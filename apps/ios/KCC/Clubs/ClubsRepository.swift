@@ -6,11 +6,18 @@ import Foundation
 @MainActor
 protocol ClubsRepository: AnyObject {
     func enabledUpdates() -> AsyncStream<Bool>
+    func affiliationUpdates(memberID: String) -> AsyncStream<String?>
     func state() async throws -> CommunityClubState
     func directory(after cursor: String?) async throws -> ClubDirectoryPage
     func get(id: String) async throws -> CommunityClub?
     func sentInvitations(clubID: String, after cursor: String?) async throws -> SentClubInvitationsPage
     func manage(action: String, fields: [String: String], operationID: String) async throws
+}
+
+extension ClubsRepository {
+    func affiliationUpdates(memberID: String) -> AsyncStream<String?> {
+        AsyncStream { $0.yield(nil); $0.finish() }
+    }
 }
 
 @MainActor
@@ -34,6 +41,22 @@ final class FirebaseClubsRepository: ClubsRepository {
                     continuation.yield(error == nil && snapshot?.metadata.isFromCache == false
                         && Auth.auth().currentUser?.uid == uid && data?["enabled"] as? Bool == true
                         && data?["activatedAt"] is Timestamp)
+                }
+            let box = ClubListenerBox(listener)
+            continuation.onTermination = { _ in box.listener.remove() }
+        }
+    }
+    func affiliationUpdates(memberID: String) -> AsyncStream<String?> {
+        let viewerID = uid
+        return AsyncStream { continuation in
+            guard !memberID.isEmpty, !memberID.contains("/") else {
+                continuation.yield(nil); continuation.finish(); return
+            }
+            let listener = firestore.document("users/\(memberID)")
+                .addSnapshotListener(includeMetadataChanges: true) { snapshot, error in
+                    let fresh = error == nil && snapshot?.metadata.isFromCache == false
+                        && snapshot?.metadata.hasPendingWrites == false && Auth.auth().currentUser?.uid == viewerID
+                    continuation.yield(fresh ? publicClubAffiliationID(snapshot?.data()?["clubBadge"]) : nil)
                 }
             let box = ClubListenerBox(listener)
             continuation.onTermination = { _ in box.listener.remove() }

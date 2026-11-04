@@ -1081,6 +1081,7 @@ fun AuthenticatedApp(
             // welcome-gating state above) so a different user signing in within the
             // same Activity/process re-scopes the route to their own
             // pendingWelcomeRoute instead of inheriting the previous user's saved one.
+            var clubDeepLinkId by remember(uid) { mutableStateOf<String?>(null) }
             var route by rememberSaveable(uid) { mutableStateOf(pendingWelcomeRoute) }
 
             // The ancestors of the currently-open [route], nearest parent last —
@@ -1101,6 +1102,7 @@ fun AuthenticatedApp(
             // push-notification tap, a map dialog. Starts a NEW stack, so Back
             // from it returns to the map/tab, never a stale parent.
             val openRootRoute = { target: ShellRoute ->
+                clubDeepLinkId = null
                 routeParents = arrayListOf()
                 route = target
             }
@@ -5399,15 +5401,23 @@ fun AuthenticatedApp(
                 // its own window, so it draws over whichever map slot is showing
                 // regardless of where it sits in the tree; rendering it here (once)
                 // covers both the map-home overlay and the turn-by-turn overlay.
-                selectedLiveSharer?.let { sharer ->
+                val liveSharerClubRepository = remember(context, uid) {
+                    com.kungsbackacarcommunity.app.clubs.FirebaseClubRepository.createIfAvailable(context, uid)
+                }
+                selectedLiveSharer?.let { sharer -> key(sharer.uid) {
                     LiveSharerPopup(
                         sharer = sharer,
                         pointsRepository = liveSharerPointsRepository,
+                        clubRepository = liveSharerClubRepository,
+                        onVisitClub = { clubId ->
+                            openRootRoute(ShellRoute.Clubs)
+                            clubDeepLinkId = clubId
+                        },
                         onVisitProfile =
                             if (memberProfileRepository != null) openMemberProfile else null,
                         onDismiss = { selectedLiveSharer = null },
                     )
-                }
+                } }
 
                 val convoyBarSlot: (@Composable (Boolean, Boolean) -> Unit)? =
                     if (convoyBarState != null && convoyBarCoordinator != null) {
@@ -6382,6 +6392,8 @@ fun AuthenticatedApp(
                     CompositionLocalProvider(LocalAeroBackAvailable provides true) {
                     RouteHost(
                         route = route!!,
+                        clubDeepLinkId = clubDeepLinkId,
+                        onClubDeepLinkConsumed = { clubDeepLinkId = null },
                         uid = uid,
                         profileActiveMember = profile?.activeMember == true,
                         profileIsAdmin = profile?.isAdmin == true,
@@ -8748,6 +8760,8 @@ private fun CreateChooserOption(
 @Composable
 private fun RouteHost(
     route: ShellRoute,
+    clubDeepLinkId: String?,
+    onClubDeepLinkConsumed: () -> Unit,
     uid: String,
     profileActiveMember: Boolean,
     // Backend-managed admin/owner role (users/{uid}.role), from the observed
@@ -9768,6 +9782,8 @@ private fun RouteHost(
 
         ShellRoute.Clubs -> SharedClubRoute(
             uid = uid,
+            initialClubId = clubDeepLinkId,
+            onInitialClubConsumed = onClubDeepLinkConsumed,
             onOpenEvent = openEventFromNotification,
             onOpenProfile = onOpenMemberProfile,
         )

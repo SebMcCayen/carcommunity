@@ -5764,6 +5764,23 @@
         }
       }
     },
+    "clubs.allClubs": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alla klubbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All clubs"
+          }
+        }
+      }
+    },
     "clubs.attend": {
       "extractionState": "manual",
       "localizations": {
@@ -6818,6 +6835,23 @@
         }
       }
     },
+    "clubs.myClub": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Min klubb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My club"
+          }
+        }
+      }
+    },
     "clubs.name": {
       "extractionState": "manual",
       "localizations": {
@@ -6916,6 +6950,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "No friends to show. Add this person as a friend first."
+          }
+        }
+      }
+    },
+    "clubs.noMembership": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du är inte medlem i någon klubb ännu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are not a member of a club yet."
           }
         }
       }
@@ -23491,6 +23542,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Someone nearby"
+          }
+        }
+      }
+    },
+    "nearby.visitClub": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besök klubb"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visit club"
           }
         }
       }
