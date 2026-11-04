@@ -1,6 +1,8 @@
 import Foundation
 import Observation
 
+enum ClubTab: String { case myClub, allClubs }
+
 @MainActor @Observable
 final class ClubsCoordinator {
     private let repository: (any ClubsRepository)?
@@ -12,6 +14,9 @@ final class ClubsCoordinator {
     private(set) var working = false
     private(set) var failed = false
     private(set) var selectedClub: CommunityClub?
+    private(set) var selectedTab: ClubTab = .myClub
+    private(set) var openingClub = false
+    private var requestedClubID: String?
     @ObservationIgnored nonisolated(unsafe) private var subscription: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var reloadTask: Task<Void, Never>?
     private var generation = 0
@@ -31,6 +36,7 @@ final class ClubsCoordinator {
                 self.generation += 1
                 self.loading = false; self.working = false
                 self.state = nil; self.clubs = []; self.selectedClub = nil; self.nextCursor = nil
+                self.requestedClubID = nil; self.openingClub = false; self.selectedTab = .myClub
                 self.reloadTask?.cancel()
                 if enabled { self.reloadTask = Task { [weak self] in await self?.reload() } }
             }
@@ -41,6 +47,7 @@ final class ClubsCoordinator {
         reloadTask?.cancel(); reloadTask = nil
         generation += 1; enabled = false; state = nil; clubs = []; selectedClub = nil
         loading = false; working = false; nextCursor = nil
+        requestedClubID = nil; openingClub = false; selectedTab = .myClub
     }
     func reload(append: Bool = false) async {
         guard enabled, let repository, !loading else { return }
@@ -69,22 +76,40 @@ final class ClubsCoordinator {
             failed = true
         }
     }
+    var otherClubs: [CommunityClub] { clubs.filter { $0.id != state?.club?.id } }
+    func selectTab(_ tab: ClubTab) { selectedTab = tab; closeDetail() }
+    func affiliationUpdates(memberID: String) -> AsyncStream<String?> {
+        guard enabled, let repository else { return AsyncStream { $0.yield(nil); $0.finish() } }
+        return repository.affiliationUpdates(memberID: memberID)
+    }
     func open(_ club: CommunityClub) async {
+        guard enabled else { return }
+        selectedClub = club
+        await open(id: club.id)
+    }
+    func open(id: String) async {
         guard enabled, let repository else { return }
         let generation = generation
-        selectedClub = club
+        selectedTab = .allClubs
+        requestedClubID = id
+        openingClub = true
+        defer { if requestedClubID == id && generation == self.generation { openingClub = false } }
         do {
-            let fresh = try await repository.get(id: club.id)
+            let fresh = try await repository.get(id: id)
             guard enabled, generation == self.generation, !Task.isCancelled,
-                  selectedClub?.id == club.id else { return }
+                  requestedClubID == id else { return }
             selectedClub = fresh
+            failed = fresh == nil
         } catch {
-            guard generation == self.generation, !Task.isCancelled else { return }
-            guard selectedClub?.id == club.id else { return }
+            guard generation == self.generation, !Task.isCancelled, requestedClubID == id else { return }
             selectedClub = nil; failed = true
         }
     }
-    func closeDetail() { selectedClub = nil }
+    func retry() async {
+        await reload()
+        if let requestedClubID { await open(id: requestedClubID) }
+    }
+    func closeDetail() { selectedClub = nil; requestedClubID = nil; openingClub = false }
     @discardableResult func manage(_ action: String, fields: [String: String]) async -> Bool {
         guard enabled, let repository, !working, !loading, state != nil else { return false }
         let generation = generation
@@ -98,7 +123,8 @@ final class ClubsCoordinator {
         do {
             try await repository.manage(action: action, fields: fields, operationID: pendingOperationID)
             guard enabled, generation == self.generation, !Task.isCancelled else { return false }
-            pendingAction = nil; selectedClub = nil
+            pendingAction = nil; closeDetail()
+            if ["create", "join", "acceptInvitation"].contains(action) { selectedTab = .myClub }
             await reload()
             return true
         } catch {

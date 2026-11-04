@@ -82,6 +82,57 @@ final class ClubsTests: XCTestCase {
         XCTAssertEqual(repository.operations.first, repository.operations.last)
         coordinator.stop()
     }
+    func testPublicAffiliationRequiresValidClubIDAndPresentation() {
+        XCTAssertEqual(publicClubAffiliationID(["clubId": "test-club", "clubName": "Testklubben"]), "test-club")
+        XCTAssertNil(publicClubAffiliationID(nil))
+        XCTAssertNil(publicClubAffiliationID(["clubId": "test-club\n", "clubName": "Testklubben"]))
+        XCTAssertNil(publicClubAffiliationID(["clubId": "../private", "clubName": "Testklubben"]))
+        XCTAssertNil(publicClubAffiliationID(["clubId": "test-club", "clubName": ""]))
+        XCTAssertNil(publicClubAffiliationID(["clubId": "test-club", "clubName": "Testklubben", "role": "owner"]))
+    }
+    func testMemberCanBrowseOtherClubsAndKeepDirectorySelectionAfterRefresh() async {
+        let own = CommunityClub.decode(clubData)!
+        var otherData = clubData
+        otherData["id"] = "other-club"; otherData["name"] = "Other club"
+        let other = CommunityClub.decode(otherData)!
+        let state = CommunityClubState.decode([
+            "club": clubData,
+            "membership": ["clubId": own.id, "role": "member", "joinedAt": "2026-10-30T00:00:00Z"]
+        ])
+        let repository = ClubTestRepository(club: own)
+        repository.currentState = state
+        repository.directoryClubs = [own, other]
+        let coordinator = ClubsCoordinator(repository: repository)
+        coordinator.start(); repository.continuation.yield(true)
+        await settle { coordinator.state != nil && !coordinator.loading }
+        XCTAssertEqual(coordinator.selectedTab, .myClub)
+        XCTAssertEqual(coordinator.otherClubs.map(\.id), [other.id])
+        coordinator.selectTab(.allClubs)
+        await coordinator.open(other)
+        await coordinator.reload()
+        XCTAssertEqual(coordinator.selectedTab, .allClubs)
+        XCTAssertEqual(coordinator.selectedClub?.id, other.id)
+        coordinator.selectTab(.myClub)
+        XCTAssertNil(coordinator.selectedClub)
+        XCTAssertEqual(coordinator.state?.club?.id, own.id)
+        coordinator.stop()
+    }
+    func testMapTargetLoadsClubByIDWithoutDependingOnDirectoryPage() async {
+        let repository = ClubTestRepository(club: CommunityClub.decode(clubData)!)
+        repository.directoryClubs = []
+        let coordinator = ClubsCoordinator(repository: repository)
+        coordinator.start(); repository.continuation.yield(true)
+        await settle { coordinator.state != nil && !coordinator.loading }
+        await coordinator.open(id: "test-club")
+        XCTAssertTrue(coordinator.clubs.isEmpty)
+        XCTAssertEqual(repository.getIDs, ["test-club"])
+        XCTAssertEqual(coordinator.selectedClub?.id, "test-club")
+        XCTAssertEqual(coordinator.selectedTab, .allClubs)
+        repository.continuation.yield(false)
+        await settle { !coordinator.enabled }
+        XCTAssertNil(coordinator.selectedClub)
+        coordinator.stop()
+    }
     private func settle(_ condition: () -> Bool) async {
         let deadline = Date().addingTimeInterval(2)
         while !condition() && Date() < deadline { await Task.yield() }
@@ -97,17 +148,24 @@ private final class ClubTestRepository: ClubsRepository {
     var reads = 0
     var operations: [String] = []
     var failNextMutation = false
+    var currentState: CommunityClubState = .decode([:])
+    var directoryClubs: [CommunityClub]
+    var getIDs: [String] = []
     init(club: CommunityClub) {
         self.club = club
+        self.directoryClubs = [club]
         let pair = AsyncStream.makeStream(of: Bool.self)
         stream = pair.stream; continuation = pair.continuation
     }
     func enabledUpdates() -> AsyncStream<Bool> { stream }
-    func state() async throws -> CommunityClubState { reads += 1; return .decode([:]) }
+    func state() async throws -> CommunityClubState { reads += 1; return currentState }
     func directory(after cursor: String?) async throws -> ClubDirectoryPage {
-        ClubDirectoryPage(clubs: [club], nextCursor: nil)
+        ClubDirectoryPage(clubs: directoryClubs, nextCursor: nil)
     }
-    func get(id: String) async throws -> CommunityClub? { club }
+    func get(id: String) async throws -> CommunityClub? {
+        getIDs.append(id)
+        return directoryClubs.first { $0.id == id } ?? (id == club.id ? club : nil)
+    }
     func manage(action: String, fields: [String: String], operationID: String) async throws {
         operations.append(operationID)
         if failNextMutation { failNextMutation = false; throw URLError(.networkConnectionLost) }

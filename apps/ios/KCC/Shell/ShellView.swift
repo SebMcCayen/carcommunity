@@ -72,6 +72,7 @@ struct ShellView: View {
     @State private var mapReadingSelection: MapReadingSelection?
     @State private var mapDockHeight: CGFloat = 0
     @State private var mapSessionHeight: CGFloat = 0
+    @State private var clubDeepLinkID: String?
     @State private var clubsCoordinator: ClubsCoordinator?
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
     @State private var savedPlacesProximity: MapPoint?
@@ -1153,14 +1154,16 @@ struct ShellView: View {
             if liveLocationFeatureEnabled {
                 MapReadingPanel(title: "liveLocation.screenTitle", onClose: dismissMapReading) {
                     ConvoySharerDetail(coordinator: convoyAwareness, uid: uid,
-                        onUnavailable: dismissMapReading, onViewProfile: openMemberProfile)
+                        onUnavailable: dismissMapReading, onViewProfile: openMemberProfile,
+                        clubsCoordinator: clubsCoordinator, onViewClub: openClub)
                 }
             }
         case .nearby(let uid):
             if liveLocationFeatureEnabled {
                 MapReadingPanel(title: "liveLocation.screenTitle", onClose: dismissMapReading) {
                     NearbySharerDetail(coordinator: nearbyLive, uid: uid,
-                        onUnavailable: dismissMapReading, onViewProfile: openMemberProfile)
+                        onUnavailable: dismissMapReading, onViewProfile: openMemberProfile,
+                        clubsCoordinator: clubsCoordinator, onViewClub: openClub)
                 }
             }
         }
@@ -1351,7 +1354,10 @@ struct ShellView: View {
                 onOpenAccountDeletion: { routes = routes.opening(.accountDeletion) }
             )
         case .clubs:
-            routeNavigation { ClubsScreen(coordinator: clubsCoordinator) }
+            routeNavigation {
+                ClubsScreen(coordinator: clubsCoordinator, initialClubID: clubDeepLinkID,
+                    onInitialClubConsumed: { clubDeepLinkID = nil })
+            }
         case .myDrives:
             routeNavigation { myDrives }
         case .points:
@@ -1816,6 +1822,13 @@ struct ShellView: View {
         }
     }
 
+    private func openClub(id: String) {
+        guard !id.isEmpty, clubsCoordinator?.enabled == true else { return }
+        dismissMapReading()
+        clubDeepLinkID = id
+        routes = routes.opening(.clubs)
+    }
+
     private func openMemberProfile(uid: String, displayName: String?) {
         guard !uid.isEmpty, uid != signedInUid else { return }
         memberProfileTarget = MemberProfileRouteTarget(uid: uid, displayName: displayName)
@@ -2253,6 +2266,7 @@ struct ShellView: View {
         partnersCoordinator = nil
         clubsCoordinator?.stop()
         clubsCoordinator = nil
+        clubDeepLinkID = nil
         savedPlacesCoordinator = nil
         navSearchOpen = false
         dismissMapReading()

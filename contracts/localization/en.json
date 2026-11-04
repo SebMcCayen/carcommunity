@@ -718,7 +718,8 @@
     "unknownSharer": "Someone nearby",
     "visitProfile": "Visit profile",
     "sharerPoints": "%1$s %2$s",
-    "sharerPopupClose": "Close"
+    "sharerPopupClose": "Close",
+    "visitClub": "Visit club"
   },
   "convoy": {
     "title": "Convoys",
@@ -2302,7 +2303,10 @@
     "invalidForm": "Enter a name (3–60 characters), description (10–500), and location (2–80).",
     "logoError": "Could not prepare this image. Choose another image.",
     "reportConfirm": "Send a report about this message to the administrators?",
-    "noAttending": "No clubs registered yet."
+    "noAttending": "No clubs registered yet.",
+    "myClub": "My club",
+    "allClubs": "All clubs",
+    "noMembership": "You are not a member of a club yet."
   },
   "accountWarnings": {
     "title": "Warnings from an administrator",

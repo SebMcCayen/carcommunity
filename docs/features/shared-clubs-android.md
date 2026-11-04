@@ -7,8 +7,14 @@ eligible accounts. The API and authorization contract is in
 
 ## User flows
 
-- Social → Club opens the current club, or a paginated directory with club logos,
-  descriptions, open/closed access, invitations and creation.
+- Social → Club has two tabs: **Min klubb** shows the current club (or a
+  no-membership message, invitations and creation); **Alla klubbar** lets every
+  user, including existing members, browse the other clubs in pages of 25 and
+  read their public presentations. The own club is excluded from this directory.
+- Tapping a live driver's map icon offers **Besök profil** and, when the public
+  `users/{uid}.clubBadge` projection is present, **Besök klubb**. The club action
+  fetches that exact club ID, including clubs outside the loaded directory page.
+  Android and iOS share these navigation labels and directory behavior.
 - Membership is limited to one club across both apps. Open clubs permit self-join;
   closed clubs require recipient-accepted invitations. Leaving or removal starts
   a server-enforced 24-hour wait before creating or joining any club.
@@ -33,7 +39,10 @@ eligible accounts. The API and authorization contract is in
 
 Directory, roster, calendar, messages and event participants load in bounded
 pages of 25 with explicit additional-page actions. No avatar performs an extra
-club lookup. Logos use the existing public-image sanitizer, downscale to 512 px
+club lookup. Only an open live-driver popup observes that driver's public
+club affiliation; the observer is removed on dismiss and a missing, unverified
+or revoked projection hides the club action. This projection never grants
+private roster, calendar or chat access. Logos use the existing public-image sanitizer, downscale to 512 px
 (or 384 px fallback), re-encode JPEG, strip identifying metadata and fail closed
 above 256 KiB. Club writes go through Driver callables; no client membership,
 role, statistics, attendance or message document writes are permitted.

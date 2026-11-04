@@ -723,6 +723,8 @@ struct ConvoySharerDetail: View {
     let uid: String
     let onUnavailable: () -> Void
     let onViewProfile: (String, String?) -> Void
+    var clubsCoordinator: ClubsCoordinator? = nil
+    var onViewClub: ((String) -> Void)? = nil
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -734,6 +736,11 @@ struct ConvoySharerDetail: View {
                             displayName: member.displayName, imagePath: member.imagePath,
                             recordedAt: member.updatedAt, accuracyMeters: member.accuracyMeters),
                         imageURL: member.imagePath.flatMap { coordinator.imageURLs[$0] },
+                        clubsCoordinator: clubsCoordinator,
+                        onVisitClub: onViewClub.map { action in { clubID in
+                            guard coordinator.profileTarget(uid: uid) != nil else { onUnavailable(); return }
+                            action(clubID)
+                        } },
                         onVisitProfile: {
                             guard let current = coordinator.profileTarget(uid: uid) else {
                                 onUnavailable(); return

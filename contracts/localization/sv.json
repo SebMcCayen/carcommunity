@@ -718,7 +718,8 @@
     "unknownSharer": "Någon i närheten",
     "visitProfile": "Besök profil",
     "sharerPoints": "%1$s %2$s",
-    "sharerPopupClose": "Stäng"
+    "sharerPopupClose": "Stäng",
+    "visitClub": "Besök klubb"
   },
   "convoy": {
     "title": "Konvojer",
@@ -2302,7 +2303,10 @@
     "invalidForm": "Ange namn (3–60 tecken), presentation (10–500) och ort (2–80).",
     "logoError": "Bilden kunde inte förberedas. Välj en annan bild.",
     "reportConfirm": "Skicka en rapport om detta meddelande till administratörerna?",
-    "noAttending": "Inga klubbar anmälda ännu."
+    "noAttending": "Inga klubbar anmälda ännu.",
+    "myClub": "Min klubb",
+    "allClubs": "Alla klubbar",
+    "noMembership": "Du är inte medlem i någon klubb ännu."
   },
   "accountWarnings": {
     "title": "Varningar från administratör",

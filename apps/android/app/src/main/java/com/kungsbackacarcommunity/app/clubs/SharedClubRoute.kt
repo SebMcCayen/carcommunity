@@ -25,7 +25,14 @@ import java.util.UUID
 
 /** State is keyed to the authenticated UID and is never saved across accounts. */
 @Composable
-fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository: ClubRepository? = null, onOpenProfile: (String) -> Unit = {}) {
+fun SharedClubRoute(
+    uid: String,
+    onOpenEvent: (String) -> Unit = {},
+    repository: ClubRepository? = null,
+    onOpenProfile: (String) -> Unit = {},
+    initialClubId: String? = null,
+    onInitialClubConsumed: () -> Unit = {},
+) {
     val context = LocalContext.current
     val repo = remember(uid, repository) { repository ?: FirebaseClubRepository.createIfAvailable(context, uid) }
     key(uid, repo) {
@@ -38,6 +45,10 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
         var state by remember { mutableStateOf<ClubState?>(null) }
         var directory by remember { mutableStateOf(ClubPage<Club>(emptyList(), null)) }
         var selected by remember { mutableStateOf<Club?>(null) }
+        var tab by remember { mutableIntStateOf(if (initialClubId == null) 0 else 1) }
+        var openingClub by remember { mutableStateOf(false) }
+        var handledInitialClubId by remember { mutableStateOf<String?>(null) }
+        val consumeInitialClub by rememberUpdatedState(onInitialClubConsumed)
         var error by remember { mutableStateOf<Throwable?>(null) }
         var busy by remember { mutableStateOf(false) }
         var refresh by remember { mutableIntStateOf(0) }
@@ -56,23 +67,38 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
         }
         LaunchedEffect(repo, enabled, access, invitationsRevision, refresh) {
             if (!enabled || repo == null) { state = null; selected = null; directory = ClubPage(emptyList(), null); return@LaunchedEffect }
+            error = null
             try {
                 state = repo.state()
-                val own = state?.club
-                if (own != null) selected = own
-                else if (access !is ClubAccess.Member) {
-                    if (selected?.id == (access as? ClubAccess.Member)?.membership?.clubId) selected = null
-                    directory = repo.directory()
-                }
-                error = null
+                // Directory reads are public and available to members too.
+                directory = repo.directory()
             } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
+        }
+        LaunchedEffect(repo, enabled, initialClubId, refresh) {
+            val target = initialClubId?.takeUnless { it == handledInitialClubId } ?: return@LaunchedEffect
+            if (!enabled || repo == null) return@LaunchedEffect
+            tab = 1
+            selected = null
+            openingClub = true
+            try {
+                selected = repo.get(target)
+                handledInitialClubId = target
+                consumeInitialClub()
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { error = e }
+            finally { openingClub = false }
         }
         fun runAction(action: String, fields: Map<String, Any?>, after: () -> Unit = {}) {
             if (busy || repo == null) return
             busy = true
             error = null
             scope.launch {
-                try { repo.manage(action, fields, UUID.randomUUID().toString()); error = null; after(); refresh++ }
+                try {
+                    repo.manage(action, fields, UUID.randomUUID().toString())
+                    error = null
+                    if (action in setOf("create", "join", "acceptInvitation")) { tab = 0; selected = null }
+                    after(); refresh++
+                }
                 catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
                 finally { busy = false }
             }
@@ -101,12 +127,22 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
                                     mapOf("clubId" to invitation.clubId))
                             },
                         )
-                        val club = selected
-                        if (club == null) {
-                            Text(stringResource(R.string.clubs_directory), style = MaterialTheme.typography.titleLarge)
+                        TabRow(selectedTabIndex = tab) {
+                            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(stringResource(R.string.clubs_myClub)) })
+                            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(stringResource(R.string.clubs_allClubs)) })
+                        }
+                        val club = if (tab == 0) current.club else selected
+                        if (openingClub && tab == 1) {
+                            Text(stringResource(R.string.clubs_loading))
+                        } else if (club == null && tab == 0) {
+                            Text(stringResource(R.string.clubs_noMembership))
                             Button(onClick = { error = null; create = true }, enabled = !busy && current.membership == null && !clubCooldownActive(current, now)) { Text(stringResource(R.string.clubs_create)) }
-                            if (directory.items.isEmpty()) Text(stringResource(R.string.clubs_empty))
-                            directory.items.forEach { item -> ClubCard(item, onOpen = { selected = item }) }
+                            TextButton(onClick = { tab = 1 }) { Text(stringResource(R.string.clubs_allClubs)) }
+                        } else if (club == null) {
+                            Text(stringResource(R.string.clubs_directory), style = MaterialTheme.typography.titleLarge)
+                            val otherClubs = directory.items.filter { it.id != current.club?.id }
+                            if (otherClubs.isEmpty() && directory.nextCursor == null) Text(stringResource(R.string.clubs_empty))
+                            otherClubs.forEach { item -> ClubCard(item, onOpen = { selected = item }) }
                             if (directory.nextCursor != null) TextButton(enabled = !busy, onClick = {
                                 busy = true; scope.launch {
                                     try { val next = repo.directory(directory.nextCursor); directory = ClubPage((directory.items + next.items).distinctBy { it.id }, next.nextCursor) }
@@ -116,7 +152,7 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
                             }) { Text(stringResource(R.string.clubs_more)) }
                         } else {
                             val membership = (access as? ClubAccess.Member)?.membership?.takeIf { it.clubId == club.id }
-                            if (current.club?.id != club.id) TextButton(onClick = { selected = null }) { Text(stringResource(R.string.clubs_back)) }
+                            if (tab == 1) TextButton(onClick = { selected = null }) { Text(stringResource(R.string.clubs_back)) }
                             ClubCard(club)
                             if (membership == null) {
                                 Text(stringResource(R.string.clubs_readOnly))
@@ -139,7 +175,7 @@ fun SharedClubRoute(uid: String, onOpenEvent: (String) -> Unit = {}, repository:
         })
         if (confirmLeave) AlertDialog(onDismissRequest = { confirmLeave = false }, title = { Text(stringResource(R.string.clubs_leave)) },
             text = { Text(stringResource(R.string.clubs_leaveConfirm)) }, confirmButton = { TextButton(onClick = {
-                confirmLeave = false; selected?.let { club -> runAction("leave", mapOf("clubId" to club.id)) { selected = null; state = null } }
+                confirmLeave = false; state?.club?.let { club -> runAction("leave", mapOf("clubId" to club.id)) { selected = null; state = null } }
             }, enabled = !busy) { Text(stringResource(R.string.clubs_confirm)) } }, dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text(stringResource(R.string.clubs_cancel)) } })
     }
 }

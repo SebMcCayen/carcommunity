@@ -4,6 +4,8 @@ import SwiftUI
 /// Android. Public club pages never expose a roster, private calendar or chat.
 struct ClubsScreen: View {
     let coordinator: ClubsCoordinator?
+    var initialClubID: String? = nil
+    var onInitialClubConsumed: () -> Void = {}
     @State private var showsCreate = false
     @State private var confirmsLeave = false
 
@@ -22,7 +24,14 @@ struct ClubsScreen: View {
         .navigationTitle("clubs.title")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("clubs.screen")
-        .task { await coordinator?.reload() }
+        .task(id: coordinator?.enabled) {
+            guard let coordinator, coordinator.enabled else { return }
+            await coordinator.reload()
+            if let initialClubID {
+                await coordinator.open(id: initialClubID)
+                onInitialClubConsumed()
+            }
+        }
         .refreshable { await coordinator?.reload() }
         .sheet(isPresented: $showsCreate) {
             if let coordinator { ClubCreateSheet(coordinator: coordinator) }
@@ -40,21 +49,18 @@ struct ClubsScreen: View {
     @ViewBuilder private func clubContent(_ coordinator: ClubsCoordinator) -> some View {
         if coordinator.failed {
             Text("clubs.error").foregroundStyle(KccTheme.error)
-            Button("clubs.retry") { Task { await coordinator.reload() } }.frame(minHeight: 48)
+            Button("clubs.retry") { Task { await coordinator.retry() } }.frame(minHeight: 48)
         }
         if coordinator.loading { ProgressView("clubs.loading") }
-        if let club = coordinator.selectedClub {
-            Button { coordinator.closeDetail() } label: { Label("clubs.back", systemImage: "chevron.backward") }
-                .frame(minHeight: 48)
-            ClubPresentation(club: club)
-            clubStatistics(club)
-            if let state = coordinator.state, state.canJoin(at: Date()), club.visibility == "open" {
-                Button("clubs.join") { Task { await coordinator.manage("join", fields: ["clubId": club.id]) } }
-                    .kccPrimaryAction().disabled(coordinator.working)
-                    .frame(minHeight: 48)
-            }
-            Text("clubs.readOnly").font(.footnote).foregroundStyle(KccTheme.secondary)
-        } else {
+        Picker("clubs.title", selection: Binding(
+            get: { coordinator.selectedTab }, set: { coordinator.selectTab($0) }
+        )) {
+            Text("clubs.myClub").tag(ClubTab.myClub)
+            Text("clubs.allClubs").tag(ClubTab.allClubs)
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("clubs.tabs")
+        if coordinator.selectedTab == .myClub {
             if let state = coordinator.state {
                 if let club = state.club {
                     ClubPresentation(club: club)
@@ -65,6 +71,7 @@ struct ClubsScreen: View {
                         Text("clubs.ownershipError").font(.footnote).foregroundStyle(KccTheme.secondary)
                     }
                 } else {
+                    Text("clubs.noMembership")
                     if state.legacyConflict { Text("clubs.conflict").foregroundStyle(KccTheme.error) }
                     if let until = state.joinAllowedAt, until > Date() {
                         Text("clubs.cooldown".localizedFormat(until.formatted(date: .abbreviated, time: .shortened)))
@@ -73,6 +80,7 @@ struct ClubsScreen: View {
                     if state.canJoin(at: Date()) {
                         Button("clubs.create") { showsCreate = true }.kccPrimaryAction().frame(minHeight: 48)
                     }
+                    Button("clubs.allClubs") { coordinator.selectTab(.allClubs) }.frame(minHeight: 48)
                 }
                 if !state.invitations.isEmpty {
                     Text("clubs.invitations").font(.headline)
@@ -86,9 +94,25 @@ struct ClubsScreen: View {
                     }
                 }
             }
+        } else if coordinator.openingClub {
+            ProgressView("clubs.loading")
+        } else if let club = coordinator.selectedClub {
+            Button { coordinator.closeDetail() } label: { Label("clubs.back", systemImage: "chevron.backward") }
+                .frame(minHeight: 48)
+            ClubPresentation(club: club)
+            clubStatistics(club)
+            if let state = coordinator.state, state.canJoin(at: Date()), club.visibility == "open" {
+                Button("clubs.join") { Task { await coordinator.manage("join", fields: ["clubId": club.id]) } }
+                    .kccPrimaryAction().disabled(coordinator.working)
+                    .frame(minHeight: 48)
+            }
+            Text("clubs.readOnly").font(.footnote).foregroundStyle(KccTheme.secondary)
+        } else {
             Text("clubs.directory").font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
-            if !coordinator.loading && !coordinator.failed && coordinator.clubs.isEmpty { Text("clubs.empty") }
-            ForEach(coordinator.clubs) { club in
+            if !coordinator.loading && !coordinator.failed && coordinator.otherClubs.isEmpty && coordinator.nextCursor == nil {
+                Text("clubs.empty")
+            }
+            ForEach(coordinator.otherClubs) { club in
                 Button { Task { await coordinator.open(club) } } label: { ClubPresentation(club: club) }
                     .buttonStyle(.plain)
                     .accessibilityHint(Text("clubs.title"))

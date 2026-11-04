@@ -26,6 +26,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import com.kungsbackacarcommunity.app.clubs.ClubRepository
+import kotlinx.coroutines.flow.flowOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -98,12 +102,8 @@ object LiveSharerPopupContent {
 }
 
 /**
- * The small sub-menu popup opened by TAPPING a live sharer's car-photo chip on
- * the map (the approved 2026-08-11 "tap-live-user profile popup"). Profile-only:
- * it shows the sharer's nickname + Crown Points ("XP", the same headline number
- * their profile shows) and a single "Besök profil" action that opens their
- * member profile. No messaging or other actions — visiting the profile is the
- * one thing offered, and the profile screen owns everything past that.
+ * The live sharer's identity and public navigation actions. Club affiliation is
+ * observed only while this popup is mounted and never grants membership access.
  *
  * Modelled on [com.kungsbackacarcommunity.app.billboards.BillboardMapPopup] —
  * the same translucent aero [Surface] over the live map, the same close
@@ -126,10 +126,17 @@ fun LiveSharerPopup(
     pointsRepository: FriendPointsRepository?,
     onVisitProfile: ((String) -> Unit)?,
     onDismiss: () -> Unit,
+    clubRepository: ClubRepository? = null,
+    onVisitClub: ((String) -> Unit)? = null,
 ) {
     val unknownLabel = stringResource(R.string.nearby_unknownSharer)
     val nickname = LiveSharerPopupContent.nickname(sharer, unknownLabel)
     val canVisit = LiveSharerPopupContent.canVisitProfile(sharer.uid, onVisitProfile != null)
+
+    val affiliationSource = remember(sharer.uid, clubRepository) {
+        clubRepository?.observeAffiliation(sharer.uid) ?: flowOf(null)
+    }
+    val clubId by affiliationSource.collectAsState(initial = null)
 
     // Best-effort points read, keyed on the sharer so re-opening a different chip
     // re-reads. A null repository resolves straight to 0 (no wallet visible).
@@ -220,6 +227,14 @@ fun LiveSharerPopup(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(LIVE_SHARER_POPUP_VISIT_TAG),
                     ) {
                         Text(text = stringResource(R.string.nearby_visitProfile))
+                    }
+                }
+                clubId?.let { target ->
+                    if (onVisitClub != null) {
+                        Button(
+                            onClick = { onVisitClub(target); onDismiss() },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("live_sharer_popup_club"),
+                        ) { Text(stringResource(R.string.nearby_visitClub)) }
                     }
                 }
             }
