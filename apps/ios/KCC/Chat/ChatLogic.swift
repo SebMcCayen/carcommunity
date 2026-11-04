@@ -357,7 +357,7 @@ struct ChatRateLimit: Equatable, Sendable {
 final class ChatSendCooldown {
     private var deadline: TimeInterval = 0
     private var highestServerDeadline: Int64?
-    @ObservationIgnored private let elapsed: () -> TimeInterval
+    private let elapsed: () -> TimeInterval
 
     init(elapsed: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.elapsed = elapsed

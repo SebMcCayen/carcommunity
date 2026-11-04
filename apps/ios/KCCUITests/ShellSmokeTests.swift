@@ -53,6 +53,27 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
+    func testCommunitySpamSeriesExpandsWithoutHidingTheNewestMessage() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
+            app.buttons["shell.tab.chat"].tap()
+            XCTAssertTrue(app.staticTexts["chat.message.text.fixture-39"].waitForExistence(timeout: 15))
+            XCTAssertFalse(app.staticTexts["chat.message.text.fixture-37"].exists)
+            let toggle = app.buttons["community-group-toggle-fixture-31"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+            for _ in 0..<4 {
+                if toggle.isHittable { break }
+                element("chat.thread.messages", in: app).swipeDown()
+            }
+            XCTAssertTrue(toggle.isHittable)
+            toggle.tap()
+            XCTAssertTrue(app.staticTexts["chat.message.text.fixture-37"].exists)
+            XCTAssertTrue(app.staticTexts["chat.message.text.fixture-39"].exists)
+            attach(app, name: largeText ? "community-series-accessibility" : "community-series")
+            app.terminate()
+        }
+    }
+
     func testCommunityComposerStaysVisibleWithKeyboard() {
         for largeText in [false, true] {
             let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
