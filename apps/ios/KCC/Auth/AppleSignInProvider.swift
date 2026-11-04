@@ -78,6 +78,37 @@ final class AppleSignInProvider: NSObject, AppleIDTokenProvider, @unchecked Send
         return request
     }
 
+    /// Normalize the delegate's NSError bridge before diagnostics inspect its
+    /// Swift type. Raw Apple errors can otherwise arrive as `NSError` and fall
+    /// into the server's shared Unknown bucket. Reuse the already-allowlisted
+    /// failure type; only app-authored codes enter private diagnostic metadata.
+    /// Never copy an arbitrary domain, numeric code, userInfo, or message.
+    static func signInError(from error: Error) -> Error {
+        let source = error as NSError
+        guard source.domain == ASAuthorizationErrorDomain else {
+            return SignInFailedError(underlying: error, diagnosticCode: "appleProviderFailure")
+        }
+        let diagnosticCode: String
+        switch source.code {
+        case ASAuthorizationError.Code.canceled.rawValue:
+            return SignInCancelledError()
+        case ASAuthorizationError.Code.unknown.rawValue:
+            diagnosticCode = "appleUnknown"
+        case ASAuthorizationError.Code.invalidResponse.rawValue:
+            diagnosticCode = "appleInvalidResponse"
+        case ASAuthorizationError.Code.notHandled.rawValue:
+            diagnosticCode = "appleNotHandled"
+        case ASAuthorizationError.Code.failed.rawValue:
+            diagnosticCode = "appleFailed"
+        case ASAuthorizationError.Code.notInteractive.rawValue:
+            diagnosticCode = "appleNotInteractive"
+        default:
+            // Future OS codes stay bounded without discarding the failure.
+            diagnosticCode = "appleOther"
+        }
+        return SignInFailedError(underlying: error, diagnosticCode: diagnosticCode)
+    }
+
     /// Resolves a pending flow with `CancellationError` when the calling
     /// task is cancelled: the caller returns immediately (the coordinator
     /// maps it back to idle) and the stored state is cleared so the next
@@ -162,11 +193,7 @@ extension AppleSignInProvider: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        if let authError = error as? ASAuthorizationError, authError.code == .canceled {
-            resume(with: .failure(SignInCancelledError()))
-        } else {
-            resume(with: .failure(error))
-        }
+        resume(with: .failure(Self.signInError(from: error)))
     }
 }
 
