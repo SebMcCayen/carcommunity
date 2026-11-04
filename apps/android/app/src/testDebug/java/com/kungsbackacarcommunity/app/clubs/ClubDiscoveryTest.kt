@@ -40,6 +40,21 @@ class ClubDiscoveryTest {
         compose.onNodeWithText("Own club").assertExists()
     }
 
+    @Test fun mapOwnClubDetailRefreshesAfterOwnerEdits() {
+        val repo = DiscoveryRepository(member = true, role = ClubRole.Owner)
+        compose.setContent { KccTheme { SharedClubRoute("viewer", repository = repo, initialClubId = "own") } }
+        compose.onNodeWithText("Own club").assertExists()
+        compose.onNodeWithText(text(R.string.clubs_edit)).performScrollTo().performClick()
+        compose.onNode(hasSetTextAction() and hasText("Own club")).performTextReplacement("Renamed club")
+        compose.onNode(isToggleable()).performClick()
+        compose.onNodeWithText(text(R.string.clubs_save)).performClick()
+        compose.onNodeWithText("Renamed club").assertExists()
+        compose.onNodeWithText("Own club").assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.clubs_invite)).assertExists()
+        tab(R.string.clubs_myClub).performScrollTo().performClick()
+        compose.onNodeWithText("Renamed club").assertExists()
+    }
+
     @Test fun nonmemberHasEmptyOwnTabAndCanBrowseAllClubs() {
         val repo = DiscoveryRepository()
         compose.setContent { KccTheme { SharedClubRoute("viewer", repository = repo) } }
@@ -59,6 +74,8 @@ class ClubDiscoveryTest {
         compose.onNodeWithText(text(R.string.clubs_members)).assertExists()
         compose.runOnIdle { repo.access.value = ClubAccess.Unverified }
         compose.onNodeWithText(text(R.string.clubs_members)).assertDoesNotExist()
+        tab(R.string.clubs_allClubs).performScrollTo().performClick()
+        compose.onNodeWithText("Last club").assertExists()
     }
 
     @Test fun popupHidesAbsentAffiliationNavigatesToExactClubAndRemovesRevokedAffiliation() {
@@ -83,22 +100,22 @@ class ClubDiscoveryTest {
 
 private fun discoveryClub(id: String, name: String) = Club(id, name, "About $name", "Kungsbacka", "open", "owner", null, 1, 0, ClubStats())
 
-private class DiscoveryRepository(member: Boolean = false) : ClubRepository {
-    val own = discoveryClub("own", "Own club")
+private class DiscoveryRepository(member: Boolean = false, role: ClubRole = ClubRole.Member) : ClubRepository {
+    val own = discoveryClub("own", "Own club").let { if (role == ClubRole.Owner) it.copy(ownerUid = "viewer") else it }
     val other = discoveryClub("other", "Other club")
     val last = discoveryClub("last", "Last club")
-    private val membership = ClubMembership("own", ClubRole.Member, "2026-11-01T12:00:00Z")
+    private val membership = ClubMembership("own", role, "2026-11-01T12:00:00Z")
     val access = MutableStateFlow<ClubAccess>(if (member) ClubAccess.Member(membership) else ClubAccess.None)
     val affiliation = MutableStateFlow<String?>(null)
     val pages = mutableListOf<String?>()
     val gets = mutableListOf<String>()
     val rosters = mutableListOf<String>()
-    private val state = if (member) ClubState(own, membership) else ClubState()
+    private var currentState = if (member) ClubState(own, membership) else ClubState()
     override fun observeEnabled() = flowOf(true)
     override fun observePublicAttendanceReady() = flowOf(false)
     override fun observeAccess(): Flow<ClubAccess> = access
     override fun observeAffiliation(memberUid: String): Flow<String?> = affiliation
-    override suspend fun state() = state
+    override suspend fun state() = currentState
     override suspend fun directory(cursor: String?): ClubPage<Club> {
         pages += cursor
         return if (cursor == null) ClubPage(listOf(own, other), "page2") else ClubPage(listOf(last), null)
@@ -112,7 +129,16 @@ private class DiscoveryRepository(member: Boolean = false) : ClubRepository {
     override fun observeEventParticipants(eventId: String, clubIds: List<String>): Flow<List<Club>> = flowOf(emptyList())
     override fun eventAttendance(eventId: String, clubId: String): Flow<Boolean?> = flowOf(null)
     override suspend fun moreEventParticipants(eventId: String, afterId: String): List<Club> = emptyList()
-    override suspend fun manage(action: String, fields: Map<String, Any?>, operationId: String): Map<String, Any?> = error("unused")
+    override suspend fun manage(action: String, fields: Map<String, Any?>, operationId: String): Map<String, Any?> {
+        check(action == "update" && fields["clubId"] == own.id)
+        currentState = currentState.copy(club = own.copy(
+            name = fields["name"] as String,
+            description = fields["description"] as String,
+            location = fields["location"] as String,
+            visibility = fields["visibility"] as String,
+        ))
+        return emptyMap()
+    }
     override suspend fun uploadLogo(clubId: String, bytes: ByteArray): String = error("unused")
     override fun chat(): Flow<ClubChatState> = error("unused")
     override suspend fun olderMessages(clubId: String, before: ClubMessageCursor): ClubMessagePage = error("unused")

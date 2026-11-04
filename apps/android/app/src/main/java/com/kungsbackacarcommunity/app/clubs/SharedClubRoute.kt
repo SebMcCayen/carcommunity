@@ -69,7 +69,11 @@ fun SharedClubRoute(
             if (!enabled || repo == null) { state = null; selected = null; directory = ClubPage(emptyList(), null); return@LaunchedEffect }
             error = null
             try {
-                state = repo.state()
+                val freshState = repo.state()
+                state = freshState
+                // A map link can select our own club in the directory tab.
+                // Keep that detail fresh after management without replacing other selections.
+                freshState.club?.let { own -> if (selected?.id == own.id) selected = own }
                 // Directory reads are public and available to members too.
                 directory = repo.directory()
             } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e }
