@@ -246,6 +246,7 @@ final class ChannelChatCoordinator {
             $0.replyTo?.messageId == (chatRepliesEnabled ? replyTarget?.id : nil)
         }) {
             retry(existing)
+            clearReply()
             return existing.id
         }
         let clientId = UUID().uuidString
@@ -285,6 +286,7 @@ final class ChannelChatCoordinator {
         guard !cooldown.isBlocked, message.deliveryState == .failed, message.sendError?.isRetryable == true,
             let index = pending.firstIndex(where: { $0.id == message.id })
         else { return }
+        guard pending[index].deliveryState == .failed else { return }
         let retried = Self.reset(pending[index])
         pending[index] = retried
         recompute()
@@ -326,7 +328,8 @@ final class ChannelChatCoordinator {
 
     private func acknowledgeDraft(_ id: String) {
         guard let recovery = draftRecovery.removeValue(forKey: id), recovery.restored,
-              draftRevision == recovery.revision, draft == recovery.text else { return }
+              draftRevision == recovery.revision, draft == recovery.text,
+              replyRevision == recovery.replyRevision else { return }
         draft = ""
         if replyRevision == recovery.replyRevision { replyTarget = nil }
     }

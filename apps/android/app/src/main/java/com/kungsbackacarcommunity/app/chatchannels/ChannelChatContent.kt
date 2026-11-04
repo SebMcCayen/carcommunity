@@ -12,6 +12,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
@@ -871,8 +874,10 @@ internal fun ChannelMessageList(
             groups.firstOrNull { group -> group.messages.any { it.id == parentId } }?.let {
                 if (it.id !in expandedGroups) expandedGroups = expandedGroups + it.id
             }
-            highlightedId = parentId
-            scope.launch { listState.animateScrollToItem((index + headerOffset).coerceAtLeast(0)) }
+            scope.launch {
+                listState.animateScrollToItem((index + headerOffset).coerceAtLeast(0))
+                highlightedId = parentId
+            }
         }
     }
 
@@ -965,13 +970,17 @@ private fun ChannelMessageRow(
     showSender: Boolean = true,
     collapsedBodyLines: Int = 8,
 ) {
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(highlighted) {
+        if (highlighted) bringIntoView.bringIntoView()
+    }
     if (isOwn) {
         // The time sits on the line ABOVE the bubble, aligned to the bubble's own
         // (right) edge. Your own messages carry no sender header, so this line is
         // the counterpart of the sender-name line on an incoming message — which
         // keeps the stamp in the same place on every message in the thread.
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView),
             horizontalAlignment = Alignment.End,
         ) {
             MessageTimeText(millis = message.createdAtMillis, dates = dates)
@@ -1005,7 +1014,7 @@ private fun ChannelMessageRow(
         }
     val senderName = message.senderDisplayName ?: stringResource(R.string.channel_unknownSender)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView),
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
         if (showSender) SenderAvatar(

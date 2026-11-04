@@ -512,4 +512,22 @@ final class ChannelChatCoordinatorTests: XCTestCase {
         await waitUntil { coordinator.messages.last?.deliveryState == .failed }
         XCTAssertEqual(coordinator.draft, "ny text")
     }
+
+    @MainActor
+    func testResendingRecoveredDraftReusesItsIDAndClearsTheRecoveredQuote() async {
+        let source = FakeChatSource()
+        source.scriptPost([.failed(.generic), .sent(messageId: "ok", mentionedUids: [])])
+        let coordinator = ChannelChatCoordinator(source: source, chatRepliesEnabled: true, cooldown: ChatSendCooldown())
+        coordinator.setReplyTarget(serverMessage("parent"))
+        coordinator.draft = "svar"
+        let first = coordinator.sendDraft()
+        await waitUntil { coordinator.messages.first?.deliveryState == .failed }
+        XCTAssertEqual(coordinator.draft, "svar")
+        XCTAssertEqual(coordinator.sendDraft(), first)
+        XCTAssertNil(coordinator.replyTarget)
+        await waitUntil { source.postedTexts.count == 2 }
+        XCTAssertTrue(coordinator.draft.isEmpty)
+        XCTAssertEqual(coordinator.messages.count, 1)
+        XCTAssertEqual(source.postedReplyIds, ["parent", "parent"])
+    }
 }
