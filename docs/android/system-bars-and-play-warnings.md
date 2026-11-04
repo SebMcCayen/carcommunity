@@ -72,3 +72,13 @@ production behavior. The emulator runner invokes a checked-in Bash script as
 one command; it must not split a multi-line quoted shell block line by line.
 The combined app/test APK compilation, including the explicit provider
 permission handling required by AGP 9 lint, passed locally on 2026-11-04.
+
+The chat fixture grants `POST_NOTIFICATIONS` before activity launch on API 33+
+so its first-entry system dialog cannot steal keyboard focus. It does not rely
+on permissions or preferences left by another test. The final matrix is
+verified on CI emulators; a stressed local API-34 emulator developed a SystemUI
+ANR during the extended run, which is not app/device acceptance evidence.
+
+Final current-head CI/device results and artifact links are recorded in
+[PR #1308](https://github.com/SebMcCayen/carcommunity/pull/1308); earlier local
+checks above are historical evidence and do not replace those final gates.

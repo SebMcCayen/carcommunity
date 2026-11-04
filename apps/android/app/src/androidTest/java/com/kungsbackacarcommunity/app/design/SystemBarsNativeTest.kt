@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.design
 
+import android.Manifest
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -29,6 +30,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.rule.GrantPermissionRule
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.*
 import com.kungsbackacarcommunity.app.redesign.MapShellCataloguePreview
@@ -39,13 +41,19 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
+import org.junit.rules.RuleChain
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /** Real system bars/IME, production styling and screens, disposable local content only. */
 @RunWith(AndroidJUnit4::class)
 class SystemBarsNativeTest {
-    @get:Rule val compose = createAndroidComposeRule<SystemBarsTestActivity>()
+    private val compose = createAndroidComposeRule<SystemBarsTestActivity>()
+    @get:Rule val rules: RuleChain = if (Build.VERSION.SDK_INT >= 33) {
+        RuleChain.outerRule(GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS)).around(compose)
+    } else {
+        RuleChain.outerRule(compose)
+    }
     private var dark by mutableStateOf(true)
 
     @Before fun configureRequestedOrientationBeforeContent() {
