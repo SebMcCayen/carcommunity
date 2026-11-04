@@ -1,10 +1,12 @@
 package com.kungsbackacarcommunity.app.design
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
+import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -85,7 +87,7 @@ class SystemBarsNativeTest {
                 }
             }
         }
-        for (mode in listOf(true, false, true, false)) {
+        for ((iteration, mode) in listOf(true, false, true, false).withIndex()) {
             compose.runOnIdle { dark = mode }
             compose.waitForIdle()
             assertStyle(mode)
@@ -93,7 +95,7 @@ class SystemBarsNativeTest {
             val insets = insets().getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             assertTrue("Text must clear status bar/cutout", safe.top >= insets.top)
             assertTrue("Text must clear side cutout", safe.left >= insets.left)
-            capture("system-bars-${if (mode) "dark" else "light"}")
+            capture("system-bars-${if (mode) "dark" else "light"}-$iteration")
         }
     }
 
@@ -215,9 +217,32 @@ class SystemBarsNativeTest {
         val bitmap = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
         try {
             val context = InstrumentationRegistry.getInstrumentation().targetContext
-            val dir = File(checkNotNull(context.getExternalFilesDir(null)), "system-bars")
-            check(dir.mkdirs() || dir.isDirectory)
-            File(dir, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            val arguments = InstrumentationRegistry.getArguments()
+            val variant = "${arguments.getString("orientation") ?: "default"}-${arguments.getString("navigationMode") ?: "default"}"
+            require(variant.matches(Regex("[a-zA-Z0-9_-]+")))
+            if (Build.VERSION.SDK_INT >= 29) {
+                // AGP uninstalls the app before the shell can pull private files.
+                // Test-only MediaStore captures survive cleanup on the disposable
+                // emulator, without production storage permissions or real data.
+                val resolver = context.contentResolver
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/carcommunity-system-bars/$variant")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+                val uri = checkNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+                checkNotNull(resolver.openOutputStream(uri)).use {
+                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+                check(resolver.update(uri, ContentValues().apply {
+                    put(MediaStore.Images.Media.IS_PENDING, 0)
+                }, null, null) == 1)
+            } else {
+                val dir = File(checkNotNull(context.getExternalFilesDir(null)), "system-bars/$variant")
+                check(dir.mkdirs() || dir.isDirectory)
+                File(dir, "$name.png").outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            }
         } finally { bitmap.recycle() }
     }
 

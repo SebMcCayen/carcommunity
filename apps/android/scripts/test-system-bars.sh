@@ -33,9 +33,14 @@ for orientation in portrait landscape; do
       -Pandroid.testInstrumentationRunnerArguments.requireCutout=true || test_status=$?
     evidence="../../system-bars-evidence/$orientation/$mode"
     mkdir -p "$evidence"
-    adb pull /sdcard/Android/data/com.kungsbackacarcommunity.app/files/system-bars "$evidence/" || true
+    capture_status=0
+    adb pull "/sdcard/Pictures/carcommunity-system-bars/$orientation-$mode" "$evidence/system-bars" || capture_status=$?
     cp -R app/build/outputs/androidTest-results "$evidence/" || true
     cp -R app/build/reports/androidTests "$evidence/" || true
     test "$test_status" -eq 0
+    test "$capture_status" -eq 0
+    # Missing screenshots must fail acceptance instead of silently uploading
+    # reports only. Each successful combination captures nine real OS images.
+    test "$(find "$evidence/system-bars" -type f -name '*.png' | wc -l)" -ge 9
   done
 done
