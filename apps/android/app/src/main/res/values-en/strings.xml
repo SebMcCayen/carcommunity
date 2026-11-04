@@ -2028,6 +2028,9 @@
     <string name="whatsNew_release010Build9Live">The live bar shows elapsed time, current speed and distance. Tap it for more controls. Stop now uses an icon without a visible label.</string>
     <string name="whatsNew_release010Build9Profiles">Open a member’s profile with Visit profile when selecting a live driver on the map.</string>
     <string name="whatsNew_release010Build9Map">The required Mapbox logo and information control now sit on the left, clear of the live bar.</string>
+    <string name="whatsNew_release010Build10Highlight">A cleaner map after live driving.</string>
+    <string name="whatsNew_release010Build10Drives">My drives stays in the Profile menu, without an extra button appearing on the map after a live session.</string>
+    <string name="whatsNew_release010Build10Create">The plus button now shows only its icon.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

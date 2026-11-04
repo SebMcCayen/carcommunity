@@ -1049,7 +1049,6 @@ struct ShellView: View {
     private var mapBottomDockVisible: Bool {
         if mapReadingSelection != nil || convoyManagementCoordinator?.activeConvoy != nil
             || liveLocationCoordinator?.isSharing == true { return true }
-        if let state = driveRecordingCoordinator?.state, case .kept = state { return true }
         return false
     }
 
@@ -1101,14 +1100,6 @@ struct ShellView: View {
         if let coordinator = liveLocationCoordinator, coordinator.isSharing {
             LiveSessionBar(live: coordinator, recording: driveRecordingCoordinator,
                 onManage: { routes = routes.opening(.liveLocation) })
-        }
-        if let state = driveRecordingCoordinator?.state, case .kept = state {
-            Button { routes = routes.opening(.myDrives) } label: {
-                Label("shell.moreDrives", systemImage: "chart.bar.xaxis")
-                    .font(.subheadline).frame(maxWidth: .infinity, minHeight: 48)
-                    .background(KccTheme.overlay, in: Capsule())
-            }
-            .accessibilityIdentifier("shell.postDriveHistory")
         }
     }
 
@@ -1255,7 +1246,7 @@ struct ShellView: View {
                             .font(.system(size: 20, weight: .semibold))
                             .frame(height: 28)
                             .accessibilityHidden(true)
-                        if !(tab == .create && (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting)) {
+                        if tab != .create {
                           Text(LocalizedStringKey(tabTitle(tab))).font(.caption2)
                             // Only navigation chrome is bounded. Reading content
                             // keeps the user's full accessibility text size.

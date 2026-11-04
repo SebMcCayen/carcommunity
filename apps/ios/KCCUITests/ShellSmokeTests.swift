@@ -331,7 +331,11 @@ final class ShellSmokeTests: XCTestCase {
             let stopped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: bar)
             XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 10), .completed)
             XCTAssertEqual(stop.label, "Create")
+            XCTAssertEqual(stop.staticTexts.count, 0, "The restored plus disc must contain only its icon")
+            XCTAssertFalse(app.buttons["shell.postDriveHistory"].exists,
+                "Saved drives belong under Profile, not in the map dock after stopping")
             XCTAssertEqual(map.value as? String, identity)
+            chatProof(app, name: largeText ? "map-after-stop-en-accessibility" : "map-after-stop-en")
             app.terminate()
         }
     }
@@ -752,6 +756,9 @@ final class ShellSmokeTests: XCTestCase {
         let app = launch(language: language)
         let ids = ["map", "chat", "social", "garage"]
         assertSelected(app.buttons["shell.tab.map"])
+        let create = app.buttons["shell.tab.create"]
+        XCTAssertEqual(create.label, language == "sv" ? "Skapa" : "Create")
+        XCTAssertEqual(create.staticTexts.count, 0, "Create must keep an accessible name without visible text")
         for (index, label) in labels.enumerated().dropFirst() {
             let tab = app.buttons["shell.tab.\(ids[index])"]
             XCTAssertTrue(tab.isHittable)
