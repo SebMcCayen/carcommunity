@@ -55,16 +55,18 @@ test('legal compatibility pages preserve existing Hosting and event routing', ()
   assert.equal(existsSync(resolve(root, 'apps/admin/public/legal.css')), false);
 });
 
-test('Android locale contracts keep compatible installed-app links', () => {
+test('native locale contracts open canonical public legal pages directly', () => {
   for (const locale of ['sv', 'en']) {
     const contract = JSON.parse(
       readFileSync(resolve(root, `contracts/localization/${locale}.json`), 'utf8'),
     );
-    for (const route of ['privacy', 'terms']) {
+    for (const [route, page] of destinations) {
+      if (route === 'support') continue;
       const url = new URL(contract.url[route]);
-      assert.equal(url.origin, 'https://kungsbacka-car-community.web.app');
-      assert.equal(url.pathname, `/${route}`);
-      assert.equal(existsSync(resolve(root, `apps/admin/public${url.pathname}/index.html`)), true);
+      assert.equal(url.href, `https://kungsbackacarcommunity.se/${page}`);
+      // Older installed apps still use these compatibility pages. Keep them
+      // even though new native resources no longer depend on admin Hosting.
+      assert.equal(existsSync(resolve(root, `apps/admin/public/${route}/index.html`)), true);
     }
   }
 });
