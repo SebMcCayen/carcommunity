@@ -344,20 +344,35 @@ it('serializes public reply snapshots with concurrent removal of their canonical
     reason: 'Concurrent quote test',
     idempotencyKey: crypto.randomUUID(),
   });
-  await Promise.all([
+  const [, replies] = await Promise.all([
     removal,
-    ...Array.from({ length: 3 }, (_, i) =>
-      httpsCallable(
-        functions,
-        'communityChat-post',
-      )({ text: `Racing reply ${i}`, replyToMessageId: 'parent', clientId: `race-reply-${i}` }),
+    Promise.allSettled(
+      Array.from({ length: 3 }, (_, i) =>
+        httpsCallable(
+          functions,
+          'communityChat-post',
+        )({
+          text: `Racing reply ${i}`,
+          replyToMessageId: 'parent',
+          clientId: `race-reply-${i}`,
+        }),
+      ),
     ),
   ]);
+  expect(replies.filter((reply) => reply.status === 'fulfilled')).toHaveLength(2);
+  expect(replies.filter((reply) => reply.status === 'rejected')).toHaveLength(1);
   expect((await publicMessages.where('replyTo.messageId', '==', 'parent').get()).size).toBe(0);
-  for (let i = 0; i < 3; i++)
-    expect((await publicMessages.doc(`race-reply-${i}`).get()).get('text')).toBe(
-      `Racing reply ${i}`,
-    );
+  for (const [i, reply] of replies.entries()) {
+    const message = await publicMessages.doc(`race-reply-${i}`).get();
+    if (reply.status === 'fulfilled') expect(message.get('text')).toBe(`Racing reply ${i}`);
+    else {
+      expect(reply.reason).toMatchObject({
+        code: 'functions/resource-exhausted',
+        details: { reason: 'chat-rate-limited' },
+      });
+      expect(message.exists).toBe(false);
+    }
+  }
 });
 
 it('rejects late send retries that reuse a removed public message id', async () => {

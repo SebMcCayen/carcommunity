@@ -577,7 +577,14 @@
     "replyComposerReplyingTo": "Svarar %1$s",
     "replyComposerBanner": "Svarar på ett meddelande från %1$s",
     "replyQuoteHeaderAction": "Svar till %1$s: %2$s. Tryck för att visa originalet.",
-    "hideKeyboard": "Dölj tangentbord"
+    "hideKeyboard": "Dölj tangentbord",
+    "flood": {
+      "paused": "Meddelanden är tillfälligt pausade",
+      "wait": "Du kan skicka igen om %1$d sekunder. Ditt utkast finns kvar.",
+      "showMore": "Visa mer",
+      "showLess": "Visa mindre",
+      "moreFrom": "Visa fler från %1$s (%2$d)"
+    }
   },
   "common": {
     "placeholder": "Kommer snart"

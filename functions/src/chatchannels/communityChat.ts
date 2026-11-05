@@ -84,7 +84,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { requireChatSender } from '../shared/chat-actor';
-import { stageChatSendGuard, throwChatRateLimited } from '../shared/chat-send-guard';
+import { throwChatRateLimited } from '../shared/chat-send-guard';
+import { stageCommunitySendGuard } from './community-send-guard';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
@@ -333,7 +334,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
           }
         : null,
     );
-    const guard = await stageChatSendGuard(db, tx, actor.uid, Date.now);
+    const guard = await stageCommunitySendGuard(db, tx, actor.uid, text, Date.now);
     if (!guard.allowed) return { kind: 'denied' as const, guard };
     tx.create(
       messageRef,

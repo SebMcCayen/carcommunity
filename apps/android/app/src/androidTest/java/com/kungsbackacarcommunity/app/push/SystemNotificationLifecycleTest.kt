@@ -8,12 +8,16 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
-import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Direction
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import com.google.firebase.FirebaseApp
 import com.kungsbackacarcommunity.app.MainActivity
 import com.kungsbackacarcommunity.app.R
@@ -21,6 +25,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -160,7 +165,12 @@ class SystemNotificationLifecycleTest {
             .also { scenario = it }
         val original = AtomicReference<MainActivity>()
         activity.onActivity { original.set(it) }
-        activity.moveToState(Lifecycle.State.CREATED)
+        // Put the task genuinely behind the launcher before posting. A forced
+        // ActivityScenario state alone does not establish the System UI journey.
+        assertTrue(UiDevice.getInstance(instrumentation).pressHome())
+        awaitStable("Home must stop the existing MainActivity", timeoutMillis = 15_000) {
+            original.get().lifecycle.currentState == Lifecycle.State.CREATED
+        }
 
         val link = PushDeepLink(PushTarget.EVENT, "${namespace}_event")
         ownedDeepLink = link
@@ -179,7 +189,7 @@ class SystemNotificationLifecycleTest {
         awaitFixtureKeys(regular + status)
 
         tapSystemNotification()
-        awaitStable("PendingIntent must resume MainActivity and publish its queued deep link") {
+        awaitStable("PendingIntent must resume MainActivity and publish its queued deep link", timeoutMillis = 15_000) {
             // ActivityScenario.state rejects its transient STARTED stage. The
             // Activity lifecycle itself remains readable throughout the resume.
             original.get().lifecycle.currentState == Lifecycle.State.RESUMED && PushNavigator.pending.value == link
@@ -254,26 +264,34 @@ class SystemNotificationLifecycleTest {
     }
 
     private fun tapSystemNotification() {
+        val device = UiDevice.getInstance(instrumentation)
         openedShade = true
-        assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS))
-        var clicked = false
-        awaitStable("The actual notification row must be clickable in System UI") {
-            if (!clicked) {
-                val nodes = ArrayDeque<AccessibilityNodeInfo>()
-                instrumentation.uiAutomation.rootInActiveWindow?.let(nodes::add)
-                while (nodes.isNotEmpty()) {
-                    val node = nodes.removeFirst()
-                    if (node.text?.toString() == tappableTitle) {
-                        var target: AccessibilityNodeInfo? = node
-                        while (target != null && !target.isClickable) target = target.parent
-                        clicked = target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-                        break
-                    }
-                    for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
-                }
+        assertTrue(device.openNotification())
+        val selector = By.text(tappableTitle)
+        var row = device.wait(Until.findObject(selector), 10_000)
+        // Status fixtures can place this row outside the initial shade viewport.
+        // Search both directions with bounded real System UI scrolling.
+        for (direction in listOf(Direction.DOWN, Direction.UP)) {
+            var scrolls = 0
+            while (row == null && scrolls < 8) {
+                val shade = device.findObject(By.res("com.android.systemui", "notification_stack_scroller"))
+                    ?: device.findObject(By.pkg("com.android.systemui").scrollable(true))
+                    ?: break
+                val moved = shade.scroll(direction, 0.7f)
+                row = device.wait(Until.findObject(selector), 1_000)
+                scrolls++
+                if (!moved) break
             }
-            clicked
+            if (row != null) break
         }
+        val ownedKeys = manager.activeNotifications.map { NoticeKey(it.tag, it.id) }.filter { it in fixtureKeys }
+        assertNotNull(
+            "Notification fixture must be visible in System UI; foreground=${device.currentPackageName}, owned=$ownedKeys",
+            row,
+        )
+        // UiObject2 injects the tap on the visible row, preserving Android's
+        // notification interaction authorization. Do not send PendingIntent directly.
+        requireNotNull(row).click()
     }
 
     private fun assertStatusFlags(keys: Set<NoticeKey>) {
@@ -293,14 +311,14 @@ class SystemNotificationLifecycleTest {
         }
     }
 
-    private fun awaitStable(description: String, condition: () -> Boolean) {
+    private fun awaitStable(description: String, timeoutMillis: Long = 5_000, condition: () -> Boolean) {
         var consecutiveMatches = 0
         try {
-            compose.waitUntil(timeoutMillis = 5_000) {
+            compose.waitUntil(timeoutMillis = timeoutMillis) {
                 consecutiveMatches = if (condition()) consecutiveMatches + 1 else 0
                 consecutiveMatches >= 2
             }
-        } catch (failure: AssertionError) {
+        } catch (failure: ComposeTimeoutException) {
             throw AssertionError(description, failure)
         }
     }

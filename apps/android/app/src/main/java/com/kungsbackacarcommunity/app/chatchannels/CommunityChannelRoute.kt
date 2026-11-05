@@ -178,6 +178,7 @@ fun CommunityChannelRoute(
     }
 
     ChannelChatContent(
+        protectCommunity = true,
         cooldownSeconds = rememberChatCooldownSeconds(coordinator.cooldown),
         onSendConfirmed = { text, mentions, reply, id -> coordinator.send(text, mentions, reply, id) },
         onRetryConfirmed = { message -> message.clientId?.let { coordinator.retry(it) } ?: false },

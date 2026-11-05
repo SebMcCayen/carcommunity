@@ -477,3 +477,30 @@ fun channelIsoToMillisOrNull(iso: String): Long? =
     } catch (_: Exception) {
         null
     }
+
+
+/** Only adjacent delivered messages inside one 30s interval and local day group.
+ * Pending/failed rows remain visible so their retry and status cannot disappear.
+ */
+data class CommunityMessageGroup(val messages: List<ChannelMessage>) {
+    val id: String get() = messages.first().id
+}
+
+object CommunityMessageGroups {
+    fun build(messages: List<ChannelMessage>, zone: java.time.ZoneId): List<CommunityMessageGroup> {
+        val groups = mutableListOf<MutableList<ChannelMessage>>()
+        for (message in messages) {
+            val group = groups.lastOrNull()
+            val first = group?.firstOrNull()
+            val start = first?.createdAtMillis
+            val time = message.createdAtMillis
+            val joins = first != null && first.senderUid == message.senderUid &&
+                first.deliveryState == ChannelDeliveryState.Sent && message.deliveryState == ChannelDeliveryState.Sent &&
+                start != null && time != null && time >= start && time - start <= 30_000 &&
+                java.time.Instant.ofEpochMilli(start).atZone(zone).toLocalDate() ==
+                java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
+            if (joins) group!!.add(message) else groups.add(mutableListOf(message))
+        }
+        return groups.map { CommunityMessageGroup(it.toList()) }
+    }
+}

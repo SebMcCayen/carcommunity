@@ -535,6 +535,11 @@
     <string name="chat_replyComposerBanner">Svarar på ett meddelande från %1$s</string>
     <string name="chat_replyQuoteHeaderAction">Svar till %1$s: %2$s. Tryck för att visa originalet.</string>
     <string name="chat_hideKeyboard">Dölj tangentbord</string>
+    <string name="chat_flood_paused">Meddelanden är tillfälligt pausade</string>
+    <string name="chat_flood_wait">Du kan skicka igen om %1$d sekunder. Ditt utkast finns kvar.</string>
+    <string name="chat_flood_showMore">Visa mer</string>
+    <string name="chat_flood_showLess">Visa mindre</string>
+    <string name="chat_flood_moreFrom">Visa fler från %1$s (%2$d)</string>
     <string name="common_placeholder">Kommer snart</string>
     <string name="auth_loginTitle">Logga in</string>
     <string name="auth_loginSubtitle">Logga in för att använda appen.</string>

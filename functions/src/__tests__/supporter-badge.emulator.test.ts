@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   assertFails,
   assertSucceeds,
@@ -51,10 +51,18 @@ beforeAll(async () => {
   apply = (await import('../subscription/entitlement')).applyEntitlement;
   reconcile = (await import('../subscription/supporter-badge')).reconcileSupporterBadge;
   await firebase.adminAuth.createUser({ uid });
+});
+beforeEach(async () => {
+  // Keep the fixture consistent with the asynchronous profile-search trigger.
+  // Otherwise its displayNameLower repair races the updateTime no-op assertion.
+  // Reset each case so a failed transition cannot turn the next security write
+  // into an allowed no-op on an already-true eligibility field.
   await firebase.db
     .collection('users')
     .doc(uid)
-    .set({ displayName: 'Supporter', activeMember: false, showSupporterBadge: false, showMembershipMapRing: false });
+    .set({ displayName: 'Supporter', displayNameLower: 'supporter', activeMember: false, showSupporterBadge: false, showMembershipMapRing: false });
+  await firebase.db.collection('subscriptions').doc(uid).delete();
+  await firebase.adminAuth.setCustomUserClaims(uid, {});
 });
 afterAll(async () => {
   await env?.cleanup();
@@ -96,6 +104,7 @@ describe('Supporter badge persistence and security', () => {
   });
 
   it('backfills missing eligibility and repairs stale downgrades without touching preference or claims', async () => {
+    await apply(input);
     const profile = firebase.db.collection('users').doc(uid);
     const { FieldValue } = await import('firebase-admin/firestore');
     await profile.update({ supporterBadgeEligible: FieldValue.delete(), membershipMapRingEligible: FieldValue.delete() });
@@ -130,6 +139,7 @@ describe('Supporter badge persistence and security', () => {
   });
 
   it('allows only an owner boolean ring preference, never public eligibility/deadline forgery', async () => {
+    await apply({ ...input, status: 'expired', entitlement: 'none', expiresAt: new Date(0) });
     const owner = env.authenticatedContext(uid).firestore();
     const other = env.authenticatedContext('ring-viewer').firestore();
     const profile = doc(owner, 'users', uid);
@@ -199,6 +209,7 @@ describe('Supporter badge persistence and security', () => {
   });
 
   it('allows boolean owner preference but forbids eligibility forgery, deletion and cross-user changes', async () => {
+    await apply(input);
     await firebase.db.collection('users').doc(uid).update({ supporterBadgeEligible: false });
     const owner = env.authenticatedContext(uid).firestore();
     const other = env.authenticatedContext('crown-viewer').firestore();

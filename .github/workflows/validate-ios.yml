@@ -32,29 +32,30 @@ concurrency:
   group: validate-ios-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  validate-ios:
-    name: validate-ios
-    # macOS minutes bill at a 10x multiplier on private repos — this job is
-    # paths-filtered above so it runs for iOS, its contracts, and admin/backend configuration changes.
-    # Pin the standard Apple Silicon image. Intel fallback exhausted worker
-    # startup margins under the combined simulator/emulator workload.
-    # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
-    runs-on: macos-26
-    # The usual full sequence takes ~88 minutes. A loaded hosted worker took
-    # twice as long for the UI gate; retain every gate with enough time for
-    # that slower worker rather than cancelling during the remaining suites.
-    timeout-minutes: 180
+env:
+  SEGMENT_DOWNLOAD_TIMEOUT_MINS: 5
+  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  # Available on both standard images; the verified ARM allocation uses this same SDK.
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
+# Compile ARM Debug once for Community/full UI, with a separate cached Intel
+# Debug producer for native SDK emulator compatibility. Optimized Release is separate.
+# Product artifacts match the exact checkout and preserve executable/symlink modes.
+# Save packages and bounded content-addressed compilations before running tests.
+# Every original native test/build remains required; no cache supplies a test result.
+jobs:
+  # Validate source once before scheduling native builds; these checks also run on Linux locally.
+  ios-preflight:
+    name: iOS source preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
       - name: Setup Node.js (for codegen checks)
         uses: actions/setup-node@v7
         with:
           node-version: 24
-
       - name: Verify generated String Catalog is up to date
         run: |
           node apps/ios/scripts/generate-strings.mjs
@@ -62,7 +63,6 @@ jobs:
             echo "::error::Localizable.xcstrings is out of date. Run: node apps/ios/scripts/generate-strings.mjs"
             exit 1
           fi
-
       - name: Verify generated design tokens are up to date
         run: |
           node apps/ios/scripts/generate-tokens.mjs
@@ -70,15 +70,46 @@ jobs:
             echo "::error::Tokens.swift is out of date. Run: node apps/ios/scripts/generate-tokens.mjs"
             exit 1
           fi
-
       - name: Validate release metadata and preflight regression tests
         run: |
           python3 apps/ios/scripts/release-preflight.py
           python3 -m unittest discover -s apps/ios/scripts -p 'test_*.py'
-
+  ios-build-debug:
+    name: iOS Debug build for testing
+    needs: ios-preflight
+    runs-on: macos-26
+    timeout-minutes: 180
+    outputs:
+      artifact_id: ${{ steps.products.outputs.artifact-id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python for test-product transfer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - name: Show Xcode version
         run: xcodebuild -version
-
+      - name: Finish Simulator runtime cache preparation
+        timeout-minutes: 15
+        run: xcrun simctl runtime dyld_shared_cache update --all
+      - name: Identify toolchain, SDK, lockfile and destination
+        id: context
+        run: python3 apps/ios/scripts/ci-test-products.py context --kind debug
+      - name: Restore resolved Swift packages
+        id: packages
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ios-tests/SourcePackages
+          key: ios-spm-v1-${{ steps.context.outputs.cache }}
+      - name: Restore content-addressed compilations
+        id: compilations
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ios-compilation-cache
+          key: ios-cas-v1-${{ steps.context.outputs.cache }}-debug-${{ github.sha }}
+          restore-keys: |
+            ios-cas-v1-${{ steps.context.outputs.cache }}-debug-
       - name: Regenerate native project including feature folders
         run: |
           if ! command -v xcodegen >/dev/null 2>&1; then
@@ -86,102 +117,550 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
-
-      # Builds WITHOUT GoogleService-Info.plist (it is gitignored and no
-      # secret is injected here) — this is deliberate: it continuously proves
-      # the config-less-build seam that FirebaseBootstrap provides.
-      # Run the reported iPhone regression first; fail with geometry and
-      # synthetic screenshot evidence before spending time on the full suite.
-      # The complete unit/UI, optimized Release and native SDK gates remain below.
-      - name: Composer keyboard and map dock acceptance (config-less)
+      - name: Resolve the committed package graph
+        timeout-minutes: 35
         run: |
-          DEST=$(xcrun simctl list devices available --json | python3 -c '
-          import json, sys
-          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
-                     for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone ")))
-          ')
-          xcrun simctl bootstatus "$DEST" -b
-          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCCReleaseSmoke \
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/KCC.xcodeproj -scheme KCC \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests"
+          git diff --exit-code -- apps/ios/KCC.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+      - name: Save resolved Swift packages before compilation
+        if: steps.packages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ios-tests/SourcePackages
+          key: ${{ steps.packages.outputs.cache-primary-key }}
+      - name: Build Debug app and complete test targets
+        timeout-minutes: 120
+        run: |
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
             -configuration Debug \
-            -destination "platform=iOS Simulator,id=${DEST}" \
+            -destination 'platform=iOS Simulator,id=${{ steps.context.outputs.destination }}' \
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
             ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
-            -parallel-testing-enabled NO \
-            -only-testing:KCCUITests/ShellSmokeTests/testClubsMenuRemainsDiscoverableWithoutBackendActivation \
-            -only-testing:KCCUITests/ShellSmokeTests/testChatBackLiveMetricsProfileAndStopMatchAndroid \
-            -only-testing:KCCUITests/ShellSmokeTests/testSearchSelectionOffersExplicitNavigationAndKeepsTheMap \
-            -only-testing:KCCUITests/ShellSmokeTests/testNavigationHandoffFailureKeepsTheDestinationAvailable \
-            -only-testing:KCCUITests/ShellSmokeTests/testCommunityOpensAtLatestWithAccessibleText \
-            -only-testing:KCCUITests/ShellSmokeTests/testCommunityComposerStaysVisibleWithKeyboard \
-            -only-testing:KCCUITests/ShellSmokeTests/testSocialAndGarageDragHandlesReturnToTheRetainedMap \
-            -only-testing:KCCUITests/ShellSmokeTests/testTrafficMarkersStayBelowMapControlsInBothThemes \
-            -only-testing:KCCUITests/ShellSmokeTests/testCrownTilePaletteFollowsMapAppearanceOverride \
-            -only-testing:KCCUITests/ShellSmokeTests/testSavedPlacesDockKeepsCloseToolsAndPrimaryNavigationReachable \
-            -resultBundlePath "${RUNNER_TEMP}/ios-chat-smoke.xcresult" \
-            test
-
-      - name: Build and test (unit + UI smoke tests, simulator, config-less)
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILATION_CACHE_CAS_PATH="${RUNNER_TEMP}/ios-compilation-cache" \
+            COMPILATION_CACHE_KEEP_CAS_DIRECTORY=YES COMPILATION_CACHE_LIMIT_SIZE=2G \
+            COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES \
+            -resultBundlePath "${RUNNER_TEMP}/ios-build-debug.xcresult" \
+            build-for-testing
+      - name: Verify compilation cache contains reusable output
         run: |
+          python3 - <<'CACHE'
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "ios-compilation-cache"
+          size = 0
+          for path in root.rglob("*"):
+              try:
+                  if path.is_file():
+                      size += path.stat().st_size
+              except FileNotFoundError:
+                  pass
+          if size == 0:
+              raise SystemExit("Enabled compilation cache produced no persisted data")
+          print(f"Persisted compilation-cache data: {size} bytes")
+          CACHE
+      - name: Save completed compilations before executing tests
+        if: steps.compilations.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ios-compilation-cache
+          key: ${{ steps.compilations.outputs.cache-primary-key }}
+      - name: Package exact-commit executable test products
+        run: |
+          python3 apps/ios/scripts/ci-test-products.py pack --kind debug \
+            --products "${RUNNER_TEMP}/ios-tests/Build/Products" \
+            --archive-directory "${RUNNER_TEMP}/ios-products" \
+            --runtime '${{ steps.context.outputs.runtime }}'
+      - name: Publish reusable test products
+        id: products
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-debug-test-products-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-products
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+      - name: Preserve build failure results
+        if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-debug-build-results-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-build-debug.xcresult
+          if-no-files-found: ignore
+          retention-days: 3
+  # Keep the native Firestore acceptance on the proven Intel Simulator transport.
+  # Its architecture-aware package/compilation caches stay separate from ARM builds.
+  ios-build-native:
+    name: iOS native SDK build for testing
+    needs: ios-preflight
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    outputs:
+      artifact_id: ${{ steps.products.outputs.artifact-id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python for test-product transfer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Finish Simulator runtime cache preparation
+        timeout-minutes: 15
+        run: xcrun simctl runtime dyld_shared_cache update --all
+      - name: Identify toolchain, SDK, lockfile and destination
+        id: context
+        run: python3 apps/ios/scripts/ci-test-products.py context --kind debug
+      - name: Restore resolved Swift packages
+        id: packages
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ios-tests/SourcePackages
+          key: ios-spm-v1-${{ steps.context.outputs.cache }}
+      - name: Restore content-addressed compilations
+        id: compilations
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ios-compilation-cache
+          key: ios-cas-v1-${{ steps.context.outputs.cache }}-debug-${{ github.sha }}
+          restore-keys: |
+            ios-cas-v1-${{ steps.context.outputs.cache }}-debug-
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
           cd apps/ios
-          # Pick the first available iPhone simulator on the runner image, so
-          # the workflow survives device-lineup renames across Xcode versions.
-          # Use its UDID to avoid ambiguous names across installed runtimes.
-          DEST=$(xcrun simctl list devices available --json | python3 -c '
-          import json, sys
-          devices = json.load(sys.stdin)["devices"]
-          print(next(device["udid"] for runtime in devices.values() for device in runtime
-                     if device.get("isAvailable") and device["name"].startswith("iPhone ")))
-          ')
-          echo "Using simulator destination: ${DEST}"
-          # A cold first UI-test launch has timed out on hosted Xcode runners
-          # while subsequent tests pass. Wait for simulator startup explicitly;
-          # do not retry or suppress failing tests.
-          xcrun simctl bootstatus "$DEST" -b
-          xcodebuild -project KCC.xcodeproj -scheme KCC \
-            -destination "platform=iOS Simulator,id=${DEST}" \
+          xcodegen generate
+      - name: Resolve the committed package graph
+        timeout-minutes: 35
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/KCC.xcodeproj -scheme KCC \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests"
+          git diff --exit-code -- apps/ios/KCC.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+      - name: Save resolved Swift packages before compilation
+        if: steps.packages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ios-tests/SourcePackages
+          key: ${{ steps.packages.outputs.cache-primary-key }}
+      - name: Build Debug app and complete test targets
+        timeout-minutes: 120
+        run: |
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,id=${{ steps.context.outputs.destination }}' \
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
-            ENTITLEMENTS_REQUIRED=YES \
+            ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILATION_CACHE_CAS_PATH="${RUNNER_TEMP}/ios-compilation-cache" \
+            COMPILATION_CACHE_KEEP_CAS_DIRECTORY=YES COMPILATION_CACHE_LIMIT_SIZE=2G \
+            COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES \
+            -resultBundlePath "${RUNNER_TEMP}/ios-build-native.xcresult" \
+            build-for-testing
+      - name: Verify compilation cache contains reusable output
+        run: |
+          python3 - <<'CACHE'
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "ios-compilation-cache"
+          size = 0
+          for path in root.rglob("*"):
+              try:
+                  if path.is_file():
+                      size += path.stat().st_size
+              except FileNotFoundError:
+                  pass
+          if size == 0:
+              raise SystemExit("Enabled compilation cache produced no persisted data")
+          print(f"Persisted compilation-cache data: {size} bytes")
+          CACHE
+      - name: Save completed compilations before executing tests
+        if: steps.compilations.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ios-compilation-cache
+          key: ${{ steps.compilations.outputs.cache-primary-key }}
+      - name: Package exact-commit executable test products
+        run: |
+          python3 apps/ios/scripts/ci-test-products.py pack --kind debug \
+            --products "${RUNNER_TEMP}/ios-tests/Build/Products" \
+            --archive-directory "${RUNNER_TEMP}/ios-products" \
+            --runtime '${{ steps.context.outputs.runtime }}'
+      - name: Publish reusable test products
+        id: products
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-native-test-products-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-products
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+      - name: Preserve build failure results
+        if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-native-build-results-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-build-native.xcresult
+          if-no-files-found: ignore
+          retention-days: 3
+  ios-build-release:
+    name: iOS optimized Release build for testing
+    needs: ios-preflight
+    runs-on: macos-26
+    timeout-minutes: 180
+    outputs:
+      artifact_id: ${{ steps.products.outputs.artifact-id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python for test-product transfer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Finish Simulator runtime cache preparation
+        timeout-minutes: 15
+        run: xcrun simctl runtime dyld_shared_cache update --all
+      - name: Identify toolchain, SDK, lockfile and destination
+        id: context
+        run: python3 apps/ios/scripts/ci-test-products.py context --kind release
+      - name: Restore resolved Swift packages
+        id: packages
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ios-tests/SourcePackages
+          key: ios-spm-v1-${{ steps.context.outputs.cache }}
+      - name: Restore content-addressed compilations
+        id: compilations
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ios-compilation-cache
+          key: ios-cas-v1-${{ steps.context.outputs.cache }}-release-${{ github.sha }}
+          restore-keys: |
+            ios-cas-v1-${{ steps.context.outputs.cache }}-release-
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd apps/ios
+          xcodegen generate
+      - name: Resolve the committed package graph
+        timeout-minutes: 35
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/KCC.xcodeproj -scheme KCCReleaseSmoke \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests"
+          git diff --exit-code -- apps/ios/KCC.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+      - name: Save resolved Swift packages before compilation
+        if: steps.packages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ios-tests/SourcePackages
+          key: ${{ steps.packages.outputs.cache-primary-key }}
+      - name: Build optimized Release app and complete test targets
+        timeout-minutes: 120
+        run: |
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCCReleaseSmoke \
+            -configuration Release \
+            -destination 'platform=iOS Simulator,id=${{ steps.context.outputs.destination }}' \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
+            ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILATION_CACHE_CAS_PATH="${RUNNER_TEMP}/ios-compilation-cache" \
+            COMPILATION_CACHE_KEEP_CAS_DIRECTORY=YES COMPILATION_CACHE_LIMIT_SIZE=2G \
+            COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES \
+            SWIFT_ENABLE_OPAQUE_TYPE_ERASURE=NO \
+            -resultBundlePath "${RUNNER_TEMP}/ios-build-release.xcresult" \
+            build-for-testing
+      - name: Verify compilation cache contains reusable output
+        run: |
+          python3 - <<'CACHE'
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "ios-compilation-cache"
+          size = 0
+          for path in root.rglob("*"):
+              try:
+                  if path.is_file():
+                      size += path.stat().st_size
+              except FileNotFoundError:
+                  pass
+          if size == 0:
+              raise SystemExit("Enabled compilation cache produced no persisted data")
+          print(f"Persisted compilation-cache data: {size} bytes")
+          CACHE
+      - name: Save completed compilations before executing tests
+        if: steps.compilations.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ios-compilation-cache
+          key: ${{ steps.compilations.outputs.cache-primary-key }}
+      - name: Package exact-commit executable test products
+        run: |
+          python3 apps/ios/scripts/ci-test-products.py pack --kind release \
+            --products "${RUNNER_TEMP}/ios-tests/Build/Products" \
+            --archive-directory "${RUNNER_TEMP}/ios-products" \
+            --runtime '${{ steps.context.outputs.runtime }}'
+      - name: Publish reusable test products
+        id: products
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-release-test-products-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-products
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+      - name: Preserve build failure results
+        if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-release-build-results-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-build-release.xcresult
+          if-no-files-found: ignore
+          retention-days: 3
+  ios-community-ui:
+    name: iOS Community (${{ matrix.label }})
+    needs: ios-build-debug
+    runs-on: macos-26
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - label: shell
+            test: testChatChromeAndRecoveryRemainReadableAtAccessibilityXXXL
+          - label: keyboard
+            test: testCommunityComposerStaysVisibleWithKeyboard
+          - label: expansion
+            test: testCommunitySpamSeriesExpandsWithoutHidingTheNewestMessage
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python for test-product transfer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Finish Simulator runtime cache preparation
+        timeout-minutes: 15
+        run: xcrun simctl runtime dyld_shared_cache update --all
+      - name: Download successful same-commit test build
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ needs.ios-build-debug.outputs.artifact_id }}
+          path: ${{ runner.temp }}/ios-products
+          merge-multiple: true
+      - name: Verify and restore app, runners and unfiltered test plan
+        id: prepared
+        run: |
+          python3 apps/ios/scripts/ci-test-products.py unpack --kind debug \
+            --archive-directory "${RUNNER_TEMP}/ios-products" \
+            --products "${RUNNER_TEMP}/ios-tests/Build/Products"
+      - name: Prepare software keyboard and boot the selected runtime
+        timeout-minutes: 10
+        run: |
+          python3 apps/ios/scripts/configure-simulator-input.py '${{ steps.prepared.outputs.destination }}'
+          xcrun simctl bootstatus '${{ steps.prepared.outputs.destination }}' -b
+      - name: Community composer, expansion and maximum-text shell acceptance
+        timeout-minutes: 40
+        run: |
+          xcodebuild test-without-building \
+            -xctestrun '${{ steps.prepared.outputs.xctestrun }}' \
+            -destination 'platform=iOS Simulator,id=${{ steps.prepared.outputs.destination }}' \
             -parallel-testing-enabled NO \
-            -resultBundlePath "${RUNNER_TEMP}/ios-tests.xcresult" \
-            test
-
+            -only-testing:KCCUITests/ShellSmokeTests/${{ matrix.test }} \
+            -resultBundlePath "${RUNNER_TEMP}/ios-chat-smoke.xcresult"
+          python3 apps/ios/scripts/ci-test-products.py check-result \
+            --results "${RUNNER_TEMP}/ios-chat-smoke.xcresult" --expected-tests 1
+      - name: Export failure screenshots and structured summary
+        if: failure()
+        timeout-minutes: 6
+        run: |
+          python3 apps/ios/scripts/export-test-results.py \
+            --results "${RUNNER_TEMP}/ios-chat-smoke.xcresult" \
+            --output "${RUNNER_TEMP}/ios-failure-evidence"
+      - name: Preserve test failure evidence and optional passing results
+        if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-community-ui-${{ matrix.label }}-results-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ios-failure-evidence
+            ${{ runner.temp }}/ios-chat-smoke.xcresult
+          if-no-files-found: ignore
+          retention-days: 3
+  ios-simulator:
+    name: iOS simulator (unit + UI)
+    needs: [ios-build-debug, ios-community-ui]
+    runs-on: macos-26
+    timeout-minutes: 150
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python for test-product transfer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Finish Simulator runtime cache preparation
+        timeout-minutes: 15
+        run: xcrun simctl runtime dyld_shared_cache update --all
+      - name: Download successful same-commit test build
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ needs.ios-build-debug.outputs.artifact_id }}
+          path: ${{ runner.temp }}/ios-products
+          merge-multiple: true
+      - name: Verify and restore app, runners and unfiltered test plan
+        id: prepared
+        run: |
+          python3 apps/ios/scripts/ci-test-products.py unpack --kind debug \
+            --archive-directory "${RUNNER_TEMP}/ios-products" \
+            --products "${RUNNER_TEMP}/ios-tests/Build/Products"
+      - name: Prepare software keyboard and boot the selected runtime
+        timeout-minutes: 10
+        run: |
+          python3 apps/ios/scripts/configure-simulator-input.py '${{ steps.prepared.outputs.destination }}'
+          xcrun simctl bootstatus '${{ steps.prepared.outputs.destination }}' -b
+      - name: Execute the unfiltered full unit and UI suite
+        timeout-minutes: 120
+        run: |
+          xcodebuild test-without-building \
+            -xctestrun '${{ steps.prepared.outputs.xctestrun }}' \
+            -destination 'platform=iOS Simulator,id=${{ steps.prepared.outputs.destination }}' \
+            -parallel-testing-enabled NO \
+            -resultBundlePath "${RUNNER_TEMP}/ios-tests.xcresult"
       - name: Verify built simulator identity and keychain entitlements
         run: |
           python3 apps/ios/scripts/simulator-package.py \
             "${RUNNER_TEMP}/ios-tests/Build/Products/Debug-iphonesimulator/KCC.app"
-
-      # Debug's implicit view type erasure can hide a SwiftUI metadata/stack
-      # overflow that occurs in TestFlight. Execute the actual shell with -O
-      # and implicit erasure disabled, then exercise retained map/route identity.
-      # This UI-only scheme excludes unit-test helpers that exist only in
-      # Debug. Test the active simulator architecture; the device build below
-      # independently compiles arm64 without test-only settings.
-      - name: Release shell smoke tests (optimized, config-less)
+      - name: Export failure screenshots and structured summary
+        if: failure()
+        timeout-minutes: 6
         run: |
-          DEST=$(xcrun simctl list devices booted --json | python3 -c '
-          import json, sys
-          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
-                     for device in runtime if device["name"].startswith("iPhone ")))
-          ')
-          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCCReleaseSmoke \
-            -configuration Release \
-            -destination "platform=iOS Simulator,id=${DEST}" \
-            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
-            ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
-            SWIFT_ENABLE_OPAQUE_TYPE_ERASURE=NO \
+          python3 apps/ios/scripts/export-test-results.py \
+            --results "${RUNNER_TEMP}/ios-tests.xcresult" \
+            --output "${RUNNER_TEMP}/ios-failure-evidence"
+      - name: Preserve test failure evidence and optional passing results
+        if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-simulator-results-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ios-failure-evidence
+            ${{ runner.temp }}/ios-tests.xcresult
+          if-no-files-found: ignore
+          retention-days: 3
+  ios-release:
+    name: iOS optimized Release
+    needs: ios-build-release
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python for test-product transfer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Finish Simulator runtime cache preparation
+        timeout-minutes: 15
+        run: xcrun simctl runtime dyld_shared_cache update --all
+      - name: Download successful same-commit test build
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ needs.ios-build-release.outputs.artifact_id }}
+          path: ${{ runner.temp }}/ios-products
+          merge-multiple: true
+      - name: Verify and restore app, runners and unfiltered test plan
+        id: prepared
+        run: |
+          python3 apps/ios/scripts/ci-test-products.py unpack --kind release \
+            --archive-directory "${RUNNER_TEMP}/ios-products" \
+            --products "${RUNNER_TEMP}/ios-tests/Build/Products"
+      - name: Prepare software keyboard and boot the selected runtime
+        timeout-minutes: 10
+        run: |
+          python3 apps/ios/scripts/configure-simulator-input.py '${{ steps.prepared.outputs.destination }}'
+          xcrun simctl bootstatus '${{ steps.prepared.outputs.destination }}' -b
+      - name: Execute optimized Release shell acceptance
+        timeout-minutes: 30
+        run: |
+          xcodebuild test-without-building \
+            -xctestrun '${{ steps.prepared.outputs.xctestrun }}' \
+            -destination 'platform=iOS Simulator,id=${{ steps.prepared.outputs.destination }}' \
             -parallel-testing-enabled NO \
             -only-testing:KCCUITests/ShellSmokeTests/testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip \
             -only-testing:KCCUITests/ShellSmokeTests/testMapToolsAppearOnRightAndWorkWithoutBackend \
-            -resultBundlePath "${RUNNER_TEMP}/ios-release-smoke.xcresult" \
-            test
-
+            -resultBundlePath "${RUNNER_TEMP}/ios-release-smoke.xcresult"
+          python3 apps/ios/scripts/ci-test-products.py check-result \
+            --results "${RUNNER_TEMP}/ios-release-smoke.xcresult" --expected-tests 2
+      - name: Export failure screenshots and structured summary
+        if: failure()
+        timeout-minutes: 6
+        run: |
+          python3 apps/ios/scripts/export-test-results.py \
+            --results "${RUNNER_TEMP}/ios-release-smoke.xcresult" \
+            --output "${RUNNER_TEMP}/ios-failure-evidence"
+      - name: Preserve test failure evidence and optional passing results
+        if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-release-results-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ios-failure-evidence
+            ${{ runner.temp }}/ios-release-smoke.xcresult
+          if-no-files-found: ignore
+          retention-days: 3
+  ios-native:
+    name: iOS native Firebase SDK
+    needs: ios-build-native
+    runs-on: macos-26-intel
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python for test-product transfer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Finish Simulator runtime cache preparation
+        timeout-minutes: 15
+        run: xcrun simctl runtime dyld_shared_cache update --all
+      - name: Download successful same-commit test build
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ needs.ios-build-native.outputs.artifact_id }}
+          path: ${{ runner.temp }}/ios-products
+          merge-multiple: true
+      - name: Verify and restore app, runners and unfiltered test plan
+        id: prepared
+        run: |
+          python3 apps/ios/scripts/ci-test-products.py unpack --kind debug \
+            --archive-directory "${RUNNER_TEMP}/ios-products" \
+            --products "${RUNNER_TEMP}/ios-tests/Build/Products"
+      - name: Prepare software keyboard and boot the selected runtime
+        timeout-minutes: 10
+        run: |
+          python3 apps/ios/scripts/configure-simulator-input.py '${{ steps.prepared.outputs.destination }}'
+          xcrun simctl bootstatus '${{ steps.prepared.outputs.destination }}' -b
+      - name: Setup Node.js for local member emulators
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
       - name: Setup JDK for native member emulators
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
-
       - name: Build backend handlers for native SDK acceptance
+        timeout-minutes: 15
         run: |
           npm ci --prefix functions --ignore-scripts
           npm --prefix functions run build
@@ -189,29 +668,53 @@ jobs:
           npm install --global firebase-tools@15.34.0
           firebase setup:emulators:firestore
           firebase setup:emulators:database
-
-      - name: Native Firebase Auth and member-tools acceptance (no cloud credentials)
+      - name: Execute native Firebase Auth and member-tools acceptance
+        timeout-minutes: 30
         run: |
-          DEST=$(xcrun simctl list devices booted --json | python3 -c '
-          import json, sys
-          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
-                     for device in runtime if device["name"].startswith("iPhone ")))
-          ')
-          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
-            -destination "platform=iOS Simulator,id=${DEST}" \
-            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
-            ENTITLEMENTS_REQUIRED=YES \
-            -only-testing:KCCTests/FirebaseEmulatorIntegrationTests build-for-testing
-          # firebase-tools also applies this limit to runtime socket readiness.
-          # Slow worker imports must complete before the unchanged SDK checks.
           FUNCTIONS_DISCOVERY_TIMEOUT=120 GCLOUD_PROJECT=demo-kcc-ios-ci node scripts/run-no-cloud.mjs -- firebase emulators:exec \
             --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json" \
             --only auth,firestore,functions,database --non-interactive \
-            "node scripts/native-member-emulators.mjs seed && python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${DEST}' --member-tools"
-
-      # TestFlight uses the Release configuration on arm64 hardware. Keep this
-      # unsigned and config-less so PRs catch device-only compile/link failures
-      # without storing Apple signing credentials or Firebase config in CI.
+            "node scripts/native-member-emulators.mjs seed && python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${{ steps.prepared.outputs.destination }}' --member-tools"
+      - name: Export failure screenshots and structured summary
+        if: failure()
+        timeout-minutes: 6
+        run: |
+          python3 apps/ios/scripts/export-test-results.py \
+            --results "${RUNNER_TEMP}/ios-tests/Build/Products/auth-emulator-tests.xcresult" \
+            --output "${RUNNER_TEMP}/ios-failure-evidence"
+      - name: Preserve test failure evidence and optional passing results
+        if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-native-results-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ios-failure-evidence
+            ${{ runner.temp }}/ios-tests/Build/Products/auth-emulator-tests.xcresult
+            *-debug.log
+          if-no-files-found: ignore
+          retention-days: 3
+  # Independently compile unsigned arm64 Release for an iOS device. This does not claim physical-device runtime coverage.
+  ios-device:
+    name: iOS unsigned arm64 build
+    needs: ios-preflight
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node.js (for codegen checks)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd apps/ios
+          xcodegen generate
       - name: Build release for a generic iOS device (unsigned, config-less)
         run: |
           cd apps/ios
@@ -221,50 +724,26 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
             CODE_SIGNING_ALLOWED=NO \
             build
-
-      # All screenshot attachments are captured by config-less KCCUITests;
-      # no Firebase plist, production account, or production fixtures are used.
-      - name: Export config-less simulator screenshot attachments
-        if: always()
-        run: |
-          RESULTS="${RUNNER_TEMP}/ios-tests.xcresult"
-          SCREENSHOTS="${RUNNER_TEMP}/ios-configless-screenshots"
-          if [ ! -d "${RESULTS}" ]; then
-            RESULTS="${RUNNER_TEMP}/ios-chat-smoke.xcresult"
-          fi
-          if [ -d "${RESULTS}" ]; then
-            mkdir -p "${SCREENSHOTS}"
-            xcrun xcresulttool export attachments \
-              --path "${RESULTS}" \
-              --output-path "${SCREENSHOTS}"
-          fi
-
-      - name: Upload simulator results and screenshot attachments
-        if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: ios-test-results
-          path: |
-            ${{ runner.temp }}/ios-tests.xcresult
-            ${{ runner.temp }}/ios-release-smoke.xcresult
-            ${{ runner.temp }}/ios-chat-smoke.xcresult
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload config-less screenshot PNGs and attachment manifest
-        if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: ios-configless-screenshots
-          path: ${{ runner.temp }}/ios-configless-screenshots
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload generated Xcode project
-        if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: ios-generated-project
-          path: apps/ios/KCC.xcodeproj
-          if-no-files-found: ignore
-          retention-days: 7
+  # A build/cache hit never supplies acceptance. Every execution gate must pass.
+  validate-ios:
+    name: validate-ios
+    if: ${{ always() }}
+    needs:
+      - ios-preflight
+      - ios-build-debug
+      - ios-build-native
+      - ios-community-ui
+      - ios-simulator
+      - ios-build-release
+      - ios-release
+      - ios-native
+      - ios-device
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Require every iOS build and execution gate to succeed
+        env:
+          IOS_GATE_RESULTS: ${{ toJSON(needs) }}
+        run: python3 apps/ios/scripts/ci-gate-results.py

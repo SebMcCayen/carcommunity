@@ -175,11 +175,17 @@ enum ChannelSendError: Equatable, Sendable {
     case invalid
     case cannotDeliver
     case generic
+    case rateLimited(ChatRateLimit)
 
     /// Whether re-sending the SAME message could plausibly succeed. Only
     /// ``generic`` (transient/network/unknown) is retryable; the rest are
     /// terminal for this message. Android: `ChannelSendError.isRetryable`.
-    var isRetryable: Bool { self == .generic }
+    var isRetryable: Bool {
+        switch self {
+        case .generic, .rateLimited: return true
+        default: return false
+        }
+    }
 }
 
 /// Pure code → send-error mapping. Branch on the code, never the message.

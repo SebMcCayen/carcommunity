@@ -531,6 +531,7 @@ export async function purgeUserData(uid: string): Promise<void> {
   // particular, Driver-only deletion must never reset it. A failure propagates
   // so the request remains pending; a retry tolerates Auth already being absent.
   await db.collection('chatSendGuards').doc(uid).delete();
+  await db.collection('communityChatSendGuards').doc(uid).delete();
   await db.collection('accountPurgeProgress').doc(uid).delete();
 }
 

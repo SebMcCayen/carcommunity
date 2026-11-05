@@ -535,6 +535,11 @@
     <string name="chat_replyComposerBanner">Replying to a message from %1$s</string>
     <string name="chat_replyQuoteHeaderAction">Reply to %1$s: %2$s. Tap to view the original.</string>
     <string name="chat_hideKeyboard">Hide keyboard</string>
+    <string name="chat_flood_paused">Messages are temporarily paused</string>
+    <string name="chat_flood_wait">You can send again in %1$d seconds. Your draft is kept.</string>
+    <string name="chat_flood_showMore">Show more</string>
+    <string name="chat_flood_showLess">Show less</string>
+    <string name="chat_flood_moreFrom">Show more from %1$s (%2$d)</string>
     <string name="common_placeholder">Coming soon</string>
     <string name="auth_loginTitle">Sign in</string>
     <string name="auth_loginSubtitle">Sign in to use the app.</string>

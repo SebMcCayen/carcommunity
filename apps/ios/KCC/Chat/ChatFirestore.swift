@@ -67,6 +67,16 @@ enum ChatFirestore {
         }
     }
 
+    static func sendError(from error: Error) -> ChannelSendError {
+        let nsError = error as NSError
+        if nsError.domain == FunctionsErrorDomain,
+           FunctionsErrorCode(rawValue: nsError.code) == .resourceExhausted,
+           let limit = ChatRateLimit.parse(nsError.userInfo[FunctionsErrorDetailsKey]) {
+            return .rateLimited(limit)
+        }
+        return ChannelErrorMapper.mapSend(channelErrorCode(from: error))
+    }
+
     /// Whether a Firestore listener error is a terminal `PERMISSION_DENIED`
     /// (membership lost / blocked / removed) — which clears the channel to empty
     /// even over a cached snapshot, per Android's listener handling.

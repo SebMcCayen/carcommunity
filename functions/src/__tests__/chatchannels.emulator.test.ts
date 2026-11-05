@@ -184,6 +184,55 @@ afterAll(async () => {
 });
 
 describe('communityChat callables + rules', () => {
+  it('limits Community bursts transactionally and replays an accepted ID during the pause', async () => {
+    const sender = await newMember('Community burst limit');
+    await signInAs(sender);
+    const clientId = `burst-${crypto.randomUUID()}`;
+    const first = (await call('communityChat-post', { text: 'one', clientId })).data;
+    await call('communityChat-post', { text: 'two', clientId: `second-${crypto.randomUUID()}` });
+    const deniedId = `denied-${crypto.randomUUID()}`;
+    await expect(
+      call('communityChat-post', { text: 'three', clientId: deniedId }),
+    ).rejects.toMatchObject({
+      code: 'functions/resource-exhausted',
+      details: { reason: 'chat-rate-limited' },
+    });
+    const guard = await adminDb.doc(`chatSendGuards/${sender.uid}`).get();
+    const communityGuard = await adminDb.doc(`communityChatSendGuards/${sender.uid}`).get();
+    expect((await adminDb.doc(`communityChat/global/messages/${deniedId}`).get()).exists).toBe(
+      false,
+    );
+    expect((await call('communityChat-post', { text: 'one', clientId })).data).toEqual(first);
+    await expect(
+      call('communityChat-post', { text: 'four', clientId: `again-${crypto.randomUUID()}` }),
+    ).rejects.toMatchObject({ code: 'functions/resource-exhausted' });
+    expect((await guard.ref.get()).updateTime?.isEqual(guard.updateTime!)).toBe(true);
+    expect((await communityGuard.ref.get()).updateTime?.isEqual(communityGuard.updateTime!)).toBe(
+      true,
+    );
+    await expect(getDocs(collection(firestore, 'communityChatSendGuards'))).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    await expect(
+      addDoc(collection(firestore, 'communityChatSendGuards'), { creditMs: 10000 }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('rejects a third identical emoji message even when Community credit is available', async () => {
+    const sender = await newMember('Community repeated emoji');
+    await signInAs(sender);
+    await call('communityChat-post', { text: '🚗' });
+    await call('communityChat-post', { text: '🚗' });
+    // Refill only the token bucket; retain the real accepted-message history.
+    await adminDb.doc(`communityChatSendGuards/${sender.uid}`).update({ creditMs: 10000 });
+    await expect(call('communityChat-post', { text: '🚗' })).rejects.toMatchObject({
+      code: 'functions/resource-exhausted',
+      details: { reason: 'chat-rate-limited' },
+    });
+    const guard = await adminDb.doc(`chatSendGuards/${sender.uid}`).get();
+    expect(guard.get('violationLevel')).toBe(1);
+  });
+
   it('rejects unauthenticated callers, but ADMITS a non-member', async () => {
     await auth.signOut();
     expect(await callableErrorCode(call('communityChat-list', {}))).toBe(
@@ -220,7 +269,12 @@ describe('communityChat callables + rules', () => {
 
     // TTL: the stored message carries expireAt ≈ createdAt + 120 days.
     const storedComm = (
-      await adminDb.collection('communityChat').doc('global').collection('messages').doc(posted.messageId).get()
+      await adminDb
+        .collection('communityChat')
+        .doc('global')
+        .collection('messages')
+        .doc(posted.messageId)
+        .get()
     ).data()!;
     const commTtlDays =
       (storedComm.expireAt.toDate().getTime() - storedComm.createdAt.toDate().getTime()) /
@@ -321,7 +375,12 @@ describe('convoyChat callables + rules', () => {
 
     // TTL: the stored convoy message carries expireAt ≈ createdAt + 30 days.
     const storedConvoy = (
-      await adminDb.collection('convoyChats').doc(convoyId).collection('messages').doc(posted.messageId).get()
+      await adminDb
+        .collection('convoyChats')
+        .doc(convoyId)
+        .collection('messages')
+        .doc(posted.messageId)
+        .get()
     ).data()!;
     const convoyTtlDays =
       (storedConvoy.expireAt.toDate().getTime() - storedConvoy.createdAt.toDate().getTime()) /
@@ -356,9 +415,9 @@ describe('convoyChat callables + rules', () => {
     expect(await callableErrorCode(call('convoyChat-post', { convoyId, text: 'nope' }))).toBe(
       'functions/not-found',
     );
-    expect(
-      await callableErrorCode(call('convoyChat-list', { convoyId: 'does-not-exist' })),
-    ).toBe('functions/not-found');
+    expect(await callableErrorCode(call('convoyChat-list', { convoyId: 'does-not-exist' }))).toBe(
+      'functions/not-found',
+    );
   });
 
   it('rules: accepted members read convoy messages; invited/outsiders denied; no client writes', async () => {
@@ -405,7 +464,7 @@ describe('convoyChat callables + rules', () => {
     ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 
-  it('markRead stamps a PER-CONVOY marker in the caller\'s userPrivate, and caps the map', async () => {
+  it("markRead stamps a PER-CONVOY marker in the caller's userPrivate, and caps the map", async () => {
     const member = await newMember('MarkReadOwnerChat');
     await signInAs(member);
     // Plain ids, not created convoys: markRead deliberately carries no convoy
@@ -428,8 +487,7 @@ describe('convoyChat callables + rules', () => {
 
     const stamped = await pollUntil(async () => {
       const map = (await privateRef.get()).data()?.convoyChatLastReadAt as
-        | Record<string, Timestamp>
-        | undefined;
+        Record<string, Timestamp> | undefined;
       return map?.[convoyId];
     });
     expect(stamped.toMillis()).toBeGreaterThan(0);
@@ -661,8 +719,7 @@ describe('convoyChat-post in-app notification fan-out', () => {
 
     const latestFor = async (uid: string) =>
       (await adminDb.collection('userPrivate').doc(uid).get()).data()?.convoyChatLatestAt as
-        | Record<string, Timestamp>
-        | undefined;
+        Record<string, Timestamp> | undefined;
 
     // Owner posts: the accepted member's private doc gains a convoyChatLatestAt
     // stamp for THIS convoy — the owner-only readable signal the client's
@@ -682,7 +739,12 @@ describe('convoyChat-post in-app notification fan-out', () => {
     // lastRead — a phantom "unread" dot. Assert latest EQUALS the message's
     // createdAt, which pins the fix (with the bug this reads strictly greater).
     const messageCreatedAt = (
-      await adminDb.collection('convoyChats').doc(convoyId).collection('messages').doc(posted.messageId).get()
+      await adminDb
+        .collection('convoyChats')
+        .doc(convoyId)
+        .collection('messages')
+        .doc(posted.messageId)
+        .get()
     ).data()!.createdAt as Timestamp;
     expect(latest.toMillis()).toBe(messageCreatedAt.toMillis());
 
@@ -1000,9 +1062,9 @@ describe('keyed optimistic send is EXACTLY-ONCE (clientId idempotency)', () => {
     // Swallowing this as success would silently DROP the second sender's message
     // while telling them it was delivered.
     await signInAs(thief);
-    expect(
-      await callableErrorCode(call('communityChat-post', { text: 'theirs', clientId })),
-    ).toBe('functions/already-exists');
+    expect(await callableErrorCode(call('communityChat-post', { text: 'theirs', clientId }))).toBe(
+      'functions/already-exists',
+    );
     const stored = await awaitCommunityMessage(clientId);
     expect(stored.text).toBe('mine');
   });
@@ -1212,8 +1274,9 @@ describe('convoyChat-post reply-to snapshot (chatReplies flag)', () => {
 
     await setChatRepliesFlag(true);
     // seedConvoy leaves us signed in as the owner; owner posts the parent.
-    const parent = (await call('convoyChat-post', { convoyId, text: 'convoy original' }))
-      .data as { messageId: string };
+    const parent = (await call('convoyChat-post', { convoyId, text: 'convoy original' })).data as {
+      messageId: string;
+    };
     await awaitConvoyMessage(convoyId, parent.messageId);
 
     // The accepted member replies within the same convoy.

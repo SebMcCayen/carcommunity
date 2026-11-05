@@ -119,7 +119,7 @@ suite('chat flood real Firestore transactions', () => {
     }
     expect((await db.doc(`chatSendGuards/${uid}`).get()).get('creditMs')).toBe(4000);
     for (let i = 0; i < 2; i++)
-      await community.post.run(request(uid, { text: 'Hej', clientId: id() }));
+      await convoy.post.run(request(uid, { convoyId: room, text: 'Hej', clientId: id() }));
     await expect(
       community.post.run(request(uid, { text: 'pause', clientId: id() })),
     ).rejects.toMatchObject({ code: 'resource-exhausted' });
@@ -256,7 +256,7 @@ suite('chat flood real Firestore transactions', () => {
       const clubSend = () => engine.send(uid, { clubId, text: 'Driver', operationId: id() });
       const results = [];
       for (let burst = 0; burst < 2; burst++)
-        results.push(...(await Promise.allSettled([ccSend(), clubSend(), ccSend(), clubSend()])));
+        results.push(...(await Promise.allSettled([ccSend(), clubSend(), clubSend(), clubSend()])));
       expect(results.filter((row) => row.status === 'fulfilled')).toHaveLength(6);
       for (const row of results)
         if (row.status === 'rejected')

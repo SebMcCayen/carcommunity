@@ -53,6 +53,101 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
+    func testCommunitySpamSeriesExpandsWithoutHidingTheNewestMessage() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true, chatFloodFixture: true)
+            app.buttons["shell.tab.chat"].tap()
+            XCTAssertTrue(app.staticTexts["chat.message.text.fixture-39"].waitForExistence(timeout: 15))
+            XCTAssertFalse(app.staticTexts["chat.message.text.fixture-37"].exists)
+            let thread = element("chat.thread.messages", in: app)
+            // The scroll view's AX frame extends behind the safe-area composer.
+            // Keep touch coordinates above that overlay, inside readable rows.
+            let emojiRow = app.scrollViews["chat.quickEmojiRow"]
+            let footerReady = emojiRow.waitForExistence(timeout: 15)
+            if !footerReady { chatProof(app, name: "community-series-footer-missing", tree: true) }
+            XCTAssertTrue(footerReady)
+            let threadFrame = thread.frame
+            let footerTop = emojiRow.frame.minY
+            let visibleHeight = min(threadFrame.maxY, footerTop) - threadFrame.minY
+            let readableViewport = CGRect(x: threadFrame.minX, y: threadFrame.minY,
+                width: threadFrame.width, height: visibleHeight)
+            print("CHAT_SERIES_VIEWPORT accessibility=\(largeText) thread=\(threadFrame) footerTop=\(footerTop) visibleHeight=\(visibleHeight)")
+            if visibleHeight <= 44 { chatProof(app, name: "community-series-viewport-failure", tree: true) }
+            XCTAssertGreaterThan(visibleHeight, 44)
+            // XCUI coordinates remain relative to their referenced element.
+            // Resolve the readable viewport once, then anchor gestures to the
+            // stable application window. Re-resolving the lazy scroll view
+            // during each drag can reposition it before the event is injected.
+            let appFrame = app.frame
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let lower = origin.withOffset(CGVector(dx: threadFrame.midX - appFrame.minX,
+                dy: threadFrame.minY + visibleHeight * 0.8 - appFrame.minY))
+            let upper = origin.withOffset(CGVector(dx: threadFrame.midX - appFrame.minX,
+                dy: threadFrame.minY + visibleHeight * 0.25 - appFrame.minY))
+            let toggle = app.buttons["community-group-toggle-fixture-31"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 15))
+            var toggleReady = false
+            for _ in 0..<16 {
+                if toggle.exists && toggle.isHittable {
+                    let frame = toggle.frame
+                    if frame.midY > threadFrame.minY + 8 && frame.midY < footerTop - 8 {
+                        toggleReady = true
+                        break
+                    }
+                }
+                upper.press(forDuration: 0.1, thenDragTo: lower, withVelocity: .slow, thenHoldForDuration: 0.2)
+            }
+            if !toggleReady { chatProof(app, name: "community-series-toggle-failure", tree: true) }
+            XCTAssertTrue(toggleReady)
+            print("CHAT_SERIES_TOGGLE accessibility=\(largeText) frame=\(toggle.frame) label=\(toggle.label)")
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            // The toggle can leave the visible AX tree when a tall group opens.
+            // Verify the content instead: reach the newest row, read the formerly
+            // hidden row above it, then return to the newest. A collapsed group
+            // can never satisfy the fixture-37 assertion in either font size.
+            for (visit, target) in [("fixture-39", false), ("fixture-37", true), ("fixture-39", false)].enumerated() {
+                let (id, older) = target
+                let message = app.staticTexts["chat.message.text." + id]
+                if message.exists {
+                    print("CHAT_SERIES_TARGET accessibility=\(largeText) visit=\(visit) id=\(id) before=\(message.frame)")
+                }
+                for attempt in 0..<16 {
+                    let frame = message.exists ? message.frame : .null
+                    let readable = !frame.isNull && !frame.isEmpty && readableViewport.contains(frame)
+                    if readable && message.isHittable { break }
+                    // Follow the actual row position, including after a pan
+                    // passes the middle target. Hittable alone can accept a
+                    // row partly hidden behind the safe-area composer.
+                    let towardOlder = frame.isNull ? older : frame.minY < readableViewport.minY
+                    print("CHAT_SERIES_SCROLL accessibility=\(largeText) visit=\(visit) attempt=\(attempt) frame=\(frame) towardOlder=\(towardOlder)")
+                    if towardOlder {
+                        upper.press(forDuration: 0.1, thenDragTo: lower, withVelocity: .slow, thenHoldForDuration: 0.2)
+                    } else {
+                        // fixture-39 is the final row: let a natural fast pan
+                        // coast to the newest bound, even with maximum text.
+                        // Middle rows still use overlapping, held steps.
+                        lower.press(forDuration: 0.1, thenDragTo: upper,
+                            withVelocity: id == "fixture-39" ? .fast : .slow,
+                            thenHoldForDuration: id == "fixture-39" ? 0 : 0.2)
+                    }
+                }
+                let exists = message.waitForExistence(timeout: 15)
+                let finalFrame = exists ? message.frame : .null
+                let readable = !finalFrame.isNull && !finalFrame.isEmpty && readableViewport.contains(finalFrame)
+                print("CHAT_SERIES_RESULT accessibility=\(largeText) visit=\(visit) id=\(id) frame=\(finalFrame) readable=\(readable)")
+                if !exists || !readable || !message.isHittable {
+                    chatProof(app, name: "community-series-\(id)-failure", tree: true)
+                }
+                XCTAssertTrue(exists)
+                XCTAssertTrue(readable, "Expanded \(id) must fit inside the readable conversation viewport")
+                XCTAssertTrue(message.isHittable,
+                    "Expanded \(id) must be readable on visit \(visit), accessibility=\(largeText)")
+            }
+            attach(app, name: largeText ? "community-series-accessibility" : "community-series")
+            app.terminate()
+        }
+    }
+
     func testCommunityComposerStaysVisibleWithKeyboard() {
         for largeText in [false, true] {
             let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
@@ -135,7 +230,14 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(reply.isHittable)
             assertComposerDraft("Fixture reply", present: false, in: app)
             // Keyboard resizing must also respect a deliberate history read.
-            app.buttons["chat.keyboard.dismiss"].tap()
+            // Clearing SwiftUI's vertical editor can already close the keyboard.
+            // Dismiss it if needed, then require the same keyboard-free history
+            // starting state before exercising the next keyboard transition.
+            let historyDismiss = app.buttons["chat.keyboard.dismiss"]
+            if historyDismiss.exists { historyDismiss.tap() }
+            let keyboardClosed = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+            XCTAssertEqual(XCTWaiter.wait(for: [keyboardClosed], timeout: 15), .completed)
             XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
             let messages = element("chat.thread.messages", in: app)
             messages.swipeDown()
@@ -594,7 +696,7 @@ final class ShellSmokeTests: XCTestCase {
             choice.tap()
             assertSelected(choice)
         }
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: captureScreen(app))
         screenshot.name = "map-layers-sv-dark-accessibility"
         screenshot.lifetime = .keepAlways
         add(screenshot)
@@ -896,18 +998,13 @@ final class ShellSmokeTests: XCTestCase {
         attach(app, name: "\(prefix)-S69-settings")
     }
 
-    /// Only the config-less synthetic chat fixture calls this. Inline image
-    /// evidence remains available when optional artifact uploads are disabled.
+    /// Only config-less synthetic fixtures call this. Keep the actual screenshot
+    /// in XCTest attachments; duplicate image payloads truncate live CI logs.
     private func chatProof(_ app: XCUIApplication, name: String, tree: Bool = false) {
-        attach(app, name: name)
         if tree { print("CHAT_FIXTURE_TREE \(app.debugDescription)") }
-        guard let data = app.screenshot().image.jpegData(compressionQuality: 0.55) else { return }
-        let encoded = Array(data.base64EncodedString())
-        print("KCC_CHAT_PROOF_BEGIN \(name).jpg")
-        for start in stride(from: 0, to: encoded.count, by: 4096) {
-            print("KCC_CHAT_PROOF_DATA \(String(encoded[start..<min(start + 4096, encoded.count)]))")
-        }
-        print("KCC_CHAT_PROOF_END \(name).jpg")
+        let screenshot = captureScreen(app)
+        attachScreenshot(screenshot, name: name)
+        print("KCC_CHAT_PROOF_ATTACHMENT \(name)")
     }
 
     /// SwiftUI's vertical field can replace its measuring UITextField with a
@@ -922,22 +1019,31 @@ final class ShellSmokeTests: XCTestCase {
 
     private func assertComposerDraft(_ text: String, present: Bool, in app: XCUIApplication,
                                      file: StaticString = #filePath, line: UInt = #line) {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            let candidates = app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-                + app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-            guard let editor = candidates.first(where: { $0.isHittable }) else { return false }
-            let value = editor.value as? String ?? ""
-            return value.contains(text) == present
-        }, object: app)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        // Resolve the current visible widget once per assertion. Repeatedly
+        // enumerating both editor types and querying hit targets can consume
+        // the polling deadline even while the expected draft is on screen.
+        let editor = composerInput(in: app)
+        let predicate = NSPredicate(format: present ? "value CONTAINS %@" : "NOT (value CONTAINS %@)", text)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: editor)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 15)
         if result != .completed { chatProof(app, name: "chat-draft-value-failure", tree: true) }
         XCTAssertEqual(result, .completed, "Visible editor must preserve the expected draft until Send", file: file, line: line)
+        XCTAssertTrue(editor.isHittable, "Draft assertion must inspect the visible editor", file: file, line: line)
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
         // Reached only after launch verifies the config-less Settings identity.
         // Every capture is an actual simulator render; no production fixtures.
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachScreenshot(captureScreen(app), name: name)
+    }
+
+    private func captureScreen(_ app: XCUIApplication) -> XCUIScreenshot {
+        XCTAssertEqual(app.state, .runningForeground, "Capture the config-less app in the foreground")
+        return XCUIScreen.main.screenshot()
+    }
+
+    private func attachScreenshot(_ screenshot: XCUIScreenshot, name: String) {
+        let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -953,7 +1059,7 @@ final class ShellSmokeTests: XCTestCase {
         start.press(forDuration: 0.1, thenDragTo: end)
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -961,6 +1067,7 @@ final class ShellSmokeTests: XCTestCase {
         // default can retain/transition the preceding test's category.
         app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
+        if chatFloodFixture { app.launchArguments += ["-KCCUITestChatFlood"] }
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
         if rejectMaps { app.launchArguments += ["-KCCUITestRejectMaps"] }
         if liveFixture { app.launchArguments += ["-KCCUITestLiveSession"] }
@@ -973,25 +1080,41 @@ final class ShellSmokeTests: XCTestCase {
             "Build without GoogleService-Info.plist to test the config-less shell"
         )
         XCTAssertEqual(app.buttons["shell.menu"].label, language == "sv" ? "Inställningar" : "Settings")
+        if liveFixture {
+            // The fixture publishes its active session asynchronously. Let the
+            // session dock settle before querying footer activation points;
+            // otherwise its first insertion can retire the sampled AX frame.
+            let bar = app.buttons["map.session.bar"]
+            let dockReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                guard bar.exists else { return false }
+                let frame = bar.frame
+                return !frame.isEmpty && !frame.isNull && !frame.isInfinite && app.frame.intersects(frame)
+            }, object: bar)
+            XCTAssertEqual(XCTWaiter.wait(for: [dockReady], timeout: 15), .completed,
+                "The active-session dock must be laid out before footer interaction")
+        }
         // The top menu can be exposed before the safe-area footer finishes its
         // first layout (especially after changing language/text size). Readiness
         // means actual interactive controls, not just an existing title/menu.
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 15))
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
-            let ready = XCTNSPredicateExpectation(
-                predicate: NSPredicate { _, _ in
-                    guard button.exists else { return false }
-                    let frame = button.frame
-                    // XCTest can raise an AX error instead of returning false
-                    // for hittable while SwiftUI is still publishing a zero or
-                    // offscreen frame. Require valid on-screen geometry first.
-                    guard !frame.isEmpty, !frame.isNull, !frame.isInfinite,
-                        app.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
-                    return button.isHittable
-                }, object: button
-            )
-            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed,
+            XCTAssertTrue(button.waitForExistence(timeout: 15))
+            // Let XCTest wait on actual interactivity, then measure geometry
+            // outside its polling deadline. Read the current main window;
+            // application accessibility bounds can change during first layout.
+            let interactive = button.wait(for: \.isHittable, toEqual: true, timeout: 15)
+            let frame = button.frame
+            let windowFrame = window.frame
+            let onScreen = !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
+                windowFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
+            print("SHELL_PRIMARY_READY id=\(id) largeText=\(largeText) frame=\(frame) window=\(windowFrame) interactive=\(interactive)")
+            if !interactive || !onScreen { chatProof(app, name: "primary-\(id)-readiness-failure", tree: true) }
+            XCTAssertTrue(interactive,
                 "Primary action \(id) was not interactive after launch")
+            XCTAssertTrue(onScreen,
+                "Primary action \(id) must remain on screen after becoming interactive")
         }
         return app
     }

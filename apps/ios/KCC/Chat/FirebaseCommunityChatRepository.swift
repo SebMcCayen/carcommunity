@@ -77,7 +77,7 @@ final class FirebaseCommunityChatRepository: CommunityChatRepository, @unchecked
             let data = try await functions.httpsCallable(Self.postCallable).call(payload).data
             return ChannelResponseParser.parsePostSuccess(data)
         } catch {
-            return .failed(ChannelErrorMapper.mapSend(ChatFirestore.channelErrorCode(from: error)))
+            return .failed(ChatFirestore.sendError(from: error))
         }
     }
 

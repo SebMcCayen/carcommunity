@@ -84,7 +84,18 @@ enum ChannelOlderPaging: Equatable, Sendable {
 @Observable
 final class ChannelChatCoordinator {
     /// Retained with this account/channel, across Chat source/tab view swaps.
-    var draft = ""
+    var draft = "" { didSet { draftRevision += 1 } }
+    private var draftRevision = 0
+    private struct DraftRecovery {
+        var revision: Int
+        let text: String
+        let reply: ChannelMessage?
+        let replyRevision: Int
+        var restored = false
+    }
+    private var draftRecovery: [String: DraftRecovery] = [:]
+    private var replyRevision = 0
+    let cooldown: ChatSendCooldown
     private var readingActive = true
 
     /// Retained Chat views may be covered or backgrounded; incoming messages
@@ -136,9 +147,11 @@ final class ChannelChatCoordinator {
     /// repopulating `older` post-reset.
     private var loadGeneration = 0
 
-    init(source: ChannelChatSource, chatRepliesEnabled: Bool = ChatFeatureFlags.chatRepliesDefault) {
+    init(source: ChannelChatSource, chatRepliesEnabled: Bool = ChatFeatureFlags.chatRepliesDefault,
+         cooldown: ChatSendCooldown? = nil) {
         self.source = source
         self.currentUserId = source.currentUserId()
+        self.cooldown = cooldown ?? ChatSendCooldowns.forUser(source.currentUserId())
         self.chatRepliesEnabled = chatRepliesEnabled
     }
 
@@ -185,6 +198,7 @@ final class ChannelChatCoordinator {
         attemptedAvatarPaths = Set(avatarURLs.keys).union(avatarResolutions.keys)
         older = []
         pending = []
+        draftRecovery.removeAll()
         olderPaging = .idle
         clearReply()
         subscribe()
@@ -237,6 +251,8 @@ final class ChannelChatCoordinator {
     /// (``ChannelThread/mergeWithPending``), so an optimistic send renders as
     /// exactly one message.
     private func recompute() {
+        let deliveredIDs = Set((older + live).map(\.id))
+        for id in Array(draftRecovery.keys) where deliveredIDs.contains(id) { acknowledgeDraft(id) }
         messages = ChannelThread.mergeWithPending(older: older, live: live, pending: pending)
     }
 
@@ -253,8 +269,16 @@ final class ChannelChatCoordinator {
     /// was sent (for tests/callers that want to await it).
     @discardableResult
     func send(_ text: String) -> String? {
-        guard ChannelThread.isSendable(text), let currentUserId else { return nil }
+        guard !cooldown.isBlocked, ChannelThread.isSendable(text), let currentUserId else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let existing = pending.last(where: {
+            $0.text == trimmed && $0.deliveryState == .failed && $0.sendError?.isRetryable == true &&
+            $0.replyTo?.messageId == (chatRepliesEnabled ? replyTarget?.id : nil)
+        }) {
+            retry(existing)
+            clearReply()
+            return existing.id
+        }
         let clientId = UUID().uuidString
         let replyId = chatRepliesEnabled ? replyTarget?.id : nil
         let replySnapshot = chatRepliesEnabled ? replyTarget.map(Self.optimisticReply(to:)) : nil
@@ -275,12 +299,24 @@ final class ChannelChatCoordinator {
         return clientId
     }
 
+    /// Recovery is tied to this exact cleared draft revision; later typing wins.
+    @discardableResult
+    func sendDraft() -> String? {
+        let text = draft
+        let reply = replyTarget
+        guard let id = send(text) else { return nil }
+        draft = ""
+        draftRecovery[id] = DraftRecovery(revision: draftRevision, text: text, reply: reply, replyRevision: replyRevision)
+        return id
+    }
+
     /// Retries a previously-``ChannelDeliveryState/failed`` bubble with the SAME
     /// clientId, so the send stays exactly-once. Only retryable failures act.
     func retry(_ message: ChannelMessage) {
-        guard message.deliveryState == .failed, message.sendError?.isRetryable == true,
+        guard !cooldown.isBlocked, message.deliveryState == .failed, message.sendError?.isRetryable == true,
             let index = pending.firstIndex(where: { $0.id == message.id })
         else { return }
+        guard pending[index].deliveryState == .failed else { return }
         let retried = Self.reset(pending[index])
         pending[index] = retried
         recompute()
@@ -298,13 +334,34 @@ final class ChannelChatCoordinator {
             guard let self else { return }
             switch result {
             case .sent:
+                self.acknowledgeDraft(bubble.id)
                 // The live listener reconciles the bubble away when the delivered
                 // document arrives; nothing to do here beyond letting it.
                 break
             case .failed(let error):
+                if case .rateLimited(let limit) = error { self.cooldown.apply(limit) }
+                if var recovery = self.draftRecovery[bubble.id],
+                   self.pending.contains(where: { $0.id == bubble.id }),
+                   self.draftRevision == recovery.revision, self.draft.isEmpty {
+                    self.draft = recovery.text
+                    if self.replyRevision == recovery.replyRevision, self.replyTarget == nil {
+                        self.replyTarget = recovery.reply
+                    }
+                    recovery.revision = self.draftRevision
+                    recovery.restored = true
+                    self.draftRecovery[bubble.id] = recovery
+                }
                 self.markFailed(bubble.id, error: error)
             }
         }
+    }
+
+    private func acknowledgeDraft(_ id: String) {
+        guard let recovery = draftRecovery.removeValue(forKey: id), recovery.restored,
+              draftRevision == recovery.revision, draft == recovery.text,
+              replyRevision == recovery.replyRevision else { return }
+        draft = ""
+        if replyRevision == recovery.replyRevision { replyTarget = nil }
     }
 
     private func markFailed(_ id: String, error: ChannelSendError) {
@@ -351,10 +408,12 @@ final class ChannelChatCoordinator {
     /// composer never enters reply mode with the feature dark.
     func setReplyTarget(_ message: ChannelMessage) {
         guard chatRepliesEnabled else { return }
+        replyRevision += 1
         replyTarget = message
     }
 
     func clearReply() {
+        replyRevision += 1
         replyTarget = nil
     }
 

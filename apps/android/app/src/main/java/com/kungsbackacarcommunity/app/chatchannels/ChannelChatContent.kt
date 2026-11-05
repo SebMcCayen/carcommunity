@@ -12,6 +12,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
@@ -255,6 +258,7 @@ fun ChannelChatContent(
     // renders a location link as plain, unclickable styled text.
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     cooldownSeconds: Int = 0,
+    protectCommunity: Boolean = false,
     onSendConfirmed: (suspend (String, List<String>, ChannelReplyTo?, String) -> Boolean)? = null,
     onRetryConfirmed: (suspend (ChannelMessage) -> Boolean)? = null,
 ) {
@@ -373,6 +377,7 @@ fun ChannelChatContent(
                 )
             } else {
                 ChannelMessageList(
+                    protectCommunity = protectCommunity,
                     messages = messages,
                     currentUid = currentUid,
                     mentionDisplayNames = mentionDisplayNames,
@@ -814,20 +819,20 @@ internal fun ChannelMessageList(
     onMessageLongPress: (ChannelMessage) -> Unit,
     modifier: Modifier = Modifier,
     retryEnabled: Boolean = true,
+    protectCommunity: Boolean = false,
 ) {
     val dates = rememberChatDateContext()
     // Day separators are inserted by pure logic over the WHOLE list (see
     // ChatTimeline) — including after an older page is prepended, which is what
     // keeps the pagination seam from growing a duplicate or losing a heading.
-    val timeline =
-        remember(messages, dates.zone) {
-            ChatTimeline.build(
-                messages = messages,
-                zone = dates.zone,
-                id = { it.id },
-                timestampMillis = { it.createdAtMillis },
-            )
-        }
+    val groups = remember(messages, dates.zone, protectCommunity) {
+        if (protectCommunity) CommunityMessageGroups.build(messages, dates.zone)
+        else messages.map { CommunityMessageGroup(listOf(it)) }
+    }
+    var expandedGroups by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val timeline = remember(groups, dates.zone) {
+        ChatTimeline.build(groups, dates.zone, id = { it.id }, timestampMillis = { it.messages.first().createdAtMillis })
+    }
     val listState = rememberLazyListState()
     // On open, JUMP straight to the newest message; thereafter follow new messages
     // down to the bottom, but only when it won't fight a reader scrolled up into
@@ -839,13 +844,14 @@ internal fun ChannelMessageList(
         listState = listState,
         newestMessageId = newest?.id,
         isOwnNewestMessage = newest?.senderUid == currentUid,
-        newestItemKey = newest?.let { ChatTimelineItem.Message(it.id, it).key },
+        newestItemKey = groups.lastOrNull()?.let { "msg-${it.id}" },
+        requireVisibleTail = protectCommunity,
     )
 
     // Keyboard just came up: the viewport shrank from the bottom, so re-pin the
     // newest message — shared with the DM thread and event chat so the three
     // surfaces cannot drift apart.
-    RepinToNewestOnImeRise(listState)
+    RepinToNewestOnImeRise(listState, requireVisibleTail = protectCommunity)
 
     // Tapping a reply's quote header scrolls to and briefly highlights the ORIGINAL
     // message — but only when it is still in the loaded window; a quoted parent
@@ -863,11 +869,16 @@ internal fun ChannelMessageList(
     val onQuoteTap: (String) -> Unit = { parentId ->
         val index =
             ChatReply.indexOfMessage(timeline, parentId) { item ->
-                (item as? ChatTimelineItem.Message)?.message?.id.orEmpty()
+                (item as? ChatTimelineItem.Message)?.message?.messages?.firstOrNull { it.id == parentId }?.id.orEmpty()
             }
         if (index != null) {
-            highlightedId = parentId
-            scope.launch { listState.animateScrollToItem((index + headerOffset).coerceAtLeast(0)) }
+            groups.firstOrNull { group -> group.messages.any { it.id == parentId } }?.let {
+                if (it.id !in expandedGroups) expandedGroups = expandedGroups + it.id
+            }
+            scope.launch {
+                listState.animateScrollToItem((index + headerOffset).coerceAtLeast(0))
+                highlightedId = parentId
+            }
         }
     }
 
@@ -897,21 +908,47 @@ internal fun ChannelMessageList(
         items(timeline, key = { it.key }) { item ->
             when (item) {
                 is ChatTimelineItem.DaySeparator -> DaySeparatorRow(date = item.date, dates = dates)
-                is ChatTimelineItem.Message ->
-                    ChannelMessageRow(
-                        message = item.message,
-                        isOwn = item.message.senderUid == currentUid,
-                        mentionDisplayNames = mentionDisplayNames,
-                        dates = dates,
-                        onViewProfile = onViewProfile,
-                        onShowLocationOnMap = onShowLocationOnMap,
-                        onRetry = { onRetry(item.message) },
-                        retryEnabled = retryEnabled,
-                        onLongPress = { onMessageLongPress(item.message) },
-                        ownMessageActionsEnabled = ownMessageActionsEnabled,
-                        highlighted = item.message.id == highlightedId,
-                        onQuoteTap = onQuoteTap,
-                    )
+                is ChatTimelineItem.Message -> {
+                    val group = item.message
+                    val expanded = group.id in expandedGroups || group.messages.any { it.id == highlightedId }
+                    val visible = if (expanded) group.messages else group.messages.takeLast(2)
+                    Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                        if (group.messages.size > 2) {
+                            TextButton(
+                                onClick = {
+                                    expandedGroups = if (expanded) expandedGroups - group.id else expandedGroups + group.id
+                                },
+                                modifier = Modifier.testTag("community-group-toggle-${group.id}"),
+                            ) {
+                                Text(if (expanded) stringResource(R.string.chat_flood_show_less) else
+                                    stringResource(R.string.chat_flood_more_from,
+                                        group.messages.first().senderDisplayName ?: stringResource(R.string.channel_unknownSender),
+                                        group.messages.size - 2))
+                            }
+                        }
+                        visible.forEachIndexed { index, message ->
+                            androidx.compose.runtime.key(message.id) {
+                                ChannelMessageRow(
+                                    message = message,
+                                    isOwn = message.senderUid == currentUid,
+                                    showSender = index == 0,
+                                    collapsedBodyLines = if (protectCommunity) 4 else 8,
+                                    mentionDisplayNames = mentionDisplayNames,
+                                    dates = dates,
+                                    onViewProfile = onViewProfile,
+                                    onShowLocationOnMap = onShowLocationOnMap,
+                                    onRetry = { onRetry(message) },
+                                    retryEnabled = retryEnabled,
+                                    onLongPress = { onMessageLongPress(message) },
+                                    ownMessageActionsEnabled = ownMessageActionsEnabled,
+                                    highlighted = message.id == highlightedId,
+                                    onQuoteTap = onQuoteTap,
+                                )
+                            }
+                        }
+
+                    }
+                }
             }
         }
     }
@@ -931,20 +968,27 @@ private fun ChannelMessageRow(
     highlighted: Boolean,
     onQuoteTap: (String) -> Unit,
     retryEnabled: Boolean,
+    showSender: Boolean = true,
+    collapsedBodyLines: Int = 8,
 ) {
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(highlighted) {
+        if (highlighted) bringIntoView.bringIntoView()
+    }
     if (isOwn) {
         // The time sits on the line ABOVE the bubble, aligned to the bubble's own
         // (right) edge. Your own messages carry no sender header, so this line is
         // the counterpart of the sender-name line on an incoming message — which
         // keeps the stamp in the same place on every message in the thread.
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView),
             horizontalAlignment = Alignment.End,
         ) {
             MessageTimeText(millis = message.createdAtMillis, dates = dates)
             // Own bubbles expose long-press only when the route offers an action:
             // channel replies, or Club's moderator-only hide action.
             ChannelBubble(
+                collapsedBodyLines = collapsedBodyLines,
                 message = message,
                 isOwn = true,
                 mentionDisplayNames = mentionDisplayNames,
@@ -971,10 +1015,10 @@ private fun ChannelMessageRow(
         }
     val senderName = message.senderDisplayName ?: stringResource(R.string.channel_unknownSender)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bringIntoView),
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        SenderAvatar(
+        if (showSender) SenderAvatar(
             avatarPath = message.senderAvatarPath,
             // The avatar image is decorative while inert — the sender name sits
             // right next to it — but once it becomes a button it has to carry its
@@ -996,11 +1040,12 @@ private fun ChannelMessageRow(
                     Modifier
                 },
         )
+        else Spacer(Modifier.size(32.dp))
         Column(Modifier.weight(1f)) {
             // Sender name and time share the header line above the bubble, the
             // conventional group-chat header. Only the NAME is the profile tap
             // target — the time is inert, so a mis-tap can't navigate.
-            Row(
+            if (showSender) Row(
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1018,6 +1063,7 @@ private fun ChannelMessageRow(
                 MessageTimeText(millis = message.createdAtMillis, dates = dates)
             }
             ChannelBubble(
+                collapsedBodyLines = collapsedBodyLines,
                 message = message,
                 isOwn = false,
                 mentionDisplayNames = mentionDisplayNames,
@@ -1085,6 +1131,7 @@ private fun ChannelBubble(
     onLongPress: (() -> Unit)?,
     highlighted: Boolean = false,
     onQuoteTap: (String) -> Unit = {},
+    collapsedBodyLines: Int = 8,
 ) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
@@ -1193,6 +1240,7 @@ private fun ChannelBubble(
                 )
             }
             ChatMessageBody(
+                collapsedMaxLines = collapsedBodyLines,
                 messageId = message.id,
                 text = body,
                 style = MaterialTheme.typography.bodyLarge,

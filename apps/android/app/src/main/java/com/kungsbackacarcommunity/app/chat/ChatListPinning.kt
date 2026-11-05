@@ -10,11 +10,13 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -28,6 +30,40 @@ internal data class ChatListResizeSnapshot(
     val atBottom: Boolean,
     val userScrolling: Boolean,
 )
+
+/** The measured row edge matters when many messages share one lazy item. */
+internal data class ChatListPositionSnapshot(
+    val lastVisibleIndex: Int,
+    val itemCount: Int,
+    val lastVisibleOffset: Int,
+    val lastVisibleSize: Int,
+    val viewportStartOffset: Int,
+    val viewportEndOffset: Int,
+)
+
+private fun LazyListState.chatPosition(): ChatListPositionSnapshot {
+    val layout = layoutInfo
+    val last = layout.visibleItemsInfo.lastOrNull()
+    return ChatListPositionSnapshot(
+        lastVisibleIndex = last?.index ?: -1,
+        itemCount = layout.totalItemsCount,
+        lastVisibleOffset = last?.offset ?: 0,
+        lastVisibleSize = last?.size ?: 0,
+        viewportStartOffset = layout.viewportStartOffset,
+        viewportEndOffset = layout.viewportEndOffset,
+    )
+}
+
+private data class ChatListFollowSnapshot(
+    val messageId: String?,
+    val itemKey: Any?,
+    val ownMessage: Boolean,
+    val position: ChatListPositionSnapshot,
+    val userScrolling: Boolean,
+    val initialJumpCompleted: Boolean,
+)
+
+private data class ChatListImeSnapshot(val inset: Int, val position: ChatListPositionSnapshot)
 
 /**
  * The one keyboard/scroll interaction shared by every chat surface — the group
@@ -82,6 +118,44 @@ object ChatListPinning {
         // Nothing to scroll to.
         if (totalItemsCount <= 0) return false
         return lastVisibleIndex >= totalItemsCount - 2
+    }
+
+    /** Community groups can hide many messages even one lazy item from the end. */
+    internal fun shouldRepinToNewest(
+        position: ChatListPositionSnapshot,
+        requireVisibleTail: Boolean = false,
+    ): Boolean {
+        if (!shouldRepinToNewest(position.lastVisibleIndex, position.itemCount)) return false
+        val viewportHeight = position.viewportEndOffset.toLong() - position.viewportStartOffset
+        if (viewportHeight <= 0 || position.lastVisibleSize <= 0) return false
+        val rowBottom = position.lastVisibleOffset.toLong() + position.lastVisibleSize
+        if (requireVisibleTail &&
+            (position.lastVisibleIndex != position.itemCount - 1 ||
+                position.lastVisibleOffset >= position.viewportEndOffset ||
+                rowBottom <= position.viewportStartOffset)
+        ) return false
+        // DM/event chat retain their ordinary one-row tolerance. Community must
+        // actually expose the tail, even when the preceding visible row is short.
+        if (!requireVisibleTail && position.lastVisibleSize <= viewportHeight) return true
+        // A rounded pixel at the edge is not history. Use Long for edge arithmetic.
+        return rowBottom <= position.viewportEndOffset.toLong() + 1
+    }
+
+    internal fun shouldFollowNewest(
+        previousPosition: ChatListPositionSnapshot?,
+        currentPosition: ChatListPositionSnapshot,
+        isOwnMessage: Boolean,
+        isUserScrolling: Boolean,
+        wasFollowingNewest: Boolean,
+        requireVisibleTail: Boolean = false,
+    ): Boolean {
+        if (currentPosition.itemCount <= 0) return false
+        if (isOwnMessage) return true
+        if (isUserScrolling) return false
+        // An arrival can enlarge the SAME item before this observer runs. Decide
+        // from the frame before the arrival, not its newly offscreen bottom edge.
+        // An active programmatic follow also owns subsequent messages of a burst.
+        return wasFollowingNewest || shouldRepinToNewest(previousPosition ?: currentPosition, requireVisibleTail)
     }
 
     /**
@@ -217,6 +291,8 @@ object ChatListPinning {
  * @param newestMessageId id of the newest message, or null when the list is empty.
  *   Keys the follow effect, so it re-runs exactly once per newly-arrived message.
  * @param isOwnNewestMessage whether that newest message is the caller's own send.
+ * @param requireVisibleTail group rows can contain many messages, so Community
+ *   requires the actual tail edge rather than the ordinary one-item tolerance.
  */
 @Composable
 fun KeepPinnedToNewest(
@@ -224,6 +300,7 @@ fun KeepPinnedToNewest(
     newestMessageId: String?,
     isOwnNewestMessage: Boolean,
     newestItemKey: Any? = null,
+    requireVisibleTail: Boolean = false,
 ) {
     // Saveable, sharing the SAME lifetime as rememberLazyListState's own saved
     // scroll position: both are restored together across a configuration change
@@ -290,45 +367,61 @@ fun KeepPinnedToNewest(
     // ON A NEW MESSAGE: follow to the bottom, but only after the open jump owns the
     // first positioning, and only when the reader is at/near the bottom or it's
     // their own send. Scrolled up reading history, they are left put.
-    LaunchedEffect(newestMessageId, newestItemKey) {
-        if (newestMessageId == null || !didInitialJump) return@LaunchedEffect
-        val layoutInfo = listState.layoutInfo
-        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-        val totalItems = layoutInfo.totalItemsCount
-        // isUserScrolling guards the #870 flick: a message arriving while the reader
-        // is flinging up must not cancel the fling and drag them to the bottom. It is
-        // false during this effect's OWN follow animation, so a burst of messages
-        // landing mid-follow still catches a pinned reader up to the newest.
-        if (ChatListPinning.shouldFollowNewest(
-                lastVisibleIndex = lastVisibleIndex,
-                totalItemsCount = totalItems,
-                isOwnMessage = isOwnNewestMessage,
-                isUserScrolling = isUserScrolling.value,
+    val latestMessageId by rememberUpdatedState(newestMessageId)
+    val latestItemKey by rememberUpdatedState(newestItemKey)
+    val latestOwnMessage by rememberUpdatedState(isOwnNewestMessage)
+    val latestRequireVisibleTail by rememberUpdatedState(requireVisibleTail)
+    LaunchedEffect(listState) {
+        var previous: ChatListFollowSnapshot? = null
+        var followJob: Job? = null
+        snapshotFlow {
+            ChatListFollowSnapshot(latestMessageId, latestItemKey, latestOwnMessage,
+                listState.chatPosition(), isUserScrolling.value, didInitialJump)
+        }.collect { current ->
+            val before = previous
+            previous = current
+            if (before == null || !current.initialJumpCompleted || current.messageId == null ||
+                (before.messageId == current.messageId && before.itemKey == current.itemKey)
+            ) return@collect
+            val follow = ChatListPinning.shouldFollowNewest(
+                previousPosition = before.position,
+                currentPosition = current.position,
+                isOwnMessage = current.ownMessage,
+                isUserScrolling = current.userScrolling,
+                wasFollowingNewest = followJob?.isActive == true,
+                requireVisibleTail = latestRequireVisibleTail,
             )
-        ) {
-            listState.animateScrollToItem(totalItems - 1)
-            // This effect can start before the new content's first measurement;
-            // the count above can still describe the previous message window.
-            // Give measurement one frame, then make at most ONE corrective seek.
-            // Never scroll from a snapshotFlow predicate: each seek can emit a new
-            // layout and keep fighting a reader's explicit history scroll.
-            if (newestItemKey != null) {
-                // Keep normal scroll ownership while awaiting measurement so
-                // another scroll cancels this follow, including semantics scrolls
-                // which do not emit DragInteraction.Start. Do not catch cancellation.
-                listState.scroll { withFrameNanos { } }
-                if (isUserScrolling.value || listState.isScrollInProgress) return@LaunchedEffect
-                val measured = listState.layoutInfo
-                if (measured.totalItemsCount <= 0 || measured.viewportSize.height <= 0) return@LaunchedEffect
-                if (measured.visibleItemsInfo.lastOrNull()?.key != newestItemKey) {
-                    listState.scrollToItem(measured.totalItemsCount - 1)
+            // Only content arrivals replace this job. A reader's gesture or
+            // semantics scroll still cancels it normally through MutatorMutex;
+            // a cancelled job cannot lend follow intent to the next arrival.
+            followJob?.cancel()
+            followJob = null
+            if (!follow) return@collect
+            followJob = launch {
+                listState.animateScrollToItem(current.position.itemCount - 1)
+                // This effect can start before the new content's first measurement;
+                // the count above can still describe the previous message window.
+                // Give measurement one frame, then make at most ONE corrective seek.
+                // Never scroll from a snapshotFlow predicate: each seek can emit a new
+                // layout and keep fighting a reader's explicit history scroll.
+                if (current.itemKey != null) {
+                    // Keep normal scroll ownership while awaiting measurement so
+                    // another scroll cancels this follow, including semantics scrolls
+                    // which do not emit DragInteraction.Start. Do not catch cancellation.
                     listState.scroll { withFrameNanos { } }
+                    if (isUserScrolling.value || listState.isScrollInProgress) return@launch
+                    val measured = listState.layoutInfo
+                    if (measured.totalItemsCount <= 0 || measured.viewportSize.height <= 0) return@launch
+                    if (measured.visibleItemsInfo.lastOrNull()?.key != current.itemKey) {
+                        listState.scrollToItem(measured.totalItemsCount - 1)
+                        listState.scroll { withFrameNanos { } }
+                    }
+                    if (isUserScrolling.value || listState.isScrollInProgress ||
+                        listState.layoutInfo.visibleItemsInfo.lastOrNull()?.key != current.itemKey
+                    ) return@launch
                 }
-                if (isUserScrolling.value || listState.isScrollInProgress ||
-                    listState.layoutInfo.visibleItemsInfo.lastOrNull()?.key != newestItemKey
-                ) return@LaunchedEffect
+                alignMeasuredChatTail(listState)
             }
-            alignMeasuredChatTail(listState)
         }
     }
 }
@@ -398,33 +491,38 @@ fun rememberIsUserScrolling(listState: LazyListState): State<Boolean> {
  * (closing), where the growing-back viewport re-reveals the bottom on its own.
  */
 @Composable
-fun RepinToNewestOnImeRise(listState: LazyListState) {
+fun RepinToNewestOnImeRise(listState: LazyListState, requireVisibleTail: Boolean = false) {
     val density = LocalDensity.current
     val imeInsets = WindowInsets.ime
+    val latestRequireVisibleTail by rememberUpdatedState(requireVisibleTail)
     LaunchedEffect(listState, imeInsets, density) {
         // Seeded from the current inset so a list composed with the keyboard
         // ALREADY up (e.g. after a rotation) sees no rise and does not scroll —
         // the restore is KeepPinnedToNewest's job, not this effect's.
-        var previousBottom = imeInsets.getBottom(density)
+        var previous: ChatListImeSnapshot? = null
         var following = false
-        // snapshotFlow's first emission is the current value (== previousBottom),
-        // so the first frame is never a rise and never scrolls.
-        snapshotFlow { imeInsets.getBottom(density) }.collect { currentBottom ->
-            val layoutInfo = listState.layoutInfo
-            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            val atBottom =
-                ChatListPinning.shouldRepinToNewest(lastVisibleIndex, layoutInfo.totalItemsCount)
+        // The first measured frame only seeds the observer, so composing with
+        // an already-open keyboard never invents a rise or moves restored history.
+        snapshotFlow { ChatListImeSnapshot(imeInsets.getBottom(density), listState.chatPosition()) }.collect { current ->
+            val before = previous
+            previous = current
+            // Position-only frames keep the pre-rise anchor fresh without
+            // releasing a follow between two animated inset changes.
+            if (before == null || before.inset == current.inset) return@collect
+            val atBottom = ChatListPinning.shouldRepinToNewest(before.position, latestRequireVisibleTail)
             following =
                 ChatListPinning.shouldKeepPinnedDuringImeRise(
-                    previousBottomPx = previousBottom,
-                    currentBottomPx = currentBottom,
+                    previousBottomPx = before.inset,
+                    currentBottomPx = current.inset,
                     alreadyFollowing = following,
                     atBottom = atBottom,
                 )
-            previousBottom = currentBottom
             if (following) {
-                val totalItems = layoutInfo.totalItemsCount
-                if (totalItems > 0) listState.scrollToItem(totalItems - 1)
+                val totalItems = current.position.itemCount
+                if (totalItems > 0) {
+                    listState.scrollToItem(totalItems - 1)
+                    alignMeasuredChatTail(listState)
+                }
             }
         }
     }
