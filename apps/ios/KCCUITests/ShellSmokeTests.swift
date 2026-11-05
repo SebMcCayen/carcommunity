@@ -77,8 +77,12 @@ final class ShellSmokeTests: XCTestCase {
             let thread = element("chat.thread.messages", in: app)
             // The scroll view's AX frame extends behind the safe-area composer.
             // Keep touch coordinates above that overlay, inside readable rows.
+            let emojiRow = app.scrollViews["chat.quickEmojiRow"]
+            let footerReady = emojiRow.waitForExistence(timeout: 15)
+            if !footerReady { chatProof(app, name: "community-series-footer-missing", tree: true) }
+            XCTAssertTrue(footerReady)
             let threadFrame = thread.frame
-            let footerTop = element("chat.quickEmoji.row", in: app).frame.minY
+            let footerTop = emojiRow.frame.minY
             let visibleHeight = min(threadFrame.maxY, footerTop) - threadFrame.minY
             XCTAssertGreaterThan(visibleHeight, 44)
             let visibleFraction = visibleHeight / threadFrame.height
@@ -187,7 +191,14 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(reply.isHittable)
             assertComposerDraft("Fixture reply", present: false, in: app)
             // Keyboard resizing must also respect a deliberate history read.
-            app.buttons["chat.keyboard.dismiss"].tap()
+            // Clearing SwiftUI's vertical editor can already close the keyboard.
+            // Dismiss it if needed, then require the same keyboard-free history
+            // starting state before exercising the next keyboard transition.
+            let historyDismiss = app.buttons["chat.keyboard.dismiss"]
+            if historyDismiss.exists { historyDismiss.tap() }
+            let keyboardClosed = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+            XCTAssertEqual(XCTWaiter.wait(for: [keyboardClosed], timeout: 15), .completed)
             XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
             let messages = element("chat.thread.messages", in: app)
             messages.swipeDown()
