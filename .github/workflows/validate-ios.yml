@@ -32,30 +32,25 @@ concurrency:
   group: validate-ios-${{ github.ref }}
   cancel-in-progress: true
 
+# The measured serial Intel run passed the full unit/UI and optimized Release
+# gates, but consumed over three hours before native SDK/device acceptance.
+# Run the four independent native gates concurrently on standard Intel runners.
+# Each job keeps its checks; validate-ios requires every job to succeed.
+# Simulator execution is x86_64; the unsigned device build targets arm64.
+# https://docs.github.com/en/actions/reference/runners/github-hosted-runners
 jobs:
-  validate-ios:
-    name: validate-ios
-    # macOS minutes bill at a 10x multiplier on private repos — this job is
-    # paths-filtered above so it runs for iOS, its contracts, and admin/backend configuration changes.
-    # Use the standard Intel pool while hosted ARM64 provisioning is constrained.
-    # This image provides the same Xcode toolchain. Simulator tests run on x64;
-    # the final unsigned generic-device build still targets arm64. Keep all gates.
-    # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
-    runs-on: macos-26-intel
-    # The measured Intel run spent over 150 minutes in Debug build/unit/UI gates
-    # before optimized Release, native Firebase and unsigned arm64 compilation.
-    # Retain every gate and leave time for those remaining builds on this pool.
-    timeout-minutes: 240
-
+  # Validate source once before scheduling native builds; these checks also run on Linux locally.
+  ios-preflight:
+    name: iOS source preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
       - name: Setup Node.js (for codegen checks)
         uses: actions/setup-node@v7
         with:
           node-version: 24
-
       - name: Verify generated String Catalog is up to date
         run: |
           node apps/ios/scripts/generate-strings.mjs
@@ -63,7 +58,6 @@ jobs:
             echo "::error::Localizable.xcstrings is out of date. Run: node apps/ios/scripts/generate-strings.mjs"
             exit 1
           fi
-
       - name: Verify generated design tokens are up to date
         run: |
           node apps/ios/scripts/generate-tokens.mjs
@@ -71,15 +65,25 @@ jobs:
             echo "::error::Tokens.swift is out of date. Run: node apps/ios/scripts/generate-tokens.mjs"
             exit 1
           fi
-
       - name: Validate release metadata and preflight regression tests
         run: |
           python3 apps/ios/scripts/release-preflight.py
           python3 -m unittest discover -s apps/ios/scripts -p 'test_*.py'
-
+  # Keep the changed Community cases and the unfiltered full unit/UI suite together, including simulator identity and Keychain checks.
+  ios-simulator:
+    name: iOS simulator (unit + UI)
+    needs: ios-preflight
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node.js (for codegen checks)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
       - name: Show Xcode version
         run: xcodebuild -version
-
       - name: Regenerate native project including feature folders
         run: |
           if ! command -v xcodegen >/dev/null 2>&1; then
@@ -87,14 +91,6 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
-
-      # Builds WITHOUT GoogleService-Info.plist (it is gitignored and no
-      # secret is injected here) — this is deliberate: it continuously proves
-      # the config-less-build seam that FirebaseBootstrap provides.
-      # Run the two changed Community regressions first, with geometry and
-      # synthetic screenshot evidence. Every UI case (including the map/dock
-      # scenarios) still runs in the unfiltered full unit/UI suite below.
-      # Optimized Release, native SDK and unsigned device gates also remain.
       - name: Community composer and expansion acceptance (config-less)
         run: |
           DEST=$(xcrun simctl list devices available --json | python3 -c '
@@ -113,7 +109,6 @@ jobs:
             -only-testing:KCCUITests/ShellSmokeTests/testCommunitySpamSeriesExpandsWithoutHidingTheNewestMessage \
             -resultBundlePath "${RUNNER_TEMP}/ios-chat-smoke.xcresult" \
             test
-
       - name: Build and test (unit + UI smoke tests, simulator, config-less)
         run: |
           cd apps/ios
@@ -138,86 +133,10 @@ jobs:
             -parallel-testing-enabled NO \
             -resultBundlePath "${RUNNER_TEMP}/ios-tests.xcresult" \
             test
-
       - name: Verify built simulator identity and keychain entitlements
         run: |
           python3 apps/ios/scripts/simulator-package.py \
             "${RUNNER_TEMP}/ios-tests/Build/Products/Debug-iphonesimulator/KCC.app"
-
-      # Debug's implicit view type erasure can hide a SwiftUI metadata/stack
-      # overflow that occurs in TestFlight. Execute the actual shell with -O
-      # and implicit erasure disabled, then exercise retained map/route identity.
-      # This UI-only scheme excludes unit-test helpers that exist only in
-      # Debug. Test the active simulator architecture; the device build below
-      # independently compiles arm64 without test-only settings.
-      - name: Release shell smoke tests (optimized, config-less)
-        run: |
-          DEST=$(xcrun simctl list devices booted --json | python3 -c '
-          import json, sys
-          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
-                     for device in runtime if device["name"].startswith("iPhone ")))
-          ')
-          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCCReleaseSmoke \
-            -configuration Release \
-            -destination "platform=iOS Simulator,id=${DEST}" \
-            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
-            ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
-            SWIFT_ENABLE_OPAQUE_TYPE_ERASURE=NO \
-            -parallel-testing-enabled NO \
-            -only-testing:KCCUITests/ShellSmokeTests/testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip \
-            -only-testing:KCCUITests/ShellSmokeTests/testMapToolsAppearOnRightAndWorkWithoutBackend \
-            -resultBundlePath "${RUNNER_TEMP}/ios-release-smoke.xcresult" \
-            test
-
-      - name: Setup JDK for native member emulators
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Build backend handlers for native SDK acceptance
-        run: |
-          npm ci --prefix functions --ignore-scripts
-          npm --prefix functions run build
-          node scripts/native-member-emulators.mjs prepare "${RUNNER_TEMP}/native-members"
-          npm install --global firebase-tools@15.34.0
-          firebase setup:emulators:firestore
-          firebase setup:emulators:database
-
-      - name: Native Firebase Auth and member-tools acceptance (no cloud credentials)
-        run: |
-          DEST=$(xcrun simctl list devices booted --json | python3 -c '
-          import json, sys
-          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
-                     for device in runtime if device["name"].startswith("iPhone ")))
-          ')
-          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
-            -destination "platform=iOS Simulator,id=${DEST}" \
-            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
-            ENTITLEMENTS_REQUIRED=YES \
-            -only-testing:KCCTests/FirebaseEmulatorIntegrationTests build-for-testing
-          # firebase-tools also applies this limit to runtime socket readiness.
-          # Slow worker imports must complete before the unchanged SDK checks.
-          FUNCTIONS_DISCOVERY_TIMEOUT=120 GCLOUD_PROJECT=demo-kcc-ios-ci node scripts/run-no-cloud.mjs -- firebase emulators:exec \
-            --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json" \
-            --only auth,firestore,functions,database --non-interactive \
-            "node scripts/native-member-emulators.mjs seed && python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${DEST}' --member-tools"
-
-      # TestFlight uses the Release configuration on arm64 hardware. Keep this
-      # unsigned and config-less so PRs catch device-only compile/link failures
-      # without storing Apple signing credentials or Firebase config in CI.
-      - name: Build release for a generic iOS device (unsigned, config-less)
-        run: |
-          cd apps/ios
-          xcodebuild -project KCC.xcodeproj -scheme KCC \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
-            CODE_SIGNING_ALLOWED=NO \
-            build
-
-      # All screenshot attachments are captured by config-less KCCUITests;
-      # no Firebase plist, production account, or production fixtures are used.
       - name: Export config-less simulator screenshot attachments
         if: always()
         run: |
@@ -232,7 +151,6 @@ jobs:
               --path "${RESULTS}" \
               --output-path "${SCREENSHOTS}"
           fi
-
       - name: Upload simulator results and screenshot attachments
         if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         uses: actions/upload-artifact@v7
@@ -240,11 +158,9 @@ jobs:
           name: ios-test-results
           path: |
             ${{ runner.temp }}/ios-tests.xcresult
-            ${{ runner.temp }}/ios-release-smoke.xcresult
             ${{ runner.temp }}/ios-chat-smoke.xcresult
           if-no-files-found: ignore
           retention-days: 7
-
       - name: Upload config-less screenshot PNGs and attachment manifest
         if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         uses: actions/upload-artifact@v7
@@ -253,7 +169,6 @@ jobs:
           path: ${{ runner.temp }}/ios-configless-screenshots
           if-no-files-found: ignore
           retention-days: 7
-
       - name: Upload generated Xcode project
         if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         uses: actions/upload-artifact@v7
@@ -262,3 +177,178 @@ jobs:
           path: apps/ios/KCC.xcodeproj
           if-no-files-found: ignore
           retention-days: 7
+  # Run optimized SwiftUI without implicit view type erasure in a fresh, explicitly booted simulator.
+  ios-release:
+    name: iOS optimized Release
+    needs: ios-preflight
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node.js (for codegen checks)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd apps/ios
+          xcodegen generate
+      - name: Release shell smoke tests (optimized, config-less)
+        run: |
+          DEST=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
+                     for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone ")))
+          ')
+          xcrun simctl bootstatus "$DEST" -b
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCCReleaseSmoke \
+            -configuration Release \
+            -destination "platform=iOS Simulator,id=${DEST}" \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
+            ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ENABLE_OPAQUE_TYPE_ERASURE=NO \
+            -parallel-testing-enabled NO \
+            -only-testing:KCCUITests/ShellSmokeTests/testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip \
+            -only-testing:KCCUITests/ShellSmokeTests/testMapToolsAppearOnRightAndWorkWithoutBackend \
+            -resultBundlePath "${RUNNER_TEMP}/ios-release-smoke.xcresult" \
+            test
+      - name: Export optimized Release screenshot attachments
+        if: always()
+        run: |
+          RESULTS="${RUNNER_TEMP}/ios-release-smoke.xcresult"
+          SCREENSHOTS="${RUNNER_TEMP}/ios-release-screenshots"
+          if [ -d "${RESULTS}" ]; then
+            mkdir -p "${SCREENSHOTS}"
+            xcrun xcresulttool export attachments --path "${RESULTS}" --output-path "${SCREENSHOTS}"
+          fi
+      - name: Upload optimized Release results and screenshots
+        if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-release-test-results
+          path: |
+            ${{ runner.temp }}/ios-release-smoke.xcresult
+            ${{ runner.temp }}/ios-release-screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+  # Exercise Firebase Auth and member tools against isolated local emulators, with no cloud credentials.
+  ios-native:
+    name: iOS native Firebase SDK
+    needs: ios-preflight
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node.js (for codegen checks)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd apps/ios
+          xcodegen generate
+      - name: Setup JDK for native member emulators
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Build backend handlers for native SDK acceptance
+        run: |
+          npm ci --prefix functions --ignore-scripts
+          npm --prefix functions run build
+          node scripts/native-member-emulators.mjs prepare "${RUNNER_TEMP}/native-members"
+          npm install --global firebase-tools@15.34.0
+          firebase setup:emulators:firestore
+          firebase setup:emulators:database
+      - name: Native Firebase Auth and member-tools acceptance (no cloud credentials)
+        run: |
+          DEST=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          print(next(device["udid"] for runtime in json.load(sys.stdin)["devices"].values()
+                     for device in runtime if device.get("isAvailable") and device["name"].startswith("iPhone ")))
+          ')
+          xcrun simctl bootstatus "$DEST" -b
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
+            -destination "platform=iOS Simulator,id=${DEST}" \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
+            ENTITLEMENTS_REQUIRED=YES \
+            -only-testing:KCCTests/FirebaseEmulatorIntegrationTests build-for-testing
+          # firebase-tools also applies this limit to runtime socket readiness.
+          # Slow worker imports must complete before the unchanged SDK checks.
+          FUNCTIONS_DISCOVERY_TIMEOUT=120 GCLOUD_PROJECT=demo-kcc-ios-ci node scripts/run-no-cloud.mjs -- firebase emulators:exec \
+            --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json" \
+            --only auth,firestore,functions,database --non-interactive \
+            "node scripts/native-member-emulators.mjs seed && python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${DEST}' --member-tools"
+      - name: Upload native Firebase acceptance results
+        if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-native-sdk-results
+          path: |
+            ${{ runner.temp }}/ios-tests/Build/Products/auth-emulator-tests.xcresult
+            *-debug.log
+          if-no-files-found: ignore
+          retention-days: 7
+  # Independently compile unsigned arm64 Release for an iOS device. This does not claim physical-device runtime coverage.
+  ios-device:
+    name: iOS unsigned arm64 build
+    needs: ios-preflight
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node.js (for codegen checks)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd apps/ios
+          xcodegen generate
+      - name: Build release for a generic iOS device (unsigned, config-less)
+        run: |
+          cd apps/ios
+          xcodebuild -project KCC.xcodeproj -scheme KCC \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+  # Keep the required check name stable. Failure, cancellation, skipping, or missing results in any gate must fail this check.
+  validate-ios:
+    name: validate-ios
+    if: ${{ always() }}
+    needs:
+      - ios-preflight
+      - ios-simulator
+      - ios-release
+      - ios-native
+      - ios-device
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Require every iOS gate to succeed
+        env:
+          IOS_GATE_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 apps/ios/scripts/ci-gate-results.py
