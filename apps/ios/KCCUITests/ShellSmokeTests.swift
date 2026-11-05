@@ -72,9 +72,16 @@ final class ShellSmokeTests: XCTestCase {
             print("CHAT_SERIES_VIEWPORT accessibility=\(largeText) thread=\(threadFrame) footerTop=\(footerTop) visibleHeight=\(visibleHeight)")
             if visibleHeight <= 44 { chatProof(app, name: "community-series-viewport-failure", tree: true) }
             XCTAssertGreaterThan(visibleHeight, 44)
-            let visibleFraction = visibleHeight / threadFrame.height
-            let lower = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: visibleFraction * 0.8))
-            let upper = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: visibleFraction * 0.25))
+            // XCUI coordinates remain relative to their referenced element.
+            // Resolve the readable viewport once, then anchor gestures to the
+            // stable application window. Re-resolving the lazy scroll view
+            // during each drag can reposition it before the event is injected.
+            let appFrame = app.frame
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let lower = origin.withOffset(CGVector(dx: threadFrame.midX - appFrame.minX,
+                dy: threadFrame.minY + visibleHeight * 0.8 - appFrame.minY))
+            let upper = origin.withOffset(CGVector(dx: threadFrame.midX - appFrame.minX,
+                dy: threadFrame.minY + visibleHeight * 0.25 - appFrame.minY))
             let toggle = app.buttons["community-group-toggle-fixture-31"]
             XCTAssertTrue(toggle.waitForExistence(timeout: 15))
             var toggleReady = false
@@ -96,8 +103,12 @@ final class ShellSmokeTests: XCTestCase {
             // Verify the content instead: reach the newest row, read the formerly
             // hidden row above it, then return to the newest. A collapsed group
             // can never satisfy the fixture-37 assertion in either font size.
-            for (id, older) in [("fixture-39", false), ("fixture-37", true), ("fixture-39", false)] {
+            for (visit, target) in [("fixture-39", false), ("fixture-37", true), ("fixture-39", false)].enumerated() {
+                let (id, older) = target
                 let message = app.staticTexts["chat.message.text." + id]
+                if message.exists {
+                    print("CHAT_SERIES_TARGET accessibility=\(largeText) visit=\(visit) id=\(id) before=\(message.frame)")
+                }
                 for _ in 0..<16 {
                     if message.exists && message.isHittable { break }
                     // Overlapping viewport steps keep each target discoverable
@@ -113,7 +124,8 @@ final class ShellSmokeTests: XCTestCase {
                     chatProof(app, name: "community-series-\(id)-failure", tree: true)
                 }
                 XCTAssertTrue(exists)
-                XCTAssertTrue(message.isHittable)
+                XCTAssertTrue(message.isHittable,
+                    "Expanded \(id) must be readable on visit \(visit), accessibility=\(largeText)")
             }
             attach(app, name: largeText ? "community-series-accessibility" : "community-series")
             app.terminate()
