@@ -1124,11 +1124,12 @@ final class ShellSmokeTests: XCTestCase {
             if layoutResult != .completed { chatProof(app, name: "primary-\(id)-layout-failure", tree: true) }
             XCTAssertEqual(layoutResult, .completed,
                 "Primary action \(id) must have valid on-screen geometry after launch")
-            let interactive = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "hittable == true"), object: button)
-            let interactiveResult = XCTWaiter.wait(for: [interactive], timeout: 15)
-            if interactiveResult != .completed { chatProof(app, name: "primary-\(id)-hittable-failure", tree: true) }
-            XCTAssertEqual(interactiveResult, .completed,
+            // Observe the public XCUIElement property through XCTest's native
+            // wait API. The string-keyed KVC predicate repeatedly resolved the
+            // visible button but never established its hit-testing readiness.
+            let interactive = button.wait(for: \.isHittable, toEqual: true, timeout: 15)
+            if !interactive { chatProof(app, name: "primary-\(id)-hittable-failure", tree: true) }
+            XCTAssertTrue(interactive,
                 "Primary action \(id) was not interactive after launch")
             let frame = button.frame
             XCTAssertTrue(!frame.isEmpty && !frame.isNull && !frame.isInfinite &&
