@@ -50,6 +50,22 @@ struct MapLayersSheet: View {
                             .font(.footnote)
                             .foregroundStyle(KccTheme.secondary)
                     }
+                    if preferences.trafficAlertsEnabled {
+                        Picker("shell.layersAlertAgeTitle", selection: Binding(
+                            get: { preferences.incidentMaxAge },
+                            set: { preferences.setIncidentMaxAge($0) }
+                        )) {
+                            ForEach(IncidentAgeOption.allCases, id: \.self) { option in
+                                Text(LocalizedStringKey(option.titleKey)).tag(option)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(minHeight: 48)
+                        .accessibilityIdentifier("shell.layersAlertAge")
+                        Text("shell.layersAlertAgeHelp")
+                            .font(.subheadline)
+                            .foregroundStyle(KccTheme.secondary)
+                    }
                     Divider()
                     layerRow("shell.layers3d", help: "shell.layers3dHelp",
                              icon: "cube", binding: threeDBinding, id: "shell.layers3d")

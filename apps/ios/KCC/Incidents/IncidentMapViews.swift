@@ -10,7 +10,7 @@ struct IncidentMapOverlay: View {
         GeometryReader { geometry in
             let markers = IncidentLayerPresentation.markers(
                 enabled: coordinator.trafficAlertsEnabled,
-                incidents: coordinator.incidents,
+                incidents: coordinator.visibleIncidents,
                 policeReports: coordinator.policeReports
             )
             ZStack(alignment: .bottomLeading) {
@@ -33,7 +33,7 @@ struct IncidentMapOverlay: View {
                         .accessibilityIdentifier("map.incident." + marker.id)
                         .accessibilityLabel(Text(IncidentAccessibility.markerLabel(
                             id: marker.id,
-                            incidents: coordinator.incidents,
+                            incidents: coordinator.visibleIncidents,
                             policeReports: coordinator.policeReports
                         )))
                         .position(x: CGFloat(point.x), y: CGFloat(point.y))

@@ -69,7 +69,11 @@ final class FirebaseAuthRepository: AuthRepository, @unchecked Sendable {
             fullName: nil
         )
         do {
-            try await auth.signIn(with: credential)
+            let result = try await auth.signIn(with: credential)
+            let isNewUser = result.additionalUserInfo?.isNewUser == true
+            await MainActor.run {
+                MapLayerPreferences.shared.initializeIncidentAgeForSignIn(isNewUser: isNewUser)
+            }
         } catch {
             // Preserve the concrete Firebase error as `underlying` and lift
             // its stable, PII-safe AuthErrorCode name into the diagnostic

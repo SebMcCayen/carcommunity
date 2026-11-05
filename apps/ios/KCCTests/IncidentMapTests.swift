@@ -92,6 +92,75 @@ final class IncidentMapTests: XCTestCase {
         )
     }
 
+    func testAgeFilterMatchesAndroidBoundariesAndNeverHidesMemberOrUnknownAgeReports() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        for option in IncidentAgeOption.allCases {
+            guard let limit = option.maxAge else { continue }
+            let boundary = Self.incident(id: "boundary", type: .roadwork, source: "trafikverket",
+                                         postedAt: now.addingTimeInterval(-limit))
+            let stale = Self.incident(id: "stale", type: .roadwork, source: "trafikverket",
+                                      createdAt: now, postedAt: now.addingTimeInterval(-limit - 1))
+            XCTAssertTrue(option.isVisible(boundary, now: now))
+            XCTAssertFalse(option.isVisible(stale, now: now))
+            XCTAssertTrue(IncidentAgeOption.all.isVisible(stale, now: now))
+            XCTAssertTrue(option.isVisible(Self.incident(id: "unknown", type: .roadwork,
+                                                         source: "trafikverket"), now: now))
+            XCTAssertTrue(option.isVisible(Self.incident(id: "member", type: .hazard,
+                                                         postedAt: now.addingTimeInterval(-limit - 1)), now: now))
+            XCTAssertTrue(option.isVisible(Self.incident(id: "future", type: .roadwork,
+                                                         source: "trafikverket", postedAt: now.addingTimeInterval(1)), now: now))
+        }
+        XCTAssertEqual(IncidentAgeOption.week1.maxAge, 7 * 86_400)
+        XCTAssertEqual(IncidentAgeOption.fromStoredName(nil), .all)
+        XCTAssertEqual(IncidentAgeOption.fromStoredName("unknown"), .all)
+        for option in IncidentAgeOption.allCases {
+            XCTAssertEqual(IncidentAgeOption.fromStoredName(option.rawValue), option)
+        }
+    }
+
+    @MainActor
+    func testAgeChangesImmediatelyUpdateNativeAndOverlayMarkersWithoutDiscardingReports() async {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let repository = FakeIncidentRepository()
+        repository.nearby = [
+            Self.incident(id: "stale", type: .roadwork, source: "trafikverket",
+                          postedAt: now.addingTimeInterval(-8 * 86_400)),
+            Self.incident(id: "boundary", type: .roadwork, source: "trafikverket",
+                          postedAt: now.addingTimeInterval(-7 * 86_400)),
+            Self.incident(id: "unknown", type: .roadwork, source: "trafikverket"),
+            Self.incident(id: "member", type: .hazard, createdAt: now.addingTimeInterval(-30 * 86_400)),
+        ]
+        let coordinator = IncidentMapCoordinator(
+            incidentRepository: repository, policeRepository: nil, currentUid: "me",
+            now: { now }, pollInterval: .seconds(60)
+        )
+        let surface = Self.surface()
+        coordinator.start(surface: surface, provider: StubLocationProvider())
+        defer { coordinator.stop() }
+        await waitUntil { surface.incidentMarkers.count == 4 }
+        coordinator.selectMarker(id: "stale")
+        XCTAssertNotNil(coordinator.selectedIncident)
+
+        coordinator.setIncidentMaxAge(.week1)
+        XCTAssertNil(coordinator.selectedIncident)
+        XCTAssertEqual(surface.incidentMarkers.map(\.id), ["boundary", "unknown", "member"])
+        let overlay = IncidentLayerPresentation.markers(
+            enabled: true, incidents: coordinator.visibleIncidents, policeReports: coordinator.policeReports
+        )
+        XCTAssertEqual(overlay.map(\.id), surface.incidentMarkers.map(\.id))
+        coordinator.selectMarker(id: "stale")
+        XCTAssertNil(coordinator.selectedIncident)
+        XCTAssertEqual(coordinator.incidents.count, 4)
+
+        coordinator.setIncidentMaxAge(.all)
+        XCTAssertEqual(surface.incidentMarkers.count, 4)
+        coordinator.setIncidentMaxAge(.week1)
+
+        coordinator.setTrafficAlertsEnabled(false)
+        XCTAssertEqual(coordinator.incidentMaxAge, .week1)
+        XCTAssertTrue(surface.incidentMarkers.isEmpty)
+    }
+
     func testMarkerAccessibilityLabelsDescribeTypePoliceAndClearedState() {
         let hazard = Self.incident(id: "hazard", type: .hazard)
         let cleared = Self.incident(

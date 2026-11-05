@@ -25,6 +25,7 @@ final class IncidentMapCoordinator {
     private(set) var feedback: IncidentFeedback?
     private(set) var proximityAlert: PoliceReport?
     private(set) var trafficAlertsEnabled = true
+    private(set) var incidentMaxAge: IncidentAgeOption = .all
     var selectedIncident: RoadIncident?
     var selectedPolice: PoliceReport?
     var reportSheetPresented = false
@@ -107,6 +108,18 @@ final class IncidentMapCoordinator {
             }
         }
         startPollingIfNeeded()
+    }
+
+    func setIncidentMaxAge(_ option: IncidentAgeOption) {
+        guard option != incidentMaxAge else { return }
+        incidentMaxAge = option
+        reconcileSelections()
+        updateMarkers()
+    }
+
+    var visibleIncidents: [RoadIncident] {
+        let date = now()
+        return incidents.filter { incidentMaxAge.isVisible($0, now: date) }
     }
 
     func setTrafficAlertsEnabled(_ enabled: Bool) {
@@ -303,7 +316,7 @@ final class IncidentMapCoordinator {
             selectedPolice = policeReports.first { $0.id == pinId }
             selectedIncident = nil
         } else {
-            selectedIncident = incidents.first { $0.id == id }
+            selectedIncident = visibleIncidents.first { $0.id == id }
             selectedPolice = nil
         }
     }
@@ -500,13 +513,14 @@ final class IncidentMapCoordinator {
             surface?.setIncidentMarkers([])
             return
         }
+        let visible = visibleIncidents
         surface?.setIncidentMarkers(
-            incidents.map(\.mapMarker) + PoliceMapMarker.markers(pins: policeReports, incidents: incidents)
+            visible.map(\.mapMarker) + PoliceMapMarker.markers(pins: policeReports, incidents: visible)
         )
     }
 
     private func reconcileSelections() {
-        if let id = selectedIncident?.id { selectedIncident = incidents.first { $0.id == id } }
+        if let id = selectedIncident?.id { selectedIncident = visibleIncidents.first { $0.id == id } }
         if let id = selectedPolice?.id { selectedPolice = policeReports.first { $0.id == id } }
     }
 

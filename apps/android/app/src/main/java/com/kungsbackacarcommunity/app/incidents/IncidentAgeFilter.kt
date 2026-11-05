@@ -54,15 +54,12 @@ enum class IncidentAgeOption(val maxAgeMillis: Long?) {
 
 object IncidentAgeFilter {
     /**
-     * The setting applied when nothing has been chosen yet: [IncidentAgeOption.ALL].
-     *
-     * "Show everything" so the filter never silently hides an alert until the user
-     * deliberately opts into filtering — the same principle as the resting-zoom
-     * slider defaulting to the app's original framing (an untouched control changes
-     * nothing). A user annoyed by Trafikverket's backlog turns the knob down; a user
-     * who wants it all does nothing.
+     * Legacy fallback. Keep existing accounts with no stored choice unfiltered.
+     * Only a confirmed new account receives [NEW_USER_DEFAULT], persisted once.
      */
     val DEFAULT: IncidentAgeOption = IncidentAgeOption.ALL
+
+    val NEW_USER_DEFAULT: IncidentAgeOption = IncidentAgeOption.WEEK_1
 
     /** The choices in ascending age order, strictest ([IncidentAgeOption.DAYS_3]) first, [IncidentAgeOption.ALL] last. */
     val orderedOptions: List<IncidentAgeOption> = IncidentAgeOption.entries.toList()
@@ -167,6 +164,12 @@ class IncidentAgeFilterPreferenceStore(context: Context) {
         state.value = option
     }
 
+    /** A new installation/sign-in alone is not evidence of a new account. */
+    fun initializeForSignIn(isNewUser: Boolean) {
+        if (!isNewUser || prefs.contains(KEY_MAX_AGE)) return
+        set(IncidentAgeFilter.NEW_USER_DEFAULT)
+    }
+
     private fun readStored(): IncidentAgeOption {
         val stored = prefs.getString(KEY_MAX_AGE, null)
         val option = IncidentAgeFilter.fromStoredName(stored)
@@ -176,9 +179,17 @@ class IncidentAgeFilterPreferenceStore(context: Context) {
         return option
     }
 
-    private companion object {
-        const val PREFS_NAME = "app_incident_age_filter"
-        const val KEY_MAX_AGE = "max_age"
+    companion object {
+        private const val PREFS_NAME = "app_incident_age_filter"
+        private const val KEY_MAX_AGE = "max_age"
+
+        @Volatile private var cached: IncidentAgeFilterPreferenceStore? = null
+
+        /** Auth initialization and the map must observe the same live value. */
+        fun getInstance(context: Context): IncidentAgeFilterPreferenceStore =
+            cached ?: synchronized(this) {
+                cached ?: IncidentAgeFilterPreferenceStore(context.applicationContext).also { cached = it }
+            }
     }
 }
 

@@ -133,7 +133,7 @@ class MainActivity : ComponentActivity() {
     // SharedPreferences for the same reasons as the stores above; collected in
     // setContent so a change re-filters the running alert layer with no restart.
     private val incidentAgeFilterPreferenceStore by lazy {
-        IncidentAgeFilterPreferenceStore(applicationContext)
+        IncidentAgeFilterPreferenceStore.getInstance(applicationContext)
     }
 
     // Whether the user takes part in Kronjakt (Crown Hunt); default participating.

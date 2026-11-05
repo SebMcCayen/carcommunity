@@ -40,6 +40,7 @@ class IncidentAgeFilterTest {
     @Test
     fun `unset default is show everything`() {
         assertEquals(IncidentAgeOption.ALL, IncidentAgeFilter.DEFAULT)
+        assertEquals(IncidentAgeOption.WEEK_1, IncidentAgeFilter.NEW_USER_DEFAULT)
     }
 
     @Test

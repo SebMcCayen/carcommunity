@@ -66,6 +66,8 @@ enum MapTrafficPalette {
 @Observable
 @MainActor
 final class MapLayerPreferences {
+    /// Shared by sign-in initialization and the live map.
+    static let shared = MapLayerPreferences()
     static let trafficDefault = false
     static let trafficAlertsDefault = true
     static let threeDDefault = true
@@ -76,6 +78,7 @@ final class MapLayerPreferences {
         static let mode = "map.layers.mode"
         static let threeD = "map.layers.3d"
         static let zoom = "map.layers.browsingZoom"
+        static let incidentMaxAge = "map.layers.incidentMaxAge"
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -86,9 +89,11 @@ final class MapLayerPreferences {
     private(set) var mapModeOverride: MapMode?
     private(set) var is3D: Bool
     private(set) var browsingZoom: Double
+    private(set) var incidentMaxAge: IncidentAgeOption
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        incidentMaxAge = IncidentAgeOption.fromStoredName(defaults.string(forKey: Key.incidentMaxAge))
         trafficEnabled = defaults.object(forKey: Key.traffic) as? Bool
             ?? Self.trafficDefault
         trafficAlertsEnabled = defaults.object(forKey: Key.trafficAlerts) as? Bool
@@ -103,6 +108,19 @@ final class MapLayerPreferences {
 
     func effectiveMapMode(systemIsDark: Bool) -> MapMode {
         mapModeOverride ?? (systemIsDark ? .night : .day)
+    }
+
+    /// Existing accounts without a preference keep All. Firebase's account-
+    /// creation result is required; reinstalling or signing in is insufficient.
+    func initializeIncidentAgeForSignIn(isNewUser: Bool) {
+        guard isNewUser, defaults.object(forKey: Key.incidentMaxAge) == nil else { return }
+        setIncidentMaxAge(.week1)
+    }
+
+    func setIncidentMaxAge(_ option: IncidentAgeOption) {
+        // Persist even All: an explicit choice must survive future initialization.
+        defaults.set(option.rawValue, forKey: Key.incidentMaxAge)
+        incidentMaxAge = option
     }
 
     func setTrafficEnabled(_ enabled: Bool) {

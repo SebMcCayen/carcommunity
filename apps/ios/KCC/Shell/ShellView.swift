@@ -65,7 +65,7 @@ struct ShellView: View {
     /// stand it down via ``MapSurface/setActive(_:)`` (see the map-cover
     /// effect below), never recreate it.
     @State private var mapSurface = StubMapSurface()
-    @State private var mapLayerPreferences = MapLayerPreferences()
+    @State private var mapLayerPreferences = MapLayerPreferences.shared
     @State private var showMapLayers = false
     @State private var navSearchOpen = false
     @AccessibilityFocusState private var searchLauncherFocused: Bool
@@ -352,6 +352,9 @@ struct ShellView: View {
 
     private var shellBaseInteractions: AnyView {
         shellBase
+        .onChange(of: mapLayerPreferences.incidentMaxAge) { _, option in
+            incidentMapCoordinator?.setIncidentMaxAge(option)
+        }
         // Drive the surface's liveness from the SAME pure cover value the
         // pages derive from — the iOS counterpart of Android's
         // `LaunchedEffect(mapCover) { mapSurface.setActive(...) }`:
@@ -1329,6 +1332,7 @@ struct ShellView: View {
 
     private func applyMapLayerPreferences() {
         incidentMapCoordinator?.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
+        incidentMapCoordinator?.setIncidentMaxAge(mapLayerPreferences.incidentMaxAge)
         mapSurface.setTrafficEnabled(mapLayerPreferences.trafficEnabled)
         mapSurface.setMapMode(
             mapLayerPreferences.effectiveMapMode(systemIsDark: colorScheme == .dark)
@@ -2294,6 +2298,7 @@ struct ShellView: View {
             currentUid: uid
         )
         incidentMap.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
+        incidentMap.setIncidentMaxAge(mapLayerPreferences.incidentMaxAge)
         incidentMapCoordinator = incidentMap
         let eventChat = eventChatEnabled
             ? FirebaseEventChatRepository.createIfAvailable() : nil
