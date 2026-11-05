@@ -845,12 +845,13 @@ internal fun ChannelMessageList(
         newestMessageId = newest?.id,
         isOwnNewestMessage = newest?.senderUid == currentUid,
         newestItemKey = groups.lastOrNull()?.let { "msg-${it.id}" },
+        requireVisibleTail = protectCommunity,
     )
 
     // Keyboard just came up: the viewport shrank from the bottom, so re-pin the
     // newest message — shared with the DM thread and event chat so the three
     // surfaces cannot drift apart.
-    RepinToNewestOnImeRise(listState)
+    RepinToNewestOnImeRise(listState, requireVisibleTail = protectCommunity)
 
     // Tapping a reply's quote header scrolls to and briefly highlights the ORIGINAL
     // message — but only when it is still in the loaded window; a quoted parent

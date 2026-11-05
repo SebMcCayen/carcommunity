@@ -120,15 +120,25 @@ object ChatListPinning {
         return lastVisibleIndex >= totalItemsCount - 2
     }
 
-    /** Keep the ordinary one-row tolerance, but not pages hidden inside a tall row. */
-    internal fun shouldRepinToNewest(position: ChatListPositionSnapshot): Boolean {
+    /** Community groups can hide many messages even one lazy item from the end. */
+    internal fun shouldRepinToNewest(
+        position: ChatListPositionSnapshot,
+        requireVisibleTail: Boolean = false,
+    ): Boolean {
         if (!shouldRepinToNewest(position.lastVisibleIndex, position.itemCount)) return false
         val viewportHeight = position.viewportEndOffset.toLong() - position.viewportStartOffset
         if (viewportHeight <= 0 || position.lastVisibleSize <= 0) return false
-        if (position.lastVisibleSize <= viewportHeight) return true
+        val rowBottom = position.lastVisibleOffset.toLong() + position.lastVisibleSize
+        if (requireVisibleTail &&
+            (position.lastVisibleIndex != position.itemCount - 1 ||
+                position.lastVisibleOffset >= position.viewportEndOffset ||
+                rowBottom <= position.viewportStartOffset)
+        ) return false
+        // DM/event chat retain their ordinary one-row tolerance. Community must
+        // actually expose the tail, even when the preceding visible row is short.
+        if (!requireVisibleTail && position.lastVisibleSize <= viewportHeight) return true
         // A rounded pixel at the edge is not history. Use Long for edge arithmetic.
-        return position.lastVisibleOffset.toLong() + position.lastVisibleSize <=
-            position.viewportEndOffset.toLong() + 1
+        return rowBottom <= position.viewportEndOffset.toLong() + 1
     }
 
     internal fun shouldFollowNewest(
@@ -137,6 +147,7 @@ object ChatListPinning {
         isOwnMessage: Boolean,
         isUserScrolling: Boolean,
         wasFollowingNewest: Boolean,
+        requireVisibleTail: Boolean = false,
     ): Boolean {
         if (currentPosition.itemCount <= 0) return false
         if (isOwnMessage) return true
@@ -144,7 +155,7 @@ object ChatListPinning {
         // An arrival can enlarge the SAME item before this observer runs. Decide
         // from the frame before the arrival, not its newly offscreen bottom edge.
         // An active programmatic follow also owns subsequent messages of a burst.
-        return wasFollowingNewest || shouldRepinToNewest(previousPosition ?: currentPosition)
+        return wasFollowingNewest || shouldRepinToNewest(previousPosition ?: currentPosition, requireVisibleTail)
     }
 
     /**
@@ -280,6 +291,8 @@ object ChatListPinning {
  * @param newestMessageId id of the newest message, or null when the list is empty.
  *   Keys the follow effect, so it re-runs exactly once per newly-arrived message.
  * @param isOwnNewestMessage whether that newest message is the caller's own send.
+ * @param requireVisibleTail group rows can contain many messages, so Community
+ *   requires the actual tail edge rather than the ordinary one-item tolerance.
  */
 @Composable
 fun KeepPinnedToNewest(
@@ -287,6 +300,7 @@ fun KeepPinnedToNewest(
     newestMessageId: String?,
     isOwnNewestMessage: Boolean,
     newestItemKey: Any? = null,
+    requireVisibleTail: Boolean = false,
 ) {
     // Saveable, sharing the SAME lifetime as rememberLazyListState's own saved
     // scroll position: both are restored together across a configuration change
@@ -356,6 +370,7 @@ fun KeepPinnedToNewest(
     val latestMessageId by rememberUpdatedState(newestMessageId)
     val latestItemKey by rememberUpdatedState(newestItemKey)
     val latestOwnMessage by rememberUpdatedState(isOwnNewestMessage)
+    val latestRequireVisibleTail by rememberUpdatedState(requireVisibleTail)
     LaunchedEffect(listState) {
         var previous: ChatListFollowSnapshot? = null
         var followJob: Job? = null
@@ -374,6 +389,7 @@ fun KeepPinnedToNewest(
                 isOwnMessage = current.ownMessage,
                 isUserScrolling = current.userScrolling,
                 wasFollowingNewest = followJob?.isActive == true,
+                requireVisibleTail = latestRequireVisibleTail,
             )
             // Only content arrivals replace this job. A reader's gesture or
             // semantics scroll still cancels it normally through MutatorMutex;
@@ -475,9 +491,10 @@ fun rememberIsUserScrolling(listState: LazyListState): State<Boolean> {
  * (closing), where the growing-back viewport re-reveals the bottom on its own.
  */
 @Composable
-fun RepinToNewestOnImeRise(listState: LazyListState) {
+fun RepinToNewestOnImeRise(listState: LazyListState, requireVisibleTail: Boolean = false) {
     val density = LocalDensity.current
     val imeInsets = WindowInsets.ime
+    val latestRequireVisibleTail by rememberUpdatedState(requireVisibleTail)
     LaunchedEffect(listState, imeInsets, density) {
         // Seeded from the current inset so a list composed with the keyboard
         // ALREADY up (e.g. after a rotation) sees no rise and does not scroll —
@@ -492,7 +509,7 @@ fun RepinToNewestOnImeRise(listState: LazyListState) {
             // Position-only frames keep the pre-rise anchor fresh without
             // releasing a follow between two animated inset changes.
             if (before == null || before.inset == current.inset) return@collect
-            val atBottom = ChatListPinning.shouldRepinToNewest(before.position)
+            val atBottom = ChatListPinning.shouldRepinToNewest(before.position, latestRequireVisibleTail)
             following =
                 ChatListPinning.shouldKeepPinnedDuringImeRise(
                     previousBottomPx = before.inset,

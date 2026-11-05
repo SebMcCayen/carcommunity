@@ -49,6 +49,48 @@ class ChatListPinningTest {
     }
 
     @Test
+    fun communityDoesNotFollowAcrossAHiddenFinalGroupFromAnOrdinaryPreviousRow() {
+        // [day separator, short group A, huge expanded group B]. B is not visible.
+        val previousGroup = tallTail.copy(lastVisibleIndex = 1, itemCount = 3,
+            lastVisibleOffset = 400, lastVisibleSize = 100)
+        assertTrue(ChatListPinning.shouldRepinToNewest(previousGroup))
+        assertFalse(ChatListPinning.shouldRepinToNewest(previousGroup, requireVisibleTail = true))
+        assertFalse(ChatListPinning.shouldFollowNewest(previousGroup, previousGroup,
+            isOwnMessage = false, isUserScrolling = false, wasFollowingNewest = false,
+            requireVisibleTail = true))
+        assertFalse(ChatListPinning.shouldKeepPinnedDuringImeRise(0, 50, false,
+            ChatListPinning.shouldRepinToNewest(previousGroup, requireVisibleTail = true)))
+    }
+
+    @Test
+    fun communityRequiresTheMeasuredBottomEvenWhenItsFinalRowIsShort() {
+        val shortTail = tallTail.copy(lastVisibleOffset = 400, lastVisibleSize = 100)
+        assertTrue(ChatListPinning.shouldRepinToNewest(shortTail, requireVisibleTail = true))
+        assertTrue(ChatListPinning.shouldRepinToNewest(shortTail.copy(lastVisibleOffset = 0), requireVisibleTail = true))
+        assertFalse(ChatListPinning.shouldRepinToNewest(shortTail.copy(lastVisibleOffset = 450), requireVisibleTail = true))
+        assertFalse(ChatListPinning.shouldRepinToNewest(shortTail.copy(lastVisibleOffset = -200), requireVisibleTail = true))
+        assertTrue(ChatListPinning.shouldRepinToNewest(shortTail.copy(lastVisibleOffset = 450)))
+    }
+
+    @Test
+    fun strictCommunityGeometryPreservesPreArrivalBottomOwnSendsAndActiveBursts() {
+        val bottom = tallTail.copy(lastVisibleOffset = -1500)
+        val grown = bottom.copy(lastVisibleSize = 2200)
+        assertTrue(ChatListPinning.shouldFollowNewest(bottom, grown,
+            isOwnMessage = false, isUserScrolling = false, wasFollowingNewest = false,
+            requireVisibleTail = true))
+        assertTrue(ChatListPinning.shouldFollowNewest(tallTail, tallTail,
+            isOwnMessage = true, isUserScrolling = true, wasFollowingNewest = false,
+            requireVisibleTail = true))
+        assertTrue(ChatListPinning.shouldFollowNewest(tallTail, tallTail,
+            isOwnMessage = false, isUserScrolling = false, wasFollowingNewest = true,
+            requireVisibleTail = true))
+        assertFalse(ChatListPinning.shouldFollowNewest(tallTail, tallTail,
+            isOwnMessage = false, isUserScrolling = true, wasFollowingNewest = true,
+            requireVisibleTail = true))
+    }
+
+    @Test
     fun incomingGroupGrowthUsesThePositionBeforeArrival() {
         val pinnedBeforeArrival = tallTail.copy(lastVisibleOffset = -1500)
         val grownAfterArrival = pinnedBeforeArrival.copy(lastVisibleSize = 2200)
