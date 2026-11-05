@@ -105,6 +105,7 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
             ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
             -parallel-testing-enabled NO \
+            -only-testing:KCCUITests/ShellSmokeTests/testChatChromeAndRecoveryRemainReadableAtAccessibilityXXXL \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunityComposerStaysVisibleWithKeyboard \
             -only-testing:KCCUITests/ShellSmokeTests/testCommunitySpamSeriesExpandsWithoutHidingTheNewestMessage \
             -resultBundlePath "${RUNNER_TEMP}/ios-chat-smoke.xcresult" \
@@ -138,7 +139,9 @@ jobs:
           python3 apps/ios/scripts/simulator-package.py \
             "${RUNNER_TEMP}/ios-tests/Build/Products/Debug-iphonesimulator/KCC.app"
       - name: Export config-less simulator screenshot attachments
-        if: always()
+        # Exporting PNGs is only useful when the optional artifact upload is enabled.
+        # The test result bundles and their screenshot attachments are still produced by XCTest.
+        if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         run: |
           RESULTS="${RUNNER_TEMP}/ios-tests.xcresult"
           SCREENSHOTS="${RUNNER_TEMP}/ios-configless-screenshots"
@@ -219,7 +222,7 @@ jobs:
             -resultBundlePath "${RUNNER_TEMP}/ios-release-smoke.xcresult" \
             test
       - name: Export optimized Release screenshot attachments
-        if: always()
+        if: always() && vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         run: |
           RESULTS="${RUNNER_TEMP}/ios-release-smoke.xcresult"
           SCREENSHOTS="${RUNNER_TEMP}/ios-release-screenshots"

@@ -1076,22 +1076,38 @@ final class ShellSmokeTests: XCTestCase {
         // The top menu can be exposed before the safe-area footer finishes its
         // first layout (especially after changing language/text size). Readiness
         // means actual interactive controls, not just an existing title/menu.
+        let windowFrame = app.frame
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
-            let ready = XCTNSPredicateExpectation(
+            XCTAssertTrue(button.waitForExistence(timeout: 15))
+            // Geometry and hit testing each require accessibility snapshots.
+            // Do not repeatedly fetch the window, frame and hit target inside
+            // one poll: that work can consume the readiness deadline itself.
+            let laidOut = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
                     guard button.exists else { return false }
                     let frame = button.frame
                     // XCTest can raise an AX error instead of returning false
                     // for hittable while SwiftUI is still publishing a zero or
                     // offscreen frame. Require valid on-screen geometry first.
-                    guard !frame.isEmpty, !frame.isNull, !frame.isInfinite,
-                        app.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
-                    return button.isHittable
+                    return !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
+                        windowFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
                 }, object: button
             )
-            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed,
+            let layoutResult = XCTWaiter.wait(for: [laidOut], timeout: 15)
+            if layoutResult != .completed { chatProof(app, name: "primary-\(id)-layout-failure", tree: true) }
+            XCTAssertEqual(layoutResult, .completed,
+                "Primary action \(id) must have valid on-screen geometry after launch")
+            let interactive = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "hittable == true"), object: button)
+            let interactiveResult = XCTWaiter.wait(for: [interactive], timeout: 15)
+            if interactiveResult != .completed { chatProof(app, name: "primary-\(id)-hittable-failure", tree: true) }
+            XCTAssertEqual(interactiveResult, .completed,
                 "Primary action \(id) was not interactive after launch")
+            let frame = button.frame
+            XCTAssertTrue(!frame.isEmpty && !frame.isNull && !frame.isInfinite &&
+                windowFrame.contains(CGPoint(x: frame.midX, y: frame.midY)),
+                "Primary action \(id) must remain on screen after becoming interactive")
         }
         return app
     }
