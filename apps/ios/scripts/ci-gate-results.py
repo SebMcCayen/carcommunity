@@ -9,6 +9,7 @@ import sys
 REQUIRED_JOBS = (
     "ios-preflight",
     "ios-build-debug",
+    "ios-build-native",
     "ios-community-ui",
     "ios-simulator",
     "ios-build-release",
@@ -20,7 +21,7 @@ REQUIRED_JOBS = (
 
 def validate_results(results):
     if not isinstance(results, dict) or set(results) != set(REQUIRED_JOBS):
-        raise ValueError("Expected results for all eight required iOS jobs.")
+        raise ValueError("Expected results for all nine required iOS jobs.")
     failed = [
         job for job in REQUIRED_JOBS
         if not isinstance(results[job], dict)

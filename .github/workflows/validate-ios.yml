@@ -38,7 +38,8 @@ env:
   # Available on both standard images; the verified ARM allocation uses this same SDK.
   DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
-# Compile Debug once for Community, the full suite and isolated native SDK tests.
+# Compile ARM Debug once for Community/full UI, with a separate cached Intel
+# Debug producer for native SDK emulator compatibility. Optimized Release is separate.
 # Product artifacts match the exact checkout and preserve executable/symlink modes.
 # Save packages and bounded content-addressed compilations before running tests.
 # Every original native test/build remains required; no cache supplies a test result.
@@ -187,6 +188,124 @@ jobs:
         with:
           name: ios-debug-build-results-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ios-build-debug.xcresult
+          if-no-files-found: ignore
+          retention-days: 3
+  # Keep the native Firestore acceptance on the proven Intel Simulator transport.
+  # Its architecture-aware package/compilation caches stay separate from ARM builds.
+  ios-build-native:
+    name: iOS native SDK build for testing
+    needs: ios-preflight
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    outputs:
+      artifact_id: ${{ steps.products.outputs.artifact-id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python for test-product transfer
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Finish Simulator runtime cache preparation
+        timeout-minutes: 15
+        run: xcrun simctl runtime dyld_shared_cache update --all
+      - name: Identify toolchain, SDK, lockfile and destination
+        id: context
+        run: python3 apps/ios/scripts/ci-test-products.py context --kind debug
+      - name: Restore resolved Swift packages
+        id: packages
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ios-tests/SourcePackages
+          key: ios-spm-v1-${{ steps.context.outputs.cache }}
+      - name: Restore content-addressed compilations
+        id: compilations
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ios-compilation-cache
+          key: ios-cas-v1-${{ steps.context.outputs.cache }}-debug-${{ github.sha }}
+          restore-keys: |
+            ios-cas-v1-${{ steps.context.outputs.cache }}-debug-
+      - name: Regenerate native project including feature folders
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd apps/ios
+          xcodegen generate
+      - name: Resolve the committed package graph
+        timeout-minutes: 35
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/KCC.xcodeproj -scheme KCC \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests"
+          git diff --exit-code -- apps/ios/KCC.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+      - name: Save resolved Swift packages before compilation
+        if: steps.packages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ios-tests/SourcePackages
+          key: ${{ steps.packages.outputs.cache-primary-key }}
+      - name: Build Debug app and complete test targets
+        timeout-minutes: 120
+        run: |
+          xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,id=${{ steps.context.outputs.destination }}' \
+            -derivedDataPath "${RUNNER_TEMP}/ios-tests" \
+            ENTITLEMENTS_REQUIRED=YES ONLY_ACTIVE_ARCH=YES \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILATION_CACHE_CAS_PATH="${RUNNER_TEMP}/ios-compilation-cache" \
+            COMPILATION_CACHE_KEEP_CAS_DIRECTORY=YES COMPILATION_CACHE_LIMIT_SIZE=2G \
+            COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES \
+            -resultBundlePath "${RUNNER_TEMP}/ios-build-native.xcresult" \
+            build-for-testing
+      - name: Verify compilation cache contains reusable output
+        run: |
+          python3 - <<'CACHE'
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "ios-compilation-cache"
+          size = 0
+          for path in root.rglob("*"):
+              try:
+                  if path.is_file():
+                      size += path.stat().st_size
+              except FileNotFoundError:
+                  pass
+          if size == 0:
+              raise SystemExit("Enabled compilation cache produced no persisted data")
+          print(f"Persisted compilation-cache data: {size} bytes")
+          CACHE
+      - name: Save completed compilations before executing tests
+        if: steps.compilations.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ios-compilation-cache
+          key: ${{ steps.compilations.outputs.cache-primary-key }}
+      - name: Package exact-commit executable test products
+        run: |
+          python3 apps/ios/scripts/ci-test-products.py pack --kind debug \
+            --products "${RUNNER_TEMP}/ios-tests/Build/Products" \
+            --archive-directory "${RUNNER_TEMP}/ios-products" \
+            --runtime '${{ steps.context.outputs.runtime }}'
+      - name: Publish reusable test products
+        id: products
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-native-test-products-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-products
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+      - name: Preserve build failure results
+        if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-native-build-results-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-build-native.xcresult
           if-no-files-found: ignore
           retention-days: 3
   ios-build-release:
@@ -360,12 +479,20 @@ jobs:
             -resultBundlePath "${RUNNER_TEMP}/ios-chat-smoke.xcresult"
           python3 apps/ios/scripts/ci-test-products.py check-result \
             --results "${RUNNER_TEMP}/ios-chat-smoke.xcresult" --expected-tests 1
+      - name: Export failure screenshots and structured summary
+        if: failure()
+        timeout-minutes: 6
+        run: |
+          python3 apps/ios/scripts/export-test-results.py \
+            --results "${RUNNER_TEMP}/ios-chat-smoke.xcresult" \
+            --output "${RUNNER_TEMP}/ios-failure-evidence"
       - name: Preserve test failure evidence and optional passing results
         if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ios-community-ui-${{ matrix.label }}-results-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/ios-failure-evidence
             ${{ runner.temp }}/ios-chat-smoke.xcresult
           if-no-files-found: ignore
           retention-days: 3
@@ -413,12 +540,20 @@ jobs:
         run: |
           python3 apps/ios/scripts/simulator-package.py \
             "${RUNNER_TEMP}/ios-tests/Build/Products/Debug-iphonesimulator/KCC.app"
+      - name: Export failure screenshots and structured summary
+        if: failure()
+        timeout-minutes: 6
+        run: |
+          python3 apps/ios/scripts/export-test-results.py \
+            --results "${RUNNER_TEMP}/ios-tests.xcresult" \
+            --output "${RUNNER_TEMP}/ios-failure-evidence"
       - name: Preserve test failure evidence and optional passing results
         if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ios-simulator-results-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/ios-failure-evidence
             ${{ runner.temp }}/ios-tests.xcresult
           if-no-files-found: ignore
           retention-days: 3
@@ -466,19 +601,27 @@ jobs:
             -resultBundlePath "${RUNNER_TEMP}/ios-release-smoke.xcresult"
           python3 apps/ios/scripts/ci-test-products.py check-result \
             --results "${RUNNER_TEMP}/ios-release-smoke.xcresult" --expected-tests 2
+      - name: Export failure screenshots and structured summary
+        if: failure()
+        timeout-minutes: 6
+        run: |
+          python3 apps/ios/scripts/export-test-results.py \
+            --results "${RUNNER_TEMP}/ios-release-smoke.xcresult" \
+            --output "${RUNNER_TEMP}/ios-failure-evidence"
       - name: Preserve test failure evidence and optional passing results
         if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ios-release-results-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/ios-failure-evidence
             ${{ runner.temp }}/ios-release-smoke.xcresult
           if-no-files-found: ignore
           retention-days: 3
   ios-native:
     name: iOS native Firebase SDK
-    needs: ios-build-debug
-    runs-on: macos-26
+    needs: ios-build-native
+    runs-on: macos-26-intel
     timeout-minutes: 75
     steps:
       - name: Checkout
@@ -493,7 +636,7 @@ jobs:
       - name: Download successful same-commit test build
         uses: actions/download-artifact@v7
         with:
-          artifact-ids: ${{ needs.ios-build-debug.outputs.artifact_id }}
+          artifact-ids: ${{ needs.ios-build-native.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products
           merge-multiple: true
       - name: Verify and restore app, runners and unfiltered test plan
@@ -532,12 +675,20 @@ jobs:
             --project demo-kcc-ios-ci --config "${RUNNER_TEMP}/native-members/firebase.json" \
             --only auth,firestore,functions,database --non-interactive \
             "node scripts/native-member-emulators.mjs seed && python3 apps/ios/scripts/auth-emulator-tests.py run --products '${RUNNER_TEMP}/ios-tests/Build/Products' --destination '${{ steps.prepared.outputs.destination }}' --member-tools"
+      - name: Export failure screenshots and structured summary
+        if: failure()
+        timeout-minutes: 6
+        run: |
+          python3 apps/ios/scripts/export-test-results.py \
+            --results "${RUNNER_TEMP}/ios-tests/Build/Products/auth-emulator-tests.xcresult" \
+            --output "${RUNNER_TEMP}/ios-failure-evidence"
       - name: Preserve test failure evidence and optional passing results
         if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ios-native-results-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/ios-failure-evidence
             ${{ runner.temp }}/ios-tests/Build/Products/auth-emulator-tests.xcresult
             *-debug.log
           if-no-files-found: ignore
@@ -580,6 +731,7 @@ jobs:
     needs:
       - ios-preflight
       - ios-build-debug
+      - ios-build-native
       - ios-community-ui
       - ios-simulator
       - ios-build-release

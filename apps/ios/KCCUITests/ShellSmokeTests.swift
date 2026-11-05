@@ -1102,38 +1102,24 @@ final class ShellSmokeTests: XCTestCase {
         // The top menu can be exposed before the safe-area footer finishes its
         // first layout (especially after changing language/text size). Readiness
         // means actual interactive controls, not just an existing title/menu.
-        let windowFrame = app.frame
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 15))
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
             XCTAssertTrue(button.waitForExistence(timeout: 15))
-            // Geometry and hit testing each require accessibility snapshots.
-            // Do not repeatedly fetch the window, frame and hit target inside
-            // one poll: that work can consume the readiness deadline itself.
-            let laidOut = XCTNSPredicateExpectation(
-                predicate: NSPredicate { _, _ in
-                    guard button.exists else { return false }
-                    let frame = button.frame
-                    // XCTest can raise an AX error instead of returning false
-                    // for hittable while SwiftUI is still publishing a zero or
-                    // offscreen frame. Require valid on-screen geometry first.
-                    return !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
-                        windowFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
-                }, object: button
-            )
-            let layoutResult = XCTWaiter.wait(for: [laidOut], timeout: 15)
-            if layoutResult != .completed { chatProof(app, name: "primary-\(id)-layout-failure", tree: true) }
-            XCTAssertEqual(layoutResult, .completed,
-                "Primary action \(id) must have valid on-screen geometry after launch")
-            // Observe the public XCUIElement property through XCTest's native
-            // wait API. The string-keyed KVC predicate repeatedly resolved the
-            // visible button but never established its hit-testing readiness.
+            // Let XCTest wait on actual interactivity, then measure geometry
+            // outside its polling deadline. Read the current main window;
+            // application accessibility bounds can change during first layout.
             let interactive = button.wait(for: \.isHittable, toEqual: true, timeout: 15)
-            if !interactive { chatProof(app, name: "primary-\(id)-hittable-failure", tree: true) }
+            let frame = button.frame
+            let windowFrame = window.frame
+            let onScreen = !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
+                windowFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
+            print("SHELL_PRIMARY_READY id=\(id) largeText=\(largeText) frame=\(frame) window=\(windowFrame) interactive=\(interactive)")
+            if !interactive || !onScreen { chatProof(app, name: "primary-\(id)-readiness-failure", tree: true) }
             XCTAssertTrue(interactive,
                 "Primary action \(id) was not interactive after launch")
-            let frame = button.frame
-            XCTAssertTrue(!frame.isEmpty && !frame.isNull && !frame.isInfinite &&
-                windowFrame.contains(CGPoint(x: frame.midX, y: frame.midY)),
+            XCTAssertTrue(onScreen,
                 "Primary action \(id) must remain on screen after becoming interactive")
         }
         return app

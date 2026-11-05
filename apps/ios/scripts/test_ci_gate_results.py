@@ -8,7 +8,7 @@ import unittest
 
 SCRIPT = Path(__file__).with_name("ci-gate-results.py")
 JOBS = (
-    "ios-preflight", "ios-build-debug", "ios-community-ui", "ios-simulator",
+    "ios-preflight", "ios-build-debug", "ios-build-native", "ios-community-ui", "ios-simulator",
     "ios-build-release", "ios-release", "ios-native", "ios-device",
 )
 
@@ -25,7 +25,7 @@ class CIGateResultsTests(unittest.TestCase):
     def successful_results(self):
         return {job: {"result": "success", "outputs": {}} for job in JOBS}
 
-    def test_all_eight_successful_jobs_pass(self):
+    def test_all_nine_successful_jobs_pass(self):
         self.assertEqual(self.run_gate(self.successful_results()).returncode, 0)
 
     def test_each_failed_cancelled_or_skipped_job_blocks_the_check(self):
