@@ -16,6 +16,68 @@ import org.junit.Test
  * is the behaviour that can regress silently.
  */
 class ChatListPinningTest {
+    private val tallTail = ChatListPositionSnapshot(
+        lastVisibleIndex = 19, itemCount = 20, lastVisibleOffset = -200,
+        lastVisibleSize = 2000, viewportStartOffset = 0, viewportEndOffset = 500,
+    )
+
+    @Test
+    fun visibleFinalGroupDoesNotMeanItsNewestMessageIsVisible() {
+        assertFalse(ChatListPinning.shouldRepinToNewest(tallTail))
+        assertFalse(ChatListPinning.shouldRepinToNewest(tallTail.copy(lastVisibleIndex = 18)))
+        assertTrue(ChatListPinning.shouldRepinToNewest(tallTail.copy(lastVisibleOffset = -1500)))
+        assertTrue(ChatListPinning.shouldRepinToNewest(tallTail.copy(lastVisibleOffset = -1499)))
+        assertFalse(ChatListPinning.shouldRepinToNewest(tallTail.copy(lastVisibleOffset = -1498)))
+    }
+
+    @Test
+    fun ordinaryRowsKeepTheExistingOneRowTolerance() {
+        val ordinary = tallTail.copy(lastVisibleSize = 100, lastVisibleOffset = 450)
+        assertTrue(ChatListPinning.shouldRepinToNewest(ordinary))
+        assertTrue(ChatListPinning.shouldRepinToNewest(ordinary.copy(lastVisibleIndex = 18)))
+        assertFalse(ChatListPinning.shouldRepinToNewest(ordinary.copy(lastVisibleIndex = 17)))
+        assertFalse(ChatListPinning.shouldRepinToNewest(ordinary.copy(viewportEndOffset = 0)))
+        assertFalse(ChatListPinning.shouldRepinToNewest(ordinary.copy(lastVisibleSize = 0)))
+    }
+
+    @Test
+    fun measuredTailUsesViewportCoordinatesIncludingPadding() {
+        val padded = tallTail.copy(viewportStartOffset = -20, viewportEndOffset = 480)
+        assertTrue(ChatListPinning.shouldRepinToNewest(padded.copy(lastVisibleOffset = -1520)))
+        assertFalse(ChatListPinning.shouldRepinToNewest(padded.copy(lastVisibleOffset = -1500)))
+        assertFalse(ChatListPinning.shouldRepinToNewest(tallTail.copy(lastVisibleOffset = Int.MAX_VALUE)))
+    }
+
+    @Test
+    fun incomingGroupGrowthUsesThePositionBeforeArrival() {
+        val pinnedBeforeArrival = tallTail.copy(lastVisibleOffset = -1500)
+        val grownAfterArrival = pinnedBeforeArrival.copy(lastVisibleSize = 2200)
+        assertTrue(ChatListPinning.shouldFollowNewest(pinnedBeforeArrival, grownAfterArrival,
+            isOwnMessage = false, isUserScrolling = false, wasFollowingNewest = false))
+        assertFalse(ChatListPinning.shouldFollowNewest(tallTail, tallTail.copy(lastVisibleSize = 2200),
+            isOwnMessage = false, isUserScrolling = false, wasFollowingNewest = false))
+    }
+
+    @Test
+    fun measuredHistoryStillAllowsOwnSendsAndProgrammaticBurstsButNeverFightsAFling() {
+        assertTrue(ChatListPinning.shouldFollowNewest(tallTail, tallTail,
+            isOwnMessage = true, isUserScrolling = true, wasFollowingNewest = false))
+        assertTrue(ChatListPinning.shouldFollowNewest(tallTail, tallTail,
+            isOwnMessage = false, isUserScrolling = false, wasFollowingNewest = true))
+        assertFalse(ChatListPinning.shouldFollowNewest(tallTail, tallTail,
+            isOwnMessage = false, isUserScrolling = true, wasFollowingNewest = true))
+        assertFalse(ChatListPinning.shouldFollowNewest(tallTail, tallTail.copy(itemCount = 0),
+            isOwnMessage = true, isUserScrolling = false, wasFollowingNewest = true))
+    }
+
+    @Test
+    fun imeRiseUsesTheSameMeasuredHistoryBoundary() {
+        assertFalse(ChatListPinning.shouldKeepPinnedDuringImeRise(0, 50, false,
+            ChatListPinning.shouldRepinToNewest(tallTail)))
+        assertTrue(ChatListPinning.shouldKeepPinnedDuringImeRise(0, 50, false,
+            ChatListPinning.shouldRepinToNewest(tallTail.copy(lastVisibleOffset = -1500))))
+    }
+
     @Test
     fun repinsWhenTheReaderIsSittingOnTheNewestMessage() {
         assertTrue(ChatListPinning.shouldRepinToNewest(lastVisibleIndex = 19, totalItemsCount = 20))

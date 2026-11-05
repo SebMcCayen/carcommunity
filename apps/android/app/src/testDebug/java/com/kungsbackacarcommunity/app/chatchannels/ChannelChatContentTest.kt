@@ -1,26 +1,34 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasText
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_BLOCK_TEST_TAG
-import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_REPORT_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_PREVIEW_TEST_TAG
+import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_REPORT_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_SHEET_TEST_TAG
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -316,6 +324,53 @@ class ChannelChatContentTest {
         composeTestRule.onNodeWithTag("community-group-toggle-group-1").performClick()
         composeTestRule.onNodeWithText("Body of group-1").assertDoesNotExist()
         composeTestRule.onNodeWithText("Body of group-4").assertExists()
+    }
+
+    @Test
+    fun expandedCommunityHistoryStaysPutOnArrivalButBottomAndOwnSendsStillFollow() {
+        val messages = mutableStateOf((1..20).map { message("large-group-$it", "other", "Sam") })
+        composeTestRule.setContent {
+            KccTheme {
+                Box(Modifier.width(320.dp).height(360.dp)) {
+                    ChannelChatContent(
+                        protectCommunity = true, messages = messages.value, currentUid = "me",
+                        loading = false, emptyText = "empty", canLoadOlder = false, isLoadingOlder = false,
+                        onSend = { _, _, _ -> }, onRetry = {}, onLoadOlder = {},
+                        surface = ChatSurface.CommunityChannel,
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("community-group-toggle-large-group-1").performClick()
+        fun scrollBy(y: Float) {
+            composeTestRule.onNode(hasScrollAction() and hasAnyAncestor(hasTestTag("channel_message_viewport")))
+                .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, y) }
+            composeTestRule.waitForIdle()
+        }
+        scrollBy(-100_000f)
+        val oldMessage = composeTestRule.onNodeWithText("Body of large-group-1")
+        oldMessage.assertIsDisplayed()
+        composeTestRule.onNodeWithText("Body of large-group-20").assertIsNotDisplayed()
+        val oldTop = oldMessage.fetchSemanticsNode().boundsInRoot.top
+        composeTestRule.runOnIdle { messages.value += message("large-group-21", "other", "Sam") }
+        composeTestRule.waitForIdle()
+        oldMessage.assertIsDisplayed()
+        assertEquals("An incoming member of the same lazy item must preserve the reading position",
+            oldTop, oldMessage.fetchSemanticsNode().boundsInRoot.top, 1f)
+        composeTestRule.onNodeWithText("Body of large-group-21").assertIsNotDisplayed()
+
+        scrollBy(100_000f)
+        composeTestRule.onNodeWithText("Body of large-group-21").assertIsDisplayed()
+        composeTestRule.runOnIdle { messages.value += message("large-group-22", "other", "Sam") }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Body of large-group-22").assertIsDisplayed()
+
+        scrollBy(-100_000f)
+        oldMessage.assertIsDisplayed()
+        composeTestRule.runOnIdle { messages.value += message("own-after-history", "me", "Me") }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Body of own-after-history").assertIsDisplayed()
     }
 
     @Test

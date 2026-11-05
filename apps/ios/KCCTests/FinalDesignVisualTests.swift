@@ -32,8 +32,8 @@ final class FinalDesignVisualTests: XCTestCase {
         XCTAssertEqual(draft, initial)
     }
 
-    /// Small contact sheets are emitted in bounded log chunks so a public CI
-    /// run can be visually reviewed without opting into paid artifact storage.
+    /// Small contact sheets are retained as named XCTest attachments for review
+    /// through failure exports or optional passing-result artifacts.
     /// Only the explicit fixtures below are rendered; never the app window.
     func testCaptureRemainingScreensForVisualReview() async throws {
         let provider = VisualTokenProvider()
@@ -201,15 +201,8 @@ final class FinalDesignVisualTests: XCTestCase {
         }
         let attachment = XCTAttachment(image: image); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
         guard let data = image.jpegData(compressionQuality: 0.85), data.count < 1_000_000 else { XCTFail("Bounded design proof export failed"); return }
-        print("KCC_DESIGN_PROOF_BEGIN \(name).jpg")
-        let encoded = data.base64EncodedString()
-        var index = encoded.startIndex
-        while index < encoded.endIndex {
-            let end = encoded.index(index, offsetBy: 8000, limitedBy: encoded.endIndex) ?? encoded.endIndex
-            print("KCC_DESIGN_PROOF_DATA \(encoded[index..<end])")
-            index = end
-        }
-        print("KCC_DESIGN_PROOF_END \(name).jpg")
+        // The full image remains attached; only its name belongs in live logs.
+        print("KCC_DESIGN_PROOF_ATTACHMENT \(name)")
     }
 }
 

@@ -998,19 +998,13 @@ final class ShellSmokeTests: XCTestCase {
         attach(app, name: "\(prefix)-S69-settings")
     }
 
-    /// Only the config-less synthetic chat fixture calls this. Inline image
-    /// evidence remains available when optional artifact uploads are disabled.
+    /// Only config-less synthetic fixtures call this. Keep the actual screenshot
+    /// in XCTest attachments; duplicate image payloads truncate live CI logs.
     private func chatProof(_ app: XCUIApplication, name: String, tree: Bool = false) {
         if tree { print("CHAT_FIXTURE_TREE \(app.debugDescription)") }
         let screenshot = captureScreen(app)
         attachScreenshot(screenshot, name: name)
-        guard let data = screenshot.image.jpegData(compressionQuality: 0.55) else { return }
-        let encoded = Array(data.base64EncodedString())
-        print("KCC_CHAT_PROOF_BEGIN \(name).jpg")
-        for start in stride(from: 0, to: encoded.count, by: 4096) {
-            print("KCC_CHAT_PROOF_DATA \(String(encoded[start..<min(start + 4096, encoded.count)]))")
-        }
-        print("KCC_CHAT_PROOF_END \(name).jpg")
+        print("KCC_CHAT_PROOF_ATTACHMENT \(name)")
     }
 
     /// SwiftUI's vertical field can replace its measuring UITextField with a
