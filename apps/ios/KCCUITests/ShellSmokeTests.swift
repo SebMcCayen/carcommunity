@@ -59,21 +59,6 @@ final class ShellSmokeTests: XCTestCase {
             app.buttons["shell.tab.chat"].tap()
             XCTAssertTrue(app.staticTexts["chat.message.text.fixture-39"].waitForExistence(timeout: 15))
             XCTAssertFalse(app.staticTexts["chat.message.text.fixture-37"].exists)
-            let toggle = app.buttons["community-group-toggle-fixture-31"]
-            XCTAssertTrue(toggle.waitForExistence(timeout: 5))
-            for _ in 0..<4 {
-                if toggle.isHittable { break }
-                element("chat.thread.messages", in: app).swipeDown()
-            }
-            XCTAssertTrue(toggle.isHittable)
-            let collapsedLabel = toggle.label
-            toggle.tap()
-            let expanded = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "label != %@", collapsedLabel), object: toggle)
-            XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 15), .completed)
-            // Expansion grows this lazy scroll row. Earlier messages and the
-            // newest message must remain readable through normal scrolling,
-            // including when large text puts them outside the current viewport.
             let thread = element("chat.thread.messages", in: app)
             // The scroll view's AX frame extends behind the safe-area composer.
             // Keep touch coordinates above that overlay, inside readable rows.
@@ -84,22 +69,48 @@ final class ShellSmokeTests: XCTestCase {
             let threadFrame = thread.frame
             let footerTop = emojiRow.frame.minY
             let visibleHeight = min(threadFrame.maxY, footerTop) - threadFrame.minY
+            print("CHAT_SERIES_VIEWPORT accessibility=\(largeText) thread=\(threadFrame) footerTop=\(footerTop) visibleHeight=\(visibleHeight)")
+            if visibleHeight <= 44 { chatProof(app, name: "community-series-viewport-failure", tree: true) }
             XCTAssertGreaterThan(visibleHeight, 44)
             let visibleFraction = visibleHeight / threadFrame.height
-            let start = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: visibleFraction * 0.8))
-            let end = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: visibleFraction * 0.25))
-            print("CHAT_SERIES_VIEWPORT thread=\(threadFrame) footerTop=\(footerTop) visibleHeight=\(visibleHeight)")
-            for id in ["fixture-37", "fixture-39"] {
+            let lower = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: visibleFraction * 0.8))
+            let upper = thread.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: visibleFraction * 0.25))
+            let toggle = app.buttons["community-group-toggle-fixture-31"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 15))
+            var toggleReady = false
+            for _ in 0..<16 {
+                if toggle.exists && toggle.isHittable {
+                    let frame = toggle.frame
+                    if frame.midY > threadFrame.minY + 8 && frame.midY < footerTop - 8 {
+                        toggleReady = true
+                        break
+                    }
+                }
+                upper.press(forDuration: 0.1, thenDragTo: lower, withVelocity: .slow, thenHoldForDuration: 0.2)
+            }
+            if !toggleReady { chatProof(app, name: "community-series-toggle-failure", tree: true) }
+            XCTAssertTrue(toggleReady)
+            print("CHAT_SERIES_TOGGLE accessibility=\(largeText) frame=\(toggle.frame) label=\(toggle.label)")
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            // The toggle can leave the visible AX tree when a tall group opens.
+            // Verify the content instead: reach the newest row, read the formerly
+            // hidden row above it, then return to the newest. A collapsed group
+            // can never satisfy the fixture-37 assertion in either font size.
+            for (id, older) in [("fixture-39", false), ("fixture-37", true), ("fixture-39", false)] {
                 let message = app.staticTexts["chat.message.text." + id]
                 for _ in 0..<16 {
                     if message.exists && message.isHittable { break }
                     // Overlapping viewport steps keep each target discoverable
                     // at the largest accessibility text size.
-                    start.press(forDuration: 0.1, thenDragTo: end)
+                    if older {
+                        upper.press(forDuration: 0.1, thenDragTo: lower, withVelocity: .slow, thenHoldForDuration: 0.2)
+                    } else {
+                        lower.press(forDuration: 0.1, thenDragTo: upper, withVelocity: .slow, thenHoldForDuration: 0.2)
+                    }
                 }
                 let exists = message.waitForExistence(timeout: 15)
                 if !exists || !message.isHittable {
-                    chatProof(app, name: "community-series-expansion-failure", tree: true)
+                    chatProof(app, name: "community-series-\(id)-failure", tree: true)
                 }
                 XCTAssertTrue(exists)
                 XCTAssertTrue(message.isHittable)
