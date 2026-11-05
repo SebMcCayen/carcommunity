@@ -69,6 +69,8 @@ final class ShellSmokeTests: XCTestCase {
             let threadFrame = thread.frame
             let footerTop = emojiRow.frame.minY
             let visibleHeight = min(threadFrame.maxY, footerTop) - threadFrame.minY
+            let readableViewport = CGRect(x: threadFrame.minX, y: threadFrame.minY,
+                width: threadFrame.width, height: visibleHeight)
             print("CHAT_SERIES_VIEWPORT accessibility=\(largeText) thread=\(threadFrame) footerTop=\(footerTop) visibleHeight=\(visibleHeight)")
             if visibleHeight <= 44 { chatProof(app, name: "community-series-viewport-failure", tree: true) }
             XCTAssertGreaterThan(visibleHeight, 44)
@@ -109,21 +111,35 @@ final class ShellSmokeTests: XCTestCase {
                 if message.exists {
                     print("CHAT_SERIES_TARGET accessibility=\(largeText) visit=\(visit) id=\(id) before=\(message.frame)")
                 }
-                for _ in 0..<16 {
-                    if message.exists && message.isHittable { break }
-                    // Overlapping viewport steps keep each target discoverable
-                    // at the largest accessibility text size.
-                    if older {
+                for attempt in 0..<16 {
+                    let frame = message.exists ? message.frame : .null
+                    let readable = !frame.isNull && !frame.isEmpty && readableViewport.contains(frame)
+                    if readable && message.isHittable { break }
+                    // Follow the actual row position, including after a pan
+                    // passes the middle target. Hittable alone can accept a
+                    // row partly hidden behind the safe-area composer.
+                    let towardOlder = frame.isNull ? older : frame.minY < readableViewport.minY
+                    print("CHAT_SERIES_SCROLL accessibility=\(largeText) visit=\(visit) attempt=\(attempt) frame=\(frame) towardOlder=\(towardOlder)")
+                    if towardOlder {
                         upper.press(forDuration: 0.1, thenDragTo: lower, withVelocity: .slow, thenHoldForDuration: 0.2)
                     } else {
-                        lower.press(forDuration: 0.1, thenDragTo: upper, withVelocity: .slow, thenHoldForDuration: 0.2)
+                        // fixture-39 is the final row: let a natural fast pan
+                        // coast to the newest bound, even with maximum text.
+                        // Middle rows still use overlapping, held steps.
+                        lower.press(forDuration: 0.1, thenDragTo: upper,
+                            withVelocity: id == "fixture-39" ? .fast : .slow,
+                            thenHoldForDuration: id == "fixture-39" ? 0 : 0.2)
                     }
                 }
                 let exists = message.waitForExistence(timeout: 15)
-                if !exists || !message.isHittable {
+                let finalFrame = exists ? message.frame : .null
+                let readable = !finalFrame.isNull && !finalFrame.isEmpty && readableViewport.contains(finalFrame)
+                print("CHAT_SERIES_RESULT accessibility=\(largeText) visit=\(visit) id=\(id) frame=\(finalFrame) readable=\(readable)")
+                if !exists || !readable || !message.isHittable {
                     chatProof(app, name: "community-series-\(id)-failure", tree: true)
                 }
                 XCTAssertTrue(exists)
+                XCTAssertTrue(readable, "Expanded \(id) must fit inside the readable conversation viewport")
                 XCTAssertTrue(message.isHittable,
                     "Expanded \(id) must be readable on visit \(visit), accessibility=\(largeText)")
             }
@@ -680,7 +696,7 @@ final class ShellSmokeTests: XCTestCase {
             choice.tap()
             assertSelected(choice)
         }
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: captureScreen(app))
         screenshot.name = "map-layers-sv-dark-accessibility"
         screenshot.lifetime = .keepAlways
         add(screenshot)
@@ -985,9 +1001,10 @@ final class ShellSmokeTests: XCTestCase {
     /// Only the config-less synthetic chat fixture calls this. Inline image
     /// evidence remains available when optional artifact uploads are disabled.
     private func chatProof(_ app: XCUIApplication, name: String, tree: Bool = false) {
-        attach(app, name: name)
         if tree { print("CHAT_FIXTURE_TREE \(app.debugDescription)") }
-        guard let data = app.screenshot().image.jpegData(compressionQuality: 0.55) else { return }
+        let screenshot = captureScreen(app)
+        attachScreenshot(screenshot, name: name)
+        guard let data = screenshot.image.jpegData(compressionQuality: 0.55) else { return }
         let encoded = Array(data.base64EncodedString())
         print("KCC_CHAT_PROOF_BEGIN \(name).jpg")
         for start in stride(from: 0, to: encoded.count, by: 4096) {
@@ -1023,7 +1040,16 @@ final class ShellSmokeTests: XCTestCase {
     private func attach(_ app: XCUIApplication, name: String) {
         // Reached only after launch verifies the config-less Settings identity.
         // Every capture is an actual simulator render; no production fixtures.
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachScreenshot(captureScreen(app), name: name)
+    }
+
+    private func captureScreen(_ app: XCUIApplication) -> XCUIScreenshot {
+        XCTAssertEqual(app.state, .runningForeground, "Capture the config-less app in the foreground")
+        return XCUIScreen.main.screenshot()
+    }
+
+    private func attachScreenshot(_ screenshot: XCUIScreenshot, name: String) {
+        let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
