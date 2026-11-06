@@ -134,6 +134,7 @@ fun CrownHuntScreen(
 
     AeroPage(
         title = stringResource(R.string.crownHunt_screenTitle),
+        compactTitleWithBack = true,
         modifier = modifier,
         ownerShortcutEnabled = false,
     ) {

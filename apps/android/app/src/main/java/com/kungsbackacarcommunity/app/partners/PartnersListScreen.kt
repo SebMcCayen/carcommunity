@@ -60,6 +60,7 @@ fun PartnersRootScreen(
 ) {
     AeroPage(
         title = stringResource(R.string.partners_screenTitle),
+        compactTitleWithBack = true,
         modifier = modifier,
         ownerShortcutEnabled = false,
     ) {
@@ -117,6 +118,7 @@ fun PartnersListScreen(
 ) {
     AeroPage(
         title = stringResource(R.string.partners_screenTitle),
+        compactTitleWithBack = true,
         modifier = modifier,
         ownerShortcutEnabled = false,
     ) {

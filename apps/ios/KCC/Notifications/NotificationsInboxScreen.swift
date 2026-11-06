@@ -57,7 +57,9 @@ struct NotificationsInboxScreen: View {
     @ViewBuilder
     private var titledContent: some View {
         if showsNavigationTitle {
-            content.navigationTitle(Text("notifications.title"))
+            content
+                .navigationTitle(Text("notifications.title"))
+                .navigationBarTitleDisplayMode(.inline)
         } else {
             VStack(spacing: 0) {
                 if (coordinator?.unreadCount ?? 0) > 0 || onOpenSettings != nil {

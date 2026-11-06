@@ -107,7 +107,11 @@ fun SharedClubRoute(
                 finally { busy = false }
             }
         }
-        AeroPage(title = stringResource(R.string.clubs_title), ownerShortcutEnabled = false) {
+        AeroPage(
+            title = stringResource(R.string.clubs_title),
+            ownerShortcutEnabled = false,
+            compactTitleWithBack = true,
+        ) {
             when {
                 !enabled || repo == null -> Text(stringResource(R.string.clubs_unavailable))
                 else -> {

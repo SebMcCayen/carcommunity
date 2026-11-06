@@ -67,6 +67,7 @@ fun PartnerApplicationScreen(
     AeroPage(
         ownerShortcutEnabled = false,
         title = stringResource(R.string.partners_applicationTitle),
+        compactTitleWithBack = true,
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         // Consume the IME (and nav-bar) inset so the lower fields and the submit

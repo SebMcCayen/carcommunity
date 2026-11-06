@@ -654,7 +654,7 @@ struct ShellView: View {
         case .chat:
             chatTab
         case .history:
-            myDrives
+            myDrives()
         case .social:
             panelTab {
                 SocialHubPanel(
@@ -1312,10 +1312,13 @@ struct ShellView: View {
         return rows.reduce(0) { $0 + max(0, $1.unreadCount) }
     }
 
-    private var myDrives: some View {
-        DrivesPanel(sharingEnabled: FeatureGate.isAvailable(
-            flags: featureFlags, flag: .socialSharing, memberGated: false, access: access
-        ))
+    private func myDrives(showsNavigationTitle: Bool = false) -> some View {
+        DrivesPanel(
+            sharingEnabled: FeatureGate.isAvailable(
+                flags: featureFlags, flag: .socialSharing, memberGated: false, access: access
+            ),
+            showsNavigationTitle: showsNavigationTitle
+        )
         .kccReadingSurface()
     }
 
@@ -1367,7 +1370,7 @@ struct ShellView: View {
                     onInitialClubConsumed: { clubDeepLinkID = nil })
             }
         case .myDrives:
-            routeNavigation { myDrives }
+            routeNavigation { myDrives(showsNavigationTitle: true) }
         case .points:
             routeNavigation {
                 PointsScreen(uid: signedInUid)

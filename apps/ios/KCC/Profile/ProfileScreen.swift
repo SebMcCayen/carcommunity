@@ -84,20 +84,21 @@ struct ProfileScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: KccSpacing.s2) {
                 Button(action: onBack) {
                     Label("profile.back", systemImage: "chevron.backward")
-                        .frame(minHeight: 48).contentShape(Rectangle())
+                        .labelStyle(.iconOnly)
+                        .frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
                 }
-                    .accessibilityIdentifier("profile.back")
+                .accessibilityIdentifier("profile.back")
+                Text("profile.title")
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding(.horizontal, KccSpacing.s4)
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                    Text("profile.title")
-                        .font(.title2.bold())
-
                     VStack(spacing: KccSpacing.s2) {
                         avatar
                         if editing {

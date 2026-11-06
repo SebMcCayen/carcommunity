@@ -203,23 +203,36 @@ fun DrivesListScreen(
 
     // LazyColumn so an unbounded drive history only composes visible rows
     // (mirrors NotificationsScreen for durable lists).
-    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
+    val title = stringResource(R.string.shell_moreDrives)
+    // Offer driving stats once at least one saved drive is loaded.
+    val onOpenStats = onShowStats?.takeIf { allDrives.isNotEmpty() }
+    val statsAction: (@Composable () -> Unit)? = if (onOpenStats != null) {
+        { DriveStatsAction(onOpenStats) }
+    } else {
+        null
+    }
+    AeroLazyPage(
+        modifier = modifier,
+        ownerShortcutEnabled = false,
+        title = title,
+        headerActions = statsAction,
+    ) { hasPinnedTitle ->
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().testTag(DRIVE_HISTORY_LIST_TAG),
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item {
-                // The personal "your driving" stats page is reached from a small,
-                // unobtrusive action beside the title (see [DrivesHeader]) rather
-                // than the full-width card that used to sit between the header and
-                // the filters. The action is offered only once at least one drive
-                // is loaded, so it never opens a page of zeroes — the same "shown
-                // only when a drive exists" rule the old card carried.
-                val statsEntry =
-                    onShowStats?.takeIf { loaded?.drives?.isNotEmpty() == true }
-                DrivesHeader(onShowStats = statsEntry)
+            if (!hasPinnedTitle) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                    ) {
+                        AeroPageTitle(title, modifier = Modifier.weight(1f))
+                        statsAction?.invoke()
+                    }
+                }
             }
 
             item {
@@ -334,33 +347,16 @@ fun DrivesListScreen(
     }
 }
 
-/**
- * History page header: the title, plus a small "your driving stats" action when
- * [onShowStats] is non-null. Keeping the action in the header (rather than a
- * full-width card below it) is what lets the stats page stay reachable without
- * the large window that used to sit between the header and the filters.
- */
 @Composable
-private fun DrivesHeader(onShowStats: (() -> Unit)?) {
-    val title = stringResource(R.string.shell_moreDrives)
-    if (onShowStats == null) {
-        AeroPageTitle(title)
-    } else {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-        ) {
-            AeroPageTitle(title, modifier = Modifier.weight(1f))
-            FilledTonalIconButton(
-                onClick = onShowStats,
-                modifier = Modifier.testTag(DRIVE_STATS_ENTRY_TAG),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.BarChart,
-                    contentDescription = stringResource(R.string.savedDrives_statsEntryAction),
-                )
-            }
-        }
+private fun DriveStatsAction(onShowStats: () -> Unit) {
+    FilledTonalIconButton(
+        onClick = onShowStats,
+        modifier = Modifier.testTag(DRIVE_STATS_ENTRY_TAG),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.BarChart,
+            contentDescription = stringResource(R.string.savedDrives_statsEntryAction),
+        )
     }
 }
 

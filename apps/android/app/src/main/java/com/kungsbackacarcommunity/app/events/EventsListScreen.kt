@@ -93,6 +93,7 @@ fun EventsListScreen(
 ) {
     AeroPage(
         title = stringResource(R.string.events_title),
+        compactTitleWithBack = true,
         modifier = modifier,
         ownerShortcutEnabled = false,
     ) {

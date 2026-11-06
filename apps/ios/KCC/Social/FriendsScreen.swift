@@ -31,6 +31,7 @@ struct FriendsScreen: View {
     var body: some View {
         content
             .navigationTitle(Text("shell.friendsTitle"))
+            .navigationBarTitleDisplayMode(.inline)
             .kccReadingSurface(pageBackground: true)
             .task { await coordinator?.load() }
     }
