@@ -2,6 +2,25 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 67,
+      "versionName": "1.1.12",
+      "releaseDate": "2026-11-06",
+      "highlights": [
+        "Systemfälten följer appens ljusa och mörka tema",
+        "Meddelandeserier tar mindre plats i Community-chatten",
+        "Hitta klubbar och hantera väntande inbjudningar"
+      ],
+      "changes": [
+        "Förbättrad hantering av statusfält, systemnavigering och skärmutskärningar i ljusa och mörka vyer",
+        "Meddelandeserier i Community-chatten grupperas och kan fällas ut. Långa meddelanden går att läsa i sin helhet genom att expandera dem",
+        "Bläddra bland alla klubbar även om du redan är medlem. Öppna förarens klubb direkt från livekartan",
+        "Klubbägare och moderatorer kan se och återkalla väntande klubbinbjudningar",
+        "Nya användare ser som standard varningar från den senaste veckan på kartan",
+        "Förbättrad hantering av platsdelning när Android tillfälligt hindrar appen från att starta platstjänsten",
+        "Länkar till integritetspolicyn och användarvillkoren öppnar respektive sida direkt"
+      ]
+    },
+    {
       "versionCode": 66,
       "versionName": "1.1.11",
       "releaseDate": "2026-11-03",
