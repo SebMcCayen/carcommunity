@@ -39,6 +39,7 @@ struct PartnersScreen: View {
             .kccReadingSurface(pageBackground: true)
             .tint(KccTheme.driver)
             .navigationTitle("partners.screenTitle")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: onBack) {

@@ -94,7 +94,7 @@ private val AeroBackIconInset: Dp = 12.dp
  *
  * [horizontalGutter] is the page's own horizontal content gutter — the arrow is
  * shifted in by (`horizontalGutter` − [AeroBackIconInset]) so its visible glyph
- * starts flush with the [AeroPageTitle] text below it (and with the content),
+ * starts flush with the content gutter,
  * consistent on every page, rather than sitting flush against the screen edge.
  *
  * It invokes the back DISPATCHER — the same entry point the system Back gesture
@@ -134,6 +134,7 @@ private fun AeroBackButton(
  *   drive-history lists).
  * @param verticalArrangement spacing between children; defaults to the shared
  *   16dp rhythm. Forms that want a tighter field rhythm may override it.
+ * @param compactTitleWithBack pins the title beside Back on a pushed page.
  * @param onTitleClick makes the title header itself tappable. Null (the default)
  *   keeps it inert — the plain header every other page renders. Used where the
  *   title names a member (the DM thread), so tapping it opens their profile.
@@ -186,12 +187,14 @@ fun AeroPage(
     contentWindowInsets: WindowInsets? = null,
     // Editors retain their existing dirty-draft/Back flow; no alternate exit.
     ownerShortcutEnabled: Boolean = true,
+    compactTitleWithBack: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = aeroPageBackground()) {
         val scrollState = rememberScrollState()
         val ownerHeader = LocalAeroOwnerHeader.current.takeIf { ownerShortcutEnabled }
         val backAvailable = LocalAeroBackAvailable.current
+        val hasPinnedTitle = ownerHeader != null || (backAvailable && compactTitleWithBack)
         // Fixed chrome: the status-bar inset and the top breathing room live on
         // this outer Column, OUTSIDE the scroll viewport, so they stay pinned and
         // the title/content can never scroll up under the status bar. Any caller
@@ -212,13 +215,18 @@ fun AeroPage(
                     )
                     .padding(top = AeroPageTopSpacing),
         ) {
-            // Opted-in pages share one compact pinned row. Keep the legacy
-            // Back + scrolling title geometry exactly when no owner is supplied.
-            if (ownerHeader != null) {
+            if (hasPinnedTitle) {
                 AeroPageHeader(
                     title = title,
                     owner = ownerHeader,
-                    modifier = Modifier.padding(horizontal = horizontalPadding),
+                    modifier = Modifier.padding(
+                        start = if (ownerHeader == null) {
+                            (horizontalPadding - AeroBackIconInset).coerceAtLeast(0.dp)
+                        } else {
+                            horizontalPadding
+                        },
+                        end = horizontalPadding,
+                    ),
                     onTitleClick = onTitleClick,
                     back = if (backAvailable) {
                         { AeroBackButton(horizontalGutter = 0.dp) }
@@ -229,8 +237,6 @@ fun AeroPage(
             } else if (backAvailable) {
                 AeroBackButton(horizontalGutter = horizontalPadding)
             }
-            // Scrollable content, gutters and bottom padding. Without an owner
-            // provider the title retains its original place in this viewport.
             Column(
                 modifier =
                     Modifier
@@ -243,7 +249,7 @@ fun AeroPage(
                         ),
                 verticalArrangement = verticalArrangement,
             ) {
-                if (ownerHeader == null) {
+                if (!hasPinnedTitle) {
                     CompositionLocalProvider(LocalAeroOwnerHeader provides null) {
                         AeroPageTitle(title, onClick = onTitleClick)
                     }
@@ -258,9 +264,10 @@ fun AeroPage(
  * A `LazyColumn`-backed Aero page. Mirrors [AeroPage]'s fixed-chrome structure:
  * the page background, the status-bar inset and the top breathing room live on a
  * fixed outer [Column] OUTSIDE the scroll viewport, so they stay pinned exactly
- * like [AeroPage]. The caller supplies its own `LazyColumn` as [content] (with
- * [AeroPageTitle] as the first item and [aeroLazyContentPadding] for gutters), so
- * only the list — title included — scrolls.
+ * like [AeroPage]. The caller supplies its own `LazyColumn` as [content], with
+ * [aeroLazyContentPadding] for gutters. If [title] is supplied and Back is
+ * available, the header pins both above the list. The content receives whether
+ * the title is pinned, so it can render a list heading only when needed.
  *
  * Use this instead of hand-rolling a `Surface` + `statusBarsPadding()` around a
  * `LazyColumn`: doing so would only pin the status-bar inset, and the top
@@ -272,9 +279,14 @@ fun AeroPage(
 fun AeroLazyPage(
     modifier: Modifier = Modifier,
     ownerShortcutEnabled: Boolean = true,
-    content: @Composable () -> Unit,
+    title: String? = null,
+    headerActions: (@Composable () -> Unit)? = null,
+    content: @Composable (hasPinnedTitle: Boolean) -> Unit,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = aeroPageBackground()) {
+        val ownerHeader = LocalAeroOwnerHeader.current.takeIf { ownerShortcutEnabled }
+        val backAvailable = LocalAeroBackAvailable.current
+        val pinnedTitle = title.takeIf { backAvailable }
         // Fixed chrome: status-bar inset + top breathing room, OUTSIDE the
         // caller's LazyColumn scroll viewport, so they stay pinned (parity with
         // AeroPage). The caller's list then scrolls beneath this fixed top inset.
@@ -285,18 +297,23 @@ fun AeroLazyPage(
                     .aeroPageStatusBarInset()
                     .padding(top = AeroPageTopSpacing),
         ) {
-            // Pinned Back affordance in the FIXED chrome, above the caller's
-            // scrolling LazyColumn (parity with AeroPage). Its gutter is the shared
-            // AeroPageHorizontalPadding — the same gutter aeroLazyContentPadding()
-            // insets the list by — so the arrow aligns with the title. Only pushed
-            // sub-routes see LocalAeroBackAvailable == true.
-            if (LocalAeroBackAvailable.current) {
+            if (pinnedTitle != null) {
+                AeroPageHeader(
+                    title = pinnedTitle,
+                    owner = ownerHeader,
+                    modifier = Modifier.padding(
+                        start = AeroPageHorizontalPadding - AeroBackIconInset,
+                        end = AeroPageHorizontalPadding,
+                    ),
+                    back = { AeroBackButton(horizontalGutter = 0.dp) },
+                    actions = headerActions,
+                )
+            } else if (backAvailable) {
                 AeroBackButton(horizontalGutter = AeroPageHorizontalPadding)
             }
-            CompositionLocalProvider(
-                LocalAeroOwnerHeader provides LocalAeroOwnerHeader.current.takeIf { ownerShortcutEnabled },
-                content = content,
-            )
+            CompositionLocalProvider(LocalAeroOwnerHeader provides ownerHeader) {
+                content(pinnedTitle != null)
+            }
         }
     }
 }

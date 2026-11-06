@@ -122,6 +122,7 @@ fun ProfileScreen(
 
     AeroPage(
         title = stringResource(if (editing) R.string.profile_editButton else R.string.profile_title),
+        compactTitleWithBack = true,
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         // Consume the IME (and nav-bar) inset so the save button and lower fields

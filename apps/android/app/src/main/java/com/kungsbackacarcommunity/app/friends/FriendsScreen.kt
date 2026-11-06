@@ -117,14 +117,15 @@ fun FriendsScreen(
     // Durable list: a LazyColumn so only visible rows compose. Static sections
     // (title, add-friend, headers, banners) are `item {}` blocks; the request and
     // friend rows are keyed so recomposition/scroll state is stable.
-    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
+    val title = stringResource(R.string.shell_friendsTitle)
+    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false, title = title) { hasPinnedTitle ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().testTag("friends_list"),
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            item(key = "title") {
-                AeroPageTitle(stringResource(R.string.shell_friendsTitle))
+            if (!hasPinnedTitle) {
+                item(key = "title") { AeroPageTitle(title) }
             }
 
             item(key = "search") {

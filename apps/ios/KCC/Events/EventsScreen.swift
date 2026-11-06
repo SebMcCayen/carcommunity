@@ -26,6 +26,7 @@ struct EventsScreen: View {
             .kccReadingSurface(pageBackground: true)
             .accessibilityIdentifier("events.screen")
             .navigationTitle(Text("events.title"))
+            .navigationBarTitleDisplayMode(.inline)
             .task { coordinator?.start() }
             .toolbar {
                 if let coordinator {

@@ -175,14 +175,15 @@ fun NotificationsScreen(
         )
     }
 
-    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false) {
+    val title = if (showTitle) stringResource(R.string.notifications_title) else null
+    AeroLazyPage(modifier = modifier, ownerShortcutEnabled = false, title = title) { hasPinnedTitle ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (showTitle) {
-                item { AeroPageTitle(stringResource(R.string.notifications_title)) }
+            if (title != null && !hasPinnedTitle) {
+                item { AeroPageTitle(title) }
             }
 
             when (state) {

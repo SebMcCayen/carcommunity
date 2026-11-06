@@ -754,6 +754,23 @@ final class ShellSmokeTests: XCTestCase {
         checkShell(language: "en", labels: ["Map", "Chat", "Social", "Garage"])
     }
 
+    func testMyDrivesTitleSharesNavigationBarWithBackAndStatistics() {
+        let app = launch(language: "en")
+        app.buttons["shell.menu"].tap()
+        let myDrives = app.buttons["shell.myDrives"]
+        XCTAssertTrue(myDrives.waitForExistence(timeout: 5))
+        myDrives.tap()
+
+        let navigationBar = app.navigationBars["My drives"]
+        XCTAssertTrue(navigationBar.waitForExistence(timeout: 5))
+        let back = navigationBar.buttons["Back"]
+        XCTAssertTrue(back.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        let statistics = navigationBar.buttons["myDrives.stats"]
+        XCTAssertTrue(statistics.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        back.tap()
+        XCTAssertTrue(app.buttons["profile.myDrives"].waitForExistence(timeout: 5))
+    }
+
     func testSettingsAndNestedBackNavigation() {
         let app = launch(language: "en")
         openSettings(app)

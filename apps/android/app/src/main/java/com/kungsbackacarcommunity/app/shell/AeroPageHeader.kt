@@ -68,10 +68,11 @@ internal const val AeroOwnerAvatarFallbackTag = "aeroOwnerAvatarFallback"
 @Composable
 internal fun AeroPageHeader(
     title: String,
-    owner: AeroOwnerHeader,
+    owner: AeroOwnerHeader? = null,
     modifier: Modifier = Modifier,
     onTitleClick: (() -> Unit)? = null,
     back: (@Composable () -> Unit)? = null,
+    actions: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -94,7 +95,8 @@ internal fun AeroPageHeader(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        AeroOwnerAvatar(owner)
+        if (owner != null) AeroOwnerAvatar(owner)
+        actions?.invoke()
     }
 }
 

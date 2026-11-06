@@ -100,6 +100,7 @@ fun SettingsScreen(
 
     AeroPage(
         title = stringResource(R.string.settingsMenu_title), modifier = modifier,
+        compactTitleWithBack = true,
         ownerShortcutEnabled = false,
     ) {
         SettingsGroup(stringResource(R.string.settingsMenu_accountSection)) {

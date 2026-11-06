@@ -25,6 +25,7 @@ struct LeaderboardScreen: View {
             }
         }
         .navigationTitle(Text("leaderboard.title"))
+        .navigationBarTitleDisplayMode(.inline)
         .kccReadingSurface(pageBackground: true)
         .tint(KccTheme.driver)
         .task { coordinator?.start() }

@@ -111,6 +111,27 @@ class AeroPageHeaderTest {
         compose.runOnIdle { assertEquals(1, titleClicks) }
     }
 
+    @Test fun pushedPagePinsCompactTitleBesideBackWithoutOwnerShortcut() {
+        compose.setContent {
+            KccTheme {
+                CompositionLocalProvider(LocalAeroBackAvailable provides true) {
+                    AeroPage("Settings", ownerShortcutEnabled = false, compactTitleWithBack = true) {
+                        repeat(40) { Text("row $it", Modifier.height(48.dp)) }
+                    }
+                }
+            }
+        }
+        val title = compose.onNodeWithText("Settings")
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
+            .fetchSemanticsNode().boundsInRoot
+        val back = compose.onNodeWithTag(AeroBackButtonTag).fetchSemanticsNode().boundsInRoot
+        assertTrue(back.right <= title.left)
+        assertEquals(back.center.y, title.center.y, 0.5f)
+        compose.onNodeWithText("row 39").performScrollTo()
+        assertEquals(title, compose.onNodeWithText("Settings").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag(AeroOwnerAvatarTag).assertDoesNotExist()
+    }
+
     @Test fun ownerShortcutAndTitleHaveSeparateActionsAndHeadingSemantics() {
         var profileClicks = 0
         var titleClicks = 0

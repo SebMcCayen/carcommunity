@@ -160,6 +160,7 @@ struct SettingsScreen: View {
         .kccReadingSurface(pageBackground: true)
         .tint(KccTheme.driver)
         .navigationTitle("settingsMenu.title")
+        .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("settings.screen")
     }
 

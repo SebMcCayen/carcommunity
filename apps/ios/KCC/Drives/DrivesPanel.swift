@@ -22,42 +22,34 @@ enum DriveDeleteStatus: Equatable {
 struct DrivesPanel: View {
     @State private var coordinator: DriveHistoryCoordinator
     let sharingEnabled: Bool
+    let showsNavigationTitle: Bool
     @State private var selectedDrive: SavedDrive?
     @State private var showingStats = false
     @State private var showingFilters = false
     @State private var pendingDelete: SavedDrive?
 
-    init(sharingEnabled: Bool = true) {
+    init(sharingEnabled: Bool = true, showsNavigationTitle: Bool = false) {
         self.init(
             coordinator: DriveHistoryCoordinator(
                 repository: FirebaseDriveHistoryRepository.createIfAvailable()
             ),
-            sharingEnabled: sharingEnabled
+            sharingEnabled: sharingEnabled,
+            showsNavigationTitle: showsNavigationTitle
         )
     }
 
-    init(coordinator: DriveHistoryCoordinator, sharingEnabled: Bool = true) {
+    init(
+        coordinator: DriveHistoryCoordinator,
+        sharingEnabled: Bool = true,
+        showsNavigationTitle: Bool = false
+    ) {
         _coordinator = State(initialValue: coordinator)
         self.sharingEnabled = sharingEnabled
+        self.showsNavigationTitle = showsNavigationTitle
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
-                HStack(alignment: .top) {
-                    Text("shell.moreDrives")
-                        .font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    Button { showingStats = true } label: {
-                        Image(systemName: "chart.bar").frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
-                    }
-                    .accessibilityLabel(Text("savedDrives.statsEntryAction"))
-                    .accessibilityIdentifier("myDrives.stats")
-                }
-                historyContent
-            }
-            .padding(KccSpacing.s4)
-        }
+        titledContent
         .kccReadingSurface(pageBackground: true)
         .tint(KccTheme.driver)
         .task { await coordinator.load() }
@@ -87,6 +79,44 @@ struct DrivesPanel: View {
             }
             Button("savedDrives.deleteConfirmCancel", role: .cancel) { pendingDelete = nil }
         } message: { Text("savedDrives.deleteConfirmBody") }
+    }
+
+    @ViewBuilder private var titledContent: some View {
+        if showsNavigationTitle {
+            scrollContent
+                .navigationTitle("shell.moreDrives")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) { statsButton }
+                }
+        } else {
+            scrollContent
+        }
+    }
+
+    private var scrollContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                if !showsNavigationTitle {
+                    HStack(alignment: .top) {
+                        Text("shell.moreDrives")
+                            .font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                        Spacer()
+                        statsButton
+                    }
+                }
+                historyContent
+            }
+            .padding(KccSpacing.s4)
+        }
+    }
+
+    private var statsButton: some View {
+        Button { showingStats = true } label: {
+            Image(systemName: "chart.bar").frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
+        }
+        .accessibilityLabel(Text("savedDrives.statsEntryAction"))
+        .accessibilityIdentifier("myDrives.stats")
     }
 
     @ViewBuilder private var historyContent: some View {
