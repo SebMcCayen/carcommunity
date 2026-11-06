@@ -309,6 +309,9 @@ struct ShellView: View {
                     .opacity(selectedTab == .chat ? 1 : 0)
                     .allowsHitTesting(selectedTab == .chat && routes.current == nil)
                     .accessibilityHidden(selectedTab != .chat || routes.current != nil)
+                    // Keep the retained native navigation and scroll views
+                    // behind the map when Chat is hidden.
+                    .zIndex(selectedTab == .chat ? 0 : -1)
             }
             if selectedTab != .map && selectedTab != .chat {
                 content(for: selectedTab)

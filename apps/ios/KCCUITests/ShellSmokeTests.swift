@@ -422,10 +422,12 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(bar.isHittable, "Back must not stop the session")
 
             let marker = app.buttons["map.fixture.liveSharer"]
-            XCTAssertTrue(marker.waitForExistence(timeout: 10))
+            XCTAssertTrue(marker.wait(for: \.isHittable, toEqual: true, timeout: 10))
             marker.tap()
             let visit = app.buttons["nearby.visitProfile"]
-            XCTAssertTrue(visit.waitForExistence(timeout: 10))
+            let visitReady = visit.waitForExistence(timeout: 10)
+            if !visitReady { chatProof(app, name: "live-profile-card-missing-after-chat", tree: true) }
+            XCTAssertTrue(visitReady, "The nearby marker must open its profile card after returning from Chat")
             reveal(visit, in: app.scrollViews["map.reading.content"], minimumHeight: 48)
             XCTAssertTrue(visit.isHittable)
             XCTAssertLessThanOrEqual(visit.frame.maxY, app.buttons["shell.tab.map"].frame.minY)
