@@ -117,7 +117,15 @@ class SystemBarsNativeTest {
         input.assertIsDisplayed()
         capture("chat-before-keyboard")
         input.performClick().performTextInput("Utkast med åäö 🚗")
-        compose.waitUntil(10_000) { insets().isVisible(WindowInsetsCompat.Type.ime()) }
+        // Android reports IME visibility before Compose has applied the new
+        // insets and removed the chat navigation controls.
+        compose.waitUntil(10_000) {
+            val windowInsets = insets()
+            windowInsets.isVisible(WindowInsetsCompat.Type.ime()) &&
+                windowInsets.getInsets(WindowInsetsCompat.Type.ime()).bottom > 0 &&
+                compose.onAllNodesWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).fetchSemanticsNodes().isEmpty() &&
+                compose.onAllNodesWithTag(CHAT_SOURCE_SELECTOR_TEST_TAG).fetchSemanticsNodes().isEmpty()
+        }
         compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).assertDoesNotExist()
         compose.onNodeWithTag(CHAT_SOURCE_SELECTOR_TEST_TAG).assertDoesNotExist()
         input.assertIsDisplayed().assertTextContains("Utkast med åäö 🚗")
@@ -127,8 +135,13 @@ class SystemBarsNativeTest {
         assertTrue("Composer must stay above keyboard", inputBounds.bottom <= rootHeight - keyboard + 2f)
         capture("chat-keyboard-dark")
         Espresso.pressBack()
-        compose.waitUntil(10_000) { !insets().isVisible(WindowInsetsCompat.Type.ime()) }
+        compose.waitUntil(10_000) {
+            !insets().isVisible(WindowInsetsCompat.Type.ime()) &&
+                compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).isDisplayed() &&
+                compose.onNodeWithTag(CHAT_SOURCE_SELECTOR_TEST_TAG).isDisplayed()
+        }
         compose.onNodeWithTag(CHAT_CHANNEL_STRIP_TEST_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(CHAT_SOURCE_SELECTOR_TEST_TAG).assertIsDisplayed()
         input.assertTextContains("Utkast med åäö 🚗")
         compose.runOnIdle { dark = false }
         compose.waitForIdle()
