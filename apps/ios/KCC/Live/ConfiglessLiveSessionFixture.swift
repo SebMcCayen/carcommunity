@@ -35,6 +35,8 @@ actor ConfiglessLiveRepository: LiveLocationRepository {
     }
     private func detach(_ token: UUID) { continuations[token] = nil }
     func startSession(duration: LiveSessionDuration, vehicleId: String?) async throws {
+        // Make the pending metrics observable before RTDB confirms the start.
+        try await Task.sleep(for: .seconds(8))
         session = LiveSessionInfo(sessionId: UUID().uuidString, status: .active, duration: duration,
             expiresAt: Date().addingTimeInterval(Double(duration.hours) * 3_600))
         for continuation in continuations.values { continuation.yield(session) }

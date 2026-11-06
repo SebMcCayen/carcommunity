@@ -57,6 +57,7 @@ struct StartDrivingSheet: View {
                         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                     }
                     .kccPrimaryAction()
+                    .accessibilityIdentifier("shell.createChooser.single")
                     .disabled(isStarting || !canStartSingleSession)
 
                     Button {
@@ -115,7 +116,11 @@ struct StartDrivingSheet: View {
                         .foregroundStyle(KccPalette.errorRed)
                     Button("garage.retryButton") { garage.reload() }
                 }
-            case .unavailable, .empty:
+            case .unavailable:
+                Text("garage.error")
+                    .font(.subheadline)
+                    .foregroundStyle(KccTheme.secondary)
+            case .empty:
                 Text("shell.createChooserNoCars")
                     .font(.subheadline)
                     .foregroundStyle(KccTheme.secondary)

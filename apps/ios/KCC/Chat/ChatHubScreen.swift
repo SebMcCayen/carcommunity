@@ -31,7 +31,7 @@ struct ChatHubScreen: View {
     let onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)?
     let notificationsCoordinator: NotificationsInboxCoordinator?
     let onOpenNotificationSettings: (() -> Void)?
-    let onOpenEvents: (() -> Void)?
+    let onViewProfile: ((String, String?) -> Void)?
     let onBackToMap: (() -> Void)?
     /// The host supplies real native Driver content when its adapter is linked.
     let driverContent: AnyView?
@@ -44,7 +44,7 @@ struct ChatHubScreen: View {
         onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)? = nil,
         notificationsCoordinator: NotificationsInboxCoordinator? = nil,
         onOpenNotificationSettings: (() -> Void)? = nil,
-        onOpenEvents: (() -> Void)? = nil,
+        onViewProfile: ((String, String?) -> Void)? = nil,
         driverContent: AnyView? = nil,
         onBackToMap: (() -> Void)? = nil
     ) {
@@ -54,7 +54,7 @@ struct ChatHubScreen: View {
         self.onOpenConversation = onOpenConversation
         self.notificationsCoordinator = notificationsCoordinator
         self.onOpenNotificationSettings = onOpenNotificationSettings
-        self.onOpenEvents = onOpenEvents
+        self.onViewProfile = onViewProfile
         self.driverContent = driverContent
         self.onBackToMap = onBackToMap
     }
@@ -93,15 +93,6 @@ struct ChatHubScreen: View {
             VStack(spacing: 0) {
                 if !keyboardPresented {
                     tabStrip(coordinator)
-                }
-                if !keyboardPresented, let onOpenEvents {
-                    Button(action: onOpenEvents) {
-                        Label("shell.socialEvents", systemImage: "calendar")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .font(.subheadline)
-                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                    .accessibilityIdentifier("chatHub.events")
                 }
                 Divider().overlay(KccTheme.border)
                 tabContent(coordinator)
@@ -205,11 +196,15 @@ struct ChatHubScreen: View {
     private func tabContent(_ coordinator: ChatHubCoordinator) -> some View {
         switch coordinator.selectedTab {
         case .community:
-            CommunityChatScreen(coordinator: coordinator.communityChat)
+            CommunityChatScreen(
+                coordinator: coordinator.communityChat,
+                onViewProfile: onViewProfile
+            )
         case .convoys:
             ConvoyListScreen(
                 coordinator: coordinator.convoyList,
-                chatRepliesEnabled: coordinator.chatRepliesEnabled
+                chatRepliesEnabled: coordinator.chatRepliesEnabled,
+                onViewProfile: onViewProfile
             )
         case .friends:
             ConversationsScreen(

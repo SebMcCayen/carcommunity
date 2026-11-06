@@ -8,9 +8,10 @@ struct ConvoyChatScreen: View {
     let coordinator: ChannelChatCoordinator?
     /// The convoy's display name for the title, or nil → `chatHub.convoyUntitled`.
     let convoyTitle: String?
+    var onViewProfile: ((String, String?) -> Void)? = nil
 
     var body: some View {
-        ChannelChatScreen(coordinator: coordinator, title: titleText)
+        ChannelChatScreen(coordinator: coordinator, title: titleText, onViewProfile: onViewProfile)
             .toolbar(.visible, for: .navigationBar)
     }
 

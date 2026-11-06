@@ -19,14 +19,22 @@ struct ChannelChatScreen: View {
     let title: Text
     let showsNavigationTitle: Bool
     let protectCommunity: Bool
+    let onViewProfile: ((String, String?) -> Void)?
     @State private var expandedGroups: Set<String> = []
     @State private var cooldownSeconds = 0
 
-    init(coordinator: ChannelChatCoordinator?, title: Text, showsNavigationTitle: Bool = true, protectCommunity: Bool = false) {
+    init(
+        coordinator: ChannelChatCoordinator?,
+        title: Text,
+        showsNavigationTitle: Bool = true,
+        protectCommunity: Bool = false,
+        onViewProfile: ((String, String?) -> Void)? = nil
+    ) {
         self.coordinator = coordinator
         self.title = title
         self.showsNavigationTitle = showsNavigationTitle
         self.protectCommunity = protectCommunity
+        self.onViewProfile = onViewProfile
     }
 
     var body: some View {
@@ -123,7 +131,8 @@ struct ChannelChatScreen: View {
                                    isOwn: message.senderUid == coordinator.currentUserId,
                                    showSender: index == 0,
                                    collapsedLines: protectCommunity ? 4 : nil,
-                                   coordinator: coordinator)
+                                   coordinator: coordinator,
+                                   onViewProfile: onViewProfile)
                             .id(message.id)
                             .contextMenu { messageActions(message, coordinator: coordinator) }
                     }
@@ -315,25 +324,36 @@ struct MessageRow: View {
     var showSender: Bool
     var collapsedLines: Int?
     let coordinator: ChannelChatCoordinator?
+    let onViewProfile: ((String, String?) -> Void)?
 
-    init(message: ChannelMessage, isOwn: Bool, showSender: Bool = true,
-         collapsedLines: Int? = nil, coordinator: ChannelChatCoordinator? = nil) {
+    init(
+        message: ChannelMessage,
+        isOwn: Bool,
+        showSender: Bool = true,
+        collapsedLines: Int? = nil,
+        coordinator: ChannelChatCoordinator? = nil,
+        onViewProfile: ((String, String?) -> Void)? = nil
+    ) {
         self.message = message
         self.isOwn = isOwn
         self.showSender = showSender
         self.collapsedLines = collapsedLines
         self.coordinator = coordinator
+        self.onViewProfile = onViewProfile
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: KccSpacing.s3) {
-            if !isOwn && showSender {
-                ChannelSenderAvatar(avatarPath: message.senderAvatarPath, coordinator: coordinator)
+        HStack(alignment: .top, spacing: 0) {
+            if !isOwn {
+                if showSender {
+                    senderAvatar
+                } else {
+                    Color.clear.frame(width: 44, height: 1).accessibilityHidden(true)
+                }
             }
-            if !isOwn && !showSender { Color.clear.frame(width: 32, height: 1).accessibilityHidden(true) }
             VStack(alignment: isOwn ? .trailing : .leading, spacing: KccSpacing.s1) {
                 if !isOwn && showSender {
-                    Text(message.senderDisplayName ?? String(localized: "chat.unknownAuthor"))
+                    senderNameView
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(KccTheme.driver)
                 }
@@ -358,6 +378,46 @@ struct MessageRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
+    }
+
+    private var senderName: String {
+        message.senderDisplayName ?? String(localized: "chat.unknownAuthor")
+    }
+
+    private var openProfile: (() -> Void)? {
+        guard let onViewProfile,
+              !message.senderUid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return { onViewProfile(message.senderUid, message.senderDisplayName) }
+    }
+
+    @ViewBuilder
+    private var senderAvatar: some View {
+        let avatar = ChannelSenderAvatar(avatarPath: message.senderAvatarPath, coordinator: coordinator)
+            .frame(width: 44, height: 44, alignment: .topLeading)
+        if let openProfile {
+            Button(action: openProfile) {
+                avatar.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: String.localizedStringWithFormat(
+                NSLocalizedString("channel.openSenderProfile", comment: ""), senderName)))
+            .accessibilityIdentifier("chat.sender.profile.\(message.id)")
+        } else {
+            avatar.accessibilityHidden(true)
+        }
+    }
+
+    @ViewBuilder
+    private var senderNameView: some View {
+        if let openProfile {
+            Button(action: openProfile) {
+                Text(verbatim: senderName)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Text(verbatim: senderName)
+        }
     }
 
     @ViewBuilder
@@ -410,7 +470,6 @@ private struct ChannelSenderAvatar: View {
         }
         .frame(width: 32, height: 32)
         .clipShape(Circle())
-        .accessibilityHidden(true)
         .task(id: avatarPath) {
             url = nil
             let resolved = await coordinator?.avatarURL(for: avatarPath)

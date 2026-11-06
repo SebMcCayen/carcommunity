@@ -32783,13 +32783,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vilken bil kör du?"
+            "value": "Välj fordon"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Which car are you driving?"
+            "value": "Select a vehicle"
           }
         }
       }
@@ -32834,13 +32834,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lägg till en bil i ditt garage för att visa den på kartan."
+            "value": "Du har inte lagt till något fordon i ditt garage än. Gå till garaget för att lägga till ett fordon."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add a car to your garage to show it on the map."
+            "value": "You haven’t added any vehicles to your garage yet. Go to your garage to add a vehicle."
           }
         }
       }

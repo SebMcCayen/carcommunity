@@ -47,8 +47,12 @@ final class StartDrivingSelectionTests: XCTestCase {
     }
 
     func testSingleSessionCommandsReconcileOnlyToTheirExpectedSharingState() {
-        XCTAssertTrue(SingleSessionCommand.starting.isReconciled(isSharing: true))
-        XCTAssertFalse(SingleSessionCommand.starting.isReconciled(isSharing: false))
+        let requestedAt = Date(timeIntervalSince1970: 100)
+        let starting = SingleSessionCommand.starting(at: requestedAt)
+        XCTAssertEqual(starting.startRequestedAt, requestedAt)
+        XCTAssertNil(SingleSessionCommand.stopping.startRequestedAt)
+        XCTAssertTrue(starting.isReconciled(isSharing: true))
+        XCTAssertFalse(starting.isReconciled(isSharing: false))
         XCTAssertTrue(SingleSessionCommand.stopping.isReconciled(isSharing: false))
         XCTAssertFalse(SingleSessionCommand.stopping.isReconciled(isSharing: true))
     }

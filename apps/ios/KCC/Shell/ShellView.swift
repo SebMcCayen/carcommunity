@@ -1058,9 +1058,15 @@ struct ShellView: View {
     }
 
     private var mapBottomDockVisible: Bool {
-        if mapReadingSelection != nil || convoyManagementCoordinator?.activeConvoy != nil
-            || liveLocationCoordinator?.isSharing == true { return true }
-        return false
+        mapReadingSelection != nil || convoyManagementCoordinator?.activeConvoy != nil
+            || liveSessionBarStart != nil
+    }
+
+    private var liveSessionBarStart: Date? {
+        if let coordinator = liveLocationCoordinator, coordinator.isSharing {
+            return coordinator.readout.startedAt
+        }
+        return pendingSessionCommand?.startRequestedAt
     }
 
     /// The dock and the rail use the same measured clearance. The persistent
@@ -1108,8 +1114,8 @@ struct ShellView: View {
                 onOpenMemberProfile: openMemberProfile
             )
         }
-        if let coordinator = liveLocationCoordinator, coordinator.isSharing {
-            LiveSessionBar(live: coordinator, recording: driveRecordingCoordinator,
+        if let coordinator = liveLocationCoordinator, let startedAt = liveSessionBarStart {
+            LiveSessionBar(startedAt: startedAt, live: coordinator, recording: driveRecordingCoordinator,
                 onManage: { routes = routes.opening(.liveLocation) })
         }
     }
@@ -1715,8 +1721,9 @@ struct ShellView: View {
                 onOpenNotificationSettings: {
                     routes = routes.opening(.notificationSettings)
                 },
-                onOpenEvents: {
-                    openEvents()
+                onViewProfile: { uid, name in
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    openMemberProfile(uid: uid, displayName: name)
                 },
                 driverContent: AnyView(
                     ShellDriverFeed(uid: signedInUid)
@@ -2023,10 +2030,9 @@ struct ShellView: View {
               liveLocationCoordinator.canShare
         else { return }
         let identity = signedInUid
-        if SingleSessionCommand.starting.isReconciled(isSharing: liveLocationCoordinator.isSharing) {
-            return
-        }
-        pendingSessionCommand = .starting
+        guard !liveLocationCoordinator.isSharing else { return }
+        let command = SingleSessionCommand.starting(at: .now)
+        pendingSessionCommand = command
         sessionCommandTask = Task {
             do {
                 try await Task.sleep(for: .seconds(15))
@@ -2036,7 +2042,7 @@ struct ShellView: View {
             guard !Task.isCancelled,
                   identity == signedInUid,
                   liveLocationCoordinator === self.liveLocationCoordinator,
-                  pendingSessionCommand == .starting
+                  pendingSessionCommand == command
             else { return }
             pendingSessionCommand = nil
             sessionCommandTask = nil
@@ -2046,7 +2052,7 @@ struct ShellView: View {
 
     private func tabTitle(_ tab: ShellTab) -> String {
         if tab == .create,
-           (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
+           (liveLocationCoordinator?.isSharing == true || pendingSessionCommand?.startRequestedAt != nil) {
             return "liveLocation.stop"
         }
         return tab.titleKey
@@ -2054,7 +2060,7 @@ struct ShellView: View {
 
     private func tabSystemImage(_ tab: ShellTab) -> String {
         if tab == .create,
-           (liveLocationCoordinator?.isSharing == true || pendingSessionCommand == .starting) {
+           (liveLocationCoordinator?.isSharing == true || pendingSessionCommand?.startRequestedAt != nil) {
             return "stop.fill"
         }
         return tab.systemImage
@@ -2096,12 +2102,13 @@ struct ShellView: View {
         let vehicleId = pendingStartVehicleId
         let identity = signedInUid
         cancelPendingSingleSessionStart()
-        pendingSessionCommand = .starting
+        let command = SingleSessionCommand.starting(at: .now)
+        pendingSessionCommand = command
         sessionCommandTask = Task {
             let result = await liveLocationCoordinator.startSharing(vehicleId: vehicleId)
             await finishSessionCommand(
                 result,
-                command: .starting,
+                command: command,
                 identity: identity,
                 coordinator: liveLocationCoordinator
             )
@@ -2281,7 +2288,17 @@ struct ShellView: View {
         let conversations = FirebaseConversationsRepository.createIfAvailable()
         let notifications = FirebaseNotificationsRepository.createIfAvailable()
         if locationPermissionCoordinator == nil {
-            let permissionCoordinator = LocationPermissionCoordinator(provider: locationProvider)
+            #if DEBUG
+            let provider: any LocationProvider
+            if ConfiglessLiveSessionFixture.isEnabled {
+                provider = ConfiglessLiveLocationProvider()
+            } else {
+                provider = locationProvider
+            }
+            #else
+            let provider = locationProvider
+            #endif
+            let permissionCoordinator = LocationPermissionCoordinator(provider: provider)
             permissionCoordinator.start()
             locationPermissionCoordinator = permissionCoordinator
         }

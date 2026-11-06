@@ -7,6 +7,7 @@ import SwiftUI
 struct ConvoyListScreen: View {
     let coordinator: ConvoyListCoordinator?
     let chatRepliesEnabled: Bool
+    var onViewProfile: ((String, String?) -> Void)? = nil
 
     var body: some View {
         content
@@ -18,7 +19,8 @@ struct ConvoyListScreen: View {
                         convoyId: route.convoyId,
                         chatRepliesEnabled: chatRepliesEnabled
                     ),
-                    convoyTitle: route.title
+                    convoyTitle: route.title,
+                    onViewProfile: onViewProfile
                 )
             }
     }
