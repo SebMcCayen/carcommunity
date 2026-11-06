@@ -2192,7 +2192,9 @@
     "release010Build11Live": "Skärmen hålls vaken under en aktiv livesession när appen är öppen. Vanlig skärmlåsning återställs när sessionen stoppas.",
     "release010Build11Clubs": "Klubbvyn har flikarna Min klubb och Alla klubbar. Tillgänglig klubbinformation kan öppnas från en liveförare på kartan.",
     "release010Build11Alerts": "Välj hur gamla importerade händelser som visas på kartan. Nya konton får en vecka som standard.",
-    "release010Build11SignIn": "Förbättrad felhantering vid Apple-inloggning och uppdaterade länkar till integritetspolicy och villkor."
+    "release010Build11SignIn": "Förbättrad felhantering vid Apple-inloggning och uppdaterade länkar till integritetspolicy och villkor.",
+    "release011Build12Highlight": "Ny iOS-version för fortsatt testning.",
+    "release011Build12Version": "Versionsnummer och byggnummer har uppdaterats inför nästa testomgång."
   },
   "driver": {
     "feed": {

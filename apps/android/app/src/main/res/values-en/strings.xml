@@ -2044,6 +2044,8 @@
     <string name="whatsNew_release010Build11Clubs">The club view has My club and All clubs tabs. Available club information can be opened from a live driver on the map.</string>
     <string name="whatsNew_release010Build11Alerts">Choose how old imported incidents can be on the map. New accounts default to one week.</string>
     <string name="whatsNew_release010Build11SignIn">Improved Apple sign-in error handling and updated privacy policy and terms links.</string>
+    <string name="whatsNew_release011Build12Highlight">New iOS version for continued testing.</string>
+    <string name="whatsNew_release011Build12Version">The version and build numbers have been updated for the next round of testing.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>
