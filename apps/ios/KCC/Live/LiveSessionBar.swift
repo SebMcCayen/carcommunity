@@ -3,42 +3,44 @@ import SwiftUI
 /// Android's elapsed → current speed → distance dock. The ticker is local to
 /// this view; readings reuse the live/drive coordinators' existing streams.
 struct LiveSessionBar: View {
+    let startedAt: Date
     let live: LiveLocationCoordinator
     let recording: DriveRecordingCoordinator?
     let onManage: () -> Void
     @State private var shownSpeed: Int?
 
     var body: some View {
-        if let start = live.readout.startedAt, let id = live.readout.sessionId {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                let elapsed = LiveSessionReadoutFormat.elapsed(startedAt: start, now: context.date)
-                let speed = LiveSessionReadoutFormat.speedKmh(live.readout.speed, at: context.date, previous: shownSpeed)
-                let speedText = speed.map { "\($0) km/h" } ?? "— km/h"
-                let distance = DriveFormatters.formatDistance(recording?.distanceMeters(for: id) ?? 0)
-                let speedDescription = speed.map {
-                    String.localizedStringWithFormat(NSLocalizedString("liveLocation.sessionBarSpeed", comment: ""), $0)
-                } ?? String(localized: "liveLocation.sessionBarSpeedUnknown")
-                Button(action: onManage) {
-                    LiveMetricLayout {
-                        metric(elapsed, icon: "record.circle.fill", id: "elapsed")
-                        metric(speedText, icon: "speedometer", id: "speed")
-                        metric(distance, icon: "ruler", id: "distance")
-                    }
-                    .padding(.horizontal, KccSpacing.s4)
-                    .padding(.vertical, KccSpacing.s2)
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .foregroundStyle(KccTheme.text)
-                    .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.full))
-                    .overlay { RoundedRectangle(cornerRadius: KccRadius.full).strokeBorder(KccTheme.border).allowsHitTesting(false) }
+        let id = live.isSharing ? live.readout.sessionId : nil
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let elapsed = LiveSessionReadoutFormat.elapsed(startedAt: startedAt, now: context.date)
+            let speed = LiveSessionReadoutFormat.speedKmh(id == nil ? nil : live.readout.speed, at: context.date, previous: shownSpeed)
+            let speedText = speed.map { "\($0) km/h" } ?? "— km/h"
+            let distanceMeters = id.flatMap { recording?.distanceMeters(for: $0) } ?? 0
+            let distance = DriveFormatters.formatDistance(distanceMeters)
+            let speedDescription = speed.map {
+                String.localizedStringWithFormat(NSLocalizedString("liveLocation.sessionBarSpeed", comment: ""), $0)
+            } ?? String(localized: "liveLocation.sessionBarSpeedUnknown")
+            Button(action: onManage) {
+                LiveMetricLayout {
+                    metric(elapsed, icon: "record.circle.fill", id: "elapsed")
+                    metric(speedText, icon: "speedometer", id: "speed")
+                    metric(distance, icon: "ruler", id: "distance")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String.localizedStringWithFormat(
-                    NSLocalizedString("liveLocation.sessionBar", comment: ""), elapsed, speedDescription, distance))
-                .accessibilityHint(Text("liveLocation.sessionBarManageHint"))
-                .accessibilityIdentifier("map.session.bar")
-                .onChange(of: speed, initial: true) { _, value in shownSpeed = value }
-                .onChange(of: id) { _, _ in shownSpeed = nil }
+                .padding(.horizontal, KccSpacing.s4)
+                .padding(.vertical, KccSpacing.s2)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .foregroundStyle(KccTheme.text)
+                .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.full))
+                .overlay { RoundedRectangle(cornerRadius: KccRadius.full).strokeBorder(KccTheme.border).allowsHitTesting(false) }
             }
+            .buttonStyle(.plain)
+            .disabled(id == nil)
+            .accessibilityLabel(String.localizedStringWithFormat(
+                NSLocalizedString("liveLocation.sessionBar", comment: ""), elapsed, speedDescription, distance))
+            .accessibilityHint(Text("liveLocation.sessionBarManageHint"))
+            .accessibilityIdentifier("map.session.bar")
+            .onChange(of: speed, initial: true) { _, value in shownSpeed = value }
+            .onChange(of: id) { _, _ in shownSpeed = nil }
         }
     }
 

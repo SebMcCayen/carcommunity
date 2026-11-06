@@ -351,7 +351,7 @@ final class ShellSmokeTests: XCTestCase {
     func testChatBackLiveMetricsProfileAndStopMatchAndroid() {
         for largeText in [false, true] {
             let app = launch(language: "en", largeText: largeText,
-                theme: largeText ? "Dark" : "Light", liveFixture: true)
+                theme: largeText ? "Dark" : "Light", chatFixture: !largeText, liveFixture: true)
             let map = app.staticTexts["shell.mapPlaceholder"]
             let identity = map.value as? String
             let bar = app.buttons["map.session.bar"]
@@ -376,7 +376,17 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertLessThanOrEqual(back.frame.maxX, community.frame.minX)
             XCTAssertLessThan(chats.frame.minY, 140, "The source selector belongs at the top without a Chat title")
             XCTAssertFalse(app.navigationBars["Chat"].exists)
+            XCTAssertFalse(app.buttons["chatHub.events"].exists)
             chatProof(app, name: largeText ? "chat-header-en-accessibility" : "chat-header-en")
+
+            if !largeText {
+                let avatar = app.buttons["chat.sender.profile.fixture-39"]
+                XCTAssertTrue(avatar.wait(for: \.isHittable, toEqual: true, timeout: 10))
+                avatar.tap()
+                XCTAssertTrue(element("memberProfile.screen", in: app).waitForExistence(timeout: 10))
+                app.buttons["Back"].firstMatch.tap()
+                XCTAssertTrue(avatar.wait(for: \.isHittable, toEqual: true, timeout: 10))
+            }
 
             // Removing the hub bar must not strand actions supplied by its
             // embedded tabs. Settings stays inline and opens its own bar.
@@ -438,6 +448,16 @@ final class ShellSmokeTests: XCTestCase {
                 "Saved drives belong under Profile, not in the map dock after stopping")
             XCTAssertEqual(map.value as? String, identity)
             chatProof(app, name: largeText ? "map-after-stop-en-accessibility" : "map-after-stop-en")
+
+            if !largeText {
+                stop.tap()
+                let start = app.buttons["shell.createChooser.single"]
+                XCTAssertTrue(start.wait(for: \.isHittable, toEqual: true, timeout: 5))
+                start.tap()
+                XCTAssertTrue(bar.waitForExistence(timeout: 5), "Metrics must appear before the delayed response")
+                XCTAssertFalse(bar.isEnabled, "Session management is available after confirmation")
+                XCTAssertTrue(bar.wait(for: \.isEnabled, toEqual: true, timeout: 15))
+            }
             app.terminate()
         }
     }

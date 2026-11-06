@@ -1,3 +1,5 @@
+import Foundation
+
 /// Pure vehicle-selection rules for the shell's Start driving sheet.
 ///
 /// The default mirrors Android and the backend's `pickSessionVehicleData`:
@@ -35,8 +37,13 @@ struct StartDrivingActions: Equatable, Sendable {
 /// confirms the callable's effect. This closes the interval between a
 /// successful callable response and the observed session echo.
 enum SingleSessionCommand: Equatable, Sendable {
-    case starting
+    case starting(at: Date)
     case stopping
+
+    var startRequestedAt: Date? {
+        if case .starting(let date) = self { return date }
+        return nil
+    }
 
     func isReconciled(isSharing: Bool) -> Bool {
         switch self {

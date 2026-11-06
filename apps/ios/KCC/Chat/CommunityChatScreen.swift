@@ -6,13 +6,15 @@ import SwiftUI
 /// ``ChatHubScreen`` (community chat is a hub TAB, not its own shell route).
 struct CommunityChatScreen: View {
     let coordinator: ChannelChatCoordinator?
+    var onViewProfile: ((String, String?) -> Void)? = nil
 
     var body: some View {
         ChannelChatScreen(
             coordinator: coordinator,
             title: Text("chatHub.tabCommunity"),
             showsNavigationTitle: false,
-            protectCommunity: true
+            protectCommunity: true,
+            onViewProfile: onViewProfile
         )
     }
 }
