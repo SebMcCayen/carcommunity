@@ -2185,7 +2185,14 @@
     "release010Build9Map": "Mapboxs logga och informationsknapp ligger nu till vänster och flyttas undan från livefältet.",
     "release010Build10Highlight": "En renare karta efter livekörning.",
     "release010Build10Drives": "Mina körningar finns kvar under Profil, utan en extra knapp på kartan efter en livesession.",
-    "release010Build10Create": "Plusknappen visar nu bara sin ikon."
+    "release010Build10Create": "Plusknappen visar nu bara sin ikon.",
+    "release010Build11Highlight": "Förbättrad karta, chatt och livekörning.",
+    "release010Build11Map": "Smidigare zoom och kartförflyttning samt förbättrad följning av din position.",
+    "release010Build11Chat": "Profilbilder visas i chatten. Meddelandeserier visas mer kompakt och kan fällas ut. En nedräkning visar när du kan skicka igen om meddelandegränsen nås.",
+    "release010Build11Live": "Skärmen hålls vaken under en aktiv livesession när appen är öppen. Vanlig skärmlåsning återställs när sessionen stoppas.",
+    "release010Build11Clubs": "Klubbvyn har flikarna Min klubb och Alla klubbar. Tillgänglig klubbinformation kan öppnas från en liveförare på kartan.",
+    "release010Build11Alerts": "Välj hur gamla importerade händelser som visas på kartan. Nya konton får en vecka som standard.",
+    "release010Build11SignIn": "Förbättrad felhantering vid Apple-inloggning och uppdaterade länkar till integritetspolicy och villkor."
   },
   "driver": {
     "feed": {
