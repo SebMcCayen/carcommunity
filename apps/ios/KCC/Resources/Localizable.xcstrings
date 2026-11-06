@@ -37095,6 +37095,40 @@
         }
       }
     },
+    "whatsNew.release011Build12Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ny iOS-version för fortsatt testning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New iOS version for continued testing."
+          }
+        }
+      }
+    },
+    "whatsNew.release011Build12Version": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versionsnummer och byggnummer har uppdaterats inför nästa testomgång."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The version and build numbers have been updated for the next round of testing."
+          }
+        }
+      }
+    },
     "whatsNew.title": {
       "extractionState": "manual",
       "localizations": {
