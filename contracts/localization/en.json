@@ -2185,7 +2185,14 @@
     "release010Build9Map": "The required Mapbox logo and information control now sit on the left, clear of the live bar.",
     "release010Build10Highlight": "A cleaner map after live driving.",
     "release010Build10Drives": "My drives stays in the Profile menu, without an extra button appearing on the map after a live session.",
-    "release010Build10Create": "The plus button now shows only its icon."
+    "release010Build10Create": "The plus button now shows only its icon.",
+    "release010Build11Highlight": "Improved map, chat and live driving.",
+    "release010Build11Map": "Smoother zooming and map movement, with improved following of your location.",
+    "release010Build11Chat": "Profile images appear in chat. Message series use a compact, expandable layout. A countdown shows when you can send again if the message limit is reached.",
+    "release010Build11Live": "The screen stays awake during an active live session while the app is open. Normal screen locking resumes when the session stops.",
+    "release010Build11Clubs": "The club view has My club and All clubs tabs. Available club information can be opened from a live driver on the map.",
+    "release010Build11Alerts": "Choose how old imported incidents can be on the map. New accounts default to one week.",
+    "release010Build11SignIn": "Improved Apple sign-in error handling and updated privacy policy and terms links."
   },
   "driver": {
     "feed": {

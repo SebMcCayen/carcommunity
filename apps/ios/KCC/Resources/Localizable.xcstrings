@@ -36500,6 +36500,125 @@
         }
       }
     },
+    "whatsNew.release010Build11Alerts": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj hur gamla importerade händelser som visas på kartan. Nya konton får en vecka som standard."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose how old imported incidents can be on the map. New accounts default to one week."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build11Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profilbilder visas i chatten. Meddelandeserier visas mer kompakt och kan fällas ut. En nedräkning visar när du kan skicka igen om meddelandegränsen nås."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile images appear in chat. Message series use a compact, expandable layout. A countdown shows when you can send again if the message limit is reached."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build11Clubs": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubbvyn har flikarna Min klubb och Alla klubbar. Tillgänglig klubbinformation kan öppnas från en liveförare på kartan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The club view has My club and All clubs tabs. Available club information can be opened from a live driver on the map."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build11Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättrad karta, chatt och livekörning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improved map, chat and live driving."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build11Live": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skärmen hålls vaken under en aktiv livesession när appen är öppen. Vanlig skärmlåsning återställs när sessionen stoppas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The screen stays awake during an active live session while the app is open. Normal screen locking resumes when the session stops."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build11Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smidigare zoom och kartförflyttning samt förbättrad följning av din position."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smoother zooming and map movement, with improved following of your location."
+          }
+        }
+      }
+    },
+    "whatsNew.release010Build11SignIn": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättrad felhantering vid Apple-inloggning och uppdaterade länkar till integritetspolicy och villkor."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improved Apple sign-in error handling and updated privacy policy and terms links."
+          }
+        }
+      }
+    },
     "whatsNew.release010Build2Highlight": {
       "extractionState": "manual",
       "localizations": {
