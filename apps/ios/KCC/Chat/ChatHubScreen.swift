@@ -14,9 +14,9 @@ extension EnvironmentValues {
 /// Opaque native Chat destination preserving the four existing channel routes.
 /// Driver content is supplied separately by the authenticated shell.
 /// The chat hub — a four-tab scaffold
-/// (Community / Convoys / Friends / Notifications), the iOS port of Android's
-/// `ChatHubContent`. Community, Convoys, the existing 1:1 DMs, and the in-app
-/// notification inbox are connected by the signed-in shell. Each tab retains
+/// (Community / Convoys / Friends / Club), the iOS port of Android's
+/// `ChatHubContent`. Community, Convoys, the existing 1:1 DMs, and the private
+/// club chat are connected by the signed-in shell. Each tab retains
 /// its own unavailable state when its backing service cannot be configured.
 ///
 /// Both the primary tab and retained legacy chatHub route are opaque.
@@ -29,8 +29,7 @@ struct ChatHubScreen: View {
     let conversationsCoordinator: ConversationsCoordinator?
     let makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)?
     let onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)?
-    let notificationsCoordinator: NotificationsInboxCoordinator?
-    let onOpenNotificationSettings: (() -> Void)?
+    let clubChatCoordinator: ClubChatCoordinator?
     let onViewProfile: ((String, String?) -> Void)?
     let onBackToMap: (() -> Void)?
     /// The host supplies real native Driver content when its adapter is linked.
@@ -42,8 +41,7 @@ struct ChatHubScreen: View {
         conversationsCoordinator: ConversationsCoordinator? = nil,
         makeNewDialogueCoordinator: (() -> NewDialogueCoordinator)? = nil,
         onOpenConversation: ((_ uid: String, _ displayName: String?) -> Void)? = nil,
-        notificationsCoordinator: NotificationsInboxCoordinator? = nil,
-        onOpenNotificationSettings: (() -> Void)? = nil,
+        clubChatCoordinator: ClubChatCoordinator? = nil,
         onViewProfile: ((String, String?) -> Void)? = nil,
         driverContent: AnyView? = nil,
         onBackToMap: (() -> Void)? = nil
@@ -52,8 +50,7 @@ struct ChatHubScreen: View {
         self.conversationsCoordinator = conversationsCoordinator
         self.makeNewDialogueCoordinator = makeNewDialogueCoordinator
         self.onOpenConversation = onOpenConversation
-        self.notificationsCoordinator = notificationsCoordinator
-        self.onOpenNotificationSettings = onOpenNotificationSettings
+        self.clubChatCoordinator = clubChatCoordinator
         self.onViewProfile = onViewProfile
         self.driverContent = driverContent
         self.onBackToMap = onBackToMap
@@ -81,6 +78,7 @@ struct ChatHubScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .kccReadingSurface(pageBackground: true)
+        .tint(KccChatColors.readingAccent)
         .toolbar(.hidden, for: .navigationBar)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("chatHub.title"))
@@ -126,8 +124,8 @@ struct ChatHubScreen: View {
                 // The unselected segment is transparent, but its entire 48pt
                 // label must remain a physical and accessible tap target.
                 .contentShape(Rectangle())
-                .foregroundStyle(showsDriver == driver ? KccTheme.onDriver : KccTheme.text)
-                .background(showsDriver == driver ? KccTheme.driver : .clear, in: Capsule())
+                .foregroundStyle(showsDriver == driver ? KccTheme.onGold : KccTheme.text)
+                .background(showsDriver == driver ? KccPalette.crownGold : .clear, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(driver ? "chatHub.source.driver" : "chatHub.source.chats")
@@ -167,8 +165,8 @@ struct ChatHubScreen: View {
                     .frame(minWidth: 72, minHeight: 44)
                     .padding(.horizontal, KccSpacing.s3)
                     .padding(.vertical, KccSpacing.s2)
-                    .foregroundStyle(coordinator.selectedTab == tab ? KccTheme.onDriver : KccTheme.text)
-                    .background(coordinator.selectedTab == tab ? KccTheme.driver : KccTheme.subtle, in: Capsule())
+                    .foregroundStyle(coordinator.selectedTab == tab ? KccTheme.onGold : KccTheme.text)
+                    .background(coordinator.selectedTab == tab ? KccPalette.crownGold : KccTheme.subtle, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("chatHub.channel.\(tab.rawValue)")
@@ -213,12 +211,8 @@ struct ChatHubScreen: View {
                 onOpenConversation: onOpenConversation,
                 showsNavigationTitle: false
             )
-        case .notifications:
-            NotificationsInboxScreen(
-                coordinator: notificationsCoordinator,
-                onOpenSettings: onOpenNotificationSettings,
-                showsNavigationTitle: false
-            )
+        case .club:
+            ClubChatScreen(coordinator: clubChatCoordinator)
         }
     }
 
@@ -233,7 +227,7 @@ struct ChatHubScreen: View {
         case .community: return "chatHub.tabCommunity"
         case .convoys: return "chatHub.tabConvoys"
         case .friends: return "chatHub.tabFriends"
-        case .notifications: return "chatHub.tabNotifications"
+        case .club: return "clubs.chatTab"
         }
     }
 
@@ -242,7 +236,7 @@ struct ChatHubScreen: View {
         case .community: return "bubble.left.and.bubble.right"
         case .convoys: return "car.2"
         case .friends: return "person.2"
-        case .notifications: return "bell"
+        case .club: return "person.3"
         }
     }
 }

@@ -9,7 +9,7 @@ struct SocialReadingState: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: KccSpacing.s3) {
-                Image(systemName: symbol).font(.title).foregroundStyle(KccTheme.driver)
+                Image(systemName: symbol).font(.title).foregroundStyle(KccChatColors.readingAccent)
                     .accessibilityHidden(true)
                 Text(title).font(.title2.bold()).accessibilityAddTraits(.isHeader)
                 Text(message).font(.body).foregroundStyle(KccTheme.secondary)
@@ -112,7 +112,7 @@ struct SocialMemberLabel: View {
     var body: some View {
         HStack(alignment: .top, spacing: KccSpacing.s3) {
             Image(systemName: "person.fill")
-                .font(.system(size: 20)).foregroundStyle(KccTheme.driver)
+                .font(.system(size: 20)).foregroundStyle(KccChatColors.readingAccent)
                 .frame(width: 40, height: 40)
                 .background(KccTheme.subtle, in: Circle())
                 .accessibilityHidden(true)

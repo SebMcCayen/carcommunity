@@ -304,8 +304,8 @@ struct ChannelComposer: View {
                 }
             }
             .buttonStyle(.borderedProminent)
-            .tint(KccTheme.driver)
-            .foregroundStyle(KccTheme.onDriver)
+            .tint(KccPalette.crownGold)
+            .foregroundStyle(KccTheme.onGold)
             .accessibilityLabel(Text("chat.sendButton"))
             .accessibilityIdentifier("chat.composer.send")
             .disabled(!canSend)
@@ -355,7 +355,7 @@ struct MessageRow: View {
                 if !isOwn && showSender {
                     senderNameView
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(KccTheme.driver)
+                        .foregroundStyle(KccChatColors.readingAccent)
                 }
                 if let reply = message.replyTo {
                     Text(reply.textPreview)
@@ -368,8 +368,8 @@ struct MessageRow: View {
                 ExpandableChannelText(text: message.text, messageID: message.id, collapsedLines: collapsedLines)
                     .padding(.horizontal, KccSpacing.s3)
                     .padding(.vertical, KccSpacing.s2)
-                    .background(isOwn ? KccTheme.driver : KccTheme.surface)
-                    .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
+                    .background(isOwn ? KccPalette.crownGold : KccTheme.surface)
+                    .foregroundStyle(isOwn ? KccTheme.onGold : KccTheme.text)
                     .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
                 if let timestamp = message.createdAt {
                     Text(timestamp, style: .time).font(.caption).foregroundStyle(KccTheme.secondary)

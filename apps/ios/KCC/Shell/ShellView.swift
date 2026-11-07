@@ -84,9 +84,11 @@ struct ShellView: View {
     @State private var eventsCoordinator: EventsCoordinator?
     @State private var billboardsCoordinator: BillboardsCoordinator?
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
+    @State private var clubChatCoordinator: ClubChatCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
     @State private var notificationSettingsAvailable = false
+    @State private var notificationsAvailable = false
     @State private var blockedUsersAvailable = false
     @State private var privacySettingsCoordinator: PrivacySettingsCoordinator?
     @State private var friendsCoordinator: FriendsCoordinator?
@@ -1002,6 +1004,12 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
+            if notificationsAvailable {
+                Button { routes = routes.opening(.notifications) } label: {
+                    Label("notifications.title", systemImage: "bell")
+                }
+                .accessibilityIdentifier("shell.notifications")
+            }
             Button {
                 routes = routes.opening(.settings)
             } label: {
@@ -1723,10 +1731,7 @@ struct ShellView: View {
                 conversationsCoordinator: conversationsCoordinator,
                 makeNewDialogueCoordinator: makeNewDialogueCoordinator,
                 onOpenConversation: openDm,
-                notificationsCoordinator: notificationsCoordinator,
-                onOpenNotificationSettings: {
-                    routes = routes.opening(.notificationSettings)
-                },
+                clubChatCoordinator: clubChatCoordinator,
                 onViewProfile: { uid, name in
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     openMemberProfile(uid: uid, displayName: name)
@@ -2293,6 +2298,9 @@ struct ShellView: View {
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
         let notifications = FirebaseNotificationsRepository.createIfAvailable()
+        notificationsAvailable = notifications != nil && uid != nil
+        clubChatCoordinator?.stop()
+        clubChatCoordinator = uid.map { ClubChatCoordinator(repository: FirebaseClubChatRepository.createIfAvailable(uid: $0), uid: $0) }
         if locationPermissionCoordinator == nil {
             #if DEBUG
             let provider: any LocationProvider

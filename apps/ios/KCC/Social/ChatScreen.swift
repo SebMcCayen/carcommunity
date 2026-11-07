@@ -154,8 +154,8 @@ struct MessageBubble: View {
         }
         .padding(.horizontal, KccSpacing.s3)
         .padding(.vertical, KccSpacing.s2)
-        .background(isOwn ? KccTheme.driver : KccTheme.subtle)
-        .foregroundStyle(isOwn ? KccTheme.onDriver : KccTheme.text)
+        .background(isOwn ? KccPalette.crownGold : KccTheme.subtle)
+        .foregroundStyle(isOwn ? KccTheme.onGold : KccTheme.text)
         .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
     }
 
