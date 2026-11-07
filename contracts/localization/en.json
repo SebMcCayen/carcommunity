@@ -38,7 +38,14 @@
     "chat": "Chat",
     "profile": "Profile",
     "settings": "Settings",
-    "about": "About app"
+    "about": "About app",
+    "title": "Navigation",
+    "inAppHint": "Navigation opens inside CarCommunity.",
+    "findingLocation": "Finding your current location…",
+    "calculatingRoute": "Calculating your route…",
+    "locationUnavailable": "Could not find a recent, accurate location. Check location access and try again.",
+    "unavailable": "Navigation is unavailable in this build.",
+    "routeFailed": "Could not calculate a route. Check your connection and try again."
   },
   "home": {
     "title": "Home",

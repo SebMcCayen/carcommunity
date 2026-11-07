@@ -76,7 +76,7 @@ struct ShellView: View {
     @State private var clubsCoordinator: ClubsCoordinator?
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
     @State private var savedPlacesProximity: MapPoint?
-    @State private var placeNavigationFailed = false
+    @State private var navigationDestination: PlaceSuggestion?
 
     /// Feature coordinators are composed once for the signed-in shell. Every
     /// factory is config-safe, so a build without GoogleService-Info.plist
@@ -151,14 +151,13 @@ struct ShellView: View {
     @State private var appStoreUnavailable = false
 
     /// What is drawn over the shell's map right now — the ONE pure value
-    /// every cover-derived decision reads. Turn-by-turn remains deliberately
-    /// false per ADR-002; address search keeps the retained map live beneath
-    /// its translucent chrome.
+    /// every cover-derived decision reads. Full-screen guidance stands down
+    /// the retained map; address search keeps it live beneath its chrome.
     private var mapCover: MapCover {
         ShellNavigation.mapCover(
             tab: selectedTab,
             route: routes.current,
-            navigating: false,
+            navigating: navigationDestination != nil,
             navSearchOpen: addressSearchPresented
         )
     }
@@ -180,7 +179,7 @@ struct ShellView: View {
     }
 
     var body: some View {
-        shellPresentation
+        shellWithNavigation
             .modifier(ChatKeyboardObserver(isPresented: $chatKeyboardPresented))
             .environment(\.chatKeyboardPresented, chatKeyboardPresented)
             .task(id: signedInUid) { await wireFeatures() }
@@ -213,7 +212,7 @@ struct ShellView: View {
             }
             // Own the idle timer at shell scope so tabs, routes and sheets
             // do not interrupt an active live session's screen-awake demand.
-            .onChange(of: liveLocationCoordinator?.keepsScreenAwake == true && scenePhase == .active,
+            .onChange(of: (liveLocationCoordinator?.keepsScreenAwake == true || navigationDestination != nil) && scenePhase == .active,
                       initial: true) { _, keepAwake in
                 UIApplication.shared.isIdleTimerDisabled = keepAwake
             }
@@ -275,6 +274,29 @@ struct ShellView: View {
                 clubsCoordinator?.stop()
                 mapSurface.setBillboardMarkers([])
             }
+    }
+
+    /// A retained sibling overlay, rather than a modal presentation: covering
+    /// the map must not disappear/reappear the shell, reset recording, rerun
+    /// account wiring or release an independent live session. Removing the
+    /// shell at the auth/access boundary still executes its privacy teardown.
+    private var shellWithNavigation: AnyView {
+        ZStack {
+            shellPresentation
+                .allowsHitTesting(navigationDestination == nil)
+                .accessibilityHidden(navigationDestination != nil)
+            if let destination = navigationDestination {
+                InAppNavigationScreen(destination: destination,
+                    location: InAppNavigationFactory.location(default: locationProvider),
+                    service: InAppNavigationFactory.service(),
+                    onFinish: { navigationDestination = nil })
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(KccTheme.page, ignoresSafeAreaEdges: .all)
+                    .id(destination)
+                    .zIndex(1)
+            }
+        }
+        .eraseToAnyView()
     }
 
     // Build 2 exhausted the device main-thread stack while decoding this
@@ -619,9 +641,6 @@ struct ShellView: View {
             Button("notifications.errorDismiss", role: .cancel) {}
         } message: {
             Text("liveLocation.error")
-        }
-        .alert("addressSearch.navAppMissing", isPresented: $placeNavigationFailed) {
-            Button("notifications.errorDismiss", role: .cancel) {}
         }
         .alert(incidentFeedbackTitle, isPresented: incidentFeedbackIsPresented) {
             Button("notifications.errorDismiss", role: .cancel) {
@@ -2295,6 +2314,7 @@ struct ShellView: View {
         openTicketsCoordinator = nil
         partnerApplicationCoordinator = nil
 
+        navigationDestination = nil
         let friends = FirebaseFriendsRepository.createIfAvailable()
         let conversations = FirebaseConversationsRepository.createIfAvailable()
         let notifications = FirebaseNotificationsRepository.createIfAvailable()
@@ -2668,15 +2688,12 @@ struct ShellView: View {
         navSearchOpen = false
         selectedTab = .map
         mapSurface.centerOn(place.point)
-        placeNavigationFailed = false
         mapReadingSelection = .place(place)
     }
 
     private func navigateToPlace(_ place: PlaceSuggestion) {
-        guard let url = PlaceNavigationDestination.drivingURL(to: place.point) else { return }
-        openURL(url) { accepted in
-            if !accepted { placeNavigationFailed = true }
-        }
+        guard SavedPlacesPolicy.isValid(point: place.point) else { return }
+        navigationDestination = place
     }
 
     private func closeAddressSearch() {

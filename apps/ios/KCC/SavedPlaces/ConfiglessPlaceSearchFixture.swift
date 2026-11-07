@@ -38,7 +38,6 @@ struct ConfiglessPlaceNavigationHandoff: ViewModifier {
         if ConfiglessPlaceSearchFixture.isEnabled {
             content
                 .environment(\.openURL, OpenURLAction { url in
-                    if ProcessInfo.processInfo.arguments.contains("-KCCUITestRejectMaps") { return .discarded }
                     openedURL = url
                     return .handled
                 })

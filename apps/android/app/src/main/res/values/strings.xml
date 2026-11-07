@@ -32,6 +32,13 @@
     <string name="navigation_profile">Profil</string>
     <string name="navigation_settings">Inställningar</string>
     <string name="navigation_about">Om appen</string>
+    <string name="navigation_title">Navigering</string>
+    <string name="navigation_inAppHint">Navigeringen öppnas i CarCommunity.</string>
+    <string name="navigation_findingLocation">Hämtar din aktuella position…</string>
+    <string name="navigation_calculatingRoute">Beräknar körväg…</string>
+    <string name="navigation_locationUnavailable">Kunde inte hitta en aktuell position med tillräcklig noggrannhet. Kontrollera platsåtkomst och försök igen.</string>
+    <string name="navigation_unavailable">Navigering är inte tillgänglig i det här bygget.</string>
+    <string name="navigation_routeFailed">Kunde inte beräkna körvägen. Kontrollera anslutningen och försök igen.</string>
     <string name="home_title">Hem</string>
     <string name="home_liveLocationButton">Dela min position</string>
     <string name="home_liveLocationStopButton">Stoppa delning</string>

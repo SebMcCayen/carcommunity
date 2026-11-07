@@ -39,6 +39,7 @@ struct LiveSessionBar: View {
                 NSLocalizedString("liveLocation.sessionBar", comment: ""), elapsed, speedDescription, distance))
             .accessibilityHint(Text("liveLocation.sessionBarManageHint"))
             .accessibilityIdentifier("map.session.bar")
+            .modifier(ConfiglessSessionContinuity(live: live, recording: recording, startedAt: startedAt))
             .onChange(of: speed, initial: true) { _, value in shownSpeed = value }
             .onChange(of: id) { _, _ in shownSpeed = nil }
         }
@@ -103,5 +104,27 @@ private struct LiveMetricLayout: Layout {
             y += height + gap
         }
         return frames
+    }
+}
+
+/// Synthetic-only lifetime evidence for the navigation/live regression test.
+/// No object identity or route data is exposed by configured or Release apps.
+private struct ConfiglessSessionContinuity: ViewModifier {
+    let live: LiveLocationCoordinator
+    let recording: DriveRecordingCoordinator?
+    let startedAt: Date
+    @ViewBuilder func body(content: Content) -> some View {
+        #if DEBUG
+        if ConfiglessLiveSessionFixture.isEnabled {
+            content.accessibilityValue([
+                live.readout.sessionId ?? "none",
+                String(startedAt.timeIntervalSince1970),
+                recording.map { String(describing: ObjectIdentifier($0)) } ?? "none",
+                String(recording?.state.summary?.pointCount ?? 0)
+            ].joined(separator: "|"))
+        } else { content }
+        #else
+        content
+        #endif
     }
 }

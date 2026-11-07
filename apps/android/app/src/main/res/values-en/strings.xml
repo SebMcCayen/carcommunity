@@ -32,6 +32,13 @@
     <string name="navigation_profile">Profile</string>
     <string name="navigation_settings">Settings</string>
     <string name="navigation_about">About app</string>
+    <string name="navigation_title">Navigation</string>
+    <string name="navigation_inAppHint">Navigation opens inside CarCommunity.</string>
+    <string name="navigation_findingLocation">Finding your current location…</string>
+    <string name="navigation_calculatingRoute">Calculating your route…</string>
+    <string name="navigation_locationUnavailable">Could not find a recent, accurate location. Check location access and try again.</string>
+    <string name="navigation_unavailable">Navigation is unavailable in this build.</string>
+    <string name="navigation_routeFailed">Could not calculate a route. Check your connection and try again.</string>
     <string name="home_title">Home</string>
     <string name="home_liveLocationButton">Share my location</string>
     <string name="home_liveLocationStopButton">Stop sharing</string>

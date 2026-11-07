@@ -313,12 +313,14 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertLessThanOrEqual(start.frame.maxY, app.buttons["shell.tab.map"].frame.minY)
             chatProof(app, name: largeText ? "search-navigation-sv-accessibility" : "search-navigation-sv")
             start.tap()
-            let opened = app.staticTexts["place.fixture.openedURL"]
-            XCTAssertTrue(opened.waitForExistence(timeout: 5))
-            let url = URLComponents(string: opened.label)
-            XCTAssertEqual(url?.host, "maps.apple.com")
-            XCTAssertEqual(url?.queryItems?.first(where: { $0.name == "daddr" })?.value, "57.109,12.249")
-            XCTAssertEqual(url?.queryItems?.first(where: { $0.name == "dirflg" })?.value, "d")
+            let guidedDestination = app.staticTexts["navigation.fixture.destination"]
+            XCTAssertTrue(guidedDestination.waitForExistence(timeout: 10))
+            XCTAssertEqual(guidedDestination.label, "In-app guidance: Varberg station")
+            XCTAssertFalse(app.staticTexts["place.fixture.openedURL"].exists,
+                "Navigate must never hand off to the phone's Maps app")
+            chatProof(app, name: largeText ? "in-app-navigation-sv-accessibility" : "in-app-navigation-sv")
+            app.buttons["navigation.fixture.stop"].tap()
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
             app.buttons["shell.tab.chat"].tap()
             assertSelected(app.buttons["shell.tab.chat"])
             app.buttons["shell.tab.map"].tap()
@@ -329,7 +331,7 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
-    func testNavigationHandoffFailureKeepsTheDestinationAvailable() {
+    func testInAppRouteFailureCanBeDismissedBackToTheDestination() {
         let app = launch(language: "en", placeSearchFixture: true, rejectMaps: true)
         app.buttons["shell.search"].tap()
         let saved = app.buttons["addressSearch.saved.home"]
@@ -338,13 +340,47 @@ final class ShellSmokeTests: XCTestCase {
         let start = app.buttons["place.navigation.start"]
         XCTAssertTrue(start.waitForExistence(timeout: 5))
         start.tap()
-        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
-        app.alerts.firstMatch.buttons.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Could not calculate a route. Check your connection and try again."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Try again"].isHittable)
+        XCTAssertFalse(app.staticTexts["place.fixture.openedURL"].exists)
+        app.buttons["navigation.cancel"].tap()
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
         XCTAssertTrue(start.isHittable)
         XCTAssertEqual(app.staticTexts["place.navigation.name"].label, "Göteborg Centralstation")
         app.buttons["map.reading.close"].tap()
         XCTAssertFalse(start.exists)
         XCTAssertTrue(app.buttons["shell.search"].isHittable)
+        app.terminate()
+    }
+
+    func testInAppNavigationPreservesTheLiveSessionAndRecordedRoute() {
+        let app = launch(language: "en", placeSearchFixture: true, liveFixture: true)
+        let bar = app.buttons["map.session.bar"]
+        let recordingReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let fields = (bar.value as? String ?? "").components(separatedBy: "|")
+            return fields.count == 4 && (Int(fields[3]) ?? 0) >= 3
+        }, object: bar)
+        XCTAssertEqual(XCTWaiter.wait(for: [recordingReady], timeout: 15), .completed)
+        let before = (bar.value as? String ?? "").components(separatedBy: "|")
+        app.buttons["shell.search"].tap()
+        let place = app.buttons["addressSearch.saved.home"]
+        XCTAssertTrue(place.waitForExistence(timeout: 5)); place.tap()
+        app.buttons["place.navigation.start"].tap()
+        let end = app.buttons["navigation.fixture.stop"]
+        XCTAssertTrue(end.waitForExistence(timeout: 10))
+        XCTAssertFalse(bar.exists && bar.isHittable, "Guidance must cover the footer and its controls")
+        chatProof(app, name: "in-app-navigation-keeps-live-recording")
+        end.tap()
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let after = (bar.value as? String ?? "").components(separatedBy: "|")
+        XCTAssertEqual(Array(before.prefix(3)), Array(after.prefix(3)),
+            "Guidance must preserve session, start time and recording coordinator identity")
+        XCTAssertEqual(after.count, 4)
+        if before.count == 4 && after.count == 4 {
+            XCTAssertGreaterThanOrEqual(Int(after[3]) ?? 0, Int(before[3]) ?? 0,
+                "Opening and closing guidance must not reset the recorded points")
+        }
+        XCTAssertTrue(app.buttons["shell.tab.create"].isHittable)
         app.terminate()
     }
 
@@ -1098,7 +1134,7 @@ final class ShellSmokeTests: XCTestCase {
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
         if chatFloodFixture { app.launchArguments += ["-KCCUITestChatFlood"] }
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
-        if rejectMaps { app.launchArguments += ["-KCCUITestRejectMaps"] }
+        if rejectMaps { app.launchArguments += ["-KCCUITestNavigationFailure"] }
         if liveFixture { app.launchArguments += ["-KCCUITestLiveSession"] }
         if !markerPoints.isEmpty {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]

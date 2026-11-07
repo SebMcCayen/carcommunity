@@ -1,0 +1,94 @@
+name: Validate iOS Navigation
+
+on:
+  pull_request:
+    paths:
+      - 'apps/ios/**'
+      - 'contracts/localization/**'
+      - '.github/workflows/validate-ios-navigation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/**'
+      - 'contracts/localization/**'
+      - '.github/workflows/validate-ios-navigation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-ios-navigation-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+jobs:
+  navigation-sdk:
+    name: iOS Mapbox Navigation SDK
+    runs-on: macos-26
+    timeout-minutes: 180
+    # Same existing Downloads:Read credential as Android. Never expose the
+    # environment to fork/Dependabot code or run pull_request_target code.
+    environment: production
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.actor != 'dependabot[bot]')
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Configure SDK download authentication
+        env:
+          MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          token = os.environ.get('MAPBOX_DOWNLOADS_TOKEN', '')
+          if not token or any(c.isspace() for c in token):
+              raise SystemExit('Missing or invalid Mapbox SDK download credential')
+          path = Path.home() / '.netrc'
+          fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(fd, 'w') as stream:
+              stream.write('machine api.mapbox.com\nlogin mapbox\npassword ' + token + '\n')
+          PY
+      - name: Restore navigation dependency cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/ios-navigation/SourcePackages
+          key: ios-navigation-spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/ios/NavigationSDK/Package.resolved') }}
+      - name: Generate real navigation variant with committed lockfile
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          python3 apps/ios/scripts/navigation-project.py
+      - name: Resolve the pinned navigation graph
+        timeout-minutes: 35
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project apps/ios/KCCNavigation.xcodeproj -scheme KCC \
+            -derivedDataPath "${RUNNER_TEMP}/ios-navigation" \
+            -onlyUsePackageVersionsFromResolvedFile
+          cmp apps/ios/NavigationSDK/Package.resolved \
+            apps/ios/KCCNavigation.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+      - name: Compile unsigned Release with real guidance SDK
+        timeout-minutes: 90
+        run: |
+          xcodebuild -project apps/ios/KCCNavigation.xcodeproj -scheme KCC \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath "${RUNNER_TEMP}/ios-navigation" \
+            -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO build
+      - name: Exercise navigation lifetime with no-network test doubles
+        timeout-minutes: 50
+        run: |
+          DESTINATION=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; print(next(d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds if d.get("isAvailable") and d["name"].startswith("iPhone ")))')
+          xcodebuild -project apps/ios/KCCNavigation.xcodeproj -scheme KCC \
+            -configuration Debug -destination "platform=iOS Simulator,id=${DESTINATION}" \
+            -derivedDataPath "${RUNNER_TEMP}/ios-navigation" \
+            -disableAutomaticPackageResolution \
+            -only-testing:KCCTests/InAppNavigationCoordinatorTests \
+            -resultBundlePath "${RUNNER_TEMP}/navigation-tests.xcresult" test
+      - name: Remove SDK download credential
+        if: always()
+        run: rm -f "$HOME/.netrc"

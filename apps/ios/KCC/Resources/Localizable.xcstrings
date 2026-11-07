@@ -23461,6 +23461,23 @@
         }
       }
     },
+    "navigation.calculatingRoute": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beräknar körväg…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calculating your route…"
+          }
+        }
+      }
+    },
     "navigation.chat": {
       "extractionState": "manual",
       "localizations": {
@@ -23495,6 +23512,23 @@
         }
       }
     },
+    "navigation.findingLocation": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hämtar din aktuella position…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finding your current location…"
+          }
+        }
+      }
+    },
     "navigation.home": {
       "extractionState": "manual",
       "localizations": {
@@ -23508,6 +23542,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Home"
+          }
+        }
+      }
+    },
+    "navigation.inAppHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigeringen öppnas i CarCommunity."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigation opens inside CarCommunity."
+          }
+        }
+      }
+    },
+    "navigation.locationUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte hitta en aktuell position med tillräcklig noggrannhet. Kontrollera platsåtkomst och försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not find a recent, accurate location. Check location access and try again."
           }
         }
       }
@@ -23546,6 +23614,23 @@
         }
       }
     },
+    "navigation.routeFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte beräkna körvägen. Kontrollera anslutningen och försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not calculate a route. Check your connection and try again."
+          }
+        }
+      }
+    },
     "navigation.settings": {
       "extractionState": "manual",
       "localizations": {
@@ -23559,6 +23644,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Settings"
+          }
+        }
+      }
+    },
+    "navigation.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigering"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigation"
+          }
+        }
+      }
+    },
+    "navigation.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigering är inte tillgänglig i det här bygget."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigation is unavailable in this build."
           }
         }
       }
