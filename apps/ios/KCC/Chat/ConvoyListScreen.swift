@@ -11,7 +11,7 @@ struct ConvoyListScreen: View {
 
     var body: some View {
         content
-            .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
+            .kccReadingSurface(pageBackground: true).tint(KccChatColors.readingAccent)
             .task { coordinator?.start() }
             .navigationDestination(for: ConvoyChatRoute.self) { route in
                 ConvoyChatScreen(
@@ -126,7 +126,7 @@ struct ConvoyChatRow: View {
     @ViewBuilder
     private var statusBadge: some View {
         Text(Self.statusKey(convoy.status)).font(.footnote.weight(.semibold))
-            .foregroundStyle(KccTheme.driver).padding(KccSpacing.s2)
+            .foregroundStyle(KccChatColors.readingAccent).padding(KccSpacing.s2)
             .background(KccTheme.subtle, in: Capsule())
     }
 

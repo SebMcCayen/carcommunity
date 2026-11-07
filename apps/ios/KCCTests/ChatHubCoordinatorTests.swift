@@ -143,8 +143,8 @@ final class ChatHubCoordinatorTests: XCTestCase {
         XCTAssertEqual(hub.selectedTab, .community)
         hub.select(.convoys)
         XCTAssertEqual(hub.selectedTab, .convoys)
-        hub.select(.notifications)
-        XCTAssertEqual(hub.selectedTab, .notifications)
+        hub.select(.club)
+        XCTAssertEqual(hub.selectedTab, .club)
     }
 
     @MainActor

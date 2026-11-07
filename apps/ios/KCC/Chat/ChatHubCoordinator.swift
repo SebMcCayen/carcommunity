@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Owns the chat-hub scaffold: the selected tab and the coordinators behind the
-/// channel tabs (Community + Convoys). Friends and Notifications keep their own
+/// channel tabs (Community + Convoys). Friends and Club keep their own
 /// coordinators because they are also standalone features; ``ChatHubScreen``
 /// receives those from the signed-in shell. This is the iOS counterpart of
 /// Android's `ChatHubContent` state hoisting.

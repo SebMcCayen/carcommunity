@@ -388,33 +388,23 @@ final class ShellSmokeTests: XCTestCase {
                 XCTAssertTrue(avatar.wait(for: \.isHittable, toEqual: true, timeout: 10))
             }
 
-            // Removing the hub bar must not strand actions supplied by its
-            // embedded tabs. Settings stays inline and opens its own bar.
-            let notifications = app.buttons["chatHub.channel.3"]
+            // Android's fourth chat destination is Club. Notifications is
+            // reached from Profile, never a chat channel.
+            let club = app.buttons["chatHub.channel.3"]
             let channels = element("chatHub.channels", in: app)
             for _ in 0..<4 {
-                // XCTest can throw while resolving a wholly off-screen
-                // SwiftUI button's activation point. Scroll by geometry first.
                 let bounds = channels.frame.intersection(app.frame)
-                if notifications.exists {
-                    let frame = notifications.frame
-                    if !frame.isEmpty && bounds.contains(frame) { break }
-                }
+                if club.exists, !club.frame.isEmpty, bounds.contains(club.frame) { break }
                 channels.swipeLeft()
             }
-            XCTAssertTrue(notifications.exists)
-            XCTAssertTrue(channels.frame.intersection(app.frame).contains(notifications.frame))
-            XCTAssertTrue(notifications.isHittable)
-            notifications.tap()
-            let settings = app.buttons["notifications.settings"]
-            XCTAssertTrue(settings.waitForExistence(timeout: 10))
-            XCTAssertTrue(settings.isHittable)
+            XCTAssertTrue(club.isHittable)
+            XCTAssertEqual(club.label, "Club")
+            club.tap()
+            XCTAssertTrue(element("clubChat.screen", in: app).waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["Join a club in Social → Club to chat. Chat requires a verified connection."].exists)
+            XCTAssertFalse(app.buttons["notifications.settings"].exists)
             XCTAssertFalse(app.navigationBars["Chat"].exists)
-            chatProof(app, name: largeText ? "chat-notification-actions-en-accessibility" : "chat-notification-actions-en")
-            settings.tap()
-            XCTAssertTrue(app.navigationBars["Notification settings"].waitForExistence(timeout: 10))
-            app.buttons["Back"].firstMatch.tap()
-            XCTAssertTrue(settings.waitForExistence(timeout: 10))
+            chatProof(app, name: largeText ? "chat-club-en-accessibility" : "chat-club-en")
             XCTAssertTrue(back.isHittable)
             back.tap()
             assertSelected(app.buttons["shell.tab.map"])
@@ -875,7 +865,7 @@ final class ShellSmokeTests: XCTestCase {
 
         let channels = element("chatHub.channels", in: app)
         XCTAssertLessThanOrEqual(channels.frame.height, 110)
-        // Notifications is intentionally reached by horizontal scrolling, not
+        // Club is intentionally reached by horizontal scrolling, not
         // by removing or shrinking away one of the existing channel routes.
         for index in 0..<4 {
             let channel = app.buttons["chatHub.channel.\(index)"]
@@ -888,7 +878,7 @@ final class ShellSmokeTests: XCTestCase {
             channel.tap()
             assertSelected(channel)
         }
-        attach(app, name: "configless-en-Dark-AXXXL-S29-notifications-reachable")
+        attach(app, name: "configless-en-Dark-AXXXL-S29-club-reachable")
         app.buttons["shell.tab.create"].tap()
         assertSelected(app.buttons["shell.tab.map"])
     }

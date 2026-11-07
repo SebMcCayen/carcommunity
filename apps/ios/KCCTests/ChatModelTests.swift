@@ -328,14 +328,14 @@ final class ChatModelTests: XCTestCase {
     // MARK: - Tab order
 
     func testChatTabOrderIsLoadBearing() {
-        XCTAssertEqual(ChatTab.allCases, [.community, .convoys, .friends, .notifications])
+        XCTAssertEqual(ChatTab.allCases, [.community, .convoys, .friends, .club])
         XCTAssertEqual(ChatTab.community.rawValue, 0)
-        XCTAssertEqual(ChatTab.notifications.rawValue, 3)
+        XCTAssertEqual(ChatTab.club.rawValue, 3)
         XCTAssertEqual(ChatTab.defaultTab, .community)
         XCTAssertTrue(ChatTab.community.isImplemented)
         XCTAssertTrue(ChatTab.convoys.isImplemented)
-        XCTAssertFalse(ChatTab.friends.isImplemented)
-        XCTAssertFalse(ChatTab.notifications.isImplemented)
+        XCTAssertTrue(ChatTab.friends.isImplemented)
+        XCTAssertTrue(ChatTab.club.isImplemented)
     }
 
     // MARK: - Fixtures

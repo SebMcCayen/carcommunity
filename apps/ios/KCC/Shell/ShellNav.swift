@@ -57,7 +57,7 @@ enum ShellRoute: Sendable {
     case conversations
     /// A single 1:1 DM thread (target carried alongside the route).
     case chat
-    /// The chat hub (Community / Convoys / Friends + Notifications), opened
+    /// The chat hub (Community / Convoys / Friends / Club), opened
     /// from the map chat bubble.
     case chatHub
     case blocked

@@ -1,41 +1,15 @@
 import Foundation
 
-/// Chat-hub domain: the four hub tabs, the caller's chat-eligible convoy rows,
-/// and the pure projection/grouping/formatting behind the Convoys tab — the iOS
-/// port of the hub pieces of Android's `chatchannels/` (`ChatTab` in
-/// `ChatHubScreen.kt`, `ChatConvoy`/`ConvoyListState`/`ConvoyChatMapper` in
-/// `ConvoyChatRepository.kt`, and `ConvoyRowFormat.kt`). Pure Swift, so every
-/// rule is unit-testable off-device.
-
-// MARK: - Hub tabs
-
-/// The four chat-hub tabs, opened from the map chat bubble. The order is
-/// load-bearing — it is BOTH the tab-strip order AND the page order — so it is
-/// pinned by ``allCases`` (declaration order) exactly like Android's
-/// `enum class ChatTab { Community, Convoys, Friends, Notifications }`, whose
-/// `ordinal` addresses the pager.
-///
-/// Community and Convoys are functional in this slice; Friends (the existing
-/// 1:1 DMs) and Notifications (the in-app inbox) are SEPARATE features that wire
-/// up when those land — here they render a placeholder. Android reuses its
-/// `dm` / `notifications` packages for those two tabs.
+/// Current Android chat destinations, in the same visible order. Notifications
+/// have their own destination under the map's Profile menu.
 enum ChatTab: Int, CaseIterable, Sendable {
     case community
     case convoys
     case friends
-    case notifications
+    case club
 
-    /// The tab shown on first entry. Android's hub defaults to Community.
     static let defaultTab: ChatTab = .community
-
-    /// Whether this tab has a working implementation in this slice. Friends and
-    /// Notifications are deferred to their own features.
-    var isImplemented: Bool {
-        switch self {
-        case .community, .convoys: return true
-        case .friends, .notifications: return false
-        }
-    }
+    var isImplemented: Bool { true }
 }
 
 // MARK: - Convoy row model

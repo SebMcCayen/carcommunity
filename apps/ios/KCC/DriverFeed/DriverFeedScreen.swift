@@ -97,7 +97,7 @@ private struct DriverFeedSession: View {
             }
         }
         .kccReadingSurface(pageBackground: true)
-        .tint(KccTheme.driver)
+        .tint(KccChatColors.readingAccent)
         .task(id: DriverFeedTaskIdentity(threadId: coordinator.state.selectedId, active: isActive && scenePhase == .active)) {
             guard isActive && scenePhase == .active else { coordinator.pause(); return }
             guard let uid, let repository else { coordinator.refresh(); return }

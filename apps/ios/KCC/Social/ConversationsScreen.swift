@@ -140,7 +140,7 @@ struct ConversationsScreen: View {
                     )
                 } label: {
                     ConversationRow(conversation: conversation)
-                        .kccContentCard(border: conversation.unreadCount > 0 ? KccTheme.driver : KccTheme.border)
+                        .kccContentCard(border: conversation.unreadCount > 0 ? KccPalette.crownGold : KccTheme.border)
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Color.clear)
@@ -173,8 +173,8 @@ struct ConversationRow: View {
                 if conversation.unreadCount > 0 {
                     Text(unreadBadgeText).font(.caption.weight(.semibold))
                         .padding(.horizontal, KccSpacing.s2).padding(.vertical, KccSpacing.s1)
-                        .foregroundStyle(KccTheme.onDriver)
-                        .background(KccTheme.driver, in: Capsule())
+                        .foregroundStyle(KccTheme.onGold)
+                        .background(KccPalette.crownGold, in: Capsule())
                         .accessibilityLabel(Text(verbatim: unreadAccessibilityText))
                 }
             }
