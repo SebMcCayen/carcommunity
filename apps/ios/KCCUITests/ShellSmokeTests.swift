@@ -341,7 +341,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(start.waitForExistence(timeout: 5))
         start.tap()
         XCTAssertTrue(app.staticTexts["Could not calculate a route. Check your connection and try again."].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["Retry"].isHittable)
+        XCTAssertTrue(app.buttons["Try again"].isHittable)
         XCTAssertFalse(app.staticTexts["place.fixture.openedURL"].exists)
         app.buttons["navigation.cancel"].tap()
         XCTAssertTrue(start.waitForExistence(timeout: 5))
