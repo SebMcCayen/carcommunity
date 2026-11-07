@@ -368,7 +368,7 @@ final class ShellSmokeTests: XCTestCase {
         app.buttons["place.navigation.start"].tap()
         let end = app.buttons["navigation.fixture.stop"]
         XCTAssertTrue(end.waitForExistence(timeout: 10))
-        XCTAssertFalse(bar.isHittable, "Guidance must cover the footer and its controls")
+        XCTAssertFalse(bar.exists && bar.isHittable, "Guidance must cover the footer and its controls")
         chatProof(app, name: "in-app-navigation-keeps-live-recording")
         end.tap()
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
