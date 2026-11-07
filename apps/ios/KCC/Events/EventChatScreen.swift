@@ -178,6 +178,7 @@ struct EventChatMessageRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
+        .tint(isOwn ? KccTheme.onGold : KccChatColors.readingAccent)
     }
 
     private var displayName: String {
