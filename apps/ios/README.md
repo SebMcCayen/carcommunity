@@ -207,6 +207,27 @@ Tapping **Not now** defers that exact version for seven days, while a newer vers
 prompt immediately. Prompts wait until live sharing/drive recording and the bundled
 What's New announcement have finished.
 
+## In-app navigation builds
+
+TestFlight/App Store builds must use the real navigation variant:
+
+```sh
+python3 apps/ios/scripts/navigation-project.py
+```
+
+Open `apps/ios/KCCNavigation.xcodeproj` (scheme KCC), or include
+`project.navigation.yml` in the private signing overlay. Configure the existing
+Mapbox Downloads:Read credential in `~/.netrc` with mode 0600 as described by
+[Mapbox](https://docs.mapbox.com/ios/navigation/guides/install/). Keep that secret out
+of app build settings and source control. The app still uses only the existing
+public `MBXAccessToken` at runtime. The two projects have independent lockfiles;
+the generator restores the reviewed navigation graph without changing the base
+project or signing inputs. See [ADR-004](../../docs/adr/004-ios-in-app-navigation.md).
+
+The default `KCC.xcodeproj` remains secret-free and shows navigation unavailable.
+It does not launch Apple Maps. CI separately compiles and tests the real SDK
+variant; coordinate/unit/UI tests never create real billable navigation sessions.
+
 ## UI smoke tests and release preflight
 
 The KCC scheme includes `KCCTests` and `KCCUITests`. The UI smoke tests launch the

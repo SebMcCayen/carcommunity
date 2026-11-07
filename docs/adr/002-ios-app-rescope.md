@@ -68,6 +68,10 @@ entitlement.
 
 ### Turn-by-turn navigation
 
+**Superseded on 2026-11-07 by [ADR-004](004-ios-in-app-navigation.md), following the
+owner's explicit approval of in-app navigation for iOS.** The original deferral is
+retained below as history.
+
 The first iOS version ships **map display only** (Mapbox Maps SDK for iOS). It does not include
 the Mapbox Navigation SDK or turn-by-turn navigation.
 

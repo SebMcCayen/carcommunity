@@ -163,3 +163,6 @@ apps/android/.kotlin/
 # iOS (apps/ios) — Firebase config is injected, never committed (ADR-002)
 apps/ios/**/GoogleService-Info.plist
 .claude/worktrees/
+
+# Regenerated navigation variant; its independent dependency lock is committed.
+apps/ios/KCCNavigation.xcodeproj/

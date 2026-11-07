@@ -313,12 +313,14 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertLessThanOrEqual(start.frame.maxY, app.buttons["shell.tab.map"].frame.minY)
             chatProof(app, name: largeText ? "search-navigation-sv-accessibility" : "search-navigation-sv")
             start.tap()
-            let opened = app.staticTexts["place.fixture.openedURL"]
-            XCTAssertTrue(opened.waitForExistence(timeout: 5))
-            let url = URLComponents(string: opened.label)
-            XCTAssertEqual(url?.host, "maps.apple.com")
-            XCTAssertEqual(url?.queryItems?.first(where: { $0.name == "daddr" })?.value, "57.109,12.249")
-            XCTAssertEqual(url?.queryItems?.first(where: { $0.name == "dirflg" })?.value, "d")
+            let guidedDestination = app.staticTexts["navigation.fixture.destination"]
+            XCTAssertTrue(guidedDestination.waitForExistence(timeout: 10))
+            XCTAssertEqual(guidedDestination.label, "In-app guidance: Varberg station")
+            XCTAssertFalse(app.staticTexts["place.fixture.openedURL"].exists,
+                "Navigate must never hand off to the phone's Maps app")
+            chatProof(app, name: largeText ? "in-app-navigation-sv-accessibility" : "in-app-navigation-sv")
+            app.buttons["navigation.fixture.stop"].tap()
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
             app.buttons["shell.tab.chat"].tap()
             assertSelected(app.buttons["shell.tab.chat"])
             app.buttons["shell.tab.map"].tap()
@@ -329,7 +331,7 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
-    func testNavigationHandoffFailureKeepsTheDestinationAvailable() {
+    func testInAppRouteFailureCanBeDismissedBackToTheDestination() {
         let app = launch(language: "en", placeSearchFixture: true, rejectMaps: true)
         app.buttons["shell.search"].tap()
         let saved = app.buttons["addressSearch.saved.home"]
@@ -338,8 +340,11 @@ final class ShellSmokeTests: XCTestCase {
         let start = app.buttons["place.navigation.start"]
         XCTAssertTrue(start.waitForExistence(timeout: 5))
         start.tap()
-        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
-        app.alerts.firstMatch.buttons.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Could not calculate a route. Check your connection and try again."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Retry"].isHittable)
+        XCTAssertFalse(app.staticTexts["place.fixture.openedURL"].exists)
+        app.buttons["navigation.cancel"].tap()
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
         XCTAssertTrue(start.isHittable)
         XCTAssertEqual(app.staticTexts["place.navigation.name"].label, "Göteborg Centralstation")
         app.buttons["map.reading.close"].tap()
@@ -1098,7 +1103,7 @@ final class ShellSmokeTests: XCTestCase {
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
         if chatFloodFixture { app.launchArguments += ["-KCCUITestChatFlood"] }
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
-        if rejectMaps { app.launchArguments += ["-KCCUITestRejectMaps"] }
+        if rejectMaps { app.launchArguments += ["-KCCUITestNavigationFailure"] }
         if liveFixture { app.launchArguments += ["-KCCUITestLiveSession"] }
         if !markerPoints.isEmpty {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]

@@ -1,0 +1,25 @@
+# Production navigation variant, like Android's nav source set. The default
+# project remains usable without a secret SDK-download token. Both variants
+# compile the same app sources; CI also compiles this real SDK integration.
+include:
+  - project.yml
+name: KCCNavigation
+packages:
+  MapboxMaps:
+    # Navigation requires this package identity. Use the same 11.26 SDK as the
+    # default binary distribution, avoiding duplicate MapboxMaps products.
+    url: https://github.com/mapbox/mapbox-maps-ios.git
+    exactVersion: 11.26.0
+  MapboxNavigation:
+    url: https://github.com/mapbox/mapbox-navigation-ios.git
+    exactVersion: 3.26.0
+targets:
+  KCC:
+    dependencies:
+      - package: MapboxNavigation
+        product: MapboxNavigationUIKit
+      - package: MapboxNavigation
+        product: MapboxNavigationCore
+    settings:
+      base:
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) KCC_NAVIGATION_SDK

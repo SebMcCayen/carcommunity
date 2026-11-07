@@ -38,7 +38,14 @@
     "chat": "Chat",
     "profile": "Profil",
     "settings": "Inställningar",
-    "about": "Om appen"
+    "about": "Om appen",
+    "title": "Navigering",
+    "inAppHint": "Navigeringen öppnas i CarCommunity.",
+    "findingLocation": "Hämtar din aktuella position…",
+    "calculatingRoute": "Beräknar körväg…",
+    "locationUnavailable": "Kunde inte hitta en aktuell position med tillräcklig noggrannhet. Kontrollera platsåtkomst och försök igen.",
+    "unavailable": "Navigering är inte tillgänglig i det här bygget.",
+    "routeFailed": "Kunde inte beräkna körvägen. Kontrollera anslutningen och försök igen."
   },
   "home": {
     "title": "Hem",
