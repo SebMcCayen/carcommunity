@@ -3,13 +3,15 @@ import UIKit
 
 struct InAppNavigationScreen: View {
     let destination: PlaceSuggestion
-    @Environment(\.dismiss) private var dismiss
+    let onFinish: () -> Void
     @Environment(\.openURL) private var openURL
     @State private var coordinator: InAppNavigationCoordinator
 
     init(destination: PlaceSuggestion, location: any LocationProvider,
-         service: any InAppNavigationService = MapboxInAppNavigationService()) {
+         service: any InAppNavigationService = MapboxInAppNavigationService(),
+         onFinish: @escaping () -> Void) {
         self.destination = destination
+        self.onFinish = onFinish
         _coordinator = State(initialValue: InAppNavigationCoordinator(location: location, service: service))
     }
 
@@ -43,7 +45,7 @@ struct InAppNavigationScreen: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("addressSearch.savedCancel") { coordinator.stop(); dismiss() }
+                            Button("addressSearch.savedCancel") { finish() }
                                 .accessibilityIdentifier("navigation.cancel")
                         }
                     }
@@ -65,7 +67,8 @@ struct InAppNavigationScreen: View {
         case .guiding: "navigation.title"
         }
     }
-    private func start() { coordinator.start(destination) { dismiss() } }
+    private func start() { coordinator.start(destination, onFinish: finish) }
+    private func finish() { coordinator.stop(); onFinish() }
 }
 
 private struct GuidanceController: UIViewControllerRepresentable {

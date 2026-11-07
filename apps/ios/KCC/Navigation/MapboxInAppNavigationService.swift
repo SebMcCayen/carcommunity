@@ -42,6 +42,9 @@ struct MapboxInAppNavigationService: InAppNavigationService {
             eventsManager: provider.eventsManager()
         ))
         controller.routeLineTracksTraversal = true
+        // One shell-level owner combines guidance and independent live-drive
+        // demand; SDK disappearance must not reset the other session's timer.
+        controller.shouldManageApplicationIdleTimer = false
         return MapboxGuidanceSession(provider: provider, controller: controller, onFinish: onFinish)
     }
 }

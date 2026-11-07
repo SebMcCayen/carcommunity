@@ -353,6 +353,37 @@ final class ShellSmokeTests: XCTestCase {
         app.terminate()
     }
 
+    func testInAppNavigationPreservesTheLiveSessionAndRecordedRoute() {
+        let app = launch(language: "en", placeSearchFixture: true, liveFixture: true)
+        let bar = app.buttons["map.session.bar"]
+        let recordingReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let fields = (bar.value as? String ?? "").components(separatedBy: "|")
+            return fields.count == 4 && (Int(fields[3]) ?? 0) >= 3
+        }, object: bar)
+        XCTAssertEqual(XCTWaiter.wait(for: [recordingReady], timeout: 15), .completed)
+        let before = (bar.value as? String ?? "").components(separatedBy: "|")
+        app.buttons["shell.search"].tap()
+        let place = app.buttons["addressSearch.saved.home"]
+        XCTAssertTrue(place.waitForExistence(timeout: 5)); place.tap()
+        app.buttons["place.navigation.start"].tap()
+        let end = app.buttons["navigation.fixture.stop"]
+        XCTAssertTrue(end.waitForExistence(timeout: 10))
+        XCTAssertFalse(bar.isHittable, "Guidance must cover the footer and its controls")
+        chatProof(app, name: "in-app-navigation-keeps-live-recording")
+        end.tap()
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let after = (bar.value as? String ?? "").components(separatedBy: "|")
+        XCTAssertEqual(Array(before.prefix(3)), Array(after.prefix(3)),
+            "Guidance must preserve session, start time and recording coordinator identity")
+        XCTAssertEqual(after.count, 4)
+        if before.count == 4 && after.count == 4 {
+            XCTAssertGreaterThanOrEqual(Int(after[3]) ?? 0, Int(before[3]) ?? 0,
+                "Opening and closing guidance must not reset the recorded points")
+        }
+        XCTAssertTrue(app.buttons["shell.tab.create"].isHittable)
+        app.terminate()
+    }
+
     func testChatBackLiveMetricsProfileAndStopMatchAndroid() {
         for largeText in [false, true] {
             let app = launch(language: "en", largeText: largeText,

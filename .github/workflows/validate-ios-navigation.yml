@@ -92,10 +92,3 @@ jobs:
       - name: Remove SDK download credential
         if: always()
         run: rm -f "$HOME/.netrc"
-      - name: Upload native navigation test evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ios-navigation-test-results
-          path: ${{ runner.temp }}/navigation-tests.xcresult
-          retention-days: 3

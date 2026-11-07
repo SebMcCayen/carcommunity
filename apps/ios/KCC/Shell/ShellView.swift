@@ -179,7 +179,7 @@ struct ShellView: View {
     }
 
     var body: some View {
-        shellPresentation
+        shellWithNavigation
             .modifier(ChatKeyboardObserver(isPresented: $chatKeyboardPresented))
             .environment(\.chatKeyboardPresented, chatKeyboardPresented)
             .task(id: signedInUid) { await wireFeatures() }
@@ -212,7 +212,7 @@ struct ShellView: View {
             }
             // Own the idle timer at shell scope so tabs, routes and sheets
             // do not interrupt an active live session's screen-awake demand.
-            .onChange(of: liveLocationCoordinator?.keepsScreenAwake == true && scenePhase == .active,
+            .onChange(of: (liveLocationCoordinator?.keepsScreenAwake == true || navigationDestination != nil) && scenePhase == .active,
                       initial: true) { _, keepAwake in
                 UIApplication.shared.isIdleTimerDisabled = keepAwake
             }
@@ -274,6 +274,29 @@ struct ShellView: View {
                 clubsCoordinator?.stop()
                 mapSurface.setBillboardMarkers([])
             }
+    }
+
+    /// A retained sibling overlay, rather than a modal presentation: covering
+    /// the map must not disappear/reappear the shell, reset recording, rerun
+    /// account wiring or release an independent live session. Removing the
+    /// shell at the auth/access boundary still executes its privacy teardown.
+    private var shellWithNavigation: AnyView {
+        ZStack {
+            shellPresentation
+                .allowsHitTesting(navigationDestination == nil)
+                .accessibilityHidden(navigationDestination != nil)
+            if let destination = navigationDestination {
+                InAppNavigationScreen(destination: destination,
+                    location: InAppNavigationFactory.location(default: locationProvider),
+                    service: InAppNavigationFactory.service(),
+                    onFinish: { navigationDestination = nil })
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(KccTheme.page, ignoresSafeAreaEdges: .all)
+                    .id(destination)
+                    .zIndex(1)
+            }
+        }
+        .eraseToAnyView()
     }
 
     // Build 2 exhausted the device main-thread stack while decoding this
@@ -514,11 +537,6 @@ struct ShellView: View {
 
     private var shellSheets: AnyView {
         shellInteractions
-        .fullScreenCover(item: $navigationDestination) { destination in
-            InAppNavigationScreen(destination: destination,
-                location: InAppNavigationFactory.location(default: locationProvider),
-                service: InAppNavigationFactory.service())
-        }
         .sheet(isPresented: $showStartDriving, onDismiss: releaseStartDrivingGarage) {
             if let startDrivingGarage {
                 StartDrivingSheet(

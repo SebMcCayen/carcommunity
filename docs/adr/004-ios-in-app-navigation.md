@@ -13,7 +13,10 @@ iOS users/trips can increase aggregate usage charges.
 Use Mapbox Navigation SDK v3 for native active guidance, voice, rerouting, camera
 following and trip progress. Search selection only previews a destination. The
 explicit Navigate action opens a full-screen native controller inside CarCommunity;
-it does not launch Apple Maps or another application.
+it does not launch Apple Maps or another application. Guidance is a retained
+sibling overlay, so opening/closing it does not run shell disappear/reappear
+teardown or account wiring. Auth/restriction removal still tears down the shell.
+The shell owns the combined live-drive/guidance idle timer; disable SDK ownership.
 
 Only a recent, accurate real-device origin may be used. No Kungsbacka/default camera
 coordinate is substituted for the user's location. Failed/denied location and failed
