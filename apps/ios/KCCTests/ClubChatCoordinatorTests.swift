@@ -116,4 +116,26 @@ final class ClubChatCoordinatorTests: XCTestCase {
         XCTAssertEqual(ClubChatCoordinator.messageID(uid: "member", operationID: "operation-1234567890"),
                        "32ea56a8a9b8d1279ebe6f6b36746816cea3293ab4aa963d9e57488b2070d476")
     }
+
+    func testRetainedHistoryFillsTheTailInsteadOfAddingAListenerPerArrival() {
+        var history = ClubChatHistoryBatches()
+        XCTAssertEqual(history.append((0..<25).map { "message-\($0)" }), [0])
+        for index in 25..<1025 {
+            let changed = history.append(["message-\(index)"])
+            XCTAssertEqual(changed.count, 1)
+            XCTAssertTrue(history.batches.allSatisfy { $0.count <= 25 })
+        }
+        XCTAssertEqual(history.batches.count, 41)
+        XCTAssertEqual(history.batches.flatMap { $0 }.count, 1025)
+        XCTAssertEqual(history.append(["message-0", "message-1024"]), [])
+    }
+
+    func testHistoryPageCrossingATailBoundaryOnlyReplacesTheTailAndNewBatch() {
+        var history = ClubChatHistoryBatches()
+        _ = history.append((0..<30).map(String.init))
+        let first = history.batches[0]
+        XCTAssertEqual(history.append((30..<55).map(String.init)), [1, 2])
+        XCTAssertEqual(history.batches.map(\.count), [25, 25, 5])
+        XCTAssertEqual(history.batches[0], first)
+    }
 }

@@ -29,7 +29,7 @@ struct EventChatScreen: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
+        .kccReadingSurface(pageBackground: true).tint(KccChatColors.readingAccent)
         .navigationTitle(Text("chat.eventChatTitle"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: accessCoordinator.canOpenEventChat) {
@@ -172,8 +172,9 @@ struct EventChatMessageRow: View {
             messageBody
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s2)
-                .background(isOwn ? KccTheme.subtle : KccTheme.surface)
-                .overlay { RoundedRectangle(cornerRadius: KccRadius.md).strokeBorder(isOwn ? KccTheme.driver : KccTheme.border).allowsHitTesting(false) }
+                .foregroundStyle(isOwn ? KccTheme.onGold : KccTheme.text)
+                .background(isOwn ? KccPalette.crownGold : KccTheme.surface)
+                .overlay { RoundedRectangle(cornerRadius: KccRadius.md).strokeBorder(isOwn ? KccPalette.crownGold : KccTheme.border).allowsHitTesting(false) }
                 .clipShape(RoundedRectangle(cornerRadius: KccRadius.md))
         }
         .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
@@ -190,12 +191,12 @@ struct EventChatMessageRow: View {
         if message.isRemoved {
             Text("chat.removedMessage")
                 .italic()
-                .foregroundStyle(KccTheme.secondary)
+                .foregroundStyle(isOwn ? KccTheme.onGold : KccTheme.secondary)
         } else if message.isAutoHidden && !revealed {
             VStack(alignment: .leading, spacing: KccSpacing.s1) {
                 Text("chat.reportedHidden")
                     .italic()
-                    .foregroundStyle(KccTheme.secondary)
+                    .foregroundStyle(isOwn ? KccTheme.onGold : KccTheme.secondary)
                 Button("chat.showReportedMessage") { revealed = true }
                     .frame(minHeight: 48)
             }

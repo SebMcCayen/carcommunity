@@ -74,7 +74,9 @@ private final class ClubChatSubscription {
     private var hidden: Set<String>?
     private var live: [QueryDocumentSnapshot]?
     private var history: [Int: [QueryDocumentSnapshot]] = [:]
-    private var retainedIDs: Set<String> = []
+    private var retainedBatches = ClubChatHistoryBatches()
+    private var retainedListeners: [Int: ListenerRegistration] = [:]
+    private var retainedRevisions: [Int: Int] = [:]
     private var cursor: (Timestamp, String)?
     private var paginated = false
     private var hasOlder = false
@@ -113,7 +115,9 @@ private final class ClubChatSubscription {
     private func resetRoom() {
         generation += 1
         messages.forEach { $0.remove() }; messages = []
-        membership = nil; live = nil; hidden = nil; history = [:]; retainedIDs = []
+        retainedListeners.values.forEach { $0.remove() }; retainedListeners = [:]
+        retainedRevisions = [:]; retainedBatches = ClubChatHistoryBatches()
+        membership = nil; live = nil; hidden = nil; history = [:]
         cursor = nil; paginated = false; hasOlder = false
         continuation?.yield(nil)
     }
@@ -187,19 +191,21 @@ private final class ClubChatSubscription {
     }
     private func retain(_ ids: [String], epoch: Int) {
         guard let clubID else { return }
-        let added = ids.filter { retainedIDs.insert($0).inserted }
-        guard !added.isEmpty else { return }
-        let index = history.count
-        history[index] = []
-        messages.append(db.collection("driverClubs/\(clubID)/messages")
-            .whereField(FieldPath.documentID(), in: added).limit(to: 25)
+        for index in retainedBatches.append(ids) {
+          retainedListeners[index]?.remove()
+          let revision = (retainedRevisions[index] ?? 0) + 1
+          retainedRevisions[index] = revision
+          history[index] = []
+          retainedListeners[index] = db.collection("driverClubs/\(clubID)/messages")
+            .whereField(FieldPath.documentID(), in: retainedBatches.batches[index]).limit(to: 25)
             .addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
                 Task { @MainActor in
-                    guard let self, self.generation == epoch else { return }
+                    guard let self, self.generation == epoch, self.retainedRevisions[index] == revision else { return }
                     self.history[index] = self.fresh(snapshot, error: error) ? snapshot?.documents ?? [] : []
                     self.emit()
                 }
-            })
+            }
+        }
     }
     private func emit() {
         guard let membership, let hidden, let live, Auth.auth().currentUser?.uid == uid else {

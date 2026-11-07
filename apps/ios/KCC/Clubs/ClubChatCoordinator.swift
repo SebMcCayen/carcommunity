@@ -15,6 +15,22 @@ struct ClubChatSnapshot: Equatable, Sendable {
     let hasOlder: Bool
 }
 
+/// Full 25-ID batches remain attached. Only a partially filled tail changes
+/// as messages arrive, so retained history never creates a listener per row.
+struct ClubChatHistoryBatches {
+    private(set) var batches: [[String]] = []
+    private var seen: Set<String> = []
+    mutating func append(_ ids: [String]) -> [Int] {
+        var changed: Set<Int> = []
+        for id in ids where seen.insert(id).inserted {
+            if batches.last?.count == 25 || batches.isEmpty { batches.append([]) }
+            let index = batches.count - 1
+            batches[index].append(id); changed.insert(index)
+        }
+        return changed.sorted()
+    }
+}
+
 @MainActor
 protocol ClubChatRepository: AnyObject {
     func updates() -> AsyncStream<ClubChatSnapshot?>
