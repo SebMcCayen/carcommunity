@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		003C04899120AC69BFE96E40 /* PartnerDesignTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D624ECAC20FAE894DB5B71B /* PartnerDesignTests.swift */; };
+		006CB9DBBC188CAE0AC44826 /* SessionLocationFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6676FEED4CFBFFA1277D76E9 /* SessionLocationFilter.swift */; };
 		019741D1421051BBD5C5A283 /* NearbyLiveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9435A5A10072BF22FE5DC583 /* NearbyLiveCoordinator.swift */; };
 		01AD13177ADE8148FEEC2414 /* DriveHistoryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 168FC85A836DD3A98386AC51 /* DriveHistoryCoordinator.swift */; };
 		0229DB676C3D37323515FED8 /* ConvoyChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB923EB0F48961801B354686 /* ConvoyChatRepository.swift */; };
@@ -155,6 +156,7 @@
 		4C843E89E7C5551D1702AB67 /* FollowMeTrailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8631E9E248B1F4C97D80F1AD /* FollowMeTrailTests.swift */; };
 		4D16751D9EF71310CE6F7847 /* ChannelChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11CDD124E35FCE223DE9DCB /* ChannelChatScreen.swift */; };
 		4DC332267ACEDE81E20CC5A4 /* FeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = 846341BD49597226831C4E13 /* FeatureFlags.swift */; };
+		4E1E5D1E4AD380C09DF8DA6B /* SessionLocationFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9689AE9286FCC7CF9FC91F /* SessionLocationFilterTests.swift */; };
 		4E36CD41A0EE50285C015024 /* NotificationSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55266E4E5C9DA8913ED97DF /* NotificationSettingsRepository.swift */; };
 		4E37B727A82BA021B053235A /* ShellSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08D2BE682E5679774562C313 /* ShellSmokeTests.swift */; };
 		4E79C8F6CC66EC188BD6864F /* PushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFD696D6EC6FCA43AD27FBD /* PushNotifications.swift */; };
@@ -643,6 +645,7 @@
 		65E91001ECE7CAF273254821 /* SavedPlacesViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedPlacesViews.swift; sourceTree = "<group>"; };
 		65F55D48F0A695F0C1D09834 /* ClubsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubsScreen.swift; sourceTree = "<group>"; };
 		667567749288390662CCCFDE /* ConvoyReactionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyReactionCoordinatorTests.swift; sourceTree = "<group>"; };
+		6676FEED4CFBFFA1277D76E9 /* SessionLocationFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLocationFilter.swift; sourceTree = "<group>"; };
 		66906F6DB393976AEC9C4B6E /* ConvoyDesignTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyDesignTests.swift; sourceTree = "<group>"; };
 		66C4E93F29A167680A3DA13E /* AuthorizedAccountDeletionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizedAccountDeletionRepository.swift; sourceTree = "<group>"; };
 		679E0852DECCA69DC65B6C97 /* InAppNavigationScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InAppNavigationScreen.swift; sourceTree = "<group>"; };
@@ -808,6 +811,7 @@
 		BC3220438A714827CFBE03D8 /* PointsCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsCoordinator.swift; sourceTree = "<group>"; };
 		BC4A164A69D9F64DCD3E66E3 /* FirebaseConvoyManagementRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseConvoyManagementRepository.swift; sourceTree = "<group>"; };
 		BC9DE0933201A46D20EE2ED8 /* ProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreen.swift; sourceTree = "<group>"; };
+		BD9689AE9286FCC7CF9FC91F /* SessionLocationFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLocationFilterTests.swift; sourceTree = "<group>"; };
 		BF18AC13F907A6E509CBFF8A /* DrivesCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivesCoordinatorTests.swift; sourceTree = "<group>"; };
 		BF33E52A64ECBDCE46A94683 /* PushNotificationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationsTests.swift; sourceTree = "<group>"; };
 		BFA53ACD4320F64E097B6526 /* ConfiglessPlaceSearchFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfiglessPlaceSearchFixture.swift; sourceTree = "<group>"; };
@@ -1001,6 +1005,7 @@
 				A63D281B16F9581698DE721B /* LocationModels.swift */,
 				5067A6E44861FDA5AB19A8EC /* LocationPermissionCoordinator.swift */,
 				D2CF6C21145444B6D343AE94 /* LocationProvider.swift */,
+				6676FEED4CFBFFA1277D76E9 /* SessionLocationFilter.swift */,
 			);
 			path = Location;
 			sourceTree = "<group>";
@@ -1741,6 +1746,7 @@
 				ECDEC616EC444307EE8CA283 /* ProfileEditingTests.swift */,
 				BF33E52A64ECBDCE46A94683 /* PushNotificationsTests.swift */,
 				02D47DC5F4210E2337814CE4 /* SavedPlacesTests.swift */,
+				BD9689AE9286FCC7CF9FC91F /* SessionLocationFilterTests.swift */,
 				86A6375BFA826C51446494E2 /* SettingsDesignTests.swift */,
 				C17EBBBC67C8A0774DC392C7 /* SettingsScreenTests.swift */,
 				99BCF885BCAC95E5A84E495A /* ShellMapHostTests.swift */,
@@ -2254,6 +2260,7 @@
 				9B989DCAA0FB755CD4E147B6 /* SavedPlacesStore.swift in Sources */,
 				29E52C450B9CF78955D088E2 /* SavedPlacesViews.swift in Sources */,
 				70E429E8ABCEBCB05652747E /* SeasonStandingsView.swift in Sources */,
+				006CB9DBBC188CAE0AC44826 /* SessionLocationFilter.swift in Sources */,
 				D466626B510C9EB9775AA226 /* SettingsDesignViews.swift in Sources */,
 				16110FC826E2D1D5D7DC7677 /* SettingsScreen.swift in Sources */,
 				062AE7034B90A9707143E724 /* ShellHubs.swift in Sources */,
@@ -2385,6 +2392,7 @@
 				F3CA5AE27861A7A11265C91C /* ProfileEditingTests.swift in Sources */,
 				C693DB409D1309779768D0BD /* PushNotificationsTests.swift in Sources */,
 				1ED18C0DD0C842274AFC90A9 /* SavedPlacesTests.swift in Sources */,
+				4E1E5D1E4AD380C09DF8DA6B /* SessionLocationFilterTests.swift in Sources */,
 				36EC862F33F6E46DC1E02839 /* SettingsDesignTests.swift in Sources */,
 				44CBF35B24705F6DF9A9152F /* SettingsScreenTests.swift in Sources */,
 				1E50D3893A5C34E20441F632 /* ShellMapHostTests.swift in Sources */,

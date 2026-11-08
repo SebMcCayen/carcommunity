@@ -163,6 +163,10 @@ struct DriveRecorder: Sendable {
     mutating func add(_ fix: LocationFix) -> Bool {
         guard points.count < Self.maximumRoutePoints,
               let point = RecordedDrivePoint(fix: fix) else { return false }
+        // A parked fix still refreshes live sharing's heartbeat, but must not
+        // advance the route timestamp. Otherwise releasing a movement deadband
+        // turns several seconds of real movement into one false speed spike.
+        if let last = points.last, last.latitude == point.latitude, last.longitude == point.longitude { return false }
         return add(point)
     }
 
@@ -195,7 +199,7 @@ struct DriveRecorder: Sendable {
             Date(timeIntervalSince1970: Double($0.timestampMilliseconds) / 1_000)
         }
         let minimumEnd = startedAt.addingTimeInterval(0.001)
-        let effectiveEnd = max(lastFix ?? endedAt, minimumEnd)
+        let effectiveEnd = max(endedAt, lastFix ?? endedAt, minimumEnd)
         return DriveSaveRequest(
             startedAt: startedAt,
             endedAt: effectiveEnd,

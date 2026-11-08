@@ -31,6 +31,8 @@ import Foundation
 @MainActor
 final class CoreLocationProvider: NSObject, LocationProvider {
     private let manager: CLLocationManager
+    private let filtersSessionMotion: Bool
+    private var motionFilter = SessionLocationFilter()
 
     private(set) var authorization: LocationAuthorization
 
@@ -44,11 +46,13 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     init(backgroundEnabled: Bool = false) {
         let manager = CLLocationManager()
         self.manager = manager
+        self.filtersSessionMotion = backgroundEnabled
         // The synchronous read is safe (and prompt-free); the delegate keeps
         // it current from here on.
         self.authorization = Self.authorization(from: manager.authorizationStatus)
         super.init()
         manager.desiredAccuracy = kCLLocationAccuracyBest
+        if backgroundEnabled { manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation }
         // Match the fix cadence intent of Android's fused request for a
         // driving app: continuous updates tuned for road use. Automotive
         // hints the chip's fusion without gating updates to driving.
@@ -126,6 +130,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
         let shouldRun = !fixContinuations.isEmpty && authorization.isAuthorized
         guard shouldRun != updatesRunning else { return }
         updatesRunning = shouldRun
+        motionFilter = SessionLocationFilter()
         if shouldRun {
             manager.startUpdatingLocation()
         } else {
@@ -162,6 +167,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
             accuracyMeters: location.horizontalAccuracy,
             headingDegrees: location.course,
             speedMetersPerSecond: location.speed,
+            speedAccuracyMetersPerSecond: location.speedAccuracy,
             isSimulatedBySoftware: location.sourceInformation?.isSimulatedBySoftware
         )
     }
@@ -187,8 +193,13 @@ final class CoreLocationProvider: NSObject, LocationProvider {
         // The protocol promises an unauthorized stream yields NOTHING, so
         // the gate is re-checked at delivery — same rule the stub enforces
         // in emitFix.
-        guard authorization.isAuthorized else { return }
-        for fix in fixes {
+        guard authorization.isAuthorized, !fixContinuations.isEmpty else { return }
+        for raw in fixes {
+            let fix: LocationFix
+            if filtersSessionMotion {
+                guard let filtered = motionFilter.process(raw, now: Date()) else { continue }
+                fix = filtered
+            } else { fix = raw }
             for sink in fixContinuations.values {
                 sink.yield(fix)
             }
