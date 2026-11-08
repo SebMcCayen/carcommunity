@@ -65,6 +65,18 @@ final class SessionLocationFilterTests: XCTestCase {
         }
     }
 
+    func testStartingTheSessionWithAPositiveSpeedDoesNotBypassParkedConfirmation() throws {
+        var filter = SessionLocationFilter(), recording = recorder()
+        for seconds in stride(from: 0, through: 120, by: 2) {
+            let meters = seconds == 0 ? 0.0 : (seconds % 4 == 0 ? 8.0 : -8.0)
+            let value = try XCTUnwrap(accept(fix(meters, at: Double(seconds), speed: 4.4, uncertainty: 0.2),
+                                            with: &filter, recording: &recording))
+            XCTAssertNil(value.speedMetersPerSecond)
+            XCTAssertEqual(value.latitude, 57)
+        }
+        XCTAssertEqual(recording.points.count, 1)
+    }
+
     func testCoarseStaleUnknownAndImpossibleFixesAreRejectedBeforeSeeding() {
         for sample in [fix(0, at: 0, accuracy: 51), fix(0, at: 0, accuracy: nil),
                        fix(0, at: -16), fix(0, at: 6),
@@ -86,10 +98,12 @@ final class SessionLocationFilterTests: XCTestCase {
         for seconds in stride(from: 0, through: 40, by: 2) {
             let raw = fix(Double(seconds) * 10, at: Double(seconds), speed: 10, uncertainty: 0.2)
             let value = try XCTUnwrap(accept(raw, with: &filter, recording: &recording))
-            XCTAssertEqual(value.latitude, raw.latitude)
-            XCTAssertEqual(value.speedMetersPerSecond, 10)
+            if seconds >= 4 {
+                XCTAssertEqual(value.latitude, raw.latitude)
+                XCTAssertEqual(value.speedMetersPerSecond, 10)
+            }
         }
-        XCTAssertEqual(recording.points.count, 21)
+        XCTAssertEqual(recording.points.count, 20)
         XCTAssertEqual(recording.summary(endedAt: start.addingTimeInterval(40)).distanceMeters!, 400, accuracy: 0.1)
     }
 
@@ -139,14 +153,46 @@ final class SessionLocationFilterTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(recording.points.count, 9)
     }
 
+    func testUncertainPositiveSpeedDoesNotPermanentlyFreezeSlowTraffic() throws {
+        var filter = SessionLocationFilter(), recording = recorder()
+        for seconds in stride(from: 0, through: 80, by: 2) {
+            let sample = fix(Double(seconds), at: Double(seconds), speed: 1, uncertainty: 1.5)
+            let output = try XCTUnwrap(accept(sample, with: &filter, recording: &recording))
+            XCTAssertNil(output.speedMetersPerSecond, "Uncertain slow motion is not a proven zero")
+        }
+        let distance = try XCTUnwrap(recording.summary(endedAt: start.addingTimeInterval(80)).distanceMeters)
+        XCTAssertGreaterThan(distance, 60)
+        XCTAssertLessThanOrEqual(distance, 80.1)
+    }
+
+    func testImprovedAccuracyAtOneHertzCanConfirmRealMotorwayMovement() throws {
+        var filter = SessionLocationFilter(), recording = recorder()
+        _ = accept(fix(0, at: 0, accuracy: 45, speed: 0, uncertainty: 0.2),
+                   with: &filter, recording: &recording)
+        var latest: LocationFix?
+        for seconds in 1...120 {
+            latest = accept(fix(Double(seconds) * 20, at: Double(seconds), accuracy: 5,
+                                speed: 20, uncertainty: 0.2), with: &filter, recording: &recording)
+        }
+        XCTAssertEqual(try XCTUnwrap(latest).latitude, fix(2_400, at: 120).latitude)
+        XCTAssertEqual(latest?.speedMetersPerSecond, 20)
+        let distance = try XCTUnwrap(recording.summary(endedAt: start.addingTimeInterval(120)).distanceMeters)
+        // The existing two-second recorder cadence may omit the final sample;
+        // this must still record the drive, within one sampling interval.
+        XCTAssertGreaterThan(distance, 2_400 - 20 * DriveRecorder.minimumSampleInterval)
+        XCTAssertLessThanOrEqual(distance, 2_400.1)
+    }
+
     func testAnIsolatedJumpDoesNotPoisonTheNextGoodFixOrGoBackwardsInTime() throws {
         var filter = SessionLocationFilter()
         _ = filter.process(fix(0, at: 0, speed: 10, uncertainty: 0.2), now: start)
         XCTAssertNil(filter.process(fix(500, at: 2), now: start.addingTimeInterval(2)))
         let good = fix(40, at: 4, speed: 10, uncertainty: 0.2)
-        XCTAssertEqual(try XCTUnwrap(filter.process(good, now: good.timestamp)).latitude, good.latitude)
+        XCTAssertEqual(try XCTUnwrap(filter.process(good, now: good.timestamp)).latitude, 57)
         XCTAssertNil(filter.process(good, now: good.timestamp))
         XCTAssertNil(filter.process(fix(20, at: 2), now: good.timestamp))
+        let confirmed = fix(60, at: 6, speed: 10, uncertainty: 0.2)
+        XCTAssertEqual(try XCTUnwrap(filter.process(confirmed, now: confirmed.timestamp)).latitude, confirmed.latitude)
     }
 
     func testAConfirmedRelocationAfterAGpsGapDoesNotPinTheOldParkedPosition() throws {

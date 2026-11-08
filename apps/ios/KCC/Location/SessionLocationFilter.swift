@@ -27,7 +27,9 @@ struct SessionLocationFilter: Sendable {
             if dt > 15 { reacquiring = true }
         }
         let speed = Self.trustedSpeed(fix)
-        guard let anchor else { return adopt(fix, speed: speed) }
+        // A positive first reading has no displacement evidence yet. Seed the
+        // position without allowing it to bypass parked-motion confirmation.
+        guard let anchor else { return adopt(fix, speed: speed == 0 ? 0 : nil) }
         lastRaw = fix
         let distance = Self.distance(anchor, fix)
         let radius = max(10, min(50, (anchor.accuracyMeters ?? 0) + accuracy))
@@ -56,7 +58,10 @@ struct SessionLocationFilter: Sendable {
             let candidateRadius = max(10, min(25, (candidate.accuracyMeters ?? 0) + accuracy))
             let oldDistance = Self.distance(anchor, candidate)
             let confirmsArea = nextDistance <= candidateRadius
-            let continues = distance > oldDistance + radius / 2 &&
+            // The parked radius has already been crossed. Requiring another
+            // half-radius on EVERY callback loses evidence at 1 Hz, especially
+            // when the seed was coarse and subsequent GPS accuracy improves.
+            let continues = distance > oldDistance &&
                 Self.directionAgreement(anchor, candidate, fix) > 0.8
             if confirmsArea || continues {
                 if fix.timestamp.timeIntervalSince(candidate.timestamp) >= 2 { return adopt(fix, speed: speed) }
@@ -88,7 +93,9 @@ struct SessionLocationFilter: Sendable {
         guard let speed = fix.speedMetersPerSecond, speed.isFinite, (0...55.6).contains(speed),
               let uncertainty = fix.speedAccuracyMetersPerSecond,
               uncertainty.isFinite, (0...1.5).contains(uncertainty) else { return nil }
-        if speed <= max(0.5, uncertainty) { return 0 }
+        // An uncertainty interval containing zero is not proof of standing
+        // still: let displacement evidence recover genuine slow movement.
+        if speed <= 0.5 && uncertainty <= 0.5 { return 0 }
         return speed - uncertainty > 0.5 ? speed : nil
     }
     private static func distance(_ a: LocationFix, _ b: LocationFix) -> Double {
