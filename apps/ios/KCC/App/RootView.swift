@@ -46,13 +46,13 @@ struct RootView: View {
     }
 
     private var configlessShell: some View {
-                ShellView(
-                    session: session,
-                    authenticatedUid: nil,
-                    access: .unrestrictedCommunity,
-                    featureFlags: .contractDefaults,
-                    diagnostics: diagnostics
-                )
+        ShellView(
+            session: session,
+            authenticatedUid: nil,
+            access: .unrestrictedCommunity,
+            featureFlags: .contractDefaults,
+            diagnostics: diagnostics
+        )
     }
 
     @ViewBuilder
