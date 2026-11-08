@@ -10,6 +10,27 @@ final class ShellSmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testNewMessageKeepsFriendsLoadedAcrossInboxRedrawsAndReopening() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-KCCUITestNewDialogue", "-AppleLanguages", "(sv)", "-AppleLocale", "sv_SE"]
+        app.launch()
+        let compose = app.buttons["conversations.newDialogue"]
+        XCTAssertTrue(compose.waitForExistence(timeout: 15))
+        for _ in 0..<2 {
+            compose.tap()
+            let friend = app.buttons["newDialogue.friend.fixture-friend"]
+            XCTAssertTrue(friend.waitForExistence(timeout: 5))
+            XCTAssertTrue(friend.isHittable)
+            XCTAssertEqual(friend.label, "Testvän")
+            friend.tap()
+            let selected = app.staticTexts["newDialogue.fixture.selected"]
+            XCTAssertTrue(selected.waitForExistence(timeout: 5))
+            XCTAssertEqual(selected.label, "fixture-friend")
+            XCTAssertTrue(compose.waitForExistence(timeout: 5))
+        }
+        app.terminate()
+    }
+
     func testClubsMenuRemainsDiscoverableWithoutBackendActivation() {
         for largeText in [false, true] {
             let app = launch(language: "en", largeText: largeText, theme: "Dark")
