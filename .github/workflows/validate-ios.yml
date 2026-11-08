@@ -117,6 +117,9 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
         run: |
@@ -235,6 +238,9 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
         run: |
@@ -351,6 +357,9 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
         run: |
@@ -723,6 +732,9 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Build release for a generic iOS device (unsigned, config-less)
         run: |
           cd apps/ios
