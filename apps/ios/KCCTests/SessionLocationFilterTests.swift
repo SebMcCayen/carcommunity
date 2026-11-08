@@ -47,7 +47,7 @@ final class SessionLocationFilterTests: XCTestCase {
         var filter = SessionLocationFilter()
         _ = filter.process(fix(0, at: 0, speed: 0, uncertainty: 0.2), now: start)
         for seconds in stride(from: 5, through: 120, by: 5) {
-            let raw = fix(seconds % 10 == 0 ? 40 : -40, at: Double(seconds), speed: 0.2, uncertainty: 0.4)
+            let raw = fix(seconds % 10 == 0 ? 40 : -40, at: Double(seconds), speed: 0, uncertainty: 0.4)
             let value = try XCTUnwrap(filter.process(raw, now: raw.timestamp))
             XCTAssertEqual(value.latitude, 57)
             XCTAssertEqual(value.speedMetersPerSecond, 0)
@@ -154,15 +154,17 @@ final class SessionLocationFilterTests: XCTestCase {
     }
 
     func testUncertainPositiveSpeedDoesNotPermanentlyFreezeSlowTraffic() throws {
-        var filter = SessionLocationFilter(), recording = recorder()
-        for seconds in stride(from: 0, through: 80, by: 2) {
-            let sample = fix(Double(seconds), at: Double(seconds), speed: 1, uncertainty: 1.5)
-            let output = try XCTUnwrap(accept(sample, with: &filter, recording: &recording))
-            XCTAssertNil(output.speedMetersPerSecond, "Uncertain slow motion is not a proven zero")
+        for (speed, uncertainty) in [(1.0, 1.5), (0.4, 0.1)] {
+            var filter = SessionLocationFilter(), recording = recorder()
+            for seconds in stride(from: 0, through: 80, by: 2) {
+                let sample = fix(Double(seconds) * speed, at: Double(seconds), speed: speed, uncertainty: uncertainty)
+                let output = try XCTUnwrap(accept(sample, with: &filter, recording: &recording))
+                XCTAssertNil(output.speedMetersPerSecond, "Slow positive motion is not a proven zero")
+            }
+            let distance = try XCTUnwrap(recording.summary(endedAt: start.addingTimeInterval(80)).distanceMeters)
+            XCTAssertGreaterThan(distance, 80 * speed * 0.6)
+            XCTAssertLessThanOrEqual(distance, 80 * speed + 0.1)
         }
-        let distance = try XCTUnwrap(recording.summary(endedAt: start.addingTimeInterval(80)).distanceMeters)
-        XCTAssertGreaterThan(distance, 60)
-        XCTAssertLessThanOrEqual(distance, 80.1)
     }
 
     func testImprovedAccuracyAtOneHertzCanConfirmRealMotorwayMovement() throws {

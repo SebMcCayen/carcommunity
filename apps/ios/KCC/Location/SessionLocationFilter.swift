@@ -95,7 +95,7 @@ struct SessionLocationFilter: Sendable {
               uncertainty.isFinite, (0...1.5).contains(uncertainty) else { return nil }
         // An uncertainty interval containing zero is not proof of standing
         // still: let displacement evidence recover genuine slow movement.
-        if speed <= 0.5 && uncertainty <= 0.5 { return 0 }
+        if speed == 0 && uncertainty <= 0.5 { return 0 }
         return speed - uncertainty > 0.5 ? speed : nil
     }
     private static func distance(_ a: LocationFix, _ b: LocationFix) -> Double {
