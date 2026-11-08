@@ -3,18 +3,18 @@
 
 The release download URL has returned repeated HTTP 504s. SwiftPM consumes the
 same archive from its normal binary cache and still performs its own manifest
-checksum check. No credentials, mirror, dependency override or extraction.
+checksum check. The optional step-scoped CI token authenticates only to the API, never its
+redirect CDN. No mirror, dependency override or extraction.
 """
 import argparse
-import hashlib
 import json
-import os
 from pathlib import Path
 import sys
-import tempfile
 import time
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from github_release_asset import prepare_archive, valid_archive as verify_archive
 
 
 VERSION = "4.0.0"
@@ -35,55 +35,12 @@ def verify_pin(lock):
 
 
 def valid_archive(path):
-    if path.is_symlink():
-        raise ValueError("Refusing a symlink in the binary archive cache")
-    if not path.is_file() or path.stat().st_size != EXPECTED_SIZE:
-        return False
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(128 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest() == EXPECTED_SHA256
+    return verify_archive(path, EXPECTED_SIZE, EXPECTED_SHA256)
 
 
-def prepare(cache_directory, opener=urlopen, sleep=time.sleep):
-    cache_directory.mkdir(parents=True, exist_ok=True)
-    target = cache_directory / CACHE_NAME
-    if valid_archive(target):
-        return target
-    for attempt in range(3):
-        temporary = None
-        try:
-            with tempfile.NamedTemporaryFile(prefix=".turf-", dir=cache_directory, delete=False) as output:
-                temporary = Path(output.name)
-                request = Request(API_URL, headers={"Accept": "application/octet-stream",
-                                                   "User-Agent": "CarCommunity-iOS-build"})
-                # Anonymous public API request: no authorization can leak on a
-                # redirect to GitHub's release CDN.
-                with opener(request, timeout=60) as response:
-                    count = 0
-                    while True:
-                        block = response.read(128 * 1024)
-                        if not block:
-                            break
-                        count += len(block)
-                        if count > EXPECTED_SIZE:
-                            raise ValueError("Unexpected Turf archive size")
-                        output.write(block)
-            if not valid_archive(temporary):
-                raise ValueError("Turf archive does not match the pinned manifest checksum")
-            os.replace(temporary, target)
-            return target
-        except (HTTPError, URLError, TimeoutError) as error:
-            retryable = not isinstance(error, HTTPError) or error.code in {408, 429, 500, 502, 503, 504}
-            if not retryable or attempt == 2:
-                raise
-            print("Retrying the official Turf asset after a network error", flush=True)
-            sleep(5 * (attempt + 1))
-        finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
-    raise RuntimeError("Turf preparation did not complete")
+def prepare(cache_directory, opener=None, sleep=time.sleep):
+    return prepare_archive(cache_directory, CACHE_NAME, API_URL, EXPECTED_SIZE,
+                           EXPECTED_SHA256, opener=opener, sleep=sleep)
 
 
 def main():
