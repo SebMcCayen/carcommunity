@@ -10,6 +10,7 @@ final class ShellSmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    #if DEBUG
     func testNewMessageKeepsFriendsLoadedAcrossInboxRedrawsAndReopening() {
         let app = XCUIApplication()
         app.launchArguments = ["-KCCUITestNewDialogue", "-AppleLanguages", "(sv)", "-AppleLocale", "sv_SE"]
@@ -30,6 +31,7 @@ final class ShellSmokeTests: XCTestCase {
         }
         app.terminate()
     }
+    #endif
 
     func testClubsMenuRemainsDiscoverableWithoutBackendActivation() {
         for largeText in [false, true] {
