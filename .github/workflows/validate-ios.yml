@@ -665,7 +665,15 @@ jobs:
           npm ci --prefix functions --ignore-scripts
           npm --prefix functions run build
           node scripts/native-member-emulators.mjs prepare "${RUNNER_TEMP}/native-members"
-          npm install --global firebase-tools@15.34.0
+      # Native CLI dependencies can need compilation on Intel runners. Keep
+      # that separate from backend setup and emulator downloads so one shared
+      # 15-minute budget cannot cancel otherwise healthy acceptance tests.
+      - name: Install pinned Firebase CLI
+        timeout-minutes: 20
+        run: npm install --global firebase-tools@15.34.0
+      - name: Prepare Firebase emulator binaries
+        timeout-minutes: 10
+        run: |
           firebase setup:emulators:firestore
           firebase setup:emulators:database
       - name: Execute native Firebase Auth and member-tools acceptance

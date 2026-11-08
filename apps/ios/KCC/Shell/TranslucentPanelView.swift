@@ -116,7 +116,8 @@ struct TranslucentShellPanel<Content: View>: View {
     /// back-stack of their own) — the caller supplies that tab switch.
     let onDismiss: () -> Void
     @ViewBuilder let content: () -> Content
-    @State private var dragOffset: CGFloat = 0
+    @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.3, dampingFraction: 0.85)))
+    private var dragOffset: CGFloat = 0
 
     /// Fraction of the height the card occupies, anchored to the bottom.
     /// Deliberately below 1 — the remaining strip is live, visible map, the
@@ -139,36 +140,45 @@ struct TranslucentShellPanel<Content: View>: View {
                 .frame(height: proxy.size.height * (1 - Self.cardHeightFraction))
                 .accessibilityHidden(true)
 
-                VStack(spacing: 0) {
-                    dragHandle(panelHeight: proxy.size.height * Self.cardHeightFraction)
-                    content()
+                ZStack(alignment: .top) {
+                    VStack(spacing: 0) {
+                        Capsule().fill(KccTheme.secondary.opacity(0.55))
+                            .frame(width: 32, height: 4)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .accessibilityHidden(true)
+                        content()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .background(KccTheme.overlay)
-                    .clipShape(
-                        .rect(
-                            topLeadingRadius: KccRadius.lg,
-                            topTrailingRadius: KccRadius.lg
+                        .background(KccTheme.overlay)
+                        .clipShape(
+                            .rect(
+                                topLeadingRadius: KccRadius.lg,
+                                topTrailingRadius: KccRadius.lg
+                            )
                         )
-                    )
-                    .offset(y: dragOffset)
-                    .accessibilityElement(children: .contain)
-                    // The standard VoiceOver dismiss (two-finger scrub) —
-                    // the accessible counterpart of the outside tap.
-                    .accessibilityAction(.escape, onDismiss)
+                        .offset(y: dragOffset)
+                    // Keep the recognizer's hit target stationary. Moving it
+                    // with the card can cancel recognition before finger-up.
+                    dragHandle(panelHeight: proxy.size.height * Self.cardHeightFraction)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .accessibilityElement(children: .contain)
+                .accessibilityAction(.escape, onDismiss)
             }
         }
     }
 
     private func dragHandle(panelHeight: CGFloat) -> some View {
-        Capsule().fill(KccTheme.secondary.opacity(0.55))
-            .frame(width: 32, height: 4)
+        Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 10, coordinateSpace: .global)
-                .onChanged { dragOffset = max(0, $0.translation.height) }
+                .updating($dragOffset) { value, offset, _ in
+                    offset = max(0, value.translation.height)
+                }
                 .onEnded { value in
                     if ShellPanelDragPolicy.shouldDismiss(
                         offset: value.translation.height,
@@ -176,9 +186,9 @@ struct TranslucentShellPanel<Content: View>: View {
                         panelHeight: panelHeight
                     ) {
                         onDismiss()
-                    } else {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { dragOffset = 0 }
                     }
+                    // GestureState also springs back when recognition is
+                    // cancelled, where onEnded is never called.
                 })
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("shell.panelDragHandle"))
