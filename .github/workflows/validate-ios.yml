@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'apps/ios/**'
+      - 'scripts/github_release_asset.py'
+      - 'scripts/test_release_caches.py'
       - 'firebase/firestore.rules'
       - 'apps/admin/**'
       - 'firebase/firestore.indexes.json'
@@ -18,6 +20,8 @@ on:
   pull_request:
     paths:
       - 'apps/ios/**'
+      - 'scripts/github_release_asset.py'
+      - 'scripts/test_release_caches.py'
       - 'firebase/firestore.rules'
       - 'apps/admin/**'
       - 'firebase/firestore.indexes.json'
@@ -74,6 +78,7 @@ jobs:
         run: |
           python3 apps/ios/scripts/release-preflight.py
           python3 -m unittest discover -s apps/ios/scripts -p 'test_*.py'
+          python3 -m unittest discover -s scripts -p 'test_release_caches.py'
   ios-build-debug:
     name: iOS Debug build for testing
     needs: ios-preflight
@@ -119,6 +124,8 @@ jobs:
           xcodegen generate
       - name: Prepare verified Turf binary cache
         timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
@@ -240,6 +247,8 @@ jobs:
           xcodegen generate
       - name: Prepare verified Turf binary cache
         timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
@@ -359,6 +368,8 @@ jobs:
           xcodegen generate
       - name: Prepare verified Turf binary cache
         timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
@@ -734,6 +745,8 @@ jobs:
           xcodegen generate
       - name: Prepare verified Turf binary cache
         timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Build release for a generic iOS device (unsigned, config-less)
         run: |
