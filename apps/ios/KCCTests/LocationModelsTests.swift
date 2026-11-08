@@ -32,6 +32,7 @@ final class LocationModelsTests: XCTestCase {
                 accuracyMeters: 5.0,
                 headingDegrees: 271.5,
                 speedMetersPerSecond: 13.9,
+                speedAccuracyMetersPerSecond: nil,
                 isSimulatedBySoftware: nil
             )
         )
