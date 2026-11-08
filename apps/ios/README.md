@@ -212,6 +212,7 @@ What's New announcement have finished.
 TestFlight/App Store builds must use the real navigation variant:
 
 ```sh
+python3 apps/ios/scripts/prepare-turf-cache.py
 python3 apps/ios/scripts/navigation-project.py
 ```
 
@@ -248,3 +249,14 @@ The current [iOS release and device checklist](../../docs/ios-release-readiness.
 covers Apple/Firebase setup, signed archive validation, TestFlight, physical-iPhone
 acceptance tests, and App Store metadata. The GitHub workflow does not sign or
 upload releases.
+
+The Turf 4.0.0 release download endpoint has returned persistent HTTP 504s.
+`prepare-turf-cache.py` prepares the identical official GitHub release asset
+through the public asset API. It verifies the SHA-256 from Turf's pinned
+Package.swift and atomically fills SwiftPM's ordinary binary archive cache.
+SwiftPM still verifies the dependency checksum itself. No mirror, SDK version
+change, token or paid service is involved. Both committed Turf pins must match;
+review the trusted asset/checksum when updating that dependency. This works for
+ordinary builds as well as the navigation variant. CI runs it before resolution.
+
+CI uses its short-lived, read-only GitHub token to avoid shared anonymous API rate limits. The release helper removes authentication before following any HTTPS redirect, verifies the pinned SHA256 and size, then atomically seeds the native cache. Android uses the same transport for the unchanged Gradle 9.3.1 wrapper ZIP after repeated upstream 504 responses; its committed URL and checksum remain authoritative.

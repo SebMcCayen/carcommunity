@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - 'apps/ios/**'
+      - 'scripts/github_release_asset.py'
+      - 'scripts/test_release_caches.py'
       - 'contracts/localization/**'
       - '.github/workflows/validate-ios-navigation.yml'
   push:
     branches: [main]
     paths:
       - 'apps/ios/**'
+      - 'scripts/github_release_asset.py'
+      - 'scripts/test_release_caches.py'
       - 'contracts/localization/**'
       - '.github/workflows/validate-ios-navigation.yml'
 
@@ -63,6 +67,11 @@ jobs:
         run: |
           if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
           python3 apps/ios/scripts/navigation-project.py
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the pinned navigation graph
         timeout-minutes: 35
         run: |

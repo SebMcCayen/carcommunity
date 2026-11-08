@@ -22,13 +22,15 @@ struct RootView: View {
             case .signedOut:
                 SignInScreen(coordinator: signInCoordinator)
             case .unavailable:
-                ShellView(
-                    session: session,
-                    authenticatedUid: nil,
-                    access: .unrestrictedCommunity,
-                    featureFlags: .contractDefaults,
-                    diagnostics: diagnostics
-                )
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-KCCUITestNewDialogue") {
+                    ConfiglessNewDialogueFixture()
+                } else {
+                    configlessShell
+                }
+                #else
+                configlessShell
+                #endif
             case .signedIn(let uid, let displayName):
                 authenticatedContent(uid: uid, displayName: displayName)
             }
@@ -41,6 +43,16 @@ struct RootView: View {
                 Task { await accessSession.refreshFlags() }
             }
         }
+    }
+
+    private var configlessShell: some View {
+        ShellView(
+            session: session,
+            authenticatedUid: nil,
+            access: .unrestrictedCommunity,
+            featureFlags: .contractDefaults,
+            diagnostics: diagnostics
+        )
     }
 
     @ViewBuilder

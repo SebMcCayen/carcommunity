@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'apps/ios/**'
+      - 'scripts/github_release_asset.py'
+      - 'scripts/test_release_caches.py'
       - 'firebase/firestore.rules'
       - 'apps/admin/**'
       - 'firebase/firestore.indexes.json'
@@ -18,6 +20,8 @@ on:
   pull_request:
     paths:
       - 'apps/ios/**'
+      - 'scripts/github_release_asset.py'
+      - 'scripts/test_release_caches.py'
       - 'firebase/firestore.rules'
       - 'apps/admin/**'
       - 'firebase/firestore.indexes.json'
@@ -74,6 +78,7 @@ jobs:
         run: |
           python3 apps/ios/scripts/release-preflight.py
           python3 -m unittest discover -s apps/ios/scripts -p 'test_*.py'
+          python3 -m unittest discover -s scripts -p 'test_release_caches.py'
   ios-build-debug:
     name: iOS Debug build for testing
     needs: ios-preflight
@@ -117,6 +122,11 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
         run: |
@@ -235,6 +245,11 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
         run: |
@@ -351,6 +366,11 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Resolve the committed package graph
         timeout-minutes: 35
         run: |
@@ -665,7 +685,15 @@ jobs:
           npm ci --prefix functions --ignore-scripts
           npm --prefix functions run build
           node scripts/native-member-emulators.mjs prepare "${RUNNER_TEMP}/native-members"
-          npm install --global firebase-tools@15.34.0
+      # Native CLI dependencies can need compilation on Intel runners. Keep
+      # that separate from backend setup and emulator downloads so one shared
+      # 15-minute budget cannot cancel otherwise healthy acceptance tests.
+      - name: Install pinned Firebase CLI
+        timeout-minutes: 20
+        run: npm install --global firebase-tools@15.34.0
+      - name: Prepare Firebase emulator binaries
+        timeout-minutes: 10
+        run: |
           firebase setup:emulators:firestore
           firebase setup:emulators:database
       - name: Execute native Firebase Auth and member-tools acceptance
@@ -715,6 +743,11 @@ jobs:
           fi
           cd apps/ios
           xcodegen generate
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
       - name: Build release for a generic iOS device (unsigned, config-less)
         run: |
           cd apps/ios

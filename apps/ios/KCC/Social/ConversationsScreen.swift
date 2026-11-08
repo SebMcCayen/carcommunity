@@ -200,8 +200,16 @@ struct ConversationRow: View {
 /// `NewDialogueSheet`). Picking a friend simply reports it upward — opening
 /// the thread is pure navigation.
 struct NewDialogueSheet: View {
-    let coordinator: NewDialogueCoordinator
+    // The sheet owns this observable reference for its presentation lifetime.
+    // The inbox's sheet builder can run again while a live snapshot arrives;
+    // replacing the input with a fresh .loading model does not restart .task.
+    @State private var coordinator: NewDialogueCoordinator
     let onPick: (FriendSummary) -> Void
+
+    init(coordinator: NewDialogueCoordinator, onPick: @escaping (FriendSummary) -> Void) {
+        _coordinator = State(initialValue: coordinator)
+        self.onPick = onPick
+    }
 
     var body: some View {
         NavigationStack {
@@ -246,6 +254,7 @@ struct NewDialogueSheet: View {
                                     .frame(minHeight: 48)
                             }
                             .foregroundStyle(.primary)
+                            .accessibilityIdentifier("newDialogue.friend.\(friend.uid)")
                         }
                     } header: {
                         Text("dm.newDialogue.subtitle")
@@ -256,6 +265,38 @@ struct NewDialogueSheet: View {
         }
     }
 }
+
+#if DEBUG
+/// No Firebase account or network: redraw the real inbox while its picker is
+/// open, as live inbox/appearance updates do in a configured app.
+struct ConfiglessNewDialogueFixture: View {
+    @State private var revision = 0
+    @State private var selectedUID = ""
+    @State private var inbox = ConversationsCoordinator(
+        repository: PreviewConversationsRepository(),
+        blockVisibility: PreviewBlockVisibilityRepository(), uid: "fixture-self")
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                Text(selectedUID).accessibilityIdentifier("newDialogue.fixture.selected")
+                ConversationsScreen(coordinator: inbox, makeNewDialogueCoordinator: { [revision] in
+                    _ = revision
+                    return NewDialogueCoordinator(friends: PreviewFriendsRepository(result: .loaded(FriendsData(
+                        friends: [FriendSummary(uid: "fixture-friend", displayName: "Testvän", avatarPath: nil, friendsSince: nil)],
+                        incoming: [], outgoing: []))))
+                }, onOpenConversation: { uid, _ in selectedUID = uid }, showsNavigationTitle: false)
+            }
+        }
+        .task {
+            for _ in 0..<300 {
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                revision += 1
+            }
+        }
+    }
+}
+#endif
 
 // MARK: - Previews
 
