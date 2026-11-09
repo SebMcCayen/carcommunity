@@ -542,7 +542,7 @@ class MapboxMapSurface(
     // onRelease alongside the gesture/camera listeners.
     private var mapLoadingErrorSubscription: Cancelable? = null
     private var mapLoadedSubscription: Cancelable? = null
-    private var styleLoadedSubscription: Cancelable? = null
+    private var onBasemapLoaded: Style.OnStyleLoaded? = null
     private var renderFrameSubscription: Cancelable? = null
 
     /**
@@ -634,7 +634,7 @@ class MapboxMapSurface(
     override fun setBasemap(basemap: MapBasemap) {
         if (basemapFlow.value == basemap) return
         basemapFlow.value = basemap
-        mapViewRef?.mapboxMap?.loadStyle(basemap.styleUri)
+        mapViewRef?.mapboxMap?.loadStyle(basemap.styleUri, onBasemapLoaded)
     }
 
     override fun set3dEnabled(enabled: Boolean) {
@@ -1951,9 +1951,8 @@ class MapboxMapSurface(
                             pitch(this@MapboxMapSurface.pitch)
                         },
                     )
-                    styleLoadedSubscription = mapboxMap.subscribeStyleLoaded {
-                        val style = mapboxMap.style ?: return@subscribeStyleLoaded
-                        if (style.styleURI != basemapFlow.value.styleUri) return@subscribeStyleLoaded
+                    onBasemapLoaded = Style.OnStyleLoaded { style ->
+                        if (mapViewRef !== this || style.styleURI != basemapFlow.value.styleUri) return@OnStyleLoaded
                         loadStateFlow.value = MapLoadState.Loaded
                         // Apply the current day/night light preset (read the flow
                         // directly — this runs async at style-load, not at
@@ -2205,7 +2204,7 @@ class MapboxMapSurface(
                     }
                     location.addOnIndicatorPositionChangedListener(positionListener)
                     location.addOnIndicatorBearingChangedListener(bearingListener)
-                    mapboxMap.loadStyle(basemapFlow.value.styleUri)
+                    mapboxMap.loadStyle(basemapFlow.value.styleUri, onBasemapLoaded)
                 }
             },
             update = { mapView ->
@@ -2299,11 +2298,10 @@ class MapboxMapSurface(
                 // a new one is built (which resets surfaceShown/everRendered).
                 runCatching { mapLoadingErrorSubscription?.cancel() }
                 runCatching { mapLoadedSubscription?.cancel() }
-                runCatching { styleLoadedSubscription?.cancel() }
                 runCatching { renderFrameSubscription?.cancel() }
                 mapLoadingErrorSubscription = null
                 mapLoadedSubscription = null
-                styleLoadedSubscription = null
+                onBasemapLoaded = null
                 renderFrameSubscription = null
                 surfaceShown = false
                 longClickListener?.let { l ->
