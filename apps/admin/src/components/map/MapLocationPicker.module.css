@@ -50,3 +50,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+.choice {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 4px;
+  border: 2px solid var(--accent-contrast);
+  border-radius: 50%;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.choice:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

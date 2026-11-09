@@ -334,6 +334,51 @@
       "source": "docs/gamification-system.md (Crown spawning — area-based auto-spawning)"
     },
     {
+      "name": "crownHunt.reportPlacement",
+      "domain": "crownHunt",
+      "description": "Report an active crown placement once per account. Accepts crownId, source, crown coordinates, reason and an optional comment.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/crownHunt/placement-reports.ts"
+    },
+    {
+      "name": "crownHunt.listPlacementCases",
+      "domain": "crownHunt",
+      "description": "List open or handled crown placement cases, with cursor pagination and an open case count.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/crownHunt/placement-reports.ts"
+    },
+    {
+      "name": "crownHunt.getPlacementCase",
+      "domain": "crownHunt",
+      "description": "Read a crown placement case, current crown status and its latest reports.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/crownHunt/placement-reports.ts"
+    },
+    {
+      "name": "crownHunt.listPlacementDestinations",
+      "domain": "crownHunt",
+      "description": "List nearby eligible cached safe stops in the original spawn area. Includes OpenStreetMap data.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/crownHunt/placement-reports.ts"
+    },
+    {
+      "name": "crownHunt.resolvePlacementCase",
+      "domain": "crownHunt",
+      "description": "Ignore, move, or remove a reported crown placement. Move and removal write a persistent location block. Decision and audit entry are committed atomically.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/crownHunt/placement-reports.ts"
+    },
+    {
       "name": "crownHunt.spawnDiagnostics",
       "domain": "crownHunt",
       "description": "Admin-only, READ-ONLY troubleshooting view over the MARKED-AREA auto-spawn engine (crownHunt-spawnCrowns' runCrownAreaSpawnPass) for ONE area. Input { areaId }. Reuses the engine's own constants + per-cell decision shape (no second copy that could drift): the 10-minute run cadence, the round-robin queue over active areas ordered by lastSpawnPassAt, the 10-areas/60-cells-per-run budgets, the per-cell activity score A + targetCrownCount (cap 5, A<1 floor), the 3x3 150 m neighbourhood live count, and the cached OSM safe-stop POIs. Returns: the crownHuntSpawn flag state, active/safeAreaConfirmed, areaPoiCount + poisRefreshedAt; serverTime + nextRunAt (the next 10-min cron boundary) + runIntervalSeconds for a client-side ticking countdown; the area's queue facts (activeAreaCount, areasAhead, maxAreasPerRun, maxAreaCellsPerRun, lastSpawnPassAt) from which the admin derives an ESTIMATED time-to-next-service; a scanned WINDOW of the area's grid cells from its nextCellOffset cursor (mirroring what the next visit would walk), each with centroid/bounds, activity score, target, live count, deficit, POI count + a sample of POI anchors, and a reason (would_spawn / below_activity_floor / at_target / no_pois_in_cell); candidateCellCount; and a blockers[] list of the area-level reasons nothing is spawning (spawn_flag_off, area_inactive, area_not_confirmed, area_oversize, no_area_pois, pois_stale, all_cells_below_activity_floor, all_cells_at_target). Purely observational: no writes, no audit record, requireAdminActor + App Check enforced. This has to be a callable because crownSpawnAreas / crownSpawnAreaPois / crownCellActivity are backend-only in firestore.rules, so the admin web cannot read spawn state directly. Every time-relative number is an ESTIMATE (round-robin + shared per-run cell budget + already-at-target cells) and is framed as such in the UI. Deployed via grouped export as crownHunt-spawnDiagnostics (functions/src/crownHunt/spawnDiagnostics.ts).",

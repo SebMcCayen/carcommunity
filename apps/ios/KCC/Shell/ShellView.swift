@@ -112,6 +112,7 @@ struct ShellView: View {
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
     @State private var nearbyLive = NearbyLiveCoordinator()
+    @State private var nearbyWaveCoordinator: NearbyWaveCoordinator?
     @State private var groupDriveMapUids: [String] = []
     @State private var convoyReactionCoordinator: ConvoyReactionCoordinator?
     @State private var convoyFollowMeCoordinator: ConvoyFollowMeCoordinator?
@@ -499,6 +500,7 @@ struct ShellView: View {
             }
         }
         .onChange(of: liveLocationCoordinator?.isSharing) { _, sharing in
+            if sharing != true { nearbyWaveCoordinator?.sharingEnded() }
             guard let sharing,
                   let command = pendingSessionCommand,
                   command.isReconciled(isSharing: sharing)
@@ -836,11 +838,16 @@ struct ShellView: View {
                     .padding(.top, KccSpacing.s12 + KccSpacing.s12)
                 }
             }
+            .overlay {
+                if nearbyWaveUid != nil, let nearbyWaveCoordinator {
+                    NearbyWaveOverlay(coordinator: nearbyWaveCoordinator)
+                }
+            }
             .eraseToAnyView()
     }
 
     private var mapContent: AnyView {
-        mapOverlayContent
+        mapOverlayWithWaves
             .task(id: incidentMapLifecycleKey) {
                 guard foregroundMapWorkActive, let incidentMapCoordinator else { return }
                 incidentMapCoordinator.start(
@@ -860,7 +867,17 @@ struct ShellView: View {
                     camera: mapSurface.cameraSnapshot,
                     visibleRadiusMeters: mapSurface.visibleRadiusMeters()
                 )
-                do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                // Like Android's map poll, keep stationary foreground maps
+                // current when a crown is removed or moved by an admin.
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(60)) } catch { break }
+                    guard coordinator.isAvailable else { continue }
+                    await coordinator.refresh(
+                        camera: mapSurface.cameraSnapshot,
+                        visibleRadiusMeters: mapSurface.visibleRadiusMeters(),
+                        force: true
+                    )
+                }
                 coordinator.stop()
                 perkCoordinator?.stop()
             }
@@ -928,13 +945,16 @@ struct ShellView: View {
                 do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
                 while !Task.isCancelled {
                     if let camera = mapSurface.cameraSnapshot {
+                        let visibleRadius = mapSurface.visibleRadiusMeters() ?? defaultNearbyLiveRadiusMeters
+                        // Keep Android's discovery reach for waves even when the map is zoomed in.
+                        let radius = nearbyWaveUid == nil
+                            ? visibleRadius : max(visibleRadius, NearbyWaveRange.radiusMeters)
                         await nearbyLive.poll(
                             center: MapPoint(
                                 longitude: camera.longitude,
                                 latitude: camera.latitude
                             ),
-                            radiusMeters: mapSurface.visibleRadiusMeters()
-                                ?? defaultNearbyLiveRadiusMeters
+                            radiusMeters: radius
                         )
                         do {
                             try await Task.sleep(for: NearbyLiveCoordinator.discoveryInterval)
@@ -981,6 +1001,19 @@ struct ShellView: View {
                     }
                     applyConvoyFocus()
                 }
+            }
+            .eraseToAnyView()
+    }
+
+    private var mapOverlayWithWaves: AnyView {
+        mapOverlayContent
+            .task(id: nearbyWaveUid) {
+                nearbyWaveCoordinator?.dismissPop()
+                guard let uid = nearbyWaveUid, let nearbyWaveCoordinator else { return }
+                await nearbyWaveCoordinator.observeInbox(uid: uid)
+            }
+            .task(id: standaloneWaveUid) {
+                await nearbyWaveCoordinator?.observeOrigin(uid: standaloneWaveUid, repository: liveLocationRepository)
             }
             .eraseToAnyView()
     }
@@ -1236,6 +1269,18 @@ struct ShellView: View {
     }
 
     private var mapCommunicationControls: some View {
+        VStack(spacing: 0) {
+            if nearbyWaveUid != nil, groupDriveMapUids.isEmpty, let nearbyWaveCoordinator {
+                NearbyWaveButton(coordinator: nearbyWaveCoordinator, rangeAt: nearbyWaveRange(at:))
+            }
+            mapToolButtons
+        }
+        .font(.system(size: 20, weight: .semibold))
+        .padding(.horizontal, KccSpacing.s4)
+        .padding(.bottom, KccSpacing.s4)
+    }
+
+    private var mapToolButtons: some View {
         VStack(spacing: KccSpacing.s3) {
             if incidentMapCoordinator?.available == true {
                 Button {
@@ -1271,9 +1316,6 @@ struct ShellView: View {
                 CrownPerkMapControl(coordinator: coordinator)
             }
         }
-        .font(.system(size: 20, weight: .semibold))
-        .padding(.horizontal, KccSpacing.s4)
-        .padding(.bottom, KccSpacing.s4)
     }
 
     private var mapSearchButton: some View {
@@ -2283,6 +2325,8 @@ struct ShellView: View {
         convoyManagementCoordinator = nil
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
         nearbyLive.deactivate()
+        nearbyWaveCoordinator?.sharingEnded()
+        nearbyWaveCoordinator = nil
         groupDriveMapUids = []
         convoyReactionCoordinator?.sync(convoyId: nil)
         convoyReactionCoordinator = nil
@@ -2502,6 +2546,9 @@ struct ShellView: View {
         recordingRepository = FirebaseDriveRecordingRepository.createIfAvailable()
         #endif
         liveLocationRepository = liveRepository
+        if let repository = FirebaseNearbyWaveRepository.createIfAvailable() {
+            nearbyWaveCoordinator = NearbyWaveCoordinator(repository: repository)
+        }
         let liveLocation = LiveLocationCoordinator(
             repository: liveRepository,
             provider: liveProvider,
@@ -2855,6 +2902,33 @@ struct ShellView: View {
 
     private var nearbyLiveExcludedUids: Set<String> {
         Set(convoyAwarenessTargetConvoy?.livePositionUids ?? [])
+    }
+
+    private var nearbyWaveUid: String? {
+        guard nearbyLiveShouldRun, liveLocationCoordinator?.isSharing == true,
+              nearbyWaveCoordinator != nil else { return nil }
+        return signedInUid
+    }
+
+    private var standaloneWaveUid: String? {
+        guard let uid = nearbyWaveUid, groupDriveMapUids.isEmpty,
+              !nearbyLiveExcludedUids.contains(uid) else { return nil }
+        return uid
+    }
+
+    private func nearbyWaveRange(at now: Date) -> NearbyWaveRange? {
+        guard let uid = nearbyWaveUid, groupDriveMapUids.isEmpty,
+              let discovery = nearbyLive.discoverySessions else { return nil }
+        // Reuse the convoy's own RTDB marker when that listener is already active.
+        let convoyUids = nearbyLiveExcludedUids
+        let origin = convoyUids.contains(uid)
+            ? convoyAwareness.ownPoint(now: now) : nearbyWaveCoordinator?.ownPoint(uid: uid, now: now)
+        guard let origin else { return nil }
+        return NearbyWaveRange(
+            origin: origin,
+            markers: nearbyLive.visibleMarkers(at: now),
+            discovery: discovery.filter { $0.uid != uid && !convoyUids.contains($0.uid) }
+        )
     }
 
     private var nearbyLiveTaskKey: String {
