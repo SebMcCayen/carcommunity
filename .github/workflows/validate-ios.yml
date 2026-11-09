@@ -472,7 +472,7 @@ jobs:
         timeout-minutes: 15
         run: xcrun simctl runtime dyld_shared_cache update --all
       - name: Download successful same-commit test build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.ios-build-debug.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products
@@ -532,7 +532,7 @@ jobs:
         timeout-minutes: 15
         run: xcrun simctl runtime dyld_shared_cache update --all
       - name: Download successful same-commit test build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.ios-build-debug.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products
@@ -593,7 +593,7 @@ jobs:
         timeout-minutes: 15
         run: xcrun simctl runtime dyld_shared_cache update --all
       - name: Download successful same-commit test build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.ios-build-release.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products
@@ -654,7 +654,7 @@ jobs:
         timeout-minutes: 15
         run: xcrun simctl runtime dyld_shared_cache update --all
       - name: Download successful same-commit test build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.ios-build-native.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products
