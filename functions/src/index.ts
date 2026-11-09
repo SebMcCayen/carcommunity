@@ -115,6 +115,13 @@ import {
 } from './crownHunt/spawnAreas';
 import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
 import { spawnDiagnostics } from './crownHunt/spawnDiagnostics';
+import {
+  reportPlacement,
+  listPlacementCases,
+  getPlacementCase,
+  listPlacementDestinations,
+  resolvePlacementCase,
+} from './crownHunt/placement-reports';
 import { onSpawnAreaWrittenIngestPois, refreshAreaPois } from './crownHunt/poiIngestion';
 import { reingestSpawnAreaPois } from './crownHunt/reingestAreaPois';
 import {
@@ -670,6 +677,11 @@ export const crownHunt = {
   // (next-run countdown, candidate cells, blockers). Deployed as
   // crownHunt-spawnDiagnostics (functions/src/crownHunt/spawnDiagnostics.ts).
   spawnDiagnostics,
+  reportPlacement,
+  listPlacementCases,
+  getPlacementCase,
+  listPlacementDestinations,
+  resolvePlacementCase,
   spawnCrowns,
   sweepSpawns,
   // OpenStreetMap safe-stop POI ingestion for AREA spawning. The area spawn pass

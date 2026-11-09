@@ -79,7 +79,9 @@ import {
   CROWN_SPAWN_FLAG_KEY,
   activityScore,
   buildCrownSpawnFields,
+  crownCellBounds,
   crownExpiresAt,
+  isFarEnoughFromAll,
   neighbourCrownCells,
   pickCrownRarity,
   targetCrownCount,
@@ -94,6 +96,12 @@ import {
 } from './crown-area-core';
 import { POI_JITTER_METERS, samplePoiPlacement, type NormalizedPoi } from './osm-poi-core';
 import { withServerErrorReporting } from '../errors/serverErrors';
+import {
+  automaticPlacementMoves,
+  isPlacementBlocked,
+  readPlacementBlocks,
+  type AutomaticPlacementMove,
+} from './placement-memory';
 
 // ---------------------------------------------------------------------------
 // Bounds
@@ -443,7 +451,6 @@ export async function runCrownAreaSpawnPass(
       continue;
     }
 
-    const accept = pointInShapeAccept(shape);
     const startOffset = ((nextCellOffset % cells.length) + cells.length) % cells.length;
     let processed = 0;
 
@@ -486,69 +493,100 @@ export async function runCrownAreaSpawnPass(
         continue;
       }
 
-      const neighbourhood = await db
+      const nearby = db
         .collection('crownSpawns')
         .where('cellKey', 'in', neighbours)
         .where('status', '==', 'live')
         .where('expiresAt', '>', nowTs)
-        .limit(MAX_NEIGHBOURHOOD_CROWNS)
-        .get();
-
-      const occupied: CrownPosition[] = [];
-      let liveInCell = 0;
-      for (const doc of neighbourhood.docs) {
-        const data = doc.data();
-        if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-          occupied.push({ latitude: data.latitude, longitude: data.longitude });
-        }
-        if (data.cellKey === cellKey) liveInCell += 1;
+        .limit(MAX_NEIGHBOURHOOD_CROWNS);
+      const neighbourhood = await nearby.get();
+      if (neighbourhood.docs.filter((doc) => doc.get('cellKey') === cellKey).length >= target) {
+        continue;
       }
 
-      // STAGGERING: never create a cell's whole deficit in one pass. Capped at
-      // MAX_NEW_CROWNS_PER_CELL_PER_PASS so an empty cell fills over successive
-      // passes instead of dumping every crown into one snapshot the client then
-      // pops onto the map simultaneously. Still bounded by the target, the
-      // per-cell density cap (via `target`), and the run's remaining write
-      // budget — this only ever LOWERS the count, never raises it, so the cell
-      // still converges to its target, just across a few ticks.
-      const deficit = Math.min(
-        target - liveInCell,
-        limits.maxSpawns - result.spawned,
-        MAX_NEW_CROWNS_PER_CELL_PER_PASS,
-      );
-      if (deficit <= 0) continue;
-
-      // ONLY NOW load this cell's cached safe-stop POIs — after we know there is a
-      // real deficit to fill. A cell already at target (the common case on a
-      // steady-state tick) reaches `continue` above and reads ZERO POI docs; the
-      // read is bounded to MAX_POIS_PER_CELL_READ. If the cell has no POIs (its
-      // area does, just not here) there is nothing to anchor to — skip it.
+      // At-target cells still read neither POIs nor placement memory.
       const cellPois = await loadCellPois(areaDoc.id, cellKey);
       if (cellPois.length === 0) continue;
-
-      const pending: { ref: FirebaseFirestore.DocumentReference; data: DocumentData }[] = [];
-      for (let i = 0; i < deficit; i += 1) {
-        // POI-ANCHORED: place at a cached safe-stop POI inside this cell (already
-        // in-shape at ingestion), jittered ≤ ~5 m, that clears 150 m from every
-        // live crown. Null when every in-cell POI is too close to an existing
-        // crown — leave the cell short, the next pass tries again. `accept`
-        // re-checks the shape after jitter; `cellKey` keeps a jittered point in
-        // its own cell (falling back to the exact POI point otherwise).
-        const position = samplePoiPlacement(cellPois, occupied, rng, {
-          cellKey,
-          accept,
-          jitterMeters: POI_JITTER_METERS,
-        });
-        if (!position) {
-          result.separationOrShapeRejections += 1;
-          break;
+      const bounds = crownCellBounds(cellKey)!;
+      const budget = Math.min(limits.maxSpawns - result.spawned, MAX_NEW_CROWNS_PER_CELL_PER_PASS);
+      const committed = await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(areaDoc.ref);
+        const freshShape = fresh.get('shape') as CrownSpawnAreaShape | undefined;
+        if (
+          !freshShape ||
+          fresh.get('active') !== true ||
+          fresh.get('safeAreaConfirmed') !== true
+        ) {
+          return null;
         }
-        occupied.push(position);
 
-        const rarity = pickCrownRarity(rng());
-        pending.push({
-          ref: db.collection('crownSpawns').doc(),
-          data: {
+        // Read the placement memory and live neighbours in the same transaction
+        // that writes the crowns. A concurrent moderation decision can't leave
+        // a newly spawned crown at the blocked spot.
+        const [live, blocks, moves] = await Promise.all([
+          tx.get(nearby),
+          readPlacementBlocks(bounds.minLat, bounds.maxLat, tx),
+          tx.get(automaticPlacementMoves.where('areaCell', '==', `${areaDoc.id}/${cellKey}`)),
+        ]);
+        const deficit = Math.min(
+          target - live.docs.filter((doc) => doc.get('cellKey') === cellKey).length,
+          budget,
+        );
+        if (deficit <= 0) return { count: 0, rejected: false };
+
+        const accept = pointInShapeAccept(freshShape);
+        const occupied: CrownPosition[] = live.docs.flatMap((doc) => {
+          const latitude = doc.get('latitude');
+          const longitude = doc.get('longitude');
+          return typeof latitude === 'number' && typeof longitude === 'number'
+            ? [{ latitude, longitude }]
+            : [];
+        });
+        const pending: CrownPosition[] = [];
+        const usedMoves: FirebaseFirestore.DocumentReference[] = [];
+        const reserved: CrownPosition[] = [];
+        const poiCollection = db
+          .collection('crownSpawnAreaPois')
+          .doc(areaDoc.id)
+          .collection('pois');
+        for (const move of moves.docs) {
+          const data = move.data() as AutomaticPlacementMove;
+          if (!accept(data) || isPlacementBlocked(data, blocks)) continue;
+          const poi = await tx.get(poiCollection.doc(data.poiId));
+          if (poi.get('lat') !== data.latitude || poi.get('lon') !== data.longitude) continue;
+          reserved.push(data);
+          if (pending.length >= deficit || !isFarEnoughFromAll(data, occupied)) continue;
+
+          const previous = await tx.get(db.collection('crownSpawns').doc(data.sourceSpawnId));
+          const expires = previous.get('expiresAt') as Timestamp | undefined;
+          if (previous.get('status') === 'live' && expires && expires.toMillis() > now.getTime())
+            continue;
+          pending.push(data);
+          occupied.push(data);
+          usedMoves.push(move.ref);
+        }
+
+        // Test both the original POI and the jittered candidate. A blocked
+        // anchor must never come back because jitter lands just outside its disk.
+        const eligiblePois = cellPois.filter(
+          ({ lat, lon }) =>
+            !isPlacementBlocked({ latitude: lat, longitude: lon }, blocks) &&
+            !reserved.some((point) => point.latitude === lat && point.longitude === lon),
+        );
+        while (pending.length < deficit) {
+          const position = samplePoiPlacement(eligiblePois, occupied, rng, {
+            cellKey,
+            accept: (point) => accept(point) && !isPlacementBlocked(point, blocks),
+            jitterMeters: POI_JITTER_METERS,
+          });
+          if (!position) break;
+          pending.push(position);
+          occupied.push(position);
+        }
+
+        for (const position of pending) {
+          const rarity = pickCrownRarity(rng());
+          tx.create(db.collection('crownSpawns').doc(), {
             ...buildCrownSpawnFields({
               cellKey,
               position,
@@ -559,29 +597,17 @@ export async function runCrownAreaSpawnPass(
             createdAt: FieldValue.serverTimestamp(),
             expiresAt: Timestamp.fromDate(crownExpiresAt(rarity, now)),
             claimedAt: null,
-          },
-        });
-      }
-
-      if (pending.length > 0) {
-        // Re-check the AREA's active+safe flags at write time, transactionally —
-        // the same window the cell path closes: a deactivation landing mid-pass
-        // drains the area's crowns, and this transaction either commits before
-        // that drain (which then deletes these) or re-reads active:false and
-        // writes nothing.
-        const committed = await db.runTransaction(async (tx) => {
-          const fresh = await tx.get(areaDoc.ref);
-          if (fresh.get('active') !== true || fresh.get('safeAreaConfirmed') !== true) return 0;
-          for (const crown of pending) tx.set(crown.ref, crown.data);
-          return pending.length;
-        });
-        if (committed === 0) {
-          result.areasDeactivatedMidPass += 1;
-          logger.warn('Crown area spawn skipped: area deactivated mid-pass', {
-            areaId: areaDoc.id,
           });
         }
-        result.spawned += committed;
+        for (const move of usedMoves) tx.delete(move);
+        return { count: pending.length, rejected: pending.length < deficit };
+      });
+      if (committed === null) {
+        result.areasDeactivatedMidPass += 1;
+        logger.warn('Crown area spawn skipped: area deactivated mid-pass', { areaId: areaDoc.id });
+      } else {
+        result.spawned += committed.count;
+        if (committed.rejected) result.separationOrShapeRejections += 1;
       }
     }
 

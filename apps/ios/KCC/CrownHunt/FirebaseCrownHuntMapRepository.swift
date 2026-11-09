@@ -13,6 +13,34 @@ final class FirebaseCrownHuntMapRepository: CrownHuntMapRepository, @unchecked S
         iso8601.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     }
 
+    func reportPlacement(
+        target: CrownMapTarget,
+        reason: CrownPlacementReportReason,
+        comment: String
+    ) async throws {
+        let crownId: String
+        let source: String
+        switch target {
+        case .point(let point):
+            crownId = point.id
+            source = "hand_placed"
+        case .spawn(let spawn):
+            crownId = spawn.id
+            source = "automatic"
+        }
+        let raw = try await functions.call("crownHunt-reportPlacement", payload: [
+            "crownId": crownId,
+            "source": source,
+            "latitude": target.latitude,
+            "longitude": target.longitude,
+            "reason": reason.rawValue,
+            "comment": comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        ])
+        guard let result = raw as? [String: Any], result["reported"] as? Bool == true else {
+            throw CrownMapRepositoryError.invalidResponse
+        }
+    }
+
     func activePoints() async throws -> [CrownMapPoint] {
         let snapshot = try await firestore.collection("crownHuntPoints")
             .whereField("status", isEqualTo: CrownHuntPointStatus.active.wire)

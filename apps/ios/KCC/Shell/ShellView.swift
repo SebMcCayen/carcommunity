@@ -868,7 +868,17 @@ struct ShellView: View {
                     camera: mapSurface.cameraSnapshot,
                     visibleRadiusMeters: mapSurface.visibleRadiusMeters()
                 )
-                do { try await Task.sleep(for: .seconds(86_400)) } catch {}
+                // Like Android's map poll, keep stationary foreground maps
+                // current when a crown is removed or moved by an admin.
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(60)) } catch { break }
+                    guard coordinator.isAvailable else { continue }
+                    await coordinator.refresh(
+                        camera: mapSurface.cameraSnapshot,
+                        visibleRadiusMeters: mapSurface.visibleRadiusMeters(),
+                        force: true
+                    )
+                }
                 coordinator.stop()
                 perkCoordinator?.stop()
             }
