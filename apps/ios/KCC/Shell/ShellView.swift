@@ -295,6 +295,11 @@ struct ShellView: View {
                     .id(destination)
                     .zIndex(1)
             }
+            if let liveLocationCoordinator, liveLocationCoordinator.wired {
+                StationaryLivePrompt(coordinator: liveLocationCoordinator) { promptID in
+                    stopSingleSession(expectedStationaryPromptID: promptID)
+                }
+            }
         }
         .eraseToAnyView()
     }
@@ -636,20 +641,6 @@ struct ShellView: View {
             }
         } message: {
             Text("map.locationPermissionBody")
-        }
-        .alert(
-            "liveLocation.stationaryPromptTitle",
-            isPresented: stationaryPromptIsPresented,
-            presenting: liveLocationCoordinator?.stationaryPromptID
-        ) { promptID in
-            Button("liveLocation.stillSharingAction") {
-                liveLocationCoordinator?.confirmStillSharing(promptID: promptID)
-            }
-            Button("liveLocation.stop", role: .destructive) {
-                stopSingleSession(expectedStationaryPromptID: promptID)
-            }
-        } message: { _ in
-            Text("liveLocation.stationaryPromptBody")
         }
         .alert("liveLocation.statusError", isPresented: $sessionActionError) {
             Button("notifications.errorDismiss", role: .cancel) {}
@@ -2157,13 +2148,6 @@ struct ShellView: View {
                 coordinator: liveLocationCoordinator
             )
         }
-    }
-
-    private var stationaryPromptIsPresented: Binding<Bool> {
-        Binding(
-            get: { scenePhase == .active && liveLocationCoordinator?.stationaryPromptID != nil },
-            set: { _ in }
-        )
     }
 
     private func stopSingleSession(expectedStationaryPromptID: UUID? = nil) {
