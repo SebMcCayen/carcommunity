@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+enum MapBasemap: String {
+    case standard
+    case satellite
+}
+
 /// Pure resting-zoom policy shared by persistence, the layers slider and the
 /// renderer. Values match Android's `MapZoomPreference` byte for byte.
 enum MapBrowsingZoom {
@@ -76,6 +81,7 @@ final class MapLayerPreferences {
         static let traffic = "map.layers.traffic"
         static let trafficAlerts = "map.layers.trafficAlerts"
         static let mode = "map.layers.mode"
+        static let basemap = "map.layers.basemap"
         static let threeD = "map.layers.3d"
         static let zoom = "map.layers.browsingZoom"
         static let incidentMaxAge = "map.layers.incidentMaxAge"
@@ -87,6 +93,7 @@ final class MapLayerPreferences {
     private(set) var trafficAlertsEnabled: Bool
     /// Nil means follow the current system/app appearance.
     private(set) var mapModeOverride: MapMode?
+    private(set) var basemap: MapBasemap
     private(set) var is3D: Bool
     private(set) var browsingZoom: Double
     private(set) var incidentMaxAge: IncidentAgeOption
@@ -99,6 +106,7 @@ final class MapLayerPreferences {
         trafficAlertsEnabled = defaults.object(forKey: Key.trafficAlerts) as? Bool
             ?? Self.trafficAlertsDefault
         mapModeOverride = Self.decodeMapMode(defaults.string(forKey: Key.mode))
+        basemap = defaults.string(forKey: Key.basemap).flatMap(MapBasemap.init(rawValue:)) ?? .standard
         is3D = defaults.object(forKey: Key.threeD) as? Bool
             ?? Self.threeDDefault
         browsingZoom = MapBrowsingZoom.fromStored(
@@ -156,6 +164,12 @@ final class MapLayerPreferences {
         guard enabled != is3D else { return }
         is3D = enabled
         defaults.set(enabled, forKey: Key.threeD)
+    }
+
+    func setBasemap(_ basemap: MapBasemap) {
+        guard self.basemap != basemap else { return }
+        self.basemap = basemap
+        defaults.set(basemap.rawValue, forKey: Key.basemap)
     }
 
     func setBrowsingZoom(_ zoom: Double) {

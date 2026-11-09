@@ -311,6 +311,7 @@ struct ShellView: View {
             MapHomeView(
                 surface: mapSurface,
                 locationProvider: locationProvider,
+                basemap: mapLayerPreferences.basemap,
                 bottomClearance: mapHomeChromeVisible ? mapDockHeight : 0,
                 featureHealthReporter: FeatureHealthReporter.whenAuthenticated(
                     diagnostics.featureHealthReporter,
@@ -1243,6 +1244,7 @@ struct ShellView: View {
             }
 
             MapLayersButton(isPresented: $showMapLayers, isActive:
+                mapLayerPreferences.basemap == .satellite ||
                 mapLayerPreferences.trafficEnabled || !mapLayerPreferences.is3D ||
                 (mapLayerPreferences.mapModeOverride != nil &&
                  mapLayerPreferences.mapModeOverride != (colorScheme == .dark ? .night : .day)))

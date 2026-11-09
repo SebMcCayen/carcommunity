@@ -39,6 +39,8 @@ struct MapLayersSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s4) {
+                    basemapControls
+                    Divider()
                     layerRow("shell.layersTraffic", help: "shell.layersTrafficHelp",
                              icon: "car", binding: trafficBinding, id: "shell.layersTraffic")
                     Divider()
@@ -66,9 +68,11 @@ struct MapLayersSheet: View {
                             .font(.subheadline)
                             .foregroundStyle(KccTheme.secondary)
                     }
-                    Divider()
-                    layerRow("shell.layers3d", help: "shell.layers3dHelp",
-                             icon: "cube", binding: threeDBinding, id: "shell.layers3d")
+                    if preferences.basemap == .standard {
+                        Divider()
+                        layerRow("shell.layers3d", help: "shell.layers3dHelp",
+                                 icon: "cube", binding: threeDBinding, id: "shell.layers3d")
+                    }
                     Divider()
                     appearanceControls
                     Button { focusExpanded.toggle() } label: {
@@ -129,6 +133,24 @@ struct MapLayersSheet: View {
                 onTrafficChanged(enabled)
             }
         )
+    }
+
+    private var basemapControls: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s2) {
+            Text("shell.layersBasemapTitle")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            Picker("shell.layersBasemapTitle", selection: Binding(
+                get: { preferences.basemap },
+                set: { preferences.setBasemap($0) }
+            )) {
+                Text("shell.layersBasemapStandard").tag(MapBasemap.standard)
+                Text("shell.layersBasemapSatellite").tag(MapBasemap.satellite)
+            }
+            .pickerStyle(.segmented)
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("shell.layersBasemap")
+        }
     }
 
     private var trafficAlertsBinding: Binding<Bool> {

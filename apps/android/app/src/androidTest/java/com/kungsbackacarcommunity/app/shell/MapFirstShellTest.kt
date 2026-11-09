@@ -5,6 +5,8 @@ import android.content.ContentValues
 import android.graphics.Bitmap
 import android.os.Build
 import android.provider.MediaStore
+import android.view.View
+import android.view.ViewGroup
 import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.runtime.getValue
@@ -15,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
@@ -40,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.children
 import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
@@ -61,6 +65,13 @@ import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import com.kungsbackacarcommunity.app.update.AppUpdateAvailability
 import com.kungsbackacarcommunity.app.update.AppUpdateSource
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
+import com.mapbox.maps.MapView
+import com.mapbox.maps.RenderedQueryGeometry
+import com.mapbox.maps.RenderedQueryOptions
+import com.mapbox.maps.ScreenBox
+import com.mapbox.maps.ScreenCoordinate
+import com.mapbox.maps.Style
+import com.mapbox.maps.dsl.cameraOptions
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import kotlinx.coroutines.flow.Flow
@@ -68,10 +79,12 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Compose UI tests for the map-first, 5-tab shell. Rendered in the no-Firebase
@@ -717,9 +730,9 @@ class MapFirstShellTest {
         // toggles.
         composeTestRule.onNodeWithText(str(R.string.shell_layersIncidents)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layersTraffic)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.shell_layersAppearanceDay)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.shell_layersAppearanceNight)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layers3d)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_layersAppearanceDay)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_layersAppearanceNight)).assertIsDisplayed()
         // ...and the Kronjakt participation toggle. assertExists rather than
         // scroll-into-view so the header's close button (asserted next) stays put:
         // the popup is a plain verticalScroll Column, so every row is composed.
@@ -727,6 +740,101 @@ class MapFirstShellTest {
         // Closing dismisses the popup.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersClose)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun basemapSelectionKeepsRouteAndMarkersOnTheSurface() {
+        val destination = MapPoint(12.07, 57.49)
+        val route = MapRouteOverlay(destination, listOf(MapPoint(12.06, 57.48), destination))
+        val markers = listOf(MapEventMarker("meetup", 12.065, 57.485))
+        val surface = StubMapSurface().apply {
+            setRouteOverlay(route)
+            setEventMarkers(markers)
+        }
+        setMapHome(trafikverketDataShown = false, surface = surface)
+
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
+        val standard = composeTestRule.onNodeWithTag("map_basemap_standard").assertIsSelected()
+        val satellite = composeTestRule.onNodeWithTag("map_basemap_satellite")
+        for ((option, basemap) in listOf(satellite to MapBasemap.Satellite, standard to MapBasemap.Standard)) {
+            option.performClick().assertIsSelected()
+            composeTestRule.runOnIdle {
+                assertEquals(basemap, surface.basemap.value)
+                assertEquals(route, surface.routeOverlay.value)
+                assertEquals(markers, surface.eventMarkers.value)
+            }
+        }
+    }
+
+    @Test
+    fun mapboxRendersRouteAndEventAfterEachBasemapChange() {
+        assumeTrue("Requires a Mapbox runtime token", str(R.string.mapbox_access_token).isNotBlank())
+        val destination = MapPoint(12.074, 57.49)
+        val surface = MapboxMapSurface().apply {
+            setRouteOverlay(MapRouteOverlay(destination, listOf(MapPoint(12.066, 57.486), destination)))
+            setEventMarkers(listOf(MapEventMarker("meetup", 12.07, 57.488)))
+        }
+        setMapHome(trafikverketDataShown = false, surface = surface)
+        val view = composeTestRule.runOnIdle {
+            checkNotNull(findMapView(composeTestRule.activity.window.decorView))
+        }
+        awaitRenderedOverlays(view, Style.STANDARD)
+        val zoom = composeTestRule.runOnIdle {
+            val map = view.mapboxMap
+            val zoom = map.cameraState.zoom - 0.25
+            map.setCamera(cameraOptions { zoom(zoom) })
+            zoom
+        }
+        for ((tag, style) in listOf(
+            "map_basemap_satellite" to Style.STANDARD_SATELLITE,
+            "map_basemap_standard" to Style.STANDARD,
+        )) {
+            composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
+            composeTestRule.onNodeWithTag(tag).performClick()
+            composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersClose)).performClick()
+            awaitRenderedOverlays(view, style)
+            composeTestRule.runOnIdle { assertEquals(zoom, view.mapboxMap.cameraState.zoom, 0.01) }
+        }
+    }
+
+    private fun findMapView(view: View): MapView? = when (view) {
+        is MapView -> view
+        is ViewGroup -> view.children.firstNotNullOfOrNull(::findMapView)
+        else -> null
+    }
+
+    private fun awaitRenderedOverlays(view: MapView, styleUri: String) {
+        val rendered = AtomicBoolean()
+        val queryPending = AtomicBoolean()
+        val routePrefix = "mapbox-android-polylineAnnotation-layer-"
+        val markerPrefix = "mapbox-android-pointAnnotation-layer-"
+        composeTestRule.waitUntil(timeoutMillis = 45_000) {
+            if (!rendered.get() && queryPending.compareAndSet(false, true)) {
+                composeTestRule.runOnIdle {
+                    val map = view.mapboxMap
+                    val style = map.style
+                    if (style?.styleURI != styleUri) {
+                        queryPending.set(false)
+                        return@runOnIdle
+                    }
+                    val layers = style.styleLayers.map { it.id }.filter {
+                        it.startsWith(routePrefix) || it.startsWith(markerPrefix)
+                    }
+                    val bounds = ScreenBox(
+                        ScreenCoordinate(0.0, 0.0),
+                        ScreenCoordinate(view.width.toDouble(), view.height.toDouble()),
+                    )
+                    map.queryRenderedFeatures(
+                        RenderedQueryGeometry.valueOf(bounds), RenderedQueryOptions(layers, null),
+                    ) { result ->
+                        val hits = result.value.orEmpty().flatMap { it.layers }
+                        rendered.set(hits.any { it.startsWith(routePrefix) } && hits.any { it.startsWith(markerPrefix) })
+                        queryPending.set(false)
+                    }
+                }
+            }
+            rendered.get()
+        }
     }
 
     /**

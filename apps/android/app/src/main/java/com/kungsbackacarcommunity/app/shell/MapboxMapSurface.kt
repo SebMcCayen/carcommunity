@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
@@ -44,6 +45,7 @@ import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.ClickInteraction
 import com.mapbox.maps.EdgeInsets
+import com.mapbox.maps.MapInitOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.MapboxMap
 import com.mapbox.maps.RenderModeType
@@ -139,7 +141,10 @@ import kotlin.math.roundToInt
  * that has not finished loading, or an absent location permission degrades to a
  * blank/partial map rather than crashing.
  */
-class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.app.map.MapZoomPreference.DEFAULT_ZOOM) : MapSurface {
+class MapboxMapSurface(
+    initialBrowsingZoom: Double = com.kungsbackacarcommunity.app.map.MapZoomPreference.DEFAULT_ZOOM,
+    initialBasemap: MapBasemap = MapBasemap.Standard,
+) : MapSurface {
     private val loadStateFlow = MutableStateFlow(MapLoadState.Loading)
     override val loadState: StateFlow<MapLoadState> = loadStateFlow.asStateFlow()
 
@@ -153,6 +158,15 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
     // the layers popup flips it to Night via the style's `lightPreset` config.
     private val mapModeFlow = MutableStateFlow(MapMode.Day)
     override val mapMode: StateFlow<MapMode> = mapModeFlow.asStateFlow()
+
+    private val basemapFlow = MutableStateFlow(initialBasemap)
+    override val basemap: StateFlow<MapBasemap> = basemapFlow.asStateFlow()
+
+    private val MapBasemap.styleUri: String
+        get() = when (this) {
+            MapBasemap.Standard -> Style.STANDARD
+            MapBasemap.Satellite -> Style.STANDARD_SATELLITE
+        }
 
     // Camera opens tilted (3D) — see [pitch] below, which defaults to
     // DEFAULT_PITCH — so the flag starts true and the popup flips it to 2D.
@@ -528,6 +542,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
     // onRelease alongside the gesture/camera listeners.
     private var mapLoadingErrorSubscription: Cancelable? = null
     private var mapLoadedSubscription: Cancelable? = null
+    private var styleLoadedSubscription: Cancelable? = null
     private var renderFrameSubscription: Cancelable? = null
 
     /**
@@ -614,6 +629,12 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
         runCatching {
             mapViewRef?.mapboxMap?.style?.let { applyLightPreset(it, mode) }
         }
+    }
+
+    override fun setBasemap(basemap: MapBasemap) {
+        if (basemapFlow.value == basemap) return
+        basemapFlow.value = basemap
+        mapViewRef?.mapboxMap?.loadStyle(basemap.styleUri)
     }
 
     override fun set3dEnabled(enabled: Boolean) {
@@ -1732,7 +1753,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                     MapboxOptions.accessToken = token
                 }
                 appContext = context.applicationContext
-                MapView(context).apply {
+                MapView(context, MapInitOptions(context, styleUri = null)).apply {
                     mapViewRef = this
                     // The surface now genuinely exists and is on screen — from
                     // here on, "the map is not rendering" is a statement worth
@@ -1930,7 +1951,9 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                             pitch(this@MapboxMapSurface.pitch)
                         },
                     )
-                    mapboxMap.loadStyle(Style.STANDARD) { style ->
+                    styleLoadedSubscription = mapboxMap.subscribeStyleLoaded {
+                        val style = mapboxMap.style ?: return@subscribeStyleLoaded
+                        if (style.styleURI != basemapFlow.value.styleUri) return@subscribeStyleLoaded
                         loadStateFlow.value = MapLoadState.Loaded
                         // Apply the current day/night light preset (read the flow
                         // directly — this runs async at style-load, not at
@@ -1947,6 +1970,25 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                         // the night congestion colours without waiting for a toggle.
                         runCatching { addTrafficLayer(style, mapModeFlow.value) }
                         runCatching { applyTrafficVisibility(style, trafficFlow.value) }
+                        // Annotation layers persist across style loads, but the
+                        // custom images they reference belong to the old style.
+                        // Replace the managers before re-uploading the icons and
+                        // redrawing the latest overlays in their original order.
+                        listOfNotNull(
+                            crownMarkerManager,
+                            routeLineManager,
+                            destMarkerManager,
+                            incidentMarkerManager,
+                            eventMarkerManager,
+                            billboardMarkerManager,
+                        ).forEach { annotations.removeAnnotationManager(it) }
+                        crownMarkerManager = null
+                        routeLineManager = null
+                        destMarkerManager = null
+                        incidentMarkerManager = null
+                        eventMarkerManager = null
+                        billboardMarkerManager = null
+                        crownManagerReadyFlow.value = false
                         // ORDER MATTERS: the crown manager is created FIRST, before
                         // the route/destination and incident managers below, so the
                         // crown layer is the LOWEST annotation layer and never draws
@@ -1987,11 +2029,14 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                             // current crown from scratch (a spawn-in, not a jump).
                             crownAnnotationsById.clear()
                             crownRenderedImageById.clear()
+                            crownIdsByAnnotation.clear()
+                            crownMarkerById.clear()
                             crownAnimator.clear()
                             // Signal the animation driver (Content) that the manager
                             // now exists — it reacts by (re)drawing the current
                             // crowns and running the spawn/despawn animations.
                             crownManagerReadyFlow.value = true
+                            crownRedrawTickFlow.value += 1
                         }
                         // Route line + destination marker managers, created once
                         // the style is ready. Drawn from the current flow value
@@ -2000,11 +2045,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                         runCatching {
                             routeLineManager = annotations.createPolylineAnnotationManager()
                             destMarkerManager = annotations.createCircleAnnotationManager()
-                            // Fresh managers ⇒ any previously-drawn annotations are
-                            // gone, so drop the cache to force a redraw of the
-                            // current overlay against the new managers.
-                            lastAppliedOverlay = null
-                            applyRouteOverlayIfChanged(this, routeOverlayFlow.value)
+                            applyRouteOverlayIfChanged(this, routeOverlayFlow.value, styleChanged = true)
                         }
                         // Incident markers manager (the shared incidents layer),
                         // created once the style is ready. Drawn from the current
@@ -2160,10 +2201,11 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                                 locationPuck =
                                     createDefault2DPuck(withBearing = puckBearingArrowShown)
                             }
-                            location.addOnIndicatorPositionChangedListener(positionListener)
-                            location.addOnIndicatorBearingChangedListener(bearingListener)
                         }
                     }
+                    location.addOnIndicatorPositionChangedListener(positionListener)
+                    location.addOnIndicatorBearingChangedListener(bearingListener)
+                    mapboxMap.loadStyle(basemapFlow.value.styleUri)
                 }
             },
             update = { mapView ->
@@ -2257,9 +2299,11 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
                 // a new one is built (which resets surfaceShown/everRendered).
                 runCatching { mapLoadingErrorSubscription?.cancel() }
                 runCatching { mapLoadedSubscription?.cancel() }
+                runCatching { styleLoadedSubscription?.cancel() }
                 runCatching { renderFrameSubscription?.cancel() }
                 mapLoadingErrorSubscription = null
                 mapLoadedSubscription = null
+                styleLoadedSubscription = null
                 renderFrameSubscription = null
                 surfaceShown = false
                 longClickListener?.let { l ->
@@ -2377,13 +2421,18 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
      * caching the new value so unrelated recompositions don't re-clear/redraw the
      * route or re-fit the camera (which would flicker the line and snap the camera
      * back while the user is looking at the route). [MapRouteOverlay] is a data
-     * class, so `==` compares the destination + path by value. The cache is reset
-     * to null wherever the annotation managers are (re)created or torn down, so a
-     * cleared-then-recreated map always redraws rather than trusting a stale hit.
+     * class, so `==` compares the destination + path by value. A style change
+     * forces a redraw, but an unchanged route keeps its camera framing.
      */
-    private fun applyRouteOverlayIfChanged(mapView: MapView, overlay: MapRouteOverlay?) {
-        if (overlay == lastAppliedOverlay) return
-        applyRouteOverlay(mapView, overlay)
+    private fun applyRouteOverlayIfChanged(
+        mapView: MapView,
+        overlay: MapRouteOverlay?,
+        styleChanged: Boolean = false,
+    ) {
+        if (routeLineManager == null || destMarkerManager == null) return
+        val routeChanged = overlay != lastAppliedOverlay
+        if (!styleChanged && !routeChanged) return
+        applyRouteOverlay(mapView, overlay, fitCamera = routeChanged)
         lastAppliedOverlay = overlay
     }
 
@@ -2880,7 +2929,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
      * verified on device; the fit falls back to centring on the destination if
      * the SDK call throws.
      */
-    private fun applyRouteOverlay(mapView: MapView, overlay: MapRouteOverlay?) {
+    private fun applyRouteOverlay(mapView: MapView, overlay: MapRouteOverlay?, fitCamera: Boolean) {
         val lineManager = routeLineManager
         val markerManager = destMarkerManager
         runCatching { lineManager?.deleteAll() }
@@ -2911,6 +2960,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
             )
         }
 
+        if (!fitCamera) return
         // Fit the camera to the whole route (origin→destination), falling back
         // to centring on the destination if the fit call is unavailable.
         val fitPoints = if (linePoints.size >= 2) linePoints else listOf(dest)
@@ -3273,6 +3323,7 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
          * runCatching so a non-Standard/unloaded import degrades to a no-op.
          */
         fun apply3dObjects(style: Style, enabled: Boolean) {
+            if (style.styleURI != Style.STANDARD) return
             style.setStyleImportConfigProperty(STANDARD_IMPORT_ID, SHOW_3D_OBJECTS_CONFIG, Value(enabled))
         }
 
@@ -3536,11 +3587,17 @@ class MapboxMapSurface(initialBrowsingZoom: Double = com.kungsbackacarcommunity.
 @Composable
 fun rememberMapSurface(): MapSurface {
     val token = stringResource(R.string.mapbox_access_token)
+    val context = LocalContext.current
     // Seed synchronously, before AndroidView's factory sets its first camera.
     // Do not key remember on zoom: changing a preference must not recreate the map.
     val initialBrowsingZoom = com.kungsbackacarcommunity.app.map.LocalMapZoomController.current.browsingZoom
     return remember(token) {
-        if (token.isNotBlank()) MapboxMapSurface(initialBrowsingZoom) else StubMapSurface()
+        val basemap = MapLayersPreferenceStore(context).readBasemap()
+        if (token.isNotBlank()) {
+            MapboxMapSurface(initialBrowsingZoom, basemap)
+        } else {
+            StubMapSurface(initialBasemap = basemap)
+        }
     }
 }
 

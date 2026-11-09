@@ -1796,6 +1796,9 @@
     <string name="shell_layersCrownHunt">Crown Hunt</string>
     <string name="shell_layersCrownHuntHelp">Show the Crown Hunt game — crowns to collect on the map. Turn off to hide it.</string>
     <string name="shell_layersAppearanceTitle">Map appearance</string>
+    <string name="shell_layersBasemapTitle">Map type</string>
+    <string name="shell_layersBasemapStandard">Standard</string>
+    <string name="shell_layersBasemapSatellite">Satellite</string>
     <string name="shell_layersAppearanceDay">Day</string>
     <string name="shell_layersAppearanceNight">Night</string>
     <string name="shell_layersAppearanceSystem">System</string>

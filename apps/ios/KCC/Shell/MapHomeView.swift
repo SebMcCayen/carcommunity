@@ -353,6 +353,7 @@ private enum MapHomeStyleLayers {
     }
 
     static func apply3D(_ enabled: Bool, to map: MapboxMap) {
+        guard map.styleURI == .standard else { return }
         try? map.setStyleImportConfigProperty(
             for: standardImportId,
             config: show3DObjectsConfig,
@@ -465,6 +466,7 @@ struct MapHomeView: View {
     /// once for the whole signed-in shell and never disposed.
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
+    private let basemap: MapBasemap
     private let accessToken: String?
     let bottomClearance: CGFloat
     private let featureHealthReporter: FeatureHealthReporter?
@@ -473,12 +475,14 @@ struct MapHomeView: View {
     init(
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
+        basemap: MapBasemap = .standard,
         accessToken: String? = MapboxConfiguration.accessToken(),
         bottomClearance: CGFloat = 0,
         featureHealthReporter: FeatureHealthReporter? = nil
     ) {
         self.surface = surface
         self.locationProvider = locationProvider
+        self.basemap = basemap
         self.accessToken = accessToken
         self.bottomClearance = bottomClearance
         self.featureHealthReporter = featureHealthReporter
@@ -492,6 +496,7 @@ struct MapHomeView: View {
                     accessToken: accessToken,
                     surface: surface,
                     locationProvider: locationProvider,
+                    basemap: basemap,
                     bottomClearance: bottomClearance,
                     onLoadingError: { kind in
                         featureHealthReporter?.report(
@@ -599,7 +604,6 @@ struct MapHomeView: View {
 
 /// Mapbox-specific rendering stays confined to this file. The initial camera
 /// waits for location consent, then follows the member until they browse.
-/// The Standard style matches Android's default.
 @MainActor
 private struct MapboxStandardMap: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -608,6 +612,7 @@ private struct MapboxStandardMap: View {
     let onLoadingError: @MainActor (FeatureHealthKind) -> Void
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
+    let basemap: MapBasemap
     let bottomClearance: CGFloat
     @State private var viewport: Viewport
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
@@ -615,6 +620,7 @@ private struct MapboxStandardMap: View {
     @State private var latestOwnPoint: MapPoint?
     @State private var startupCamera = MapHomeStartupCameraPolicy()
     @State private var mapReady = false
+    @State private var didFinishInitialMapLoad = false
     @State private var compassFollowRequested = false
     @State private var meFollowEnabled = false
     @State private var meFollowSuspended = false
@@ -628,6 +634,7 @@ private struct MapboxStandardMap: View {
         accessToken: String,
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
+        basemap: MapBasemap,
         bottomClearance: CGFloat,
         onLoadingError: @escaping @MainActor (FeatureHealthKind) -> Void,
         onFullFrameRendered: @escaping @MainActor () -> Void,
@@ -636,6 +643,7 @@ private struct MapboxStandardMap: View {
         MapboxOptions.accessToken = accessToken
         self.surface = surface
         self.locationProvider = locationProvider
+        self.basemap = basemap
         self.onLoaded = onLoaded
         self.bottomClearance = bottomClearance
         self.onFullFrameRendered = onFullFrameRendered
@@ -685,7 +693,7 @@ private struct MapboxStandardMap: View {
                     .lineJoin(.round)
                 }
             }
-            .mapStyle(.standard)
+            .mapStyle(basemap == .satellite ? .standardSatellite : .standard)
             // Keep Mapbox attribution/logo; hide only the requested scale
             // and the redundant SDK compass in favour of our accessible rail.
             .ornamentOptions(OrnamentOptions(
@@ -698,6 +706,7 @@ private struct MapboxStandardMap: View {
             ))
             .onMapLoaded { _ in
                 onLoaded()
+                guard !didFinishInitialMapLoad else { return }
                 if !rendererAttached, let viewportController = proxy.viewport {
                     viewportController.addStatusObserver(interactionObserver)
                     rendererAttached = true
@@ -711,7 +720,16 @@ private struct MapboxStandardMap: View {
                     meFollowSuspended: $meFollowSuspended
                 )
                 mapReady = proxy.map != nil
+                didFinishInitialMapLoad = mapReady
                 updateOwnLocationForVisibility()
+            }
+            .onStyleLoaded { _ in
+                // MapContent and projected markers keep their owners. Only
+                // layers and settings installed directly on the style need replay.
+                guard let map = proxy.map else { return }
+                MapHomeStyleLayers.applyMapMode(surface.mapMode, to: map)
+                MapHomeStyleLayers.apply3D(surface.is3D, to: map)
+                MapHomeStyleLayers.applyTraffic(surface.trafficEnabled, mode: surface.mapMode, to: map)
             }
             .onMapLoadingError { event in
                 switch event.type {
@@ -746,6 +764,7 @@ private struct MapboxStandardMap: View {
             .onDisappear {
                 isVisible = false
                 mapReady = false
+                didFinishInitialMapLoad = false
                 if compassFollowRequested {
                     performProgrammaticViewportChange { viewport = .idle }
                 }
