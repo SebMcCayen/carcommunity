@@ -90,7 +90,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Show Xcode version
@@ -213,7 +213,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Show Xcode version
@@ -334,7 +334,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Show Xcode version
@@ -465,7 +465,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Finish Simulator runtime cache preparation
@@ -525,7 +525,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Finish Simulator runtime cache preparation
@@ -586,7 +586,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Finish Simulator runtime cache preparation
@@ -647,7 +647,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Finish Simulator runtime cache preparation
