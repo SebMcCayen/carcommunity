@@ -637,6 +637,20 @@ struct ShellView: View {
         } message: {
             Text("map.locationPermissionBody")
         }
+        .alert(
+            "liveLocation.stationaryPromptTitle",
+            isPresented: stationaryPromptIsPresented,
+            presenting: liveLocationCoordinator?.stationaryPromptID
+        ) { promptID in
+            Button("liveLocation.stillSharingAction") {
+                liveLocationCoordinator?.confirmStillSharing(promptID: promptID)
+            }
+            Button("liveLocation.stop", role: .destructive) {
+                stopSingleSession(expectedStationaryPromptID: promptID)
+            }
+        } message: { _ in
+            Text("liveLocation.stationaryPromptBody")
+        }
         .alert("liveLocation.statusError", isPresented: $sessionActionError) {
             Button("notifications.errorDismiss", role: .cancel) {}
         } message: {
@@ -2145,12 +2159,24 @@ struct ShellView: View {
         }
     }
 
-    private func stopSingleSession() {
+    private var stationaryPromptIsPresented: Binding<Bool> {
+        Binding(
+            get: { scenePhase == .active && liveLocationCoordinator?.stationaryPromptID != nil },
+            set: { _ in }
+        )
+    }
+
+    private func stopSingleSession(expectedStationaryPromptID: UUID? = nil) {
         guard pendingSessionCommand == nil, let liveLocationCoordinator else { return }
         sessionActionError = false
         let identity = signedInUid
         pendingSessionCommand = .stopping
         sessionCommandTask = Task {
+            if let expectedStationaryPromptID,
+               liveLocationCoordinator.stationaryPromptID != expectedStationaryPromptID {
+                clearSessionCommand()
+                return
+            }
             let result = await liveLocationCoordinator.stopSharing()
             await finishSessionCommand(
                 result,
@@ -2504,8 +2530,11 @@ struct ShellView: View {
                 flag: .liveLocation,
                 memberGated: false,
                 access: access
-            )
+            ),
+            onStationaryPromptChanged: LiveStationaryNotifications.update,
+            beginAutomaticStop: LiveStationaryNotifications.beginStop
         )
+        LiveStationaryNotifications.coordinator = liveLocation
         // Observe the own session from the shell so a flag-disabled feature
         // can still reveal its control when an existing session needs Stop or
         // Hide access. Starting this listener does not request GPS permission.
