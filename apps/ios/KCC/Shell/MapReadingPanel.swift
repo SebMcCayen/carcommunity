@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// Reading content belongs to the shell body, above its persistent navigation.
-/// Only the content scrolls; Close remains outside the scroll viewport.
+/// Close stays visible when the reading content needs to scroll.
 struct MapReadingPanel<Content: View>: View {
     let title: LocalizedStringKey
     let onClose: () -> Void
+    var scrollsContent = true
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -23,12 +24,12 @@ struct MapReadingPanel<Content: View>: View {
             }
             .padding(.horizontal, KccSpacing.s4)
             Divider()
-            ScrollView {
-                content()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(KccSpacing.s4)
+            if scrollsContent {
+                ScrollView { readingContent }
+                    .accessibilityIdentifier("map.reading.content")
+            } else {
+                readingContent
             }
-            .accessibilityIdentifier("map.reading.content")
         }
         .foregroundStyle(KccTheme.text)
         .tint(KccTheme.driver)
@@ -37,6 +38,12 @@ struct MapReadingPanel<Content: View>: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map.reading.panel")
         .accessibilityAction(.escape, onClose)
+    }
+
+    private var readingContent: some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(scrollsContent ? KccSpacing.s4 : KccSpacing.s2)
     }
 }
 

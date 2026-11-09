@@ -122,6 +122,25 @@ final class CrownDesignTests: XCTestCase {
             ownedCount: 2, affordable: true), buyStatus: .idle, onBuy: { _ in XCTFail("Layout must not purchase") }))
     }
 
+    func testCrownPanelFitsCompactPortraitWithoutUsingAllAvailableHeight() async {
+        let coordinator = makeCoordinator(Repository(now: .now), StubLocationProvider())
+        await coordinator.refresh(
+            camera: .of(latitude: 57, longitude: 12, zoom: 14, bearing: 0, pitch: 0),
+            visibleRadiusMeters: 200
+        )
+        coordinator.select(markerId: "point:placed")
+        XCTAssertNotNil(coordinator.selectedTarget)
+        let panel = MapReadingPanel(title: "crownHunt.popupTitle", onClose: {}, scrollsContent: false) {
+            CrownHuntCollectContent(coordinator: coordinator)
+        }
+
+        for language in ["sv", "en"] {
+            let size = measure(panel, width: 288, size: .large, language: language, dark: false, height: 440)
+            XCTAssertGreaterThan(size.height, 96, "The panel must include the header, details and action")
+            XCTAssertLessThan(size.height, 440, "A short panel should take its content's height")
+        }
+    }
+
     func testAllCollectionRecoveryStatesLayOutWithoutNetwork() {
         let states: [CrownCollectState] = [.ready, .noPosition, .tooFar(120), .waitingForSignal, .confirming, .moving, .featureOff]
         let expired = measure(CrownCollectFeedback(state: .ready, status: .idle, expired: true),
@@ -171,11 +190,13 @@ final class CrownDesignTests: XCTestCase {
             }
         }
     }
-    private func measure<Content: View>(_ view: Content, width: CGFloat, size: DynamicTypeSize, language: String, dark: Bool) -> CGSize {
+    private func measure<Content: View>(
+        _ view: Content, width: CGFloat, size: DynamicTypeSize, language: String, dark: Bool, height: CGFloat = 10_000
+    ) -> CGSize {
         let host = UIHostingController(rootView: view.environment(\.locale, Locale(identifier: language))
             .environment(\.dynamicTypeSize, size).environment(\.colorScheme, dark ? .dark : .light))
         host.overrideUserInterfaceStyle = dark ? .dark : .light
         host.loadViewIfNeeded()
-        return host.sizeThatFits(in: CGSize(width: width, height: 10000))
+        return host.sizeThatFits(in: CGSize(width: width, height: height))
     }
 }

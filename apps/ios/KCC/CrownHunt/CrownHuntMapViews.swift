@@ -111,22 +111,47 @@ struct CrownHuntCollectContent: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let collected = selectedSpawnWasCollected
             let expired = selectedSpawnExpired(at: context.date)
-            VStack(alignment: .leading, spacing: KccSpacing.s4) {
-                if let target = coordinator.selectedTarget { CrownTargetCard(target: target) }
-                Text("crownHunt.safetyStop").font(.subheadline).foregroundStyle(KccTheme.secondary)
-                CrownCollectFeedback(state: coordinator.collectState(now: context.date), status: coordinator.claimStatus, collected: collected, expired: expired)
+            let state = coordinator.collectState(now: context.date)
+            let feedback = CrownCollectFeedback(
+                state: state, status: coordinator.claimStatus, collected: collected, expired: expired
+            )
+            VStack(alignment: .leading, spacing: KccSpacing.s2) {
+                ViewThatFits(in: .vertical) {
+                    details(feedback, compact: false).fixedSize(horizontal: false, vertical: true)
+                    details(feedback, compact: true).fixedSize(horizontal: false, vertical: true)
+                    // Long descriptions or large accessibility text can scroll
+                    // independently when even the compact layout cannot fit.
+                    ScrollView { details(feedback, compact: true) }
+                }
                 if coordinator.selectedTarget != nil {
                     Button {
                         Task { await coordinator.collect(now: Date()) }
                     } label: {
-                        Text("crownHunt.collectButton").frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
+                        Text("crownHunt.collectButton")
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .contentShape(Rectangle())
                     }
                     .kccPrimaryAction()
-                    .disabled(expired || !CrownCollectPresentation.canSubmit(coordinator.collectState(now: context.date), status: coordinator.claimStatus, collected: collected))
+                    .disabled(expired || !CrownCollectPresentation.canSubmit(
+                        state, status: coordinator.claimStatus, collected: collected
+                    ))
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("crown.collect")
                 }
             }
         }
+    }
+
+    private func details(_ feedback: CrownCollectFeedback, compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: compact ? KccSpacing.s1 : KccSpacing.s3) {
+            if let target = coordinator.selectedTarget {
+                CrownTargetDetails(target: target, compact: compact)
+            }
+            Text("crownHunt.safetyStop").font(compact ? .footnote : .subheadline)
+                .foregroundStyle(KccTheme.secondary)
+            feedback.font(compact ? .footnote : .body)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func selectedSpawnExpired(at now: Date) -> Bool {
@@ -142,21 +167,26 @@ struct CrownHuntCollectContent: View {
     }
 }
 
-struct CrownTargetCard: View {
+private struct CrownTargetDetails: View {
     let target: CrownMapTarget
+    let compact: Bool
+
     var body: some View {
-        CrownHuntCard {
+        VStack(alignment: .leading, spacing: compact ? KccSpacing.s1 : KccSpacing.s2) {
             switch target {
             case .point(let point):
-                Label(point.title, systemImage: "crown.fill").font(.title3.weight(.semibold))
-                if let detail = point.detail, !detail.isEmpty { Text(detail).font(.body) }
+                Label(point.title, systemImage: "crown.fill").font(titleFont)
+                if let detail = point.detail, !detail.isEmpty { Text(detail).font(detailFont) }
                 Text(CrownHuntStrings.kpValue(point.rewardPoints)).font(.headline)
             case .spawn(let spawn):
-                Label(CrownHuntStrings.rarityKey(spawn.rarity), systemImage: "crown.fill").font(.title3.weight(.semibold))
+                Label(CrownHuntStrings.rarityKey(spawn.rarity), systemImage: "crown.fill").font(titleFont)
                 Text(CrownHuntStrings.kpValue(spawn.rewardPoints)).font(.headline)
             }
         }
     }
+
+    private var titleFont: Font { (compact ? Font.subheadline : .title3).weight(.semibold) }
+    private var detailFont: Font { compact ? .footnote : .body }
 }
 
 struct CrownCollectFeedback: View {
@@ -174,7 +204,7 @@ struct CrownCollectFeedback: View {
             } else if showsLocationState { collectState }
             claimResult
         }
-        .font(.body).frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("crown.collect.feedback")
     }
 

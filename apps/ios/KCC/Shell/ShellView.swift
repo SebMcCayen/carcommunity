@@ -315,7 +315,11 @@ struct ShellView: View {
                 featureHealthReporter: FeatureHealthReporter.whenAuthenticated(
                     diagnostics.featureHealthReporter,
                     uid: signedInUid
-                )
+                ),
+                markers: mapMarkerContent
+                    .allowsHitTesting(selectedTab == .map && routes.current == nil)
+                    .accessibilityHidden(selectedTab != .map || routes.current != nil)
+                    .eraseToAnyView()
             )
             .accessibilityHidden(mapCover == .opaque)
 
@@ -706,12 +710,7 @@ struct ShellView: View {
     // Release must still decode every nested generic modifier at first render.
     private var mapOverlayContent: AnyView {
         Color.clear.ignoresSafeArea()
-            .overlay {
-                ZStack {
-                    mapMarkerContent.zIndex(0)
-                    mapChromeContent.zIndex(1)
-                }
-            }
+            .overlay { mapChromeContent }
             .eraseToAnyView()
     }
 
@@ -1107,11 +1106,18 @@ struct ShellView: View {
                 Spacer(minLength: 0)
                 VStack(spacing: KccSpacing.s2) {
                     if let selection = mapReadingSelection {
-                        mapReadingPanel(selection)
-                            .id(selection)
-                            .frame(height: min(
-                                max(96, geometry.size.height - mapSessionHeight - KccSpacing.s4),
-                                max(180, min(320, geometry.size.height * 0.55 - mapSessionHeight))))
+                        let available = max(0, geometry.size.height - mapSessionHeight - KccSpacing.s4)
+                        if case .crown = selection {
+                            mapReadingPanel(selection)
+                                .id(selection)
+                                .frame(maxHeight: available)
+                        } else {
+                            mapReadingPanel(selection)
+                                .id(selection)
+                                .frame(height: min(
+                                    max(96, available),
+                                    max(180, min(320, geometry.size.height * 0.55 - mapSessionHeight))))
+                        }
                     }
                     VStack(spacing: KccSpacing.s2) { mapSessionControls }
                         .background { GeometryReader { proxy in
@@ -1159,7 +1165,7 @@ struct ShellView: View {
         case .crown(let id):
             if let coordinator = crownHuntComposition?.mapCoordinator, coordinator.isAvailable,
                coordinator.selectedTarget?.id == id || CrownCollectPresentation.isAwarded(coordinator.claimStatus) {
-                MapReadingPanel(title: "crownHunt.popupTitle", onClose: dismissMapReading) {
+                MapReadingPanel(title: "crownHunt.popupTitle", onClose: dismissMapReading, scrollsContent: false) {
                     CrownHuntCollectContent(coordinator: coordinator)
                 }
             }

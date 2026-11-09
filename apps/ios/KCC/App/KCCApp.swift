@@ -1,9 +1,38 @@
 import FirebaseCore
 import SwiftUI
+import UIKit
+
+enum AppThemePreference: String, CaseIterable {
+    case system, automatic, light, dark
+
+    static let storageKey = "app.theme.mode"
+    private static let dayStart = 7
+    private static let nightStart = 19
+
+    func colorScheme(at date: Date, calendar: Calendar = .autoupdatingCurrent) -> ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        case .automatic:
+            (Self.dayStart..<Self.nightStart).contains(calendar.component(.hour, from: date)) ? .light : .dark
+        }
+    }
+
+    static func nextTransition(after date: Date, calendar: Calendar = .autoupdatingCurrent) -> Date? {
+        let hour = automatic.colorScheme(at: date, calendar: calendar) == .light ? nightStart : dayStart
+        return calendar.nextDate(
+            after: date, matching: DateComponents(hour: hour, minute: 0, second: 0), matchingPolicy: .nextTime
+        )
+    }
+}
 
 @main
 struct KCCApp: App {
     @UIApplicationDelegateAdaptor(KCCAppDelegate.self) private var appDelegate
+    @AppStorage(AppThemePreference.storageKey) private var theme = AppThemePreference.system
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var themeClockRevision = 0
     private let session: AuthSession
     private let signInCoordinator: SignInCoordinator
     private let accessSession: AppAccessSession
@@ -65,7 +94,17 @@ struct KCCApp: App {
                 restrictedPrivacyCoordinator: restrictedPrivacyCoordinator,
                 diagnostics: diagnostics
             )
-            .preferredColorScheme(configlessUITestColorScheme)
+            .preferredColorScheme(theme.colorScheme(at: .now) ?? configlessUITestColorScheme)
+            .task(id: theme == .automatic && scenePhase == .active ? themeClockRevision : nil) {
+                guard theme == .automatic, scenePhase == .active,
+                      let transition = AppThemePreference.nextTransition(after: .now) else { return }
+                do { try await Task.sleep(for: .seconds(transition.timeIntervalSinceNow)) } catch { return }
+                guard !Task.isCancelled else { return }
+                themeClockRevision += 1
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+                if theme == .automatic { themeClockRevision += 1 }
+            }
             .modifier(ConfiglessUITestDynamicType())
             .modifier(ConfiglessPlaceNavigationHandoff())
         }
