@@ -727,6 +727,7 @@ private struct MapboxStandardMap: View {
                 // MapContent and projected markers keep their owners. Only
                 // layers and settings installed directly on the style need replay.
                 guard let map = proxy.map else { return }
+                surface.invalidateProjection()
                 MapHomeStyleLayers.applyMapMode(surface.mapMode, to: map)
                 MapHomeStyleLayers.apply3D(surface.is3D, to: map)
                 MapHomeStyleLayers.applyTraffic(surface.trafficEnabled, mode: surface.mapMode, to: map)
