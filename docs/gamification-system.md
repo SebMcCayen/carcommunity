@@ -527,7 +527,7 @@ A crown collected while the collector is **not** sharing a live session pays **h
 
 And, at the outer edges, the flag being **OFF**, or **any error** reading the flag or the session, also return `1` (full). So the only ways to lose half your KP are the two genuine no-session confirmations above — a corrupt or partial write never triggers the penalty, and a member who *is* live-sharing is never wrongly penalised by a transient failure. The flag is read **uncached** (mirroring the boost resolver) so the rule takes effect the instant a member starts or stops sharing.
 
-**UI is gated on the same flag.** Because the flag governs both the multiplier and the copy, the Android app only *describes* the rule when it is in force: the Kronjakt instructions gain a "go live for full points" section, and the crown-tap popups (auto-spawn and hand-placed) show a one-line tip **only when the flag is on AND the member is not currently live-sharing** — so the copy never advertises an inactive rule and never nags a member already earning full points. While the flag is OFF the multiplier is always `1` and the app shows nothing about it, so the whole feature ships dark.
+On Android and iOS, the details for both automatically spawned and hand-placed crowns show the tip about earning full points when the flag is enabled and the member has no active live session. Android also explains the rule in the Kronjakt instructions when the flag is enabled.
 
 **Economy interaction.** The reduced (or boosted) amount is still credited with `source: 'crown_hunt'`, so `points-onLedgerEntryCreated` folds the *actual awarded* amount into the daily cap (§5.3) — halving reduces both the payout and the budget it consumes, and never breaks the cap arithmetic.
 

@@ -106,6 +106,7 @@ struct CrownMarkerTile: View {
 /// readiness. Even an exclusive award which removes its target keeps its result.
 struct CrownHuntCollectContent: View {
     @Bindable var coordinator: CrownHuntMapCoordinator
+    let showLiveShareTip: Bool
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -113,7 +114,8 @@ struct CrownHuntCollectContent: View {
             let expired = selectedSpawnExpired(at: context.date)
             let state = coordinator.collectState(now: context.date)
             let feedback = CrownCollectFeedback(
-                state: state, status: coordinator.claimStatus, collected: collected, expired: expired
+                state: state, status: coordinator.claimStatus, collected: collected, expired: expired,
+                showLiveShareTip: showLiveShareTip
             )
             VStack(alignment: .leading, spacing: KccSpacing.s2) {
                 ViewThatFits(in: .vertical) {
@@ -194,6 +196,7 @@ struct CrownCollectFeedback: View {
     let status: CrownMapClaimStatus
     var collected = false
     var expired = false
+    var showLiveShareTip = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
@@ -201,7 +204,13 @@ struct CrownCollectFeedback: View {
                 Label("crownHunt.spawnResultCrownExpired", systemImage: "clock")
             } else if collected, !CrownCollectPresentation.isAwarded(status) {
                 Label("crownHunt.spawnResultAlreadyCollected", systemImage: "checkmark.circle")
-            } else if showsLocationState { collectState }
+            } else if showsLocationState {
+                collectState
+                if showLiveShareTip {
+                    Label("crownHunt.liveShareTip", systemImage: "info.circle")
+                        .foregroundStyle(KccTheme.secondary)
+                }
+            }
             claimResult
         }
         .frame(maxWidth: .infinity, alignment: .leading)
