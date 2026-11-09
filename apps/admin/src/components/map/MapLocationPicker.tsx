@@ -184,6 +184,8 @@ export function MapLocationPicker({
   const [styleLoaded, setStyleLoaded] = useState(false);
 
   const value = parseLatLng(latitude, longitude);
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   // --- Mapbox GL lifecycle (only when a token is configured) --------------
   useEffect(() => {
@@ -209,12 +211,13 @@ export function MapLocationPicker({
         // it fetches the mapbox:// style + tiles.
         mapboxgl.accessToken = token;
 
-        const center = value ?? initialCenter ?? DEFAULT_CENTER;
+        const initialValue = valueRef.current;
+        const center = initialValue ?? initialCenter ?? DEFAULT_CENTER;
         map = new mapboxgl.Map({
           container: containerRef.current,
           style: MAPBOX_STANDARD_STYLE,
           center: [center.lng, center.lat],
-          zoom: value ? 14 : DEFAULT_ZOOM,
+          zoom: initialValue ? 14 : DEFAULT_ZOOM,
           // Flat 2D top-down view: a picker maps screen clicks to coordinates,
           // so pitch/bearing are pinned to 0 (we match the STYLE, not a 3D
           // camera). Standard defaults to the "day" light preset; set it
@@ -303,8 +306,8 @@ export function MapLocationPicker({
           onChangeRef.current(formatted.latitude, formatted.longitude);
         };
 
-        if (value) {
-          marker.setLngLat([value.lng, value.lat]).addTo(map);
+        if (initialValue) {
+          marker.setLngLat([initialValue.lng, initialValue.lat]).addTo(map);
         }
 
         if (choices?.length) {

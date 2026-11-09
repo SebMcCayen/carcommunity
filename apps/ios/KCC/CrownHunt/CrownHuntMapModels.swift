@@ -35,7 +35,7 @@ enum CrownMapTarget: Equatable, Sendable, Identifiable {
     }
 }
 
-enum CrownPlacementReportReason: String, CaseIterable, Sendable {
+enum CrownPlacementReportReason: String, CaseIterable, Hashable, Sendable {
     case unsafe
     case hardToReach = "hard_to_reach"
     case privateOrClosed = "private_or_closed"

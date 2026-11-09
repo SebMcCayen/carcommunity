@@ -61,6 +61,7 @@ export const KNOWN_AUDIT_ACTIONS = [
   'crownHunt.activatePoint',
   'crownHunt.createPoint',
   'crownHunt.pausePoint',
+  'crownHunt.resolvePlacementCase',
   'crownHunt.updatePoint',
   'event.cancel',
   'event.complete',

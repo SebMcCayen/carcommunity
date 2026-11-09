@@ -37,6 +37,7 @@ type Case = CrownPosition & {
   round: number;
   decision: Decision | null;
   replacement?: CrownPosition;
+  replacementPoiId?: string;
   lastReportedAt: Timestamp;
 };
 
@@ -352,7 +353,14 @@ export const resolvePlacementCase = onCall(CALLABLE_OPTS_ADMIN, async (request) 
   return db.runTransaction(async (tx) => {
     const data = (await tx.get(ref)).data() as Case | undefined;
     if (!data) throw new HttpsError('not-found', 'Crown placement case not found.');
-    if (data.decision === input.action && data.version === input.version) return { resolved: true };
+    if (data.decision === input.action && data.version === input.version) {
+      if (input.action !== 'move') return { resolved: true };
+      const sameDestination =
+        'poiId' in input.destination
+          ? input.destination.poiId === data.replacementPoiId
+          : samePosition(input.destination, data.replacement);
+      if (sameDestination) return { resolved: true };
+    }
     if (data.decision || data.version !== input.version) {
       throw new HttpsError('failed-precondition', 'Crown placement case has changed. Reload it.');
     }
@@ -362,9 +370,11 @@ export const resolvePlacementCase = onCall(CALLABLE_OPTS_ADMIN, async (request) 
     const matches = samePosition(data, current?.data());
     const stamp = FieldValue.serverTimestamp();
     let replacement: CrownPosition | undefined;
+    let replacementPoiId: string | undefined;
     if (input.action === 'move') {
       if (data.source === 'automatic' && data.areaId && 'poiId' in input.destination) {
         const poiId = input.destination.poiId;
+        replacementPoiId = poiId;
         const [area, poi] = await Promise.all([
           tx.get(db.collection('crownSpawnAreas').doc(data.areaId)),
           tx.get(
@@ -450,6 +460,7 @@ export const resolvePlacementCase = onCall(CALLABLE_OPTS_ADMIN, async (request) 
       openAt: FieldValue.delete(),
       closedAt: stamp,
       ...(replacement ? { replacement } : {}),
+      ...(replacementPoiId ? { replacementPoiId } : {}),
     });
     tx.create(
       db.collection('adminAuditEvents').doc(),
