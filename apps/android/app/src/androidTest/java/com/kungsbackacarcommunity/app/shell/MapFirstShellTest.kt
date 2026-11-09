@@ -15,6 +15,9 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
@@ -722,7 +725,7 @@ class MapFirstShellTest {
 
     @Test
     fun layersControl_opensAndDismissesLayersPopup() {
-        setShell()
+        setMapHome(trafikverketDataShown = false)
         // Tapping the layers control opens the transparent map-layers popup.
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertIsDisplayed()
@@ -747,11 +750,8 @@ class MapFirstShellTest {
         val destination = MapPoint(12.07, 57.49)
         val route = MapRouteOverlay(destination, listOf(MapPoint(12.06, 57.48), destination))
         val markers = listOf(MapEventMarker("meetup", 12.065, 57.485))
-        val surface = StubMapSurface().apply {
-            setRouteOverlay(route)
-            setEventMarkers(markers)
-        }
-        setMapHome(trafikverketDataShown = false, surface = surface)
+        val surface = StubMapSurface().apply { setRouteOverlay(route) }
+        setMapHome(trafikverketDataShown = false, surface = surface, eventMarkers = markers)
 
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
         val standard = composeTestRule.onNodeWithTag("map_basemap_standard").assertIsSelected()
@@ -772,9 +772,12 @@ class MapFirstShellTest {
         val destination = MapPoint(12.074, 57.49)
         val surface = MapboxMapSurface().apply {
             setRouteOverlay(MapRouteOverlay(destination, listOf(MapPoint(12.066, 57.486), destination)))
-            setEventMarkers(listOf(MapEventMarker("meetup", 12.07, 57.488)))
         }
-        setMapHome(trafikverketDataShown = false, surface = surface)
+        setMapHome(
+            trafikverketDataShown = false,
+            surface = surface,
+            eventMarkers = listOf(MapEventMarker("meetup", 12.07, 57.488)),
+        )
         val view = composeTestRule.runOnIdle {
             checkNotNull(findMapView(composeTestRule.activity.window.decorView))
         }
@@ -846,6 +849,7 @@ class MapFirstShellTest {
         trafikverketDataShown: Boolean,
         surface: MapSurface = StubMapSurface(),
         incidentReportingEnabled: Boolean = false,
+        eventMarkers: List<MapEventMarker> = emptyList(),
     ) {
         composeTestRule.setContent {
             KccTheme {
@@ -857,19 +861,23 @@ class MapFirstShellTest {
                 // does, or the "turning the layer off hides the credit" assertion
                 // below has nothing to assert against.
                 var incidentsLayerEnabled by remember { mutableStateOf(true) }
-                MapHome(
-                    incidentsLayerEnabled = incidentsLayerEnabled,
-                    onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
-                    mapSurface = surface,
-                    incidentReportingEnabled = incidentReportingEnabled,
-                    isLiveSharing = false,
-                    participantCount = 0,
-                    userLabel = "Test",
-                    onSearch = {},
-                    onOpenSavedPlaces = {},
-                    moreMenuEntries = emptyList(),
-                    trafikverketDataShown = trafikverketDataShown,
-                )
+                Box(Modifier.fillMaxSize()) {
+                    if (surface is MapboxMapSurface) surface.Content(Modifier.matchParentSize())
+                    MapHome(
+                        incidentsLayerEnabled = incidentsLayerEnabled,
+                        onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
+                        mapSurface = surface,
+                        incidentReportingEnabled = incidentReportingEnabled,
+                        eventMarkers = eventMarkers,
+                        isLiveSharing = false,
+                        participantCount = 0,
+                        userLabel = "Test",
+                        onSearch = {},
+                        onOpenSavedPlaces = {},
+                        moreMenuEntries = emptyList(),
+                        trafikverketDataShown = trafikverketDataShown,
+                    )
+                }
             }
         }
     }
