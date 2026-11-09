@@ -56,18 +56,22 @@ enum KccFunctionsErrorCode: String, Equatable, Sendable, CaseIterable {
 ///
 /// PII-SAFE BY CONSTRUCTION: backend messages (which can embed request
 /// payloads, uids, or project details) are never carried. Only known
-/// machine-readable reasons are accepted from error details —
-/// the same rule Android's `firestoreCode()` and the auth slice's
-/// `SignInFailureDetails` follow.
+/// machine-readable reasons and retry delays are accepted from error details.
 struct KccFunctionsError: Error, Equatable, Sendable {
     /// The contract error code the caller branches on.
     let code: KccFunctionsErrorCode
     /// Allowlisted machine reason; never a backend message or payload.
     let reason: KccFunctionsFailureReason?
+    let retryAfterMilliseconds: Int64?
 
-    init(code: KccFunctionsErrorCode, reason: KccFunctionsFailureReason? = nil) {
+    init(
+        code: KccFunctionsErrorCode,
+        reason: KccFunctionsFailureReason? = nil,
+        retryAfterMilliseconds: Int64? = nil
+    ) {
         self.code = code
         self.reason = reason
+        self.retryAfterMilliseconds = retryAfterMilliseconds
     }
 }
 
