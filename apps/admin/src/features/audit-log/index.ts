@@ -114,6 +114,7 @@ const ACTION_LABEL_KEYS: Record<KnownAuditAction, string> = {
   'crownHunt.activatePoint': 'auditLog.action.crownHuntActivatePoint',
   'crownHunt.createPoint': 'auditLog.action.crownHuntCreatePoint',
   'crownHunt.pausePoint': 'auditLog.action.crownHuntPausePoint',
+  'crownHunt.resolvePlacementCase': 'auditLog.action.crownHuntResolvePlacementCase',
   'crownHunt.updatePoint': 'auditLog.action.crownHuntUpdatePoint',
   'event.cancel': 'auditLog.action.eventCancel',
   'event.complete': 'auditLog.action.eventComplete',
