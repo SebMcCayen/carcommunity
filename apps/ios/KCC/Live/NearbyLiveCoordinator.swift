@@ -12,6 +12,7 @@ final class NearbyLiveCoordinator {
     static let discoveryInterval: Duration = .seconds(20)
 
     private(set) var orderedUids: [String] = []
+    private(set) var discoverySessions: [NearbyLiveSession]?
     private(set) var positions: [String: LiveMarker] = [:]
     private(set) var imageURLs: [String: URL] = [:]
     private(set) var lastRefreshFailed = false
@@ -69,6 +70,7 @@ final class NearbyLiveCoordinator {
         self.currentUid = currentUid
         self.excludedUids = excludedUids
         guard repository != nil, currentUid != nil else { deactivate(); return }
+        discoverySessions = nil
         var seen = Set<String>()
         let roster = participantUids.filter {
             !$0.isEmpty && seen.insert($0).inserted
@@ -85,6 +87,7 @@ final class NearbyLiveCoordinator {
         cancelTasks()
         subscriptionKey = ""
         orderedUids = []
+        discoverySessions = nil
         positions = [:]
         imageURLs = [:]
         imageAttempts = []
@@ -111,6 +114,7 @@ final class NearbyLiveCoordinator {
         excludedUids = []
         subscriptionKey = ""
         orderedUids = []
+        discoverySessions = nil
         positions = [:]
         imageURLs = [:]
         imageAttempts = []
@@ -180,6 +184,7 @@ final class NearbyLiveCoordinator {
         // Discovery coordinates only select a bounded listener roster. They
         // are never renderable: only a confirmed, non-nil authorized RTDB
         // value may enter `positions`.
+        discoverySessions = allowed
         reconcileSubscriptions(with: Array(allowed.prefix(maximumNearbyLiveMarkers)).map(\.uid))
     }
 

@@ -89,6 +89,7 @@ final class NearbyLiveCoordinatorTests: XCTestCase {
         for _ in 0..<10 where repository.observedUids.count < maximumNearbyLiveMarkers { await Task.yield() }
 
         XCTAssertEqual(coordinator.orderedUids.count, maximumNearbyLiveMarkers)
+        XCTAssertEqual(coordinator.discoverySessions?.count, 54)
         XCTAssertFalse(coordinator.orderedUids.contains("me"))
         XCTAssertFalse(coordinator.orderedUids.contains("u1"))
         XCTAssertEqual(Set(repository.observedUids), Set(coordinator.orderedUids))
