@@ -107,6 +107,7 @@ struct CrownMarkerTile: View {
 struct CrownHuntCollectContent: View {
     @Bindable var coordinator: CrownHuntMapCoordinator
     let showLiveShareTip: Bool
+    @State private var reportingTarget: CrownMapTarget?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -119,11 +120,11 @@ struct CrownHuntCollectContent: View {
             )
             VStack(alignment: .leading, spacing: KccSpacing.s2) {
                 ViewThatFits(in: .vertical) {
-                    details(feedback, compact: false).fixedSize(horizontal: false, vertical: true)
-                    details(feedback, compact: true).fixedSize(horizontal: false, vertical: true)
+                    details(feedback, expired: expired, compact: false).fixedSize(horizontal: false, vertical: true)
+                    details(feedback, expired: expired, compact: true).fixedSize(horizontal: false, vertical: true)
                     // Long descriptions or large accessibility text can scroll
                     // independently when even the compact layout cannot fit.
-                    ScrollView { details(feedback, compact: true) }
+                    ScrollView { details(feedback, expired: expired, compact: true) }
                 }
                 if coordinator.selectedTarget != nil {
                     Button {
@@ -142,9 +143,12 @@ struct CrownHuntCollectContent: View {
                 }
             }
         }
+        .sheet(item: $reportingTarget) { target in
+            CrownPlacementReportSheet(coordinator: coordinator, target: target)
+        }
     }
 
-    private func details(_ feedback: CrownCollectFeedback, compact: Bool) -> some View {
+    private func details(_ feedback: CrownCollectFeedback, expired: Bool, compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? KccSpacing.s1 : KccSpacing.s3) {
             if let target = coordinator.selectedTarget {
                 CrownTargetDetails(target: target, compact: compact)
@@ -152,6 +156,25 @@ struct CrownHuntCollectContent: View {
             Text("crownHunt.safetyStop").font(compact ? .footnote : .subheadline)
                 .foregroundStyle(KccTheme.secondary)
             feedback.font(compact ? .footnote : .body)
+            if let target = coordinator.selectedTarget {
+                if coordinator.reportedPlacements.contains(target.placementReportKey) {
+                    Label("crownHunt.crownPlacementReported", systemImage: "checkmark.circle")
+                        .font(compact ? .footnote : .subheadline)
+                        .foregroundStyle(KccTheme.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                } else if !expired {
+                    Button {
+                        reportingTarget = target
+                    } label: {
+                        Label("crownHunt.crownPlacementReport", systemImage: "flag")
+                            .font(compact ? .footnote : .subheadline)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("crown.reportPlacement")
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -166,6 +189,92 @@ struct CrownHuntCollectContent: View {
     private var selectedSpawnWasCollected: Bool {
         if case .spawn(let spawn) = coordinator.selectedTarget { coordinator.collectedSpawnIds.contains(spawn.id) }
         else { false }
+    }
+}
+
+private struct CrownPlacementReportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let coordinator: CrownHuntMapCoordinator
+    let target: CrownMapTarget
+    @State private var reason: CrownPlacementReportReason?
+    @State private var comment = ""
+    @State private var submitting = false
+    @State private var error: LocalizedStringKey?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("crownHunt.crownPlacementReason") {
+                    ForEach(CrownPlacementReportReason.allCases, id: \.self) { option in
+                        Button {
+                            reason = option
+                        } label: {
+                            HStack {
+                                Text(label(for: option))
+                                    .foregroundStyle(KccTheme.text)
+                                Spacer()
+                                if reason == option {
+                                    Image(systemName: "checkmark").accessibilityHidden(true)
+                                }
+                            }
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(reason == option ? .isSelected : [])
+                    }
+                }
+                TextField("crownHunt.crownPlacementComment", text: $comment, axis: .vertical)
+                    .lineLimit(2...4)
+                    .onChange(of: comment) { previous, value in
+                        if value.utf16.count > 400 { comment = previous }
+                    }
+                if let error {
+                    Text(error).foregroundStyle(KccPalette.errorRed)
+                }
+            }
+            .disabled(submitting)
+            .navigationTitle("crownHunt.crownPlacementReport")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("crownHunt.crownPlacementCancel") { dismiss() }.disabled(submitting)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        guard let reason else { return }
+                        submitting = true
+                        error = nil
+                        Task {
+                            defer { submitting = false }
+                            do {
+                                try await coordinator.reportPlacement(target: target, reason: reason, comment: comment)
+                                dismiss()
+                            } catch let failure {
+                                switch (failure as? KccFunctionsError)?.code {
+                                case .failedPrecondition: error = "crownHunt.crownPlacementUnavailable"
+                                case .resourceExhausted: error = "crownHunt.crownPlacementLimit"
+                                default: error = "crownHunt.crownPlacementError"
+                                }
+                            }
+                        }
+                    } label: {
+                        Text(submitting ? "crownHunt.crownPlacementSending" : "crownHunt.crownPlacementSend")
+                    }
+                    .disabled(submitting || reason == nil || comment.utf16.count > 400)
+                }
+            }
+        }
+        .interactiveDismissDisabled(submitting)
+    }
+
+    private func label(for reason: CrownPlacementReportReason) -> LocalizedStringKey {
+        switch reason {
+        case .unsafe: "crownHunt.crownPlacementUnsafe"
+        case .hardToReach: "crownHunt.crownPlacementHardToReach"
+        case .privateOrClosed: "crownHunt.crownPlacementPrivateOrClosed"
+        case .other: "crownHunt.crownPlacementOther"
+        }
     }
 }
 

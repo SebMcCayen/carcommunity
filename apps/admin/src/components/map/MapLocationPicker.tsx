@@ -73,10 +73,16 @@ interface GlMap {
   removeLayer(id: string): void;
   isStyleLoaded?(): boolean;
   setConfigProperty?(importId: string, configName: string, value: unknown): void;
+  fitBounds(bounds: [[number, number], [number, number]], options: unknown): void;
   easeTo(options: { center: [number, number] }): void;
   addControl(control: unknown, position?: string): void;
   remove(): void;
   resize(): void;
+}
+
+export interface MapLocationChoice extends LatLng {
+  id: string;
+  label: string;
 }
 
 export interface MapLocationPickerProps {
@@ -106,6 +112,9 @@ export interface MapLocationPickerProps {
   initialCenter?: LatLng;
   /** Marks the inputs as required. */
   required?: boolean;
+  /** Optional fixed alternatives alongside the current pin. */
+  choices?: readonly MapLocationChoice[];
+  onChoose?: (id: string) => void;
   /** Disables the inputs and pin interaction. */
   disabled?: boolean;
   /** Validation error to surface under the inputs. */
@@ -146,6 +155,8 @@ export function MapLocationPicker({
   radiusMeters,
   initialCenter,
   required,
+  choices,
+  onChoose,
   disabled,
   error,
   labelClassName,
@@ -164,6 +175,8 @@ export function MapLocationPicker({
   // Latest onChange without forcing the GL effect to re-run on every render.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onChooseRef = useRef(onChoose);
+  onChooseRef.current = onChoose;
 
   const [mapError, setMapError] = useState(false);
   // Bumped once the Standard style finishes loading, so the geofence effect
@@ -171,6 +184,8 @@ export function MapLocationPicker({
   const [styleLoaded, setStyleLoaded] = useState(false);
 
   const value = parseLatLng(latitude, longitude);
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   // --- Mapbox GL lifecycle (only when a token is configured) --------------
   useEffect(() => {
@@ -178,6 +193,7 @@ export function MapLocationPicker({
 
     let cancelled = false;
     let map: GlMap | null = null;
+    const choiceMarkers: GlMarker[] = [];
 
     void (async () => {
       try {
@@ -195,12 +211,13 @@ export function MapLocationPicker({
         // it fetches the mapbox:// style + tiles.
         mapboxgl.accessToken = token;
 
-        const center = value ?? initialCenter ?? DEFAULT_CENTER;
+        const initialValue = valueRef.current;
+        const center = initialValue ?? initialCenter ?? DEFAULT_CENTER;
         map = new mapboxgl.Map({
           container: containerRef.current,
           style: MAPBOX_STANDARD_STYLE,
           center: [center.lng, center.lat],
-          zoom: value ? 14 : DEFAULT_ZOOM,
+          zoom: initialValue ? 14 : DEFAULT_ZOOM,
           // Flat 2D top-down view: a picker maps screen clicks to coordinates,
           // so pitch/bearing are pinned to 0 (we match the STYLE, not a 3D
           // camera). Standard defaults to the "day" light preset; set it
@@ -266,6 +283,7 @@ export function MapLocationPicker({
             // Already removed / mid-teardown — non-fatal.
           }
           markerRef.current = null;
+          for (const marker of choiceMarkers) marker.remove();
           try {
             mapRef.current?.remove();
           } catch {
@@ -288,8 +306,37 @@ export function MapLocationPicker({
           onChangeRef.current(formatted.latitude, formatted.longitude);
         };
 
-        if (value) {
-          marker.setLngLat([value.lng, value.lat]).addTo(map);
+        if (initialValue) {
+          marker.setLngLat([initialValue.lng, initialValue.lat]).addTo(map);
+        }
+
+        if (choices?.length) {
+          for (const [index, choice] of choices.entries()) {
+            const element = document.createElement('button');
+            element.type = 'button';
+            element.className = styles.choice ?? '';
+            element.textContent = String(index + 1);
+            element.title = choice.label;
+            element.setAttribute('aria-label', choice.label);
+            element.addEventListener('click', (event) => {
+              event.stopPropagation();
+              onChooseRef.current?.(choice.id);
+            });
+            const choiceMarker = new mapboxgl.Marker({ element })
+              .setLngLat([choice.lng, choice.lat])
+              .addTo(map);
+            element.setAttribute('role', 'button');
+            choiceMarkers.push(choiceMarker);
+          }
+          const lats = [center.lat, ...choices.map((choice) => choice.lat)];
+          const lngs = [center.lng, ...choices.map((choice) => choice.lng)];
+          map.fitBounds(
+            [
+              [Math.min(...lngs), Math.min(...lats)],
+              [Math.max(...lngs), Math.max(...lats)],
+            ],
+            { padding: 36, maxZoom: 15, duration: 0 },
+          );
         }
 
         marker.on('dragend', () => emit(marker.getLngLat()));
@@ -307,6 +354,7 @@ export function MapLocationPicker({
     return () => {
       cancelled = true;
       setStyleLoaded(false);
+      for (const marker of choiceMarkers) marker.remove();
       markerRef.current?.remove();
       markerRef.current = null;
       mapRef.current?.remove();
@@ -315,7 +363,7 @@ export function MapLocationPicker({
     // Intentionally run once for the map instance; external value changes are
     // reflected via the separate sync effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, token, disabled]);
+  }, [mapReady, token, disabled, choices]);
 
   // --- Keep the pin in sync with the inputs (BOTH directions) -------------
   useEffect(() => {
@@ -353,8 +401,7 @@ export function MapLocationPicker({
     if (map.isStyleLoaded && !map.isStyleLoaded()) return;
     const data = geofenceCirclePolygon(value, radiusMeters);
     const existing = map.getSource(GEOFENCE_SOURCE) as
-      | { setData?: (d: unknown) => void }
-      | undefined;
+      { setData?: (d: unknown) => void } | undefined;
     try {
       if (existing?.setData) {
         existing.setData(data);
@@ -395,14 +442,11 @@ export function MapLocationPicker({
           {mapError
             ? (loadErrorText ??
               'Map unavailable — it failed to load. Enter the coordinates manually below.')
-            : (unavailableText ??
-              'Map unavailable — enter the coordinates manually below.')}
+            : (unavailableText ?? 'Map unavailable — enter the coordinates manually below.')}
         </p>
       )}
 
-      {mapReady && !mapError && helpText && (
-        <p className={styles.help}>{helpText}</p>
-      )}
+      {mapReady && !mapError && helpText && <p className={styles.help}>{helpText}</p>}
 
       <div className={styles.inputs}>
         <label className={labelClassName} htmlFor={latId}>

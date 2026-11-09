@@ -214,6 +214,7 @@ import com.kungsbackacarcommunity.app.crownhunt.PerkDrainPresence
 import com.kungsbackacarcommunity.app.crownhunt.TrapDrainVibration
 import com.kungsbackacarcommunity.app.crownhunt.CrownLayerAction
 import com.kungsbackacarcommunity.app.crownhunt.CrownLayerLifecycle
+import com.kungsbackacarcommunity.app.crownhunt.CrownPlacementReporter
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownQueryCenter
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawn
@@ -2753,6 +2754,9 @@ fun AuthenticatedApp(
                 }
             }
             val openCrown = if (tappedCrownId != null) openCrownSlot.value else null
+            val crownPlacementReporter = remember(uid, context) {
+                CrownPlacementReporter.createIfAvailable(context.applicationContext)
+            }
             val crownClaimFlow =
                 remember(crownSpawnController) {
                     crownSpawnController?.claimStatus
@@ -7258,6 +7262,7 @@ fun AuthenticatedApp(
                                 if (crownForPopup != null && crownSpawnEnabled) {
                                     CrownSpawnPopup(
                                         spawn = crownForPopup,
+                                        placementReporter = crownPlacementReporter,
                                         state = crownCollectState,
                                         status = crownClaimStatus,
                                         distanceMeters = crownDistanceMeters,
@@ -7332,6 +7337,7 @@ fun AuthenticatedApp(
                                 if (pointForPopup != null && adminCrownsVisible) {
                                     CrownPointPopup(
                                         point = pointForPopup,
+                                        placementReporter = crownPlacementReporter,
                                         status = crownPointClaimStatus,
                                         // Same live-share nudge as the auto-spawn
                                         // popup: rule on AND not currently sharing.

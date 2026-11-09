@@ -9,6 +9,8 @@ final class CrownDesignTests: XCTestCase {
         let point = CrownMapPoint(id: "placed", title: "En säker plats med ett långt namn", detail: nil,
             rewardPoints: 130, latitude: 57, longitude: 12, geofenceRadiusMeters: 75)
         let spawn: CrownSpawn
+        var lastPlacementReport: (CrownMapTarget, CrownPlacementReportReason, String)?
+        var showPoint = true
         var holdCollectedRead = false
         private var collectedContinuation: CheckedContinuation<Set<String>, Never>?
         var collectedReadPending: Bool { collectedContinuation != nil }
@@ -20,7 +22,10 @@ final class CrownDesignTests: XCTestCase {
             spawn = CrownSpawn(id: "spawn", latitude: 57, longitude: 12, rarity: .rare,
                 rewardPoints: 100, collectRadiusMeters: 75, expiresAt: now.addingTimeInterval(3600))
         }
-        func activePoints() async throws -> [CrownMapPoint] { [point] }
+        func reportPlacement(target: CrownMapTarget, reason: CrownPlacementReportReason, comment: String) async throws {
+            lastPlacementReport = (target, reason, comment)
+        }
+        func activePoints() async throws -> [CrownMapPoint] { showPoint ? [point] : [] }
         func nearbySpawns(cellKeys: [String], now: Date) async throws -> [CrownSpawn] { [spawn] }
         func collectedSpawnIds(uid: String, now: Date) async throws -> Set<String> {
             if holdCollectedRead {
@@ -34,6 +39,27 @@ final class CrownDesignTests: XCTestCase {
         func submitSpawnClaim(spawnId: String, proof: CrownFixPair, idempotencyKey: String) async throws -> CrownSpawnClaimOutcome {
             CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7, newBalance: 7, rarity: .rare)
         }
+    }
+
+    func testReportPlacementWithoutLocationAndRemoveOnRefresh() async throws {
+        let repository = Repository(now: Date())
+        let provider = StubLocationProvider(authorization: .denied)
+        let coordinator = makeCoordinator(repository, provider)
+        await coordinator.refresh(camera: nil, visibleRadiusMeters: nil)
+        coordinator.select(markerId: "point:\(repository.point.id)")
+        let target = try XCTUnwrap(coordinator.selectedTarget)
+        XCTAssertEqual(coordinator.collectState(), .noPosition)
+
+        try await coordinator.reportPlacement(target: target, reason: .unsafe, comment: "Unsafe stop")
+        XCTAssertEqual(repository.lastPlacementReport?.0, target)
+        XCTAssertEqual(repository.lastPlacementReport?.1, .unsafe)
+        XCTAssertEqual(repository.lastPlacementReport?.2, "Unsafe stop")
+        XCTAssertTrue(coordinator.reportedPlacements.contains(target.placementReportKey))
+
+        repository.showPoint = false
+        await coordinator.refresh(camera: nil, visibleRadiusMeters: nil, force: true)
+        XCTAssertNil(coordinator.selectedTarget)
+        XCTAssertTrue(coordinator.points.isEmpty)
     }
 
     func testMarkerProximityExpiresWithoutChangingSourceRewards() async throws {

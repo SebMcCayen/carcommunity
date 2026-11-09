@@ -51,8 +51,8 @@ const val CROWN_LIVE_SHARE_TIP_TAG = "crown_live_share_tip"
  * The panel opened by TAPPING a Kronjakt crown on the map.
  *
  * Answers the three things the marker itself cannot — which tier it is, what it
- * pays, and how far away it is — and then offers the single action that can be
- * offered, honestly gated.
+ * pays, and how far away it is — and then shows collection readiness plus
+ * secondary actions for reporting the placement and navigating there.
  *
  * ## What this deliberately does not do
  *
@@ -88,6 +88,7 @@ fun CrownSpawnPopup(
     onNavigate: () -> Unit,
     onDismiss: () -> Unit,
     showLiveShareTip: Boolean = false,
+    placementReporter: CrownPlacementReporter? = null,
 ) {
     MapDetailSheet(
         title = stringResource(CrownSpawnMessages.rarityLabelRes(spawn.rarity)),
@@ -106,7 +107,14 @@ fun CrownSpawnPopup(
             // Base reward comes from the crown; actual awarded points only from the server outcome.
             Text(stringResource(R.string.crownHunt_spawnReward, spawn.rewardPoints),
                 style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            CrownCollectBody(state, status, distanceMeters, spawn.collectRadiusMeters, onCollect, onNavigate)
+            CrownCollectBody(state, status, distanceMeters, spawn.collectRadiusMeters, onCollect, onNavigate) {
+                if (placementReporter != null) {
+                    CrownPlacementReportAction(
+                        CrownPlacementTarget(spawn.id, "automatic", spawn.latitude, spawn.longitude),
+                        placementReporter,
+                    )
+                }
+            }
             if (showLiveShareTip) CrownLiveShareTip()
         }
     }
@@ -150,6 +158,7 @@ private fun CrownCollectBody(
     collectRadiusMeters: Double,
     onCollect: () -> Unit,
     onNavigate: () -> Unit,
+    reportPlacement: @Composable () -> Unit,
 ) {
     // TooFar owns its own distance display inside the proximity bar (the label
     // carries "x m to go"), so the generic distance line is suppressed for it to
@@ -247,9 +256,7 @@ private fun CrownCollectBody(
     ) {
         Text(text = buttonText)
     }
-    // Directly BELOW Collect: drive to the crown. Offered whatever the gate says —
-    // a member who is too far or moving needs exactly this to get parked beside
-    // it; one already in range simply will not use it.
+    reportPlacement()
     OutlinedButton(
         onClick = onNavigate,
         modifier = Modifier.fillMaxWidth().testTag(CROWN_SPAWN_NAVIGATE_TAG),

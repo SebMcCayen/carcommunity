@@ -39,9 +39,18 @@ const mocks = vi.hoisted(() => ({
   listClaims: vi.fn(),
   activate: vi.fn(),
   pause: vi.fn(),
+  listPlacements: vi.fn(),
+  placement: vi.fn(),
+  resolvePlacement: vi.fn(),
 }));
 
 vi.mock('@/app/kronjakt/CrownOverview', () => ({ CrownOverview: () => null }));
+
+vi.mock('@/features/crown-hunt/placement-reports', () => ({
+  listPlacementCases: mocks.listPlacements,
+  getPlacementCase: mocks.placement,
+  resolvePlacementCase: mocks.resolvePlacement,
+}));
 
 vi.mock('@/features/feature-flags', () => ({ subscribeFeatureFlagRows: vi.fn() }));
 
@@ -165,6 +174,7 @@ async function submitForm() {
 beforeEach(() => {
   Object.values(mocks).forEach((m) => m.mockReset());
   mocks.listPoints.mockResolvedValue(pointsResponse([]));
+  mocks.listPlacements.mockResolvedValue({ cases: [], openCount: 0, nextCursor: null });
   mocks.listClaims.mockResolvedValue({
     ok: true,
     data: { claims: [] },
@@ -584,5 +594,44 @@ describe('Kronjakt point form — collectable redesign', () => {
     expect(confirm.disabled).toBe(false);
     // Activation was NOT auto-fired by opening the modal.
     expect(mocks.activate).not.toHaveBeenCalled();
+  });
+});
+
+describe('Kronjakt placement reports', () => {
+  it('requires confirmation of the permanent block before removing the reported crown', async () => {
+    const report = {
+      caseId: 'reported-crown',
+      crownId: 'spawn-1',
+      source: 'automatic',
+      areaName: 'Kungsbacka centrum',
+      latitude: 57.5,
+      longitude: 12.1,
+      reportCount: 1,
+      reasons: { unsafe: 1 },
+      lastReportedAt: '2026-11-09T10:00:00Z',
+      version: 3,
+      decision: null,
+    };
+    mocks.listPlacements.mockResolvedValue({ cases: [report], openCount: 1, nextCursor: null });
+    mocks.placement.mockResolvedValue({ ...report, active: true, canMove: true, reports: [] });
+    mocks.resolvePlacement.mockResolvedValue({ resolved: true });
+    await act(async () => root.render(<KronjaktPage />));
+    await act(async () => buttonContaining('Platsrapporter').click());
+    expect(container.textContent).toContain('Kungsbacka centrum');
+    await act(async () => buttonByText('Ta bort kronan').click());
+    const dialog = container.querySelector('dialog')!;
+    expect(dialog.textContent).toContain('platsen spärras permanent');
+    expect(mocks.resolvePlacement).not.toHaveBeenCalled();
+
+    mocks.listPlacements.mockResolvedValue({ cases: [], openCount: 0, nextCursor: null });
+    const confirm = [...dialog.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Ta bort kronan',
+    )!;
+    await act(async () => confirm.click());
+    expect(mocks.resolvePlacement).toHaveBeenCalledWith(
+      expect.objectContaining({ caseId: 'reported-crown', version: 3 }),
+      { action: 'remove' },
+    );
+    expect(container.textContent).toContain('Inga öppna platsrapporter');
   });
 });

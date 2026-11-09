@@ -11,6 +11,8 @@ enum CrownMapTarget: Equatable, Sendable, Identifiable {
         }
     }
 
+    var placementReportKey: String { "\(id):\(latitude):\(longitude)" }
+
     var latitude: Double {
         switch self {
         case .point(let point): point.latitude
@@ -31,6 +33,13 @@ enum CrownMapTarget: Equatable, Sendable, Identifiable {
         case .spawn(let spawn): spawn.collectRadiusMeters
         }
     }
+}
+
+enum CrownPlacementReportReason: String, CaseIterable, Hashable, Sendable {
+    case unsafe
+    case hardToReach = "hard_to_reach"
+    case privateOrClosed = "private_or_closed"
+    case other
 }
 
 struct CrownMapPoint: Equatable, Sendable, Identifiable {

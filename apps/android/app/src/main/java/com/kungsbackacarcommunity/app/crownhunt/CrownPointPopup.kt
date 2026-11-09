@@ -38,7 +38,7 @@ const val CROWN_POINT_NAVIGATE_TAG = "crown_point_navigate"
  * (`crownHunt.submitClaim`) which owns the geofence, cooldown and daily-cap
  * checks and hands back a localized result.
  *
- * Two actions, stacked: **Collect**, gated by range so it is only live once the
+ * The primary **Collect** action is gated by range so it is only live once the
  * member is within the point's geofence (the same in-range rule that lights the
  * marker on the map — see [CrownRange]); and **Navigate**, directly below it, to
  * start turn-by-turn to the point so a member who is too far can drive there. The
@@ -63,6 +63,7 @@ fun CrownPointPopup(
     onNavigate: () -> Unit,
     onDismiss: () -> Unit,
     showLiveShareTip: Boolean = false,
+    placementReporter: CrownPlacementReporter? = null,
 ) {
     MapDetailSheet(
         title = point.title,
@@ -80,7 +81,16 @@ fun CrownPointPopup(
         } else {
             Text(stringResource(R.string.crownHunt_rewardLabel).replace("{points}", point.rewardPoints.toString()),
                 style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            CrownPointCollectBody(point, status, collectInRange, onCollect, onNavigate)
+            CrownPointCollectBody(point, status, collectInRange, onCollect, onNavigate) {
+                val latitude = point.latitude
+                val longitude = point.longitude
+                if (placementReporter != null && latitude != null && longitude != null) {
+                    CrownPlacementReportAction(
+                        CrownPlacementTarget(point.id, "hand_placed", latitude, longitude),
+                        placementReporter,
+                    )
+                }
+            }
             if (showLiveShareTip) CrownLiveShareTip()
         }
     }
@@ -94,6 +104,7 @@ private fun CrownPointCollectBody(
     collectInRange: Boolean,
     onCollect: () -> Unit,
     onNavigate: () -> Unit,
+    reportPlacement: @Composable () -> Unit,
 ) {
     point.description?.takeIf { it.isNotBlank() }?.let { description ->
         Text(
@@ -148,9 +159,7 @@ private fun CrownPointCollectBody(
                 ),
         )
     }
-    // Directly BELOW Collect: drive there. Offered whether or not in range — a
-    // member who is too far needs exactly this to close the gap; one who is
-    // already here simply will not use it.
+    reportPlacement()
     OutlinedButton(
         onClick = onNavigate,
         modifier = Modifier.fillMaxWidth().testTag(CROWN_POINT_NAVIGATE_TAG),
