@@ -56,6 +56,25 @@ enum LiveActionStatus: Equatable, Sendable {
 final class LiveLocationCoordinator {
     private let repository: LiveLocationRepository?
     private let provider: LocationProvider
+    private let onStationaryPromptChanged: @MainActor (UUID?, UUID?) -> Void
+    private let beginAutomaticStop: @MainActor () -> (@MainActor () -> Void)
+
+    // Match Android's StationarySharingMonitor.
+    private static let stationaryPromptDelay: TimeInterval = 10 * 60
+    private static let stationaryResponseWindow: TimeInterval = 5 * 60
+
+    private struct StationaryPrompt {
+        let id = UUID()
+        let deadline: Date
+    }
+
+    @ObservationIgnored
+    private var stationaryAnchor: (fix: LocationFix, since: Date)?
+    private var stationaryPrompt: StationaryPrompt? {
+        didSet { onStationaryPromptChanged(oldValue?.id, stationaryPrompt?.id) }
+    }
+    var stationaryPromptID: UUID? { stationaryPrompt?.id }
+
     /// Injected wall clock so expiry/cadence decisions are deterministic
     /// under test (Android threads `nowMillis` for the same reason).
     @ObservationIgnored
@@ -167,7 +186,9 @@ final class LiveLocationCoordinator {
         publishRetryWait: @escaping @Sendable (Int) async throws -> Void = { attempt in
             let seconds = min(pow(2, Double(attempt)), 4)
             try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-        }
+        },
+        onStationaryPromptChanged: @escaping @MainActor (UUID?, UUID?) -> Void = { _, _ in },
+        beginAutomaticStop: @escaping @MainActor () -> (@MainActor () -> Void) = { {} }
     ) {
         self.repository = repository
         self.provider = provider
@@ -175,6 +196,8 @@ final class LiveLocationCoordinator {
         self.now = now
         self.expiryTickWait = expiryTickWait
         self.publishRetryWait = publishRetryWait
+        self.onStationaryPromptChanged = onStationaryPromptChanged
+        self.beginAutomaticStop = beginAutomaticStop
         self.uid = repository?.currentUserId()
     }
 
@@ -278,6 +301,14 @@ final class LiveLocationCoordinator {
         }
     }
 
+    func confirmStillSharing(promptID: UUID) {
+        let at = now()
+        guard let prompt = stationaryPrompt, prompt.id == promptID, at < prompt.deadline,
+              let anchor = stationaryAnchor, isSharing else { return }
+        stationaryAnchor = (anchor.fix, at)
+        stationaryPrompt = nil
+    }
+
     /// Clears a failure so the controls are usable again.
     func reset() {
         if actionStatus == .failed {
@@ -300,6 +331,10 @@ final class LiveLocationCoordinator {
     // MARK: - Internals
 
     private func apply(_ session: LiveSessionInfo?) {
+        if self.session?.sessionId != session?.sessionId ||
+            self.session?.convoyAutoStarted != session?.convoyAutoStarted {
+            resetStationaryTracking()
+        }
         self.session = session
         readout.observe(session, at: now())
         sessionSnapshotRevision += 1
@@ -339,7 +374,10 @@ final class LiveLocationCoordinator {
                 if Task.isCancelled { break }
                 guard let self else { break }
                 self.receivedFixCount += 1
-                if self.isSharing { self.readout.acceptSpeed(from: fix) }
+                if self.isSharing {
+                    self.readout.acceptSpeed(from: fix)
+                    self.recordStationaryFix(fix)
+                }
                 relayContinuation.yield(fix)
             }
             relayContinuation.finish()
@@ -405,12 +443,51 @@ final class LiveLocationCoordinator {
                     self.endPublishing()
                     return
                 }
+                if self.repository?.currentUserId() == self.uid,
+                   self.stationaryStopIsDue(at: self.now()),
+                   self.actionStatus != .working {
+                    // Stop tears down this watchdog. Release its handle first
+                    // so the existing stop command can finish without being cancelled.
+                    self.expiryWatchdog = nil
+                    let endBackgroundTime = self.beginAutomaticStop()
+                    defer { endBackgroundTime() }
+                    await self.stopSharing()
+                    return
+                }
             }
         }
     }
 
+    private func recordStationaryFix(_ fix: LocationFix) {
+        guard session?.convoyAutoStarted == false else { return }
+        if let anchor = stationaryAnchor {
+            let distance = LiveShareCadence.distanceMeters(
+                lat1: anchor.fix.latitude, lon1: anchor.fix.longitude,
+                lat2: fix.latitude, lon2: fix.longitude
+            )
+            guard distance >= LiveShareCadence.movementThresholdMeters else { return }
+        }
+        stationaryAnchor = (fix, now())
+        if stationaryPrompt != nil { stationaryPrompt = nil }
+    }
+
+    private func stationaryStopIsDue(at now: Date) -> Bool {
+        guard session?.convoyAutoStarted == false, let anchor = stationaryAnchor else { return false }
+        if let prompt = stationaryPrompt { return now >= prompt.deadline }
+        if now.timeIntervalSince(anchor.since) >= Self.stationaryPromptDelay {
+            stationaryPrompt = StationaryPrompt(deadline: now.addingTimeInterval(Self.stationaryResponseWindow))
+        }
+        return false
+    }
+
+    private func resetStationaryTracking() {
+        stationaryAnchor = nil
+        if stationaryPrompt != nil { stationaryPrompt = nil }
+    }
+
     private func endPublishing() {
         keepsScreenAwake = false
+        resetStationaryTracking()
         if readout.sessionId != nil, !isSharing {
             readout.observe(session, at: now())
             sessionSnapshotRevision += 1

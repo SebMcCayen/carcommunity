@@ -90,7 +90,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Show Xcode version
@@ -213,7 +213,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Show Xcode version
@@ -334,7 +334,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Show Xcode version
@@ -465,14 +465,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Finish Simulator runtime cache preparation
         timeout-minutes: 15
         run: xcrun simctl runtime dyld_shared_cache update --all
       - name: Download successful same-commit test build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.ios-build-debug.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products
@@ -525,14 +525,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Finish Simulator runtime cache preparation
         timeout-minutes: 15
         run: xcrun simctl runtime dyld_shared_cache update --all
       - name: Download successful same-commit test build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.ios-build-debug.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products
@@ -586,14 +586,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Finish Simulator runtime cache preparation
         timeout-minutes: 15
         run: xcrun simctl runtime dyld_shared_cache update --all
       - name: Download successful same-commit test build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.ios-build-release.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products
@@ -647,14 +647,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Setup Python for test-product transfer
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Finish Simulator runtime cache preparation
         timeout-minutes: 15
         run: xcrun simctl runtime dyld_shared_cache update --all
       - name: Download successful same-commit test build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.ios-build-native.outputs.artifact_id }}
           path: ${{ runner.temp }}/ios-products

@@ -55,6 +55,7 @@ import {
   MAX_NEIGHBOURHOOD_CROWNS,
   SPAWN_RUN_INTERVAL_MS,
 } from './spawnScheduled';
+import { isPlacementBlocked, readPlacementBlocks } from './placement-memory';
 import {
   classifyDiagnosticCell,
   nextScheduledSpawnRun,
@@ -247,7 +248,9 @@ export const spawnDiagnostics = onCall(
     // -----------------------------------------------------------------------
     // Cell enumeration + scan window (from the cursor), mirroring the pass.
     // -----------------------------------------------------------------------
-    const enumeration = cellKeysForBoundingBox(shapeBoundingBox(shape), MAX_AREA_CELLS);
+    const box = shapeBoundingBox(shape);
+    const enumeration = cellKeysForBoundingBox(box, MAX_AREA_CELLS);
+    const blocks = await readPlacementBlocks(box.south, box.north);
     const allKeys = enumeration.keys;
     const totalCells = allKeys.length;
     const cellsTruncated = enumeration.truncated;
@@ -309,19 +312,17 @@ export const spawnDiagnostics = onCall(
         .where('cellKey', '==', cellKey)
         .limit(MAX_DIAGNOSTIC_POIS_PER_CELL)
         .get();
-      const poiCount = poiSnap.size;
+      const eligiblePois: DiagnosticPoiAnchor[] = poiSnap.docs.flatMap((doc) => {
+        const { lat, lon, category } = doc.data();
+        return typeof lat === 'number' &&
+          typeof lon === 'number' &&
+          !isPlacementBlocked({ latitude: lat, longitude: lon }, blocks)
+          ? [{ lat, lon, category: normalizePoiCategory(category) }]
+          : [];
+      });
+      const poiCount = eligiblePois.length;
       const poiCountCapped = poiSnap.size >= MAX_DIAGNOSTIC_POIS_PER_CELL;
-      const poiAnchors: DiagnosticPoiAnchor[] = poiSnap.docs
-        .slice(0, MAX_POI_ANCHORS_PER_CELL)
-        .map((doc) => {
-          const data = doc.data();
-          return {
-            lat: data.lat as number,
-            lon: data.lon as number,
-            category: normalizePoiCategory(data.category),
-          };
-        })
-        .filter((anchor) => typeof anchor.lat === 'number' && typeof anchor.lon === 'number');
+      const poiAnchors = eligiblePois.slice(0, MAX_POI_ANCHORS_PER_CELL);
 
       const classification = classifyDiagnosticCell({ target, liveCount: liveInCell, poiCount });
       const center = bounds

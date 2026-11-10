@@ -28,6 +28,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { CrownOverview } from './CrownOverview';
+import { PlacementReportsTab } from './PlacementReportsTab';
+import { listPlacementCases } from '@/features/crown-hunt/placement-reports';
 import { useCursorHistory } from '@/hooks/useCursorHistory';
 import { HistoryPager } from '@/components/ui/HistoryPager';
 
@@ -767,7 +769,7 @@ const ClaimsTab = ({
 // Page
 // ---------------------------------------------------------------------------
 
-type Tab = 'overview' | 'points' | 'claims' | 'areas' | 'stats';
+type Tab = 'overview' | 'points' | 'claims' | 'areas' | 'stats' | 'placementReports';
 
 export default function KronjaktPage() {
   const mountedRef = useRef(true);
@@ -779,6 +781,18 @@ export default function KronjaktPage() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [placementCount, setPlacementCount] = useState(0);
+  useEffect(() => {
+    let current = true;
+    void listPlacementCases(false)
+      .then(({ openCount }) => {
+        if (current) setPlacementCount(openCount);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, []);
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [focusedPoint, setFocusedPoint] = useState<AdminCrownHuntPointSummary | null>(null);
 
@@ -1007,6 +1021,7 @@ export default function KronjaktPage() {
             ['points', 'Handplacerade'],
             ['claims', 'Insamlingar'],
             ['stats', 'Statistik'],
+            ['placementReports', t('placementReports.tab')],
           ] as const
         ).map(([tab, label], index, tabs) => (
           <button
@@ -1041,6 +1056,17 @@ export default function KronjaktPage() {
             }}
           >
             {label}
+            {tab === 'placementReports' && placementCount > 0 && (
+              <span
+                className={styles.tabCount}
+                aria-label={t('placementReports.openCount').replace(
+                  '{count}',
+                  String(placementCount),
+                )}
+              >
+                {placementCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -1162,6 +1188,16 @@ export default function KronjaktPage() {
       {activeTab === 'stats' && (
         <div role="tabpanel" id="crown-panel-stats" aria-labelledby="crown-tab-stats">
           <StatsTab />
+        </div>
+      )}
+
+      {activeTab === 'placementReports' && (
+        <div
+          role="tabpanel"
+          id="crown-panel-placementReports"
+          aria-labelledby="crown-tab-placementReports"
+        >
+          <PlacementReportsTab onCount={setPlacementCount} />
         </div>
       )}
 

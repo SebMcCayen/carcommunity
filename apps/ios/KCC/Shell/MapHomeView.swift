@@ -470,6 +470,7 @@ struct MapHomeView: View {
     private let accessToken: String?
     let bottomClearance: CGFloat
     private let featureHealthReporter: FeatureHealthReporter?
+    private let markers: AnyView
     @State private var renderWatchdog: MapRenderWatchdog
 
     init(
@@ -478,7 +479,8 @@ struct MapHomeView: View {
         basemap: MapBasemap = .standard,
         accessToken: String? = MapboxConfiguration.accessToken(),
         bottomClearance: CGFloat = 0,
-        featureHealthReporter: FeatureHealthReporter? = nil
+        featureHealthReporter: FeatureHealthReporter? = nil,
+        markers: AnyView = AnyView(EmptyView())
     ) {
         self.surface = surface
         self.locationProvider = locationProvider
@@ -486,6 +488,7 @@ struct MapHomeView: View {
         self.accessToken = accessToken
         self.bottomClearance = bottomClearance
         self.featureHealthReporter = featureHealthReporter
+        self.markers = markers
         _renderWatchdog = State(initialValue: MapRenderWatchdog())
     }
 
@@ -498,6 +501,7 @@ struct MapHomeView: View {
                     locationProvider: locationProvider,
                     basemap: basemap,
                     bottomClearance: bottomClearance,
+                    markers: markers,
                     onLoadingError: { kind in
                         featureHealthReporter?.report(
                             kind,
@@ -513,6 +517,8 @@ struct MapHomeView: View {
                 }
             } else {
                 mapPlaceholder
+                    .overlay { markers }
+                    .ignoresSafeArea(edges: .top)
             }
         }
         .onAppear(perform: updateFeatureHealthConditions)
@@ -614,6 +620,7 @@ private struct MapboxStandardMap: View {
     let locationProvider: any LocationProvider
     let basemap: MapBasemap
     let bottomClearance: CGFloat
+    let markers: AnyView
     @State private var viewport: Viewport
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
@@ -636,6 +643,7 @@ private struct MapboxStandardMap: View {
         locationProvider: any LocationProvider,
         basemap: MapBasemap,
         bottomClearance: CGFloat,
+        markers: AnyView,
         onLoadingError: @escaping @MainActor (FeatureHealthKind) -> Void,
         onFullFrameRendered: @escaping @MainActor () -> Void,
         onLoaded: @escaping @MainActor () -> Void
@@ -646,6 +654,7 @@ private struct MapboxStandardMap: View {
         self.basemap = basemap
         self.onLoaded = onLoaded
         self.bottomClearance = bottomClearance
+        self.markers = markers
         self.onFullFrameRendered = onFullFrameRendered
         self.onLoadingError = onLoadingError
         _viewport = State(initialValue: .camera(
@@ -694,6 +703,9 @@ private struct MapboxStandardMap: View {
                 }
             }
             .mapStyle(basemap == .satellite ? .standardSatellite : .standard)
+            // Use the Layers switch for pitch so it cannot win against a
+            // two-finger pan. Keep the SDK's native pinch, pan and rotation.
+            .gestureOptions(GestureOptions(pitchEnabled: false))
             // Keep Mapbox attribution/logo; hide only the requested scale
             // and the redundant SDK compass in favour of our accessible rail.
             .ornamentOptions(OrnamentOptions(
@@ -704,6 +716,16 @@ private struct MapboxStandardMap: View {
                 attributionButton: AttributionButtonOptions(position: .bottomLeft,
                     margins: CGPoint(x: 112, y: bottomClearance + 8))
             ))
+            .onStyleLoaded { _ in
+                guard let map = proxy.map else { return }
+                // The marker overlay uses point(for:), which Mapbox does not
+                // support on Standard's globe at low zoom levels.
+                try? map.setProjection(StyleProjection(name: .mercator))
+                surface.invalidateProjection()
+                MapHomeStyleLayers.applyMapMode(surface.mapMode, to: map)
+                MapHomeStyleLayers.apply3D(surface.is3D, to: map)
+                MapHomeStyleLayers.applyTraffic(surface.trafficEnabled, mode: surface.mapMode, to: map)
+            }
             .onMapLoaded { _ in
                 onLoaded()
                 guard !didFinishInitialMapLoad else { return }
@@ -722,15 +744,6 @@ private struct MapboxStandardMap: View {
                 mapReady = proxy.map != nil
                 didFinishInitialMapLoad = mapReady
                 updateOwnLocationForVisibility()
-            }
-            .onStyleLoaded { _ in
-                // MapContent and projected markers keep their owners. Only
-                // layers and settings installed directly on the style need replay.
-                guard let map = proxy.map else { return }
-                surface.invalidateProjection()
-                MapHomeStyleLayers.applyMapMode(surface.mapMode, to: map)
-                MapHomeStyleLayers.apply3D(surface.is3D, to: map)
-                MapHomeStyleLayers.applyTraffic(surface.trafficEnabled, mode: surface.mapMode, to: map)
             }
             .onMapLoadingError { event in
                 switch event.type {
@@ -826,6 +839,9 @@ private struct MapboxStandardMap: View {
                 cameraRuntime.cancelIdleReturn()
                 applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
             }
+            // Mapbox projects from the native view's top-left. Expand the
+            // map and its marker layer together so their origins stay aligned.
+            .overlay { markers }
             .ignoresSafeArea(edges: .top)
         }
         .task(id: MapHomeMeFollowPolicy.subscriptionKey(

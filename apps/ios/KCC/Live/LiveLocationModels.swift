@@ -7,9 +7,7 @@
 // Deliberate deviations from the Kotlin sources (documented per the parity
 // instructions):
 // - `LiveSessionInfo` projects Android's full `mainCar` down to the image path
-//   needed by drive recording. It also carries owner-only vehicle/convoy ids;
-//   `convoyAutoStarted` remains omitted because iOS teardown does not branch
-//   on that redundant flag.
+//   needed by drive recording. It also carries owner-only vehicle/convoy ids.
 // - Times are `Date`/`TimeInterval` instead of epoch millis — the platform's
 //   native clock vocabulary, exactly as `LocationFix` did for `LiveCoordinate`.
 
@@ -73,6 +71,7 @@ struct LiveSessionInfo: Equatable, Sendable {
     let vehicleId: String?
     let carImagePath: String?
     let convoyId: String?
+    let convoyAutoStarted: Bool
 
     /// Maps the RTDB session node's dictionary value to the model, or nil when
     /// the node is missing a required field. Pure (`[String: Any]` in, model
@@ -90,7 +89,8 @@ struct LiveSessionInfo: Equatable, Sendable {
             expiresAt: (map["expiresAt"] as? String).flatMap(LiveIsoInstant.parse),
             vehicleId: clean(map["vehicleId"] as? String),
             carImagePath: clean((map["mainCar"] as? [String: Any])?["imagePath"] as? String),
-            convoyId: clean(map["convoyId"] as? String)
+            convoyId: clean(map["convoyId"] as? String),
+            convoyAutoStarted: map["convoyAutoStarted"] as? Bool == true
         )
     }
 
@@ -101,7 +101,8 @@ struct LiveSessionInfo: Equatable, Sendable {
         expiresAt: Date?,
         vehicleId: String? = nil,
         carImagePath: String? = nil,
-        convoyId: String? = nil
+        convoyId: String? = nil,
+        convoyAutoStarted: Bool = false
     ) {
         self.sessionId = sessionId
         self.status = status
@@ -110,6 +111,7 @@ struct LiveSessionInfo: Equatable, Sendable {
         self.vehicleId = vehicleId
         self.carImagePath = carImagePath
         self.convoyId = convoyId
+        self.convoyAutoStarted = convoyAutoStarted
     }
 
     private static func clean(_ value: String?) -> String? {

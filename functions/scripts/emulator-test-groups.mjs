@@ -99,6 +99,7 @@ export const GROUPS = [
     patterns: [
       'crownhunt*',
       'crown-allowance',
+      'crown-placement-reports',
       'leaderboard',
       'points*',
       'badges',

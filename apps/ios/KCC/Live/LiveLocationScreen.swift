@@ -249,6 +249,36 @@ struct LiveLocationScreen: View {
     }
 }
 
+/// Presents the Live question alongside the shell without attaching another
+/// presentation modifier to its interactive navigation and route content.
+struct StationaryLivePrompt: View {
+    @Environment(\.scenePhase) private var scenePhase
+    let coordinator: LiveLocationCoordinator
+    let onStop: (UUID) -> Void
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .alert(
+                "liveLocation.stationaryPromptTitle",
+                isPresented: Binding(
+                    get: { scenePhase == .active && coordinator.stationaryPromptID != nil },
+                    set: { _ in }
+                ),
+                presenting: coordinator.stationaryPromptID
+            ) { promptID in
+                Button("liveLocation.stillSharingAction") {
+                    coordinator.confirmStillSharing(promptID: promptID)
+                }
+                Button("liveLocation.stop", role: .destructive) {
+                    onStop(promptID)
+                }
+            } message: { _ in
+                Text("liveLocation.stationaryPromptBody")
+            }
+    }
+}
+
 #Preview("Not sharing (unwired build)") {
     let provider = StubLocationProvider()
     LiveLocationScreen(

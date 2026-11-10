@@ -1189,9 +1189,22 @@ final class ShellSmokeTests: XCTestCase {
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
             XCTAssertTrue(button.waitForExistence(timeout: 15))
-            // Let XCTest wait on actual interactivity, then measure geometry
-            // outside its polling deadline. Read the current main window;
-            // application accessibility bounds can change during first layout.
+            // XCTest can raise an activation-point error while the footer
+            // exists in the accessibility tree but its frame is still settling.
+            // Establish on-screen geometry before asking for a hit point.
+            let layoutWindow = window.frame
+            let layout = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in
+                    let frame = button.frame
+                    return !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
+                        layoutWindow.contains(CGPoint(x: frame.midX, y: frame.midY))
+                },
+                object: button
+            )
+            let layoutResult = XCTWaiter.wait(for: [layout], timeout: 15)
+            if layoutResult != .completed { chatProof(app, name: "primary-\(id)-layout-failure", tree: true) }
+            XCTAssertEqual(layoutResult, .completed, "Primary action \(id) must be laid out after launch")
+
             let interactive = button.wait(for: \.isHittable, toEqual: true, timeout: 15)
             let frame = button.frame
             let windowFrame = window.frame

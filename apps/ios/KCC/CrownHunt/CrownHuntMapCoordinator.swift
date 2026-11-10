@@ -31,6 +31,7 @@ final class CrownHuntMapCoordinator {
     private(set) var loading = false
     private(set) var claimStatus: CrownMapClaimStatus = .idle
     private(set) var collectedSpawnIds: Set<String> = []
+    private(set) var reportedPlacements: Set<String> = []
     var selectedTarget: CrownMapTarget?
 
     init(
@@ -56,6 +57,16 @@ final class CrownHuntMapCoordinator {
 
     var isAvailable: Bool {
         repository != nil && crownHuntEnabled && passesMemberGate
+    }
+
+    func reportPlacement(
+        target: CrownMapTarget,
+        reason: CrownPlacementReportReason,
+        comment: String
+    ) async throws {
+        guard isAvailable, let repository else { throw CrownMapRepositoryError.invalidResponse }
+        try await repository.reportPlacement(target: target, reason: reason, comment: comment)
+        reportedPlacements.insert(target.placementReportKey)
     }
 
     var markers: [MapCrownMarker] { markers(at: Date()) }
@@ -126,7 +137,7 @@ final class CrownHuntMapCoordinator {
         pointsLoaded = false
     }
 
-    func refresh(camera: MapCameraSnapshot?, visibleRadiusMeters: Double?) async {
+    func refresh(camera: MapCameraSnapshot?, visibleRadiusMeters: Double?, force: Bool = false) async {
         guard isAvailable, let repository else { return }
         let keys: [String]
         if spawnEnabled, let camera {
@@ -138,14 +149,17 @@ final class CrownHuntMapCoordinator {
         } else {
             keys = []
         }
-        let shouldLoadSpawns = spawnEnabled && Set(keys) != Set(lastCellKeys ?? [])
+        let cellsChanged = Set(keys) != Set(lastCellKeys ?? [])
+        let shouldLoadSpawns = spawnEnabled && (force || cellsChanged)
         loading = true
         defer { loading = false }
         do {
-            async let pointRead = loadPointsIfNeeded(repository: repository)
+            async let pointRead = loadPointsIfNeeded(repository: repository, force: force)
             if shouldLoadSpawns {
                 async let spawnRead = repository.nearbySpawns(cellKeys: keys, now: Date())
-                async let collectedRead = loadCollectedIds(repository: repository, now: Date())
+                async let collectedRead = cellsChanged
+                    ? loadCollectedIds(repository: repository, now: Date())
+                    : []
                 let (newPoints, newSpawns, collected) = try await (
                     pointRead, spawnRead, collectedRead
                 )
@@ -173,8 +187,8 @@ final class CrownHuntMapCoordinator {
         }
     }
 
-    private func loadPointsIfNeeded(repository: CrownHuntMapRepository) async throws -> [CrownMapPoint] {
-        if pointsLoaded { return points }
+    private func loadPointsIfNeeded(repository: CrownHuntMapRepository, force: Bool) async throws -> [CrownMapPoint] {
+        if pointsLoaded && !force { return points }
         return try await repository.activePoints()
     }
 

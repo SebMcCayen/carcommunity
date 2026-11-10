@@ -42,6 +42,8 @@ import {
   type CrownHuntPointStatus,
 } from './crownhunt-core';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
+import { isPlacementBlocked, manualPlacementMoves, readPlacementBlocks } from './placement-memory';
+import type { CrownPosition } from './crown-spawn-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -264,6 +266,9 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
       update.status = 'ended';
     }
 
+    if (merged.latitude !== existing.latitude || merged.longitude !== existing.longitude) {
+      tx.delete(manualPlacementMoves.doc(input.pointId));
+    }
     tx.update(pointRef, update);
     tx.set(
       db.collection('adminAuditEvents').doc(),
@@ -307,8 +312,14 @@ export const activatePoint = onCall(CALLABLE_OPTS, async (request): Promise<Poin
     if (!snap.exists) {
       throw new HttpsError('not-found', 'Kronjakt point not found.');
     }
-    if (snap.data()!.status === 'ended') {
+    const point = snap.data()!;
+    if (point.status === 'ended') {
       throw new HttpsError('failed-precondition', 'Ended points cannot be activated.');
+    }
+    const destination = point as CrownPosition;
+    const blocks = await readPlacementBlocks(destination.latitude, destination.latitude, tx);
+    if (isPlacementBlocked(destination, blocks)) {
+      throw new HttpsError('failed-precondition', 'This crown placement is blocked.');
     }
     tx.update(pointRef, {
       status: 'active',
@@ -354,7 +365,17 @@ export const pausePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointId
     if (snap.data()!.status === 'ended') {
       throw new HttpsError('failed-precondition', 'Ended points cannot be paused.');
     }
-    tx.update(pointRef, { status: 'paused', updatedAt: serverTimestamp() });
+    const point = snap.data()!;
+    const moveRef = manualPlacementMoves.doc(pointId);
+    const move = (await tx.get(moveRef)).data();
+    const moveMatches =
+      move && move.fromLatitude === point.latitude && move.fromLongitude === point.longitude;
+    tx.update(pointRef, {
+      status: 'paused',
+      updatedAt: serverTimestamp(),
+      ...(moveMatches ? { latitude: move.latitude, longitude: move.longitude } : {}),
+    });
+    if (move) tx.delete(moveRef);
     tx.set(
       db.collection('adminAuditEvents').doc(),
       buildAdminAuditEvent(
@@ -407,7 +428,10 @@ export const deletePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointD
   // state can outlive the point. Deleting the doc is what removes a live active
   // crown from the map (members read only status=='active').
   const removedCollectors = await deletePointCollectorMarkers(pointId);
-  await pointRef.delete();
+  const batch = db.batch();
+  batch.delete(pointRef);
+  batch.delete(manualPlacementMoves.doc(pointId));
+  await batch.commit();
 
   await db
     .collection('adminAuditEvents')

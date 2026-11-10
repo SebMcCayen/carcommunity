@@ -1,6 +1,11 @@
 import Foundation
 
 protocol CrownHuntMapRepository: AnyObject, Sendable {
+    func reportPlacement(
+        target: CrownMapTarget,
+        reason: CrownPlacementReportReason,
+        comment: String
+    ) async throws
     func activePoints() async throws -> [CrownMapPoint]
     func nearbySpawns(cellKeys: [String], now: Date) async throws -> [CrownSpawn]
     func collectedSpawnIds(uid: String, now: Date) async throws -> Set<String>

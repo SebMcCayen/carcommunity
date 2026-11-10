@@ -19,10 +19,13 @@ struct ConvoyReactionControls: View {
     var body: some View {
         ZStack {
             if let event = coordinator.incomingReaction {
-                ConvoyReactionOverlay(event: event)
-                    .id(event.id)
-                    .transition(.scale(scale: 0.35).combined(with: .opacity))
-                    .allowsHitTesting(false)
+                MapReactionPop(
+                    symbol: event.kind.systemImage, tint: event.kind.color, caption: event.caption
+                )
+                .accessibilityIdentifier("convoy_reaction_overlay")
+                .id(event.id)
+                .transition(.scale(scale: 0.35).combined(with: .opacity))
+                .allowsHitTesting(false)
             }
 
             VStack {
@@ -114,21 +117,32 @@ struct ConvoyReactionControls: View {
     }
 }
 
-private struct ConvoyReactionOverlay: View {
-    let event: ConvoyReactionEvent
+struct MapReactionPop: View {
+    let symbol: String
+    let tint: Color
+    let caption: String
+    var animateWave = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: KccSpacing.s2) {
             ZStack {
-                Circle().fill(event.kind.color)
-                Image(systemName: event.kind.systemImage)
-                    .font(.system(size: 50, weight: .semibold))
-                    .foregroundStyle(.white)
+                Circle().fill(tint)
+                if animateWave && !reduceMotion {
+                    icon.phaseAnimator([0.0, -16, 16, -10]) { content, degrees in
+                        content.rotationEffect(.degrees(degrees))
+                    } animation: { _ in
+                        .easeInOut(duration: 0.22)
+                    }
+                } else {
+                    icon
+                }
             }
             .frame(width: 96, height: 96)
             .shadow(color: .black.opacity(0.22), radius: 6, y: 3)
 
-            Text(event.caption)
+            Text(caption)
                 .font(.body.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, KccSpacing.s3)
@@ -136,9 +150,14 @@ private struct ConvoyReactionOverlay: View {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: KccRadius.sm))
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(event.caption)
+        .accessibilityLabel(caption)
         .accessibilityAddTraits(.updatesFrequently)
-        .accessibilityIdentifier("convoy_reaction_overlay")
+    }
+
+    private var icon: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 50, weight: .semibold))
+            .foregroundStyle(.white)
     }
 }
 
