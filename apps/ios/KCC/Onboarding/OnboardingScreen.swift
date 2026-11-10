@@ -39,7 +39,7 @@ struct OnboardingScreen: View {
                     .textContentType(.nickname)
                     .autocorrectionDisabled()
                     .accessibilityLabel(Text("onboarding.displayNameLabel"))
-                Text("onboarding.displayNameDescription")
+                Text("onboarding.iosDisplayNameDescription")
                     .font(.subheadline).foregroundStyle(KccTheme.secondary)
                 if displayName.trimmingCharacters(in: .whitespacesAndNewlines).count
                     > OnboardingForm.displayNameMaxLength

@@ -166,6 +166,7 @@
     "displayNameLabel": "Visningsnamn",
     "displayNamePlaceholder": "Ditt visningsnamn",
     "displayNameDescription": "Detta är det publika namn som andra medlemmar ser (i evenemang, chatt med mera). Ditt riktiga Google-namn visas aldrig.",
+    "iosDisplayNameDescription": "Du väljer själv vilket namn andra medlemmar ser i evenemang, chattar och på andra ställen i appen. Du använder ditt Apple-konto för att logga in.",
     "partnerStatsOptIn": "Bidra med anonymiserad partnerstatistik",
     "partnerStatsNote": "På som standard. Du kan stänga av det nu, eller senare under Integritet.",
     "defaultMapTitle": "Öppna kartlänkar i KCC",
