@@ -45,7 +45,8 @@ final class CrownHuntMapModelTests: XCTestCase {
         private(set) var deployCount = 0
 
         func effects(uid: String, now: Date) async -> CrownPerkEffects {
-            await effectsGate.waitForValue()
+            if deployCount > 0 { return .empty }
+            return await effectsGate.waitForValue()
         }
 
         func deploy(
@@ -70,6 +71,24 @@ final class CrownHuntMapModelTests: XCTestCase {
 
         func resumeEffects(_ effects: CrownPerkEffects) async {
             await effectsGate.resume(effects)
+        }
+    }
+
+
+    private final class OwnedPerksRepository: PerkShopRepository {
+        func catalog() -> AsyncStream<PerkCatalogSnapshot> {
+            AsyncStream { $0.finish() }
+        }
+
+        func inventory(uid: String) -> AsyncStream<[String: Int]> {
+            AsyncStream {
+                $0.yield(["spike_strip": 1, "shield": 2, "boost": 1])
+                $0.finish()
+            }
+        }
+
+        func buyPerk(perkId: String, idempotencyKey: String) async throws -> PerkPurchaseResult {
+            throw PerkPurchaseError(reason: .unknown)
         }
     }
 
@@ -212,16 +231,70 @@ final class CrownHuntMapModelTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 2_000)
         let coordinator = CrownPerkMapCoordinator(
             repository: repository,
-            shopRepository: nil,
+            shopRepository: OwnedPerksRepository(),
             uid: "member",
             enabled: true,
             location: { self.fix(at: now.addingTimeInterval(-61)) }
         )
+        defer { coordinator.stop() }
+        await startPerks(coordinator, repository: repository, effects: .empty)
 
         await coordinator.deploy(perkId: "spike_strip", kind: .trap, now: now)
 
         XCTAssertEqual(coordinator.status, .failed("spike_strip", .noLocation))
         XCTAssertEqual(repository.deployCount, 0)
+    }
+
+    @MainActor
+    func testActivePerksCannotBeSpentAgainUntilTheyExpire() async {
+        let repository = SuspendedPerkRepository()
+        let now = Date(timeIntervalSince1970: 2_000)
+        let expiry = now.addingTimeInterval(0.5)
+        let coordinator = CrownPerkMapCoordinator(
+            repository: repository,
+            shopRepository: OwnedPerksRepository(),
+            uid: "member",
+            enabled: true,
+            location: { nil }
+        )
+        defer { coordinator.stop() }
+        let effects = CrownPerkEffects(
+            shieldUntil: expiry,
+            boostUntil: now.addingTimeInterval(59.5),
+            traps: [CrownOwnTrap(id: "trap", latitude: 57, longitude: 12, expiresAt: expiry)]
+        )
+        await startPerks(coordinator, repository: repository, effects: effects)
+
+        XCTAssertEqual(effects.activity(for: .shield, at: now), .timed(seconds: 1))
+        XCTAssertEqual(effects.activity(for: .boost, at: now), .timed(seconds: 60))
+        XCTAssertEqual(effects.activity(for: .trap, at: now), .traps(1))
+        XCTAssertEqual(effects.activity(for: .shield, at: expiry), .inactive)
+        XCTAssertEqual(effects.activity(for: .trap, at: expiry), .inactive)
+        XCTAssertTrue(coordinator.canDeploy(perkId: "shield", kind: .shield, now: expiry))
+        XCTAssertTrue(coordinator.canDeploy(perkId: "spike_strip", kind: .trap, now: expiry))
+        XCTAssertFalse(coordinator.canDeploy(perkId: "boost", kind: .boost, now: now))
+        XCTAssertFalse(coordinator.canDeploy(perkId: "unowned", kind: .shield, now: expiry))
+
+        await coordinator.deploy(perkId: "shield", kind: .shield, now: now)
+        await coordinator.deploy(perkId: "spike_strip", kind: .trap, now: now)
+        XCTAssertEqual(repository.deployCount, 0)
+        XCTAssertEqual(coordinator.status, .idle)
+    }
+
+    @MainActor
+    private func startPerks(
+        _ coordinator: CrownPerkMapCoordinator,
+        repository: SuspendedPerkRepository,
+        effects: CrownPerkEffects
+    ) async {
+        coordinator.start()
+        await repository.waitForEffectsRequest()
+        await repository.resumeEffects(effects)
+        for _ in 0..<100 {
+            if coordinator.hasLoadedEffects && coordinator.hasLoadedInventory { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Perk inventory and effects did not load")
     }
 
     private func makeSpawn() -> CrownSpawn {

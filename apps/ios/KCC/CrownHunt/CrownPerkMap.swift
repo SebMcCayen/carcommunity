@@ -17,6 +17,29 @@ struct CrownPerkEffects: Equatable, Sendable {
     let traps: [CrownOwnTrap]
 
     static let empty = CrownPerkEffects(shieldUntil: nil, boostUntil: nil, traps: [])
+
+    func activity(for kind: PerkKind, at now: Date) -> CrownPerkActivity {
+        switch kind {
+        case .trap:
+            let count = traps.count { $0.expiresAt > now }
+            return count > 0 ? .traps(count) : .inactive
+        case .shield:
+            return Self.timedActivity(until: shieldUntil, at: now)
+        case .boost:
+            return Self.timedActivity(until: boostUntil, at: now)
+        }
+    }
+
+    private static func timedActivity(until expiry: Date?, at now: Date) -> CrownPerkActivity {
+        guard let expiry, expiry > now else { return .inactive }
+        return .timed(seconds: Int(expiry.timeIntervalSince(now).rounded(.up)))
+    }
+}
+
+enum CrownPerkActivity: Equatable {
+    case inactive
+    case traps(Int)
+    case timed(seconds: Int)
 }
 
 struct CrownPerkDeployResult: Equatable, Sendable {
@@ -36,7 +59,7 @@ enum CrownPerkDeployFailure: Error, Equatable, Sendable {
 }
 
 protocol CrownPerkDeployRepository: AnyObject, Sendable {
-    func effects(uid: String, now: Date) async -> CrownPerkEffects
+    func effects(uid: String, now: Date) async throws -> CrownPerkEffects
     func deploy(
         perkId: String,
         latitude: Double?,
@@ -54,38 +77,34 @@ final class FirebaseCrownPerkDeployRepository: CrownPerkDeployRepository, @unche
         self.functions = functions
     }
 
-    func effects(uid: String, now: Date) async -> CrownPerkEffects {
-        do {
-            async let shieldRead = firestore.collection("perkShieldPublic").document(uid).getDocument()
-            async let boostRead = firestore.collection("perkBoost").document(uid).getDocument()
-            let lowerBound = Timestamp(date: now.addingTimeInterval(-300))
-            async let trapsRead = firestore.collection("activePerks")
-                .whereField("placedByUid", isEqualTo: uid)
-                .whereField("status", isEqualTo: "armed")
-                .whereField("expiresAt", isGreaterThan: lowerBound)
-                .limit(to: 10)
-                .getDocuments()
-            let (shield, boost, traps) = try await (shieldRead, boostRead, trapsRead)
-            let ownTraps = traps.documents.compactMap { document -> CrownOwnTrap? in
-                guard let latitude = (document.get("lat") as? NSNumber)?.doubleValue,
-                      let longitude = (document.get("lng") as? NSNumber)?.doubleValue,
-                      let expiresAt = (document.get("expiresAt") as? Timestamp)?.dateValue(),
-                      expiresAt > now else { return nil }
-                return CrownOwnTrap(
-                    id: document.documentID,
-                    latitude: latitude,
-                    longitude: longitude,
-                    expiresAt: expiresAt
-                )
-            }
-            return CrownPerkEffects(
-                shieldUntil: (shield.get("shieldedUntil") as? Timestamp)?.dateValue(),
-                boostUntil: (boost.get("expiresAt") as? Timestamp)?.dateValue(),
-                traps: ownTraps
+    func effects(uid: String, now: Date) async throws -> CrownPerkEffects {
+        async let shieldRead = firestore.collection("perkShieldPublic").document(uid).getDocument(source: .server)
+        async let boostRead = firestore.collection("perkBoost").document(uid).getDocument(source: .server)
+        let lowerBound = Timestamp(date: now.addingTimeInterval(-300))
+        async let trapsRead = firestore.collection("activePerks")
+            .whereField("placedByUid", isEqualTo: uid)
+            .whereField("status", isEqualTo: "armed")
+            .whereField("expiresAt", isGreaterThan: lowerBound)
+            .limit(to: 10)
+            .getDocuments(source: .server)
+        let (shield, boost, traps) = try await (shieldRead, boostRead, trapsRead)
+        let ownTraps = traps.documents.compactMap { document -> CrownOwnTrap? in
+            guard let latitude = (document.get("lat") as? NSNumber)?.doubleValue,
+                  let longitude = (document.get("lng") as? NSNumber)?.doubleValue,
+                  let expiresAt = (document.get("expiresAt") as? Timestamp)?.dateValue(),
+                  expiresAt > now else { return nil }
+            return CrownOwnTrap(
+                id: document.documentID,
+                latitude: latitude,
+                longitude: longitude,
+                expiresAt: expiresAt
             )
-        } catch {
-            return .empty
         }
+        return CrownPerkEffects(
+            shieldUntil: (shield.get("shieldedUntil") as? Timestamp)?.dateValue(),
+            boostUntil: (boost.get("expiresAt") as? Timestamp)?.dateValue(),
+            traps: ownTraps
+        )
     }
 
     func deploy(
@@ -176,9 +195,13 @@ final class CrownPerkMapCoordinator {
     @ObservationIgnored private var inventoryTask: Task<Void, Never>?
     @ObservationIgnored private var effectsTask: Task<Void, Never>?
     @ObservationIgnored private var lifecycleGeneration = 0
+    @ObservationIgnored private var effectRefreshRevision = 0
 
     private(set) var inventory: [String: Int] = [:]
+    private(set) var hasLoadedInventory = false
     private(set) var effects: CrownPerkEffects = .empty
+    private(set) var hasLoadedEffects = false
+    private(set) var effectsLoadFailed = false
     private(set) var status: CrownPerkDeployStatus = .idle
     var menuPresented = false
 
@@ -206,6 +229,7 @@ final class CrownPerkMapCoordinator {
             for await inventory in stream {
                 guard !Task.isCancelled, let self else { return }
                 self.inventory = inventory
+                self.hasLoadedInventory = true
             }
         }
         effectsTask?.cancel()
@@ -221,24 +245,52 @@ final class CrownPerkMapCoordinator {
         effectsTask?.cancel()
         effectsTask = nil
         inventory = [:]
+        hasLoadedInventory = false
         effects = .empty
+        hasLoadedEffects = false
+        effectsLoadFailed = false
         menuPresented = false
         status = .idle
     }
 
+    func catalog() -> AsyncStream<PerkCatalogSnapshot>? {
+        guard isAvailable else { return nil }
+        return shopRepository?.catalog()
+    }
+
+    func resetStatus() {
+        if !status.isDeploying { status = .idle }
+    }
+
     func refreshEffects(now: Date = Date()) async {
-        guard let repository, let uid, enabled else {
-            effects = .empty
-            return
-        }
+        guard let repository, let uid, enabled else { return }
+        effectRefreshRevision += 1
+        let revision = effectRefreshRevision
         let generation = lifecycleGeneration
-        let refreshed = await repository.effects(uid: uid, now: now)
-        guard !Task.isCancelled, generation == lifecycleGeneration else { return }
-        effects = refreshed
+        do {
+            let refreshed = try await repository.effects(uid: uid, now: now)
+            guard !Task.isCancelled, revision == effectRefreshRevision,
+                  generation == lifecycleGeneration else { return }
+            effects = refreshed
+            hasLoadedEffects = true
+            effectsLoadFailed = false
+        } catch {
+            guard !Task.isCancelled, revision == effectRefreshRevision,
+                  generation == lifecycleGeneration else { return }
+            effectsLoadFailed = true
+        }
+    }
+
+    func canDeploy(perkId: String, kind: PerkKind, now: Date) -> Bool {
+        // The backend allows one armed trap and can consume a second timed
+        // perk to replace an active one. Match Android's client-side guard.
+        isAvailable && hasLoadedEffects && !effectsLoadFailed && !status.isDeploying
+            && (inventory[perkId] ?? 0) > 0
+            && effects.activity(for: kind, at: now) == .inactive
     }
 
     func deploy(perkId: String, kind: PerkKind, now: Date = Date()) async {
-        guard status.isIdle, let repository, enabled else { return }
+        guard canDeploy(perkId: perkId, kind: kind, now: now), let repository else { return }
         let generation = lifecycleGeneration
         var latitude: Double?
         var longitude: Double?
@@ -262,21 +314,22 @@ final class CrownPerkMapCoordinator {
                 idempotencyKey: UUID().uuidString.lowercased()
             )
             guard !Task.isCancelled, generation == lifecycleGeneration else { return }
-            status = .deployed(result)
-            await refreshEffects(now: now)
+            await refreshEffects()
+            guard !Task.isCancelled, generation == lifecycleGeneration else { return }
+            status = menuPresented ? .deployed(result) : .idle
         } catch let failure as CrownPerkDeployFailure {
             guard !Task.isCancelled, generation == lifecycleGeneration else { return }
-            status = .failed(perkId, failure)
+            status = menuPresented ? .failed(perkId, failure) : .idle
         } catch {
             guard !Task.isCancelled, generation == lifecycleGeneration else { return }
-            status = .failed(perkId, .unknown)
+            status = menuPresented ? .failed(perkId, .unknown) : .idle
         }
     }
 }
 
-private extension CrownPerkDeployStatus {
-    var isIdle: Bool {
-        if case .deploying = self { return false }
-        return true
+extension CrownPerkDeployStatus {
+    var isDeploying: Bool {
+        if case .deploying = self { return true }
+        return false
     }
 }

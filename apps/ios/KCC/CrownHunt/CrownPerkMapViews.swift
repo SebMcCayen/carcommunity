@@ -6,7 +6,6 @@ struct CrownPerkMapControl: View {
     var body: some View {
         Button {
             coordinator.menuPresented = true
-            Task { await coordinator.refreshEffects() }
         } label: {
             Image(systemName: active ? "bolt.shield.fill" : "bolt.shield")
                 .font(.title3.weight(.semibold))
@@ -84,80 +83,171 @@ struct CrownPerkDeploySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var coordinator: CrownPerkMapCoordinator
 
-    private let rows: [(String, PerkKind, String, String)] = [
-        ("spike_strip", .trap, "crownHunt.perkNameSpikeStrip", "exclamationmark.triangle.fill"),
-        ("shield", .shield, "crownHunt.perkNameShield", "shield.fill"),
-        ("boost", .boost, "crownHunt.perkNameBoost", "bolt.fill")
-    ]
+    let onOpenShop: () -> Void
+    @State private var catalog: PerkCatalogSnapshot?
+    @State private var checkedEffects = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: KccSpacing.s4) {
+                VStack(alignment: .leading, spacing: KccSpacing.s3) {
                     if coordinator.isAvailable {
-                        ForEach(rows, id: \.0) { row in
-                            perkRow(perkId: row.0, kind: row.1, title: row.2, symbol: row.3)
+                        Text("crownHunt.deployIntro")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            rows(at: context.date)
                         }
                         statusView
+                        Button(action: onOpenShop) {
+                            Text("crownHunt.deployOpenShop")
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                                .contentShape(Rectangle())
+                        }
+                        .tint(KccTheme.driver)
+                        .accessibilityIdentifier("crown.perks.openShop")
+                        Text("crownHunt.perksGameOnly")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     } else {
-                        CrownHuntMessageState(title: "crownHunt.deployTitle", message: "crownHunt.resultFeatureDisabled")
+                        Text("crownHunt.resultFeatureDisabled")
                     }
-                }.padding(KccSpacing.s4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(KccSpacing.s4)
             }
             .kccReadingSurface(pageBackground: true)
             .navigationTitle("crownHunt.deployTitle")
-
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .frame(width: 48, height: 48)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel(Text("shell.panelDismiss"))
+                }
+            }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.fraction(0.88), .large])
         .kccDismissibleSheet()
+        .task {
+            guard let snapshots = coordinator.catalog() else { return }
+            for await snapshot in snapshots {
+                guard !Task.isCancelled else { return }
+                catalog = snapshot
+            }
+        }
+        .task {
+            await coordinator.refreshEffects()
+            if !Task.isCancelled { checkedEffects = true }
+        }
     }
 
-    private func perkRow(perkId: String, kind: PerkKind, title: String, symbol: String) -> some View {
+    @ViewBuilder
+    private func rows(at now: Date) -> some View {
+        if case .failed? = catalog {
+            Text("crownHunt.deployError").foregroundStyle(KccTheme.error)
+        } else if !checkedEffects || !coordinator.hasLoadedInventory || catalog == nil {
+            Text("crownHunt.deployLoading").foregroundStyle(.secondary)
+        } else if coordinator.effectsLoadFailed {
+            Text("crownHunt.deployError").foregroundStyle(KccTheme.error)
+        } else if case .loaded(let entries) = catalog {
+            if entries.allSatisfy({ entry in
+                (coordinator.inventory[entry.perkId] ?? 0) <= 0
+                    && coordinator.effects.activity(for: entry.kind, at: now) == .inactive
+            }) {
+                Text("crownHunt.deployEmpty").foregroundStyle(.secondary)
+            } else {
+                ForEach(entries) { perk in
+                    perkRow(perk, at: now)
+                }
+            }
+        }
+    }
+
+    private func perkRow(_ perk: PerkCatalogEntry, at now: Date) -> some View {
         CrownHuntCard {
-            Label(LocalizedStringKey(title), systemImage: symbol).font(.headline)
-            Text(format("crownHunt.deployOwnedLabel", coordinator.inventory[perkId] ?? 0))
-                .font(.subheadline).foregroundStyle(KccTheme.secondary)
-            if isActive(kind) {
-                Label("crownHunt.deployActiveFor", systemImage: "clock.fill").font(.subheadline)
+            HStack(spacing: KccSpacing.s3) {
+                CrownPerkIcon(kind: perk.kind, size: 56)
+                VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                    Text(perkName(perk)).font(.headline)
+                    Text(verbatim: format("crownHunt.deployOwnedLabel", coordinator.inventory[perk.perkId] ?? 0))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    activityLabel(coordinator.effects.activity(for: perk.kind, at: now))
+                        .font(.subheadline)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             Button {
-                Task { await coordinator.deploy(perkId: perkId, kind: kind) }
+                Task { await coordinator.deploy(perkId: perk.perkId, kind: perk.kind) }
             } label: {
-                Text("crownHunt.deployActivateButton").frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
+                HStack(spacing: KccSpacing.s2) {
+                    if coordinator.status == .deploying(perk.perkId) {
+                        ProgressView()
+                        Text("crownHunt.deployActivating")
+                    } else {
+                        Text("crownHunt.deployActivateButton")
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .contentShape(Rectangle())
             }
             .kccPrimaryAction()
-            .disabled((coordinator.inventory[perkId] ?? 0) <= 0 || isDeploying)
+            .disabled(!coordinator.canDeploy(perkId: perk.perkId, kind: perk.kind, now: now))
+            .accessibilityIdentifier("crown.perks.activate.\(perk.perkId)")
+        }
+    }
+
+    @ViewBuilder
+    private func activityLabel(_ activity: CrownPerkActivity) -> some View {
+        switch activity {
+        case .inactive:
+            Text("crownHunt.perkInactive").foregroundStyle(.secondary)
+        case .traps(let count):
+            Text(verbatim: format("crownHunt.deployActiveTraps", count))
+        case .timed(let totalSeconds):
+            let (minutes, seconds) = totalSeconds.quotientAndRemainder(dividingBy: 60)
+            let remaining = if minutes == 0 {
+                format("crownHunt.deployRemainingS", seconds)
+            } else if seconds == 0 {
+                format("crownHunt.deployRemainingM", minutes)
+            } else {
+                format("crownHunt.deployRemainingMs", minutes, seconds)
+            }
+            Text(verbatim: format("crownHunt.deployActiveFor", remaining))
+                .monospacedDigit()
         }
     }
 
     @ViewBuilder
     private var statusView: some View {
         switch coordinator.status {
-        case .idle:
+        case .idle, .deploying:
             EmptyView()
-        case .deploying:
-            ProgressView("crownHunt.deployLoading")
         case .deployed(let result):
-            Text(LocalizedStringKey(result.alreadyDeployed
-                ? "crownHunt.deployAlreadyMessage" : successKey(result.kind)))
-                .foregroundStyle(.green)
+            if result.alreadyDeployed {
+                Text("crownHunt.deployAlreadyMessage")
+            } else {
+                Text(verbatim: format(successKey(result.kind), deployedPerkName(result.perkId)))
+            }
         case .failed(_, let failure):
-            Text(LocalizedStringKey(errorKey(failure))).foregroundStyle(.red)
+            Text(LocalizedStringKey(errorKey(failure))).foregroundStyle(KccTheme.error)
         }
     }
 
-    private var isDeploying: Bool {
-        if case .deploying = coordinator.status { return true }
-        return false
+    private func perkName(_ perk: PerkCatalogEntry) -> String {
+        CrownHuntPerkNames.displayName(perkId: perk.perkId, nameSv: perk.name, nameEn: perk.nameEn)
     }
 
-    private func isActive(_ kind: PerkKind) -> Bool {
-        let now = Date()
-        switch kind {
-        case .trap: return coordinator.effects.traps.contains { $0.expiresAt > now }
-        case .shield: return coordinator.effects.shieldUntil.map { $0 > now } == true
-        case .boost: return coordinator.effects.boostUntil.map { $0 > now } == true
+    private func deployedPerkName(_ perkId: String) -> String {
+        if case .loaded(let entries) = catalog, let perk = entries.first(where: { $0.perkId == perkId }) {
+            return perkName(perk)
         }
+        return CrownHuntPerkNames.displayName(perkId: perkId, nameSv: perkId, nameEn: "")
     }
 
     private func successKey(_ kind: PerkKind) -> String {
@@ -178,7 +268,31 @@ struct CrownPerkDeploySheet: View {
         }
     }
 
-    private func format(_ key: String, _ value: CVarArg) -> String {
-        String.localizedStringWithFormat(NSLocalizedString(key, comment: ""), value)
+    private func format(_ key: String, _ values: CVarArg...) -> String {
+        String(format: NSLocalizedString(key, comment: ""), locale: .current, arguments: values)
+    }
+}
+
+/// Matches the filled crown, shield and bolt used by Android. The adjacent
+/// localized perk name is the accessible label.
+struct CrownPerkIcon: View {
+    let kind: PerkKind
+    let size: CGFloat
+
+    var body: some View {
+        Image(asset)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .foregroundStyle(kind == .trap ? Color(red: 155 / 255, green: 92 / 255, blue: 1) : KccTheme.driver)
+            .accessibilityHidden(true)
+    }
+
+    private var asset: String {
+        switch kind {
+        case .trap: "crown-five_point"
+        case .shield: "perk-shield"
+        case .boost: "perk-boost"
+        }
     }
 }
