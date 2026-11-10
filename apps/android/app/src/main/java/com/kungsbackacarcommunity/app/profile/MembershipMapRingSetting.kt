@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.profile
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -19,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import kotlinx.coroutines.launch
 
 /** Parent inserts this into Settings; ownership/rules remain the write authority. */
@@ -38,7 +40,7 @@ fun MembershipMapRingSetting(repository: ProfileRepository, uid: String) = key(r
 @Composable
 fun MembershipMapRingSettingRow(ring: MembershipMapRing?, status: ProfileEditStatus, onToggle: (Boolean) -> Unit) {
     val title = stringResource(R.string.membershipMapRing_settingTitle)
-    Column {
+    Column(modifier = Modifier.padding(horizontal = KccSpacing.s4)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f))
             Switch(checked = ring?.show ?: true, onCheckedChange = onToggle,
