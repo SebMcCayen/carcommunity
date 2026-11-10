@@ -1101,25 +1101,32 @@ final class ShellSmokeTests: XCTestCase {
     /// SwiftUI's vertical field can replace its measuring UITextField with a
     /// UITextView after input/layout changes. Re-query the visible editor;
     /// retaining the original element can read a retired measuring widget.
+    private func visibleComposerInput(in app: XCUIApplication) -> XCUIElement? {
+        for fields in [app.textViews, app.textFields] {
+            let candidates = fields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+            if let editor = candidates.first(where: { $0.isHittable }) { return editor }
+        }
+        return nil
+    }
+
     private func composerInput(in app: XCUIApplication) -> XCUIElement {
-        let candidates = app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-            + app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-        return candidates.first(where: { $0.isHittable })
+        visibleComposerInput(in: app)
             ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
     }
 
     private func assertComposerDraft(_ text: String, present: Bool, in app: XCUIApplication,
                                      file: StaticString = #filePath, line: UInt = #line) {
-        // Resolve the current visible widget once per assertion. Repeatedly
-        // enumerating both editor types and querying hit targets can consume
-        // the polling deadline even while the expected draft is on screen.
-        let editor = composerInput(in: app)
-        let predicate = NSPredicate(format: present ? "value CONTAINS %@" : "NOT (value CONTAINS %@)", text)
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: editor)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 15)
+        // Read the live editor value so a replaced widget or a slow XCTest
+        // element description cannot hold up the draft check.
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let editor = self.visibleComposerInput(in: app) else { return false }
+            let value = editor.value as? String ?? ""
+            return value.contains(text) == present
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 30)
         if result != .completed { chatProof(app, name: "chat-draft-value-failure", tree: true) }
-        XCTAssertEqual(result, .completed, "Visible editor must preserve the expected draft until Send", file: file, line: line)
-        XCTAssertTrue(editor.isHittable, "Draft assertion must inspect the visible editor", file: file, line: line)
+        let message = present ? "Visible editor must preserve the draft until Send" : "Send must clear the visible draft"
+        XCTAssertEqual(result, .completed, message, file: file, line: line)
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
