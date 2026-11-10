@@ -5,7 +5,7 @@ struct CrownPerkMapControl: View {
 
     var body: some View {
         Button {
-            coordinator.menuPresented = true
+            coordinator.openMenu()
         } label: {
             Image(systemName: active ? "bolt.shield.fill" : "bolt.shield")
                 .font(.title3.weight(.semibold))
@@ -85,7 +85,6 @@ struct CrownPerkDeploySheet: View {
 
     let onOpenShop: () -> Void
     @State private var catalog: PerkCatalogSnapshot?
-    @State private var checkedEffects = false
 
     var body: some View {
         NavigationStack {
@@ -140,20 +139,16 @@ struct CrownPerkDeploySheet: View {
                 catalog = snapshot
             }
         }
-        .task {
-            await coordinator.refreshEffects()
-            if !Task.isCancelled { checkedEffects = true }
-        }
     }
 
     @ViewBuilder
     private func rows(at now: Date) -> some View {
-        if case .failed? = catalog {
+        if coordinator.effectsLoadFailed {
             Text("crownHunt.deployError").foregroundStyle(KccTheme.error)
-        } else if !checkedEffects || !coordinator.hasLoadedInventory || catalog == nil {
+        } else if case .failed? = catalog {
+            Text("crownHunt.deployError").foregroundStyle(KccTheme.error)
+        } else if !coordinator.hasLoadedEffects || !coordinator.hasLoadedInventory || catalog == nil {
             Text("crownHunt.deployLoading").foregroundStyle(.secondary)
-        } else if coordinator.effectsLoadFailed {
-            Text("crownHunt.deployError").foregroundStyle(KccTheme.error)
         } else if case .loaded(let entries) = catalog {
             if entries.allSatisfy({ entry in
                 (coordinator.inventory[entry.perkId] ?? 0) <= 0
