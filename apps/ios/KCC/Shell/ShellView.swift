@@ -107,7 +107,6 @@ struct ShellView: View {
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @AppStorage("kcc.location.initialMapExplanationShown") private var initialMapExplanationShown = false
     @State private var initialMapPermissionPrompt = false
-    @State private var primaryNavigationHeight: CGFloat = 0
     @State private var chatKeyboardPresented = false
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
@@ -317,9 +316,7 @@ struct ShellView: View {
             if !(selectedTab == .chat && chatKeyboardPresented) {
                 // Keep the footer above the map and its edge-to-edge overlays.
                 primaryNavigation
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
-                        primaryNavigationHeight = $0
-                    }
+                    .fixedSize(horizontal: false, vertical: true)
                     .zIndex(1)
             }
         }
@@ -1416,7 +1413,10 @@ struct ShellView: View {
         .padding(.horizontal, KccSpacing.s2)
         .padding(.vertical, KccSpacing.s2)
         .background(KccTheme.overlay, ignoresSafeAreaEdges: .bottom)
-        .overlay(alignment: .top) { Rectangle().fill(KccTheme.border).frame(height: 1) }
+        .overlay(alignment: .top) {
+            Rectangle().fill(KccTheme.border).frame(height: 1)
+                .allowsHitTesting(false)
+        }
     }
 
     /// Existing block-filtered inbox state; Driver activity never enters it.
@@ -1436,17 +1436,9 @@ struct ShellView: View {
     }
 
     private var chatTab: some View {
+        // The shell's vertical layout already reserves the footer's space.
         NavigationStack {
             chatHubContent
-                // The retained NavigationStack establishes its own safe area
-                // and does not inherit the footer inset on the map's ZStack.
-                // Reserve the measured footer INSIDE that navigation host so
-                // channel composers stay above both navigation and keyboard.
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: chatKeyboardPresented ? 0 : primaryNavigationHeight)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
         }
             .kccReadingSurface()
             .accessibilityAction(.escape) { selectedTab = .map }

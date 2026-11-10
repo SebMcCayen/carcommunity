@@ -941,7 +941,7 @@ final class ShellSmokeTests: XCTestCase {
             }
             XCTAssertTrue(channel.isHittable)
             XCTAssertTrue(channels.frame.contains(channel.frame))
-            channel.tap()
+            channel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             assertSelected(channel)
         }
         attach(app, name: "configless-en-Dark-AXXXL-S29-club-reachable")
@@ -1200,41 +1200,24 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [dockReady], timeout: 15), .completed,
                 "The active-session dock must be laid out before footer interaction")
         }
-        // The top menu can be exposed before the safe-area footer finishes its
-        // first layout (especially after changing language/text size). Readiness
-        // means actual interactive controls, not just an existing title/menu.
+        // The menu can appear before the footer is laid out. Read current
+        // window and button geometry together. Individual tests exercise the
+        // controls they use with real taps once the footer is on screen.
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 15))
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
-            XCTAssertTrue(button.waitForExistence(timeout: 15))
-            // XCTest can raise an activation-point error while the footer
-            // exists in the accessibility tree but its frame is still settling.
-            // Establish on-screen geometry before asking for a hit point.
-            let layoutWindow = window.frame
             let layout = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
+                    guard button.exists else { return false }
                     let frame = button.frame
-                    return !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
-                        layoutWindow.contains(CGPoint(x: frame.midX, y: frame.midY))
+                    return frame.width >= 44 && frame.height >= 44 && window.frame.contains(frame)
                 },
-                object: button
+                object: nil
             )
             let layoutResult = XCTWaiter.wait(for: [layout], timeout: 15)
             if layoutResult != .completed { chatProof(app, name: "primary-\(id)-layout-failure", tree: true) }
             XCTAssertEqual(layoutResult, .completed, "Primary action \(id) must be laid out after launch")
-
-            let interactive = button.wait(for: \.isHittable, toEqual: true, timeout: 15)
-            let frame = button.frame
-            let windowFrame = window.frame
-            let onScreen = !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
-                windowFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
-            print("SHELL_PRIMARY_READY id=\(id) largeText=\(largeText) frame=\(frame) window=\(windowFrame) interactive=\(interactive)")
-            if !interactive || !onScreen { chatProof(app, name: "primary-\(id)-readiness-failure", tree: true) }
-            XCTAssertTrue(interactive,
-                "Primary action \(id) was not interactive after launch")
-            XCTAssertTrue(onScreen,
-                "Primary action \(id) must remain on screen after becoming interactive")
         }
         return app
     }
@@ -1243,14 +1226,18 @@ final class ShellSmokeTests: XCTestCase {
         // A tap returning does not guarantee SwiftUI has published the next
         // accessibility snapshot. Wait for the actual selection, without retaps.
         let selected = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "selected == true"),
-            object: tab
+            predicate: NSPredicate { _, _ in tab.exists && tab.isSelected },
+            object: nil
         )
         // Hosted runners can publish selection after the initial five seconds;
         // failure diagnostics have then already observed selected=true. Keep the
         // actual-state assertion, with the same bounded wait as launch readiness.
         let result = XCTWaiter.wait(for: [selected], timeout: 15)
-        if result != .completed { diagnosePrimaryControls(XCUIApplication()) }
+        if result != .completed {
+            let app = XCUIApplication()
+            chatProof(app, name: "\(tab.identifier)-selection-failure", tree: true)
+            diagnosePrimaryControls(app)
+        }
         XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
     }
 
