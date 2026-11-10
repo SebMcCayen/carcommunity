@@ -7,7 +7,6 @@ import UIKit
 struct ChatThreadScrollView<Content: View>: View {
     let latestMessageID: String?
     let latestIsOwn: Bool
-    var latestScrollTargetID: String? = nil
     @ViewBuilder let content: () -> Content
     @Environment(\.chatReadingActive) private var readingActive
     @Namespace private var coordinateSpace
@@ -47,7 +46,7 @@ struct ChatThreadScrollView<Content: View>: View {
                 .onChange(of: viewport.size) { _, _ in
                     if readingActive, !dragging, pinnedBeforeKeyboardResize ?? followsLatest,
                        let newest = latestMessageID {
-                        proxy.scrollTo(latestScrollTargetID ?? newest, anchor: .bottom)
+                        proxy.scrollTo(newest, anchor: .bottom)
                     }
                 }
                 .onChange(of: viewport.safeAreaInsets.bottom) { _, _ in
@@ -55,14 +54,14 @@ struct ChatThreadScrollView<Content: View>: View {
                     // Keep the same bottom owner through both layout changes.
                     if readingActive, !dragging, pinnedBeforeKeyboardResize ?? followsLatest,
                        let newest = latestMessageID {
-                        proxy.scrollTo(latestScrollTargetID ?? newest, anchor: .bottom)
+                        proxy.scrollTo(newest, anchor: .bottom)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)) { _ in
                     if readingActive, !dragging, pinnedBeforeKeyboardResize == true,
                        let newest = latestMessageID {
                         followsLatest = true
-                        proxy.scrollTo(latestScrollTargetID ?? newest, anchor: .bottom)
+                        proxy.scrollTo(newest, anchor: .bottom)
                     }
                     pinnedBeforeKeyboardResize = nil
                 }
@@ -88,7 +87,7 @@ struct ChatThreadScrollView<Content: View>: View {
                     // Target a real row in the SAME lazy stack as the end
                     // marker. An external sentinel can scroll past the rows
                     // before SwiftUI has materialized them with bottom insets.
-                    proxy.scrollTo(latestScrollTargetID ?? newest, anchor: .bottom)
+                    proxy.scrollTo(newest, anchor: .bottom)
                 }
             }
         }

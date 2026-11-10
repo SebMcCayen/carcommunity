@@ -26,6 +26,7 @@ final class MapLayerPreferencesTests: XCTestCase {
         XCTAssertFalse(preferences.trafficEnabled)
         XCTAssertTrue(preferences.trafficAlertsEnabled)
         XCTAssertNil(preferences.mapModeOverride)
+        XCTAssertEqual(preferences.basemap, .standard)
         XCTAssertTrue(preferences.is3D)
         XCTAssertEqual(preferences.browsingZoom, 16, accuracy: 1e-9)
         XCTAssertEqual(preferences.incidentMaxAge, .all)
@@ -38,6 +39,7 @@ final class MapLayerPreferencesTests: XCTestCase {
         preferences.setTrafficEnabled(true)
         preferences.setTrafficAlertsEnabled(false)
         preferences.setMapModeOverride(.night)
+        preferences.setBasemap(.satellite)
         preferences.set3DEnabled(false)
         preferences.setBrowsingZoom(13.7)
 
@@ -45,8 +47,11 @@ final class MapLayerPreferencesTests: XCTestCase {
         XCTAssertTrue(restored.trafficEnabled)
         XCTAssertFalse(restored.trafficAlertsEnabled)
         XCTAssertEqual(restored.mapModeOverride, .night)
+        XCTAssertEqual(restored.basemap, .satellite)
         XCTAssertFalse(restored.is3D)
         XCTAssertEqual(restored.browsingZoom, 13.5, accuracy: 1e-9)
+        restored.setBasemap(.standard)
+        XCTAssertEqual(MapLayerPreferences(defaults: defaults).basemap, .standard)
     }
 
     func testConfirmedNewAccountGetsOneWeekPersistedAcrossRestart() {

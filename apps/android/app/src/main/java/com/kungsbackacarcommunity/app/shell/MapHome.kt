@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Satellite
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -373,6 +375,7 @@ fun MapHome(
     var bottomChromeHeightPx by remember { mutableIntStateOf(0) }
     val chromeDensity = LocalDensity.current
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
+    val basemap by mapSurface.basemap.collectAsState()
     val is3d by mapSurface.is3d.collectAsState()
     val bearing by mapSurface.bearing.collectAsState()
 
@@ -774,7 +777,7 @@ fun MapHome(
                     // default Night (dark theme, untouched) must NOT light it up.
                     MapCircleControlKind.Layers -> {
                         val layersActive =
-                            trafficOn ||
+                            trafficOn || basemap == MapBasemap.Satellite ||
                                 (desiredMapMode != null && desiredMapMode != systemDefaultMode) ||
                                 !is3d
                         CircleControl(
@@ -940,6 +943,8 @@ fun MapHome(
                 onIncidentsChange = onIncidentsLayerEnabledChange,
                 trafikverketDataShown = trafikverketDataShown,
                 trafficOn = trafficOn,
+                basemap = basemap,
+                onBasemapChange = mapSurface::setBasemap,
                 // Drive the night Switch off the IMMEDIATE user intent (the
                 // effective desired mode) rather than the SURFACE's mapMode, which
                 // only updates after the LaunchedEffect runs and the surface flow
@@ -1076,6 +1081,8 @@ internal fun MapLayersPopup(
     onDismiss: () -> Unit,
     followsTheme: Boolean = false,
     onFollowTheme: (() -> Unit)? = null,
+    basemap: MapBasemap = MapBasemap.Standard,
+    onBasemapChange: ((MapBasemap) -> Unit)? = null,
 ) {
     var focusExpanded by rememberSaveable { mutableStateOf(false) }
     MapDetailSheet(
@@ -1086,6 +1093,25 @@ internal fun MapLayersPopup(
         leadingContent = { Icon(Icons.Filled.Layers, contentDescription = null) },
         contentSpacing = KccSpacing.s1,
     ) {
+        if (onBasemapChange != null) {
+            Text(stringResource(R.string.shell_layersBasemapTitle), style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                MapAppearanceChip(
+                    label = stringResource(R.string.shell_layersBasemapStandard),
+                    icon = Icons.Filled.Map,
+                    selected = basemap == MapBasemap.Standard,
+                    onClick = { onBasemapChange(MapBasemap.Standard) },
+                    modifier = Modifier.testTag("map_basemap_standard"),
+                )
+                MapAppearanceChip(
+                    label = stringResource(R.string.shell_layersBasemapSatellite),
+                    icon = Icons.Filled.Satellite,
+                    selected = basemap == MapBasemap.Satellite,
+                    onClick = { onBasemapChange(MapBasemap.Satellite) },
+                    modifier = Modifier.testTag("map_basemap_satellite"),
+                )
+            }
+        }
         LayerToggleRow(
             label = stringResource(R.string.shell_layersTraffic),
             supportingText = stringResource(R.string.shell_layersTrafficHelp),
@@ -1101,13 +1127,15 @@ internal fun MapLayersPopup(
             onCheckedChange = onIncidentsChange,
             switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
         )
-        LayerToggleRow(
-            label = stringResource(R.string.shell_layers3d),
-            supportingText = stringResource(R.string.shell_layers3dHelp),
-            icon = Icons.Filled.ViewInAr,
-            checked = is3d,
-            onCheckedChange = on3dChange,
-        )
+        if (basemap == MapBasemap.Standard) {
+            LayerToggleRow(
+                label = stringResource(R.string.shell_layers3d),
+                supportingText = stringResource(R.string.shell_layers3dHelp),
+                icon = Icons.Filled.ViewInAr,
+                checked = is3d,
+                onCheckedChange = on3dChange,
+            )
+        }
         LayerToggleRow(
             label = stringResource(R.string.shell_layersCrownHunt),
             supportingText = stringResource(R.string.shell_layersCrownMapHelp),

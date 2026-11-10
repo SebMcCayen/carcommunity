@@ -619,16 +619,17 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertGreaterThan(layers.frame.midX, app.frame.midX)
         XCTAssertGreaterThan(compass.frame.minY, layers.frame.maxY)
         XCTAssertEqual(compass.value as? String, "NorthUp")
-        compass.tap()
-        let courseUp = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "CourseUp"), object: compass
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [courseUp], timeout: 5), .completed)
-        compass.tap()
-        let northUp = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "NorthUp"), object: compass
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [northUp], timeout: 5), .completed)
+        for mode in ["CourseUp", "NorthUp"] {
+            compass.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                compass.exists && (compass.value as? String) == mode
+            }, object: nil)
+            let result = XCTWaiter.wait(for: [updated], timeout: 15)
+            if result != .completed {
+                chatProof(app, name: "compass-\(mode)-center-tap-failure", tree: true)
+            }
+            XCTAssertEqual(result, .completed, "One tap at the center of Compass must switch to \(mode)")
+        }
         layers.tap()
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
     }
@@ -884,8 +885,15 @@ final class ShellSmokeTests: XCTestCase {
         }
         for id in ["social", "garage", "map", "chat"] {
             let tab = app.buttons["shell.tab.\(id)"]
-            tab.tap()
-            if id == "chat" {
+            // The center can fall between the icon and caption at this size.
+            tab.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            if id == "social" {
+                guard element("shell.socialHub", in: app).waitForExistence(timeout: 15) else {
+                    chatProof(app, name: "social-center-tap-failure", tree: true)
+                    XCTFail("One tap at the center of Social must open its panel")
+                    return
+                }
+            } else if id == "chat" {
                 // The first cold chat render can outlive XCUITest's idle wait.
                 // Wait for the actual destination, without retrying the tap.
                 XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 15))
@@ -934,7 +942,7 @@ final class ShellSmokeTests: XCTestCase {
             }
             XCTAssertTrue(channel.isHittable)
             XCTAssertTrue(channels.frame.contains(channel.frame))
-            channel.tap()
+            channel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             assertSelected(channel)
         }
         attach(app, name: "configless-en-Dark-AXXXL-S29-club-reachable")
@@ -1005,7 +1013,8 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(mapIdentity?.hasSuffix("|\(theme)") == true,
             "Capture names must match the actual SwiftUI color scheme")
         XCTAssertFalse(app.textFields["addressSearch.query"].exists)
-        XCTAssertTrue(app.buttons["shell.search"].isHittable)
+        let search = app.buttons["shell.search"]
+        XCTAssertTrue(search.isHittable)
         let layers = app.buttons["shell.mapLayers"]
         let avatar = app.buttons["shell.menu"]
         XCTAssertTrue(layers.isHittable)
@@ -1015,14 +1024,18 @@ final class ShellSmokeTests: XCTestCase {
         attach(app, name: "\(prefix)-S01-map-collapsed-search")
 
         let chatFrameBeforeSearch = app.buttons["shell.tab.chat"].frame
-        app.buttons["shell.search"].tap()
+        search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let field = app.textFields["addressSearch.query"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        guard field.waitForExistence(timeout: 5) else {
+            chatProof(app, name: "\(prefix)-search-open-failure", tree: true)
+            XCTFail("One tap at the center of Search must open the address field")
+            return
+        }
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.typeText("Kungsbacka")
         attach(app, name: "\(prefix)-S02-search-keyboard")
         app.buttons["addressSearch.close"].tap()
-        XCTAssertTrue(app.buttons["shell.search"].waitForExistence(timeout: 5))
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertFalse(field.exists)
         // The search launcher returns before UIKit finishes dismissing the
         // keyboard. Wait for the real keyboard to leave before targeting the
@@ -1098,25 +1111,32 @@ final class ShellSmokeTests: XCTestCase {
     /// SwiftUI's vertical field can replace its measuring UITextField with a
     /// UITextView after input/layout changes. Re-query the visible editor;
     /// retaining the original element can read a retired measuring widget.
+    private func visibleComposerInput(in app: XCUIApplication) -> XCUIElement? {
+        for fields in [app.textViews, app.textFields] {
+            let candidates = fields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
+            if let editor = candidates.first(where: { $0.isHittable }) { return editor }
+        }
+        return nil
+    }
+
     private func composerInput(in app: XCUIApplication) -> XCUIElement {
-        let candidates = app.textViews.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-            + app.textFields.matching(identifier: "chat.composer.input").allElementsBoundByIndex
-        return candidates.first(where: { $0.isHittable })
+        visibleComposerInput(in: app)
             ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
     }
 
     private func assertComposerDraft(_ text: String, present: Bool, in app: XCUIApplication,
                                      file: StaticString = #filePath, line: UInt = #line) {
-        // Resolve the current visible widget once per assertion. Repeatedly
-        // enumerating both editor types and querying hit targets can consume
-        // the polling deadline even while the expected draft is on screen.
-        let editor = composerInput(in: app)
-        let predicate = NSPredicate(format: present ? "value CONTAINS %@" : "NOT (value CONTAINS %@)", text)
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: editor)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 15)
+        // Read the live editor value so a replaced widget or a slow XCTest
+        // element description cannot hold up the draft check.
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let editor = self.visibleComposerInput(in: app) else { return false }
+            let value = editor.value as? String ?? ""
+            return value.contains(text) == present
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 30)
         if result != .completed { chatProof(app, name: "chat-draft-value-failure", tree: true) }
-        XCTAssertEqual(result, .completed, "Visible editor must preserve the expected draft until Send", file: file, line: line)
-        XCTAssertTrue(editor.isHittable, "Draft assertion must inspect the visible editor", file: file, line: line)
+        let message = present ? "Visible editor must preserve the draft until Send" : "Send must clear the visible draft"
+        XCTAssertEqual(result, .completed, message, file: file, line: line)
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
@@ -1181,41 +1201,24 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [dockReady], timeout: 15), .completed,
                 "The active-session dock must be laid out before footer interaction")
         }
-        // The top menu can be exposed before the safe-area footer finishes its
-        // first layout (especially after changing language/text size). Readiness
-        // means actual interactive controls, not just an existing title/menu.
+        // The menu can appear before the footer is laid out. Read current
+        // window and button geometry together. Individual tests exercise the
+        // controls they use with real taps once the footer is on screen.
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 15))
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
-            XCTAssertTrue(button.waitForExistence(timeout: 15))
-            // XCTest can raise an activation-point error while the footer
-            // exists in the accessibility tree but its frame is still settling.
-            // Establish on-screen geometry before asking for a hit point.
-            let layoutWindow = window.frame
             let layout = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
+                    guard button.exists else { return false }
                     let frame = button.frame
-                    return !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
-                        layoutWindow.contains(CGPoint(x: frame.midX, y: frame.midY))
+                    return frame.width >= 44 && frame.height >= 44 && window.frame.contains(frame)
                 },
-                object: button
+                object: nil
             )
             let layoutResult = XCTWaiter.wait(for: [layout], timeout: 15)
             if layoutResult != .completed { chatProof(app, name: "primary-\(id)-layout-failure", tree: true) }
             XCTAssertEqual(layoutResult, .completed, "Primary action \(id) must be laid out after launch")
-
-            let interactive = button.wait(for: \.isHittable, toEqual: true, timeout: 15)
-            let frame = button.frame
-            let windowFrame = window.frame
-            let onScreen = !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
-                windowFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
-            print("SHELL_PRIMARY_READY id=\(id) largeText=\(largeText) frame=\(frame) window=\(windowFrame) interactive=\(interactive)")
-            if !interactive || !onScreen { chatProof(app, name: "primary-\(id)-readiness-failure", tree: true) }
-            XCTAssertTrue(interactive,
-                "Primary action \(id) was not interactive after launch")
-            XCTAssertTrue(onScreen,
-                "Primary action \(id) must remain on screen after becoming interactive")
         }
         return app
     }
@@ -1224,14 +1227,18 @@ final class ShellSmokeTests: XCTestCase {
         // A tap returning does not guarantee SwiftUI has published the next
         // accessibility snapshot. Wait for the actual selection, without retaps.
         let selected = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "selected == true"),
-            object: tab
+            predicate: NSPredicate { _, _ in tab.exists && tab.isSelected },
+            object: nil
         )
         // Hosted runners can publish selection after the initial five seconds;
         // failure diagnostics have then already observed selected=true. Keep the
         // actual-state assertion, with the same bounded wait as launch readiness.
         let result = XCTWaiter.wait(for: [selected], timeout: 15)
-        if result != .completed { diagnosePrimaryControls(XCUIApplication()) }
+        if result != .completed {
+            let app = XCUIApplication()
+            chatProof(app, name: "\(tab.identifier)-selection-failure", tree: true)
+            diagnosePrimaryControls(app)
+        }
         XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
     }
 

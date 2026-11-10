@@ -167,6 +167,7 @@ struct ChatHubScreen: View {
                     .padding(.vertical, KccSpacing.s2)
                     .foregroundStyle(coordinator.selectedTab == tab ? KccTheme.onGold : KccTheme.text)
                     .background(coordinator.selectedTab == tab ? KccPalette.crownGold : KccTheme.subtle, in: Capsule())
+                    .contentShape(.interaction, Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("chatHub.channel.\(tab.rawValue)")

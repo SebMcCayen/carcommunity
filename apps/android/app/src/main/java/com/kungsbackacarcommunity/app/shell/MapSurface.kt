@@ -49,6 +49,11 @@ enum class MapMode {
     Night,
 }
 
+enum class MapBasemap {
+    Standard,
+    Satellite,
+}
+
 /**
  * How the map is ORIENTED while it follows the user — toggled by the floating
  * compass control.
@@ -477,6 +482,8 @@ interface MapSurface : MapProjection {
     /** The current light preset (day/night) of the Standard style. */
     val mapMode: StateFlow<MapMode>
 
+    val basemap: StateFlow<MapBasemap>
+
     /** Whether the camera is in tilted 3D mode (true) or flat 2D (false). */
     val is3d: StateFlow<Boolean>
 
@@ -799,6 +806,8 @@ interface MapSurface : MapProjection {
     /** Switch the day/night light preset (no visible effect on the stub). */
     fun setMapMode(mode: MapMode)
 
+    fun setBasemap(basemap: MapBasemap)
+
     /** Switch between tilted 3D ([true]) and flat 2D ([false]) (no visible effect on the stub). */
     fun set3dEnabled(enabled: Boolean)
 
@@ -918,6 +927,7 @@ interface MapSurface : MapProjection {
 class StubMapSurface(
     initialState: MapLoadState = MapLoadState.Loading,
     private val autoLoad: Boolean = true,
+    initialBasemap: MapBasemap = MapBasemap.Standard,
 ) : MapSurface {
     private val loadStateFlow = MutableStateFlow(initialState)
     override val loadState: StateFlow<MapLoadState> = loadStateFlow.asStateFlow()
@@ -931,6 +941,9 @@ class StubMapSurface(
     // Mirrors the real surface's defaults: day light preset, 3D camera on.
     private val mapModeFlow = MutableStateFlow(MapMode.Day)
     override val mapMode: StateFlow<MapMode> = mapModeFlow.asStateFlow()
+
+    private val basemapFlow = MutableStateFlow(initialBasemap)
+    override val basemap: StateFlow<MapBasemap> = basemapFlow.asStateFlow()
 
     private val is3dFlow = MutableStateFlow(true)
     override val is3d: StateFlow<Boolean> = is3dFlow.asStateFlow()
@@ -1207,6 +1220,10 @@ class StubMapSurface(
 
     override fun setMapMode(mode: MapMode) {
         mapModeFlow.value = mode
+    }
+
+    override fun setBasemap(basemap: MapBasemap) {
+        basemapFlow.value = basemap
     }
 
     override fun set3dEnabled(enabled: Boolean) {
