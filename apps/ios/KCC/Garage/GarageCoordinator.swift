@@ -112,6 +112,11 @@ final class GarageCoordinator {
         }
     }
 
+    func rankedDrivingVehicleIds() async -> [String] {
+        guard let repository else { return [] }
+        return (try? await repository.rankedDrivingVehicleIds()) ?? []
+    }
+
     /// Begins observing on first appearance. Idempotent: a second call (e.g.
     /// SwiftUI re-running `.task` after a tab switch) keeps the live
     /// subscription and its current state instead of flashing back to

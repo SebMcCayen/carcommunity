@@ -242,6 +242,26 @@ describe('convoy auto-start live session (item 2)', () => {
     expect(await latestExists(owner.uid)).toBe(true);
   }, 60_000);
 
+  it('attributes the active convoy once to the owner and their selected vehicle', async () => {
+    const owner = await newMember('RankOwnerCL');
+    const member = await newMember('RankMemberCL');
+    await makeFriends(owner, member);
+    const vehicleId = `${owner.uid}-picked`;
+    await adminDb.collection('vehicles').doc(vehicleId).set({ userId: owner.uid });
+    await signInAs(owner);
+    const { convoy } = (await call('convoy-create', { inviteeUids: [member.uid], vehicleId })).data as {
+      convoy: { convoyId: string };
+    };
+    const events = (uid: string) => adminDb.collection(`userPrivate/${uid}/vehicleUsageEvents`)
+      .where('vehicleId', '==', vehicleId).get();
+    expect((await events(owner.uid)).docs.map((doc) => doc.id)).toEqual([`convoy_${convoy.convoyId}`]);
+
+    await signInAs(member);
+    await call('convoy-respond', { convoyId: convoy.convoyId, action: 'accept' });
+    expect((await events(member.uid)).empty).toBe(true);
+    expect((await events(owner.uid)).size).toBe(1);
+  }, 60_000);
+
   it('creating + accepting auto-starts a convoy-tagged session for EVERY accepted member', async () => {
     // Owner auto-starts on create; the member auto-starts on accept — both are
     // live with a convoy-tagged session, nobody tapped "share live".

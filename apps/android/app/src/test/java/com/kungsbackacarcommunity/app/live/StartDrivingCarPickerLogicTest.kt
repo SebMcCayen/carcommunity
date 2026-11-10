@@ -37,6 +37,16 @@ class StartDrivingCarPickerLogicTest {
     }
 
     @Test
+    fun `fills remaining quick slots with main and garage order`() {
+        val vehicles = listOf(car("a"), car("b", isMainCar = true), car("c"), car("d"))
+        assertEquals(
+            listOf("d", "b", "a"),
+            quickStartDrivingVehicles(vehicles, listOf("deleted", "d", "d")).map { it.id },
+        )
+        assertEquals(listOf("b", "a", "c"), quickStartDrivingVehicles(vehicles, emptyList()).map { it.id })
+    }
+
+    @Test
     fun `is null when there are no cars`() {
         assertNull(defaultStartDrivingVehicleId(emptyList()))
     }

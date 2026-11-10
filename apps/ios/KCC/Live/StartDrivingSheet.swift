@@ -8,6 +8,9 @@ struct StartDrivingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var garage: GarageCoordinator
     @State private var selectedVehicleId: String?
+    @State private var rankedVehicleIds: [String]?
+    @State private var showingAllVehicles = false
+    @State private var detent: PresentationDetent = .medium
 
     let isStarting: Bool
     let canStartSingleSession: Bool
@@ -85,12 +88,48 @@ struct StartDrivingSheet: View {
             }
             .kccReadingSurface(pageBackground: true).tint(KccTheme.driver)
             .navigationTitle("shell.createChooserTitle")
-
+            .navigationDestination(isPresented: $showingAllVehicles) {
+                ScrollView {
+                    VStack(spacing: KccSpacing.s1) {
+                        ForEach(vehicles) { vehicle in
+                            vehicleButton(vehicle) {
+                                selectedVehicleId = vehicle.id
+                                showingAllVehicles = false
+                            }
+                        }
+                    }
+                    .padding(KccSpacing.s4)
+                }
+                .kccReadingSurface(pageBackground: true)
+                .navigationTitle("shell.createChooserAllVehicles")
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
         .kccDismissibleSheet()
         .presentationBackground(.regularMaterial)
         .task { garage.start() }
+        .task(id: needsRanking) {
+            guard needsRanking, rankedVehicleIds == nil else { return }
+            let ids = await garage.rankedDrivingVehicleIds()
+            if !Task.isCancelled, rankedVehicleIds == nil {
+                rankedVehicleIds = ids
+            }
+        }
+        .task(id: needsRanking) {
+            guard needsRanking, rankedVehicleIds == nil else { return }
+            do {
+                try await Task.sleep(for: .milliseconds(1_500))
+                // Freeze the fallback order for this presentation when offline
+                // or the endpoint is too slow. A late response cannot move rows.
+                if rankedVehicleIds == nil { rankedVehicleIds = [] }
+            } catch {
+                return
+            }
+        }
+        .onChange(of: vehicles.count, initial: true) { _, count in
+            if count >= 3 { detent = .large }
+        }
         .onChange(of: garage.state, initial: true) { _, _ in
             selectedVehicleId = StartDrivingSelection.effectiveVehicleId(
                 selected: selectedVehicleId,
@@ -125,55 +164,75 @@ struct StartDrivingSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(KccTheme.secondary)
             case .loaded:
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        SocialFlow {
-                            ForEach(vehicles) { vehicle in
-                                vehicleButton(vehicle)
-                                    .id(vehicle.id)
-                            }
-                        }
+                let visible = needsRanking && rankedVehicleIds == nil
+                    ? []
+                    : StartDrivingSelection.quickVehicles(vehicles, rankedIds: rankedVehicleIds ?? [])
+                if let selected = vehicles.first(where: { $0.id == effectiveVehicleId }),
+                   !visible.contains(where: { $0.id == selected.id }) {
+                    Text(String(format: String(localized: "shell.createChooserSelectedVehicle"), vehicleLabel(selected)))
+                        .font(.subheadline)
+                }
+                ForEach(visible) { vehicle in
+                    vehicleButton(vehicle) { selectedVehicleId = vehicle.id }
+                }
+                if vehicles.count > 3 {
+                    Button("shell.createChooserAllVehicles") {
+                        detent = .large
+                        showingAllVehicles = true
                     }
-                    .onChange(of: selectedVehicleId, initial: true) { _, selected in
-                        guard let selected else { return }
-                        withAnimation { proxy.scrollTo(selected, anchor: .center) }
-                    }
+                    .frame(minHeight: 44)
                 }
             }
         }
     }
 
-    private func vehicleButton(_ vehicle: Vehicle) -> some View {
-        let selected = selectedVehicleId == vehicle.id
-        let label = VehicleDisplay.headline(
-            vehicle,
-            otherLabel: String(localized: "garage.catalogueOther")
-        )
-        return Button {
-            selectedVehicleId = vehicle.id
-        } label: {
-            ZStack {
-                Circle().fill(Color(.secondarySystemBackground))
-                if let path = vehicle.imagePath, let url = garage.imageURLs[path] {
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Image(systemName: "car.fill").font(.system(size: 24)).accessibilityHidden(true).foregroundStyle(KccTheme.secondary)
+    private func vehicleLabel(_ vehicle: Vehicle) -> String {
+        VehicleDisplay.headline(vehicle, otherLabel: String(localized: "garage.catalogueOther"))
+    }
+
+    private func vehicleButton(_ vehicle: Vehicle, onSelect: @escaping () -> Void) -> some View {
+        let selected = effectiveVehicleId == vehicle.id
+        return Button(action: onSelect) {
+            HStack(spacing: KccSpacing.s3) {
+                ZStack {
+                    Color(.secondarySystemBackground)
+                    if let path = vehicle.imagePath, let url = garage.imageURLs[path] {
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            vehiclePlaceholder
+                        }
+                    } else {
+                        vehiclePlaceholder
                     }
-                    .clipShape(Circle())
-                } else {
-                    Image(systemName: "car.fill").font(.system(size: 24)).accessibilityHidden(true).foregroundStyle(KccTheme.secondary)
                 }
+                .frame(width: 32, height: 32)
+                .clipShape(.rect(cornerRadius: 6))
+                .accessibilityHidden(true)
+
+                Text(verbatim: vehicleLabel(vehicle))
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(KccTheme.driver)
+                    .opacity(selected ? 1 : 0)
+                    .accessibilityHidden(true)
             }
-            .frame(width: 64, height: 64)
-            .overlay {
-                Circle().stroke(selected ? Color.accentColor : Color.secondary.opacity(0.35), lineWidth: selected ? 3 : 1)
-            }
+            .frame(minHeight: 48)
+            .padding(.horizontal, KccSpacing.s2)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(verbatim: label))
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
+
+    private var vehiclePlaceholder: some View {
+        Image(systemName: "car.fill")
+            .foregroundStyle(KccTheme.secondary)
+    }
+
+    private var needsRanking: Bool { vehicles.count > 1 }
 
     private var vehicles: [Vehicle] {
         if case .loaded(let vehicles) = garage.state { return vehicles }

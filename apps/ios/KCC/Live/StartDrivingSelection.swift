@@ -15,6 +15,17 @@ enum StartDrivingSelection {
         return vehicles.first(where: \.isMainCar)?.id ?? vehicles.first?.id
     }
 
+    static func quickVehicles(_ vehicles: [Vehicle], rankedIds: [String]) -> [Vehicle] {
+        var remaining = Dictionary(uniqueKeysWithValues: vehicles.map { ($0.id, $0) })
+        var ranked = rankedIds.compactMap { remaining.removeValue(forKey: $0) }
+        if let mainId = vehicles.first(where: \.isMainCar)?.id,
+           let main = remaining.removeValue(forKey: mainId) {
+            ranked.append(main)
+        }
+        ranked.append(contentsOf: vehicles.filter { remaining[$0.id] != nil })
+        return Array(ranked.prefix(3))
+    }
+
     /// The chooser stays available while Firebase is wired because convoy
     /// creation is independent of the LIVE_LOCATION feature flag. Only the
     /// single-session action and location preflight depend on that flag.

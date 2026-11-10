@@ -691,6 +691,44 @@ describe('live session lifecycle', () => {
     await adminDb.collection('vehicles').doc('veh-picked').delete();
   });
 
+  it('ranks historical and confirmed starts without counting a retry or a later save twice', async () => {
+    const user = await createProvisionedUser('vehicle-usage');
+    const olderCar = `${user.uid}-history`;
+    const recentCar = `${user.uid}-recent`;
+    for (const vehicleId of [olderCar, recentCar]) {
+      await adminDb.collection('vehicles').doc(vehicleId).set({ userId: user.uid });
+    }
+    const saveRide = (id: string, vehicleId: string, startedAt: Timestamp) =>
+      adminDb.collection('rides').doc(`${user.uid}-${id}`).set({
+        userId: user.uid, vehicleId, startedAt, createdAt: Timestamp.now(),
+      });
+    await saveRide('old1', olderCar, Timestamp.fromMillis(Date.now() - 60_000));
+    await saveRide('old2', olderCar, Timestamp.fromMillis(Date.now() - 30_000));
+
+    const request = {
+      duration: '1h',
+      vehicleId: recentCar,
+      startRequestId: 'a99923a9-dfab-4909-8fe1-9c8fe42d0d03',
+    };
+    await call('live-startSession', request);
+    const useRef = adminDb.doc(`userPrivate/${user.uid}/vehicleUsageEvents/solo_${request.startRequestId}`);
+    const startTime = (await useRef.get()).get('startedAt') as Timestamp;
+    await call('live-startSession', request);
+    expect((await useRef.get()).get('startedAt')).toEqual(startTime);
+    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [olderCar, recentCar] });
+
+    // Saved iOS timestamps have second precision and can predate the same
+    // confirmed start. It was saved after tracking began, so it adds no use.
+    await saveRide('new', recentCar, Timestamp.fromMillis(startTime.toMillis() - 1_000));
+    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [olderCar, recentCar] });
+    await call('live-stopSession', {});
+
+    await signInAs(freeUser);
+    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [] });
+    expect(await callableErrorCode(call('garage-rankedDrivingVehicleIds', { uid: user.uid })))
+      .toBe('functions/invalid-argument');
+  });
+
   it('rejects stale positions and updates without an active session', async () => {
     await signInAs(member);
     // Previous test stopped the session.

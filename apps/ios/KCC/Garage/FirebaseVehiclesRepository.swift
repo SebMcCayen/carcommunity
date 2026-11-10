@@ -62,6 +62,11 @@ final class FirebaseVehiclesRepository: VehiclesRepository, @unchecked Sendable 
         }
     }
 
+    func rankedDrivingVehicleIds() async throws -> [String] {
+        let response = try await functions.call("garage-rankedDrivingVehicleIds", payload: [:])
+        return (response as? [String: Any])?["vehicleIds"] as? [String] ?? []
+    }
+
     func addVehicle(_ input: VehicleInput) async throws -> String {
         let result = try await functions.call(Self.addVehicle, payload: input.payload)
         // garage-addVehicle responds { vehicleId }. A response without a

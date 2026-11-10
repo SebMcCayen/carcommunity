@@ -33117,6 +33117,23 @@
         }
       }
     },
+    "shell.createChooserAllVehicles": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa alla fordon"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show all vehicles"
+          }
+        }
+      }
+    },
     "shell.createChooserBody": {
       "extractionState": "manual",
       "localizations": {
@@ -33198,6 +33215,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "You haven’t added any vehicles to your garage yet. Go to your garage to add a vehicle."
+          }
+        }
+      }
+    },
+    "shell.createChooserSelectedVehicle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valt fordon: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected vehicle: %1$@"
           }
         }
       }
