@@ -1008,7 +1008,8 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(mapIdentity?.hasSuffix("|\(theme)") == true,
             "Capture names must match the actual SwiftUI color scheme")
         XCTAssertFalse(app.textFields["addressSearch.query"].exists)
-        XCTAssertTrue(app.buttons["shell.search"].isHittable)
+        let search = app.buttons["shell.search"]
+        XCTAssertTrue(search.isHittable)
         let layers = app.buttons["shell.mapLayers"]
         let avatar = app.buttons["shell.menu"]
         XCTAssertTrue(layers.isHittable)
@@ -1018,14 +1019,18 @@ final class ShellSmokeTests: XCTestCase {
         attach(app, name: "\(prefix)-S01-map-collapsed-search")
 
         let chatFrameBeforeSearch = app.buttons["shell.tab.chat"].frame
-        app.buttons["shell.search"].tap()
+        search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let field = app.textFields["addressSearch.query"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        guard field.waitForExistence(timeout: 5) else {
+            chatProof(app, name: "\(prefix)-search-open-failure", tree: true)
+            XCTFail("One tap at the center of Search must open the address field")
+            return
+        }
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.typeText("Kungsbacka")
         attach(app, name: "\(prefix)-S02-search-keyboard")
         app.buttons["addressSearch.close"].tap()
-        XCTAssertTrue(app.buttons["shell.search"].waitForExistence(timeout: 5))
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertFalse(field.exists)
         // The search launcher returns before UIKit finishes dismissing the
         // keyboard. Wait for the real keyboard to leave before targeting the

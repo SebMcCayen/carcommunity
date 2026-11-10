@@ -1337,7 +1337,9 @@ struct ShellView: View {
                 .font(.system(size: 20, weight: .semibold))
                 .frame(width: 48, height: 48)
                 .kccMapControl()
+                .contentShape(.interaction, Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(Text("shell.searchExpand"))
         .accessibilityIdentifier("shell.search")
         .accessibilityFocused($searchLauncherFocused)
