@@ -1813,6 +1813,9 @@
     <string name="shell_layersCrownHunt">Kronjakt</string>
     <string name="shell_layersCrownHuntHelp">Visa spelet Kronjakt – kronor att samla in på kartan. Stäng av för att dölja det.</string>
     <string name="shell_layersAppearanceTitle">Kartans utseende</string>
+    <string name="shell_layersBasemapTitle">Karttyp</string>
+    <string name="shell_layersBasemapStandard">Standard</string>
+    <string name="shell_layersBasemapSatellite">Satellit</string>
     <string name="shell_layersAppearanceDay">Dag</string>
     <string name="shell_layersAppearanceNight">Natt</string>
     <string name="shell_layersAppearanceSystem">System</string>

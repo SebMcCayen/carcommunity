@@ -83,6 +83,16 @@ class MapLayersPreferenceStore(context: Context) {
     private var nightMode: MapMode? =
         MapLayersPreferences.nightModeFromStored(prefs.getString(KEY_NIGHT, null))
 
+    fun readBasemap(): MapBasemap {
+        val stored = prefs.getString(KEY_BASEMAP, null)
+        return MapBasemap.entries.firstOrNull { it.name == stored } ?: MapBasemap.Standard
+    }
+
+    fun writeBasemap(basemap: MapBasemap) {
+        if (readBasemap() == basemap) return
+        prefs.edit().putString(KEY_BASEMAP, basemap.name).apply()
+    }
+
     /** The traffic-alerts layer's stored state, or its default when unset. */
     fun readIncidents(): Boolean = incidents
 
@@ -139,5 +149,6 @@ class MapLayersPreferenceStore(context: Context) {
         const val KEY_TRAFFIC = "traffic_congestion"
         const val KEY_3D = "buildings_3d"
         const val KEY_NIGHT = "night_mode"
+        const val KEY_BASEMAP = "basemap"
     }
 }

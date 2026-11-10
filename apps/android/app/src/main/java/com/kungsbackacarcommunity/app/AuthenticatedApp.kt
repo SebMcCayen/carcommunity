@@ -1606,11 +1606,15 @@ fun AuthenticatedApp(
             LaunchedEffect(mapSurface) {
                 mapSurface.setTrafficEnabled(mapLayersStore.readTrafficCongestion())
                 mapSurface.set3dEnabled(mapLayersStore.read3d())
+                mapSurface.setBasemap(mapLayersStore.readBasemap())
                 launch {
                     mapSurface.trafficEnabled.collect { mapLayersStore.writeTrafficCongestion(it) }
                 }
                 launch {
                     mapSurface.is3d.collect { mapLayersStore.write3d(it) }
+                }
+                launch {
+                    mapSurface.basemap.collect { mapLayersStore.writeBasemap(it) }
                 }
             }
             // The incident marker the user has TAPPED, resolved back from the id

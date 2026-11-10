@@ -107,7 +107,6 @@ struct ShellView: View {
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @AppStorage("kcc.location.initialMapExplanationShown") private var initialMapExplanationShown = false
     @State private var initialMapPermissionPrompt = false
-    @State private var primaryNavigationHeight: CGFloat = 0
     @State private var chatKeyboardPresented = false
     @State private var startDrivingGarage: GarageCoordinator?
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
@@ -312,12 +311,48 @@ struct ShellView: View {
     // Each boundary wraps one stable layout/lifecycle segment, retaining the
     // shell's single map and coordinator identities through tab/route changes.
     private var shellBase: AnyView {
+        VStack(spacing: 0) {
+            shellTabContent
+            if !(selectedTab == .chat && chatKeyboardPresented) {
+                // Keep the footer above the map and its edge-to-edge overlays.
+                primaryNavigation
+                    .fixedSize(horizontal: false, vertical: true)
+                    .zIndex(1)
+            }
+        }
+        // Route host: sub-routes render full-screen OVER the tab shell (the
+        // Android shell's route-host pattern), each carrying its own back
+        // affordance that pops one level via the pure stack.
+        .overlay {
+            if let route = routes.current {
+                routeHost(for: route)
+            }
+        }
+        .overlay {
+            if addressSearchPresented, let savedPlacesCoordinator {
+                AddressSearchOverlay(
+                    coordinator: savedPlacesCoordinator,
+                    proximity: savedPlacesProximity,
+                    onSelect: showPlaceOnMap,
+                    onManage: {
+                        navSearchOpen = false
+                        routes = routes.opening(.savedPlaces)
+                    },
+                    onClose: { navSearchOpen = false }
+                )
+            }
+        }
+        .eraseToAnyView()
+    }
+
+    private var shellTabContent: some View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
             MapHomeView(
                 surface: mapSurface,
                 locationProvider: locationProvider,
+                basemap: mapLayerPreferences.basemap,
                 bottomClearance: mapHomeChromeVisible ? mapDockHeight : 0,
                 featureHealthReporter: FeatureHealthReporter.whenAuthenticated(
                     diagnostics.featureHealthReporter,
@@ -355,37 +390,6 @@ struct ShellView: View {
         .overlay(alignment: .bottom) {
             if mapHomeChromeVisible && mapBottomDockVisible { mapBottomDock }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !(selectedTab == .chat && chatKeyboardPresented) {
-                primaryNavigation
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
-                        primaryNavigationHeight = $0
-                    }
-            }
-        }
-        // Route host: sub-routes render full-screen OVER the tab shell (the
-        // Android shell's route-host pattern), each carrying its own back
-        // affordance that pops one level via the pure stack.
-        .overlay {
-            if let route = routes.current {
-                routeHost(for: route)
-            }
-        }
-        .overlay {
-            if addressSearchPresented, let savedPlacesCoordinator {
-                AddressSearchOverlay(
-                    coordinator: savedPlacesCoordinator,
-                    proximity: savedPlacesProximity,
-                    onSelect: showPlaceOnMap,
-                    onManage: {
-                        navSearchOpen = false
-                        routes = routes.opening(.savedPlaces)
-                    },
-                    onClose: { navSearchOpen = false }
-                )
-            }
-        }
-        .eraseToAnyView()
     }
 
     private var shellBaseInteractions: AnyView {
@@ -1316,6 +1320,7 @@ struct ShellView: View {
             }
 
             MapLayersButton(isPresented: $showMapLayers, isActive:
+                mapLayerPreferences.basemap == .satellite ||
                 mapLayerPreferences.trafficEnabled || !mapLayerPreferences.is3D ||
                 (mapLayerPreferences.mapModeOverride != nil &&
                  mapLayerPreferences.mapModeOverride != (colorScheme == .dark ? .night : .day)))
@@ -1328,7 +1333,9 @@ struct ShellView: View {
                     .rotationEffect(.degrees(-mapSurface.bearing))
                     .frame(width: 48, height: 48)
                     .kccMapControl()
+                    .contentShape(.interaction, Rectangle())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(Text(mapSurface.compassMode == .northUp
                 ? "shell.compassCourseUp" : "shell.compassNorthUp"))
             .accessibilityIdentifier("shell.compass")
@@ -1348,7 +1355,9 @@ struct ShellView: View {
                 .font(.system(size: 20, weight: .semibold))
                 .frame(width: 48, height: 48)
                 .kccMapControl()
+                .contentShape(.interaction, Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(Text("shell.searchExpand"))
         .accessibilityIdentifier("shell.search")
         .accessibilityFocused($searchLauncherFocused)
@@ -1376,7 +1385,6 @@ struct ShellView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
-                    .contentShape(Rectangle())
                     .foregroundStyle(tab == .create
                         ? (liveLocationCoordinator?.isSharing == true ? KccPalette.warmIvory : KccTheme.onGold)
                         : KccTheme.text)
@@ -1386,11 +1394,15 @@ struct ShellView: View {
                                 .fill(liveLocationCoordinator?.isSharing == true ? KccPalette.errorRed : KccPalette.crownGold)
                         }
                     }
+                    .background { KccTheme.overlay }
                     .overlay(alignment: .bottom) {
                         if selectedTab == tab {
                             Capsule().fill(KccPalette.crownGold).frame(width: 28, height: 3)
+                                .allowsHitTesting(false)
                         }
                     }
+                    // Keep the gap between the icon and title inside the tap target.
+                    .contentShape(.interaction, Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(LocalizedStringKey(tabTitle(tab))))
@@ -1403,7 +1415,10 @@ struct ShellView: View {
         .padding(.horizontal, KccSpacing.s2)
         .padding(.vertical, KccSpacing.s2)
         .background(KccTheme.overlay, ignoresSafeAreaEdges: .bottom)
-        .overlay(alignment: .top) { Rectangle().fill(KccTheme.border).frame(height: 1) }
+        .overlay(alignment: .top) {
+            Rectangle().fill(KccTheme.border).frame(height: 1)
+                .allowsHitTesting(false)
+        }
     }
 
     /// Existing block-filtered inbox state; Driver activity never enters it.
@@ -1423,17 +1438,9 @@ struct ShellView: View {
     }
 
     private var chatTab: some View {
+        // The shell's vertical layout already reserves the footer's space.
         NavigationStack {
             chatHubContent
-                // The retained NavigationStack establishes its own safe area
-                // and does not inherit the footer inset on the map's ZStack.
-                // Reserve the measured footer INSIDE that navigation host so
-                // channel composers stay above both navigation and keyboard.
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: chatKeyboardPresented ? 0 : primaryNavigationHeight)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
         }
             .kccReadingSurface()
             .accessibilityAction(.escape) { selectedTab = .map }

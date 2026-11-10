@@ -104,44 +104,69 @@ struct ChannelChatScreen: View {
     private func messageList(_ coordinator: ChannelChatCoordinator) -> some View {
         let groups = protectCommunity ? CommunityMessageGroups.build(coordinator.messages) :
             coordinator.messages.map { CommunityMessageGroup(messages: [$0]) }
+        // Keep each message as its own lazy row. At accessibility text sizes,
+        // one expanded group can span several screens and leave the latest
+        // message out of the rendered viewport even at the scroll limit.
+        let rows = groups.flatMap { group -> [ThreadRow] in
+            let expanded = expandedGroups.contains(group.id)
+            let messages = expanded ? group.messages[...] : group.messages.suffix(2)
+            let messageRows = messages.enumerated().map { index, message in
+                ThreadRow.message(message, showSender: index == 0)
+            }
+            return group.messages.count > 2 ? [.groupToggle(group, expanded: expanded)] + messageRows : messageRows
+        }
         return ChatThreadScrollView(latestMessageID: coordinator.messages.last?.id,
-                                   latestIsOwn: coordinator.messages.last?.senderUid == coordinator.currentUserId,
-                                   latestScrollTargetID: groups.last.map { "community-group-\($0.id)" }) {
+                                    latestIsOwn: coordinator.messages.last?.senderUid == coordinator.currentUserId) {
             olderControl(coordinator)
-            ForEach(groups) { group in
-                let expanded = expandedGroups.contains(group.id)
-                VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                    if group.messages.count > 2 {
-                        Button {
-                            if expanded { expandedGroups.remove(group.id) } else { expandedGroups.insert(group.id) }
-                        } label: {
-                            if expanded { Text("chat.flood.showLess") }
-                            else {
-                                Text(String.localizedStringWithFormat(NSLocalizedString("chat.flood.moreFrom", comment: ""),
-                                    group.messages[0].senderDisplayName ?? String(localized: "chat.unknownAuthor"),
-                                    Int64(group.messages.count - 2)))
-                            }
-                        }
-                        .accessibilityIdentifier("community-group-toggle-" + group.id)
-                        .frame(minHeight: 44)
-                    }
-                    ForEach(Array((expanded ? group.messages : Array(group.messages.suffix(2))).enumerated()),
-                            id: \.element.id) { index, message in
-                        MessageRow(message: message,
-                                   isOwn: message.senderUid == coordinator.currentUserId,
-                                   showSender: index == 0,
-                                   collapsedLines: protectCommunity ? 4 : nil,
-                                   coordinator: coordinator,
-                                   onViewProfile: onViewProfile)
-                            .id(message.id)
-                            .contextMenu { messageActions(message, coordinator: coordinator) }
-                    }
-
+            ForEach(rows) { row in
+                switch row {
+                case .groupToggle(let group, let expanded):
+                    groupToggle(group, expanded: expanded)
+                case .message(let message, let showSender):
+                    MessageRow(message: message,
+                               isOwn: message.senderUid == coordinator.currentUserId,
+                               showSender: showSender,
+                               collapsedLines: protectCommunity ? 4 : nil,
+                               coordinator: coordinator,
+                               onViewProfile: onViewProfile)
+                        .contextMenu { messageActions(message, coordinator: coordinator) }
+                        .id(message.id)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .id("community-group-" + group.id)
             }
         }
+    }
+
+    private enum ThreadRow: Identifiable {
+        enum ID: Hashable {
+            case groupToggle(String)
+            case message(String)
+        }
+
+        case groupToggle(CommunityMessageGroup, expanded: Bool)
+        case message(ChannelMessage, showSender: Bool)
+
+        var id: ID {
+            switch self {
+            case .groupToggle(let group, _): .groupToggle(group.id)
+            case .message(let message, _): .message(message.id)
+            }
+        }
+    }
+
+    private func groupToggle(_ group: CommunityMessageGroup, expanded: Bool) -> some View {
+        Button {
+            if expanded { expandedGroups.remove(group.id) } else { expandedGroups.insert(group.id) }
+        } label: {
+            if expanded {
+                Text("chat.flood.showLess")
+            } else {
+                Text(String.localizedStringWithFormat(NSLocalizedString("chat.flood.moreFrom", comment: ""),
+                    group.messages[0].senderDisplayName ?? String(localized: "chat.unknownAuthor"),
+                    Int64(group.messages.count - 2)))
+            }
+        }
+        .accessibilityIdentifier("community-group-toggle-" + group.id)
+        .frame(minHeight: 44)
     }
 
     @ViewBuilder
