@@ -81,8 +81,9 @@ export const rankedDrivingVehicleIds = onCall(
         ]);
 
         const uses = confirmed.docs.map((doc) => readUse(doc.data())).filter((use) => use !== null);
-        // The time boundary also separates convoy starts from their saved rides,
-        // which refer to a separate live-session ID.
+        // Seed only rides already saved before tracking began. createdAt is
+        // assigned by the server. Device clocks and timestamp rounding can put
+        // a newly saved ride's startedAt before its own confirmed start.
         const firstTrackedAt = tracking.get('firstTrackedAt');
         const firstTrackedAtMs =
           firstTrackedAt instanceof Timestamp ? firstTrackedAt.toMillis() : nowMs + 1;
@@ -92,13 +93,13 @@ export const rankedDrivingVehicleIds = onCall(
               .collection('rides')
               .where('userId', '==', actor.uid)
               .where('createdAt', '>=', cutoff)
+              .where('createdAt', '<', Timestamp.fromMillis(firstTrackedAtMs))
               .orderBy('createdAt', 'desc')
               .select('startedAt', 'vehicleId'),
           );
-          for (const doc of history.docs) {
-            const use = readUse(doc.data());
-            if (use && use.startedAtMs < firstTrackedAtMs) uses.push(use);
-          }
+          uses.push(
+            ...history.docs.map((doc) => readUse(doc.data())).filter((use) => use !== null),
+          );
         }
         return { vehicleIds: rankVehicleUsage(uses, nowMs) };
       },

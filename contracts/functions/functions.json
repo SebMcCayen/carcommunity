@@ -516,7 +516,7 @@
     {
       "name": "garage.rankedDrivingVehicleIds",
       "domain": "garage",
-      "description": "Empty input. Returns { vehicleIds: string[] } for the active caller, ordered by confirmed uses in the last 90 days, then most recent use, then ID. Starts are private, one per solo session or convoy started with the owner's selected vehicle. Saved rides with a vehicle ID seed the part of the rolling window before the first tracked start. Clients intersect the result with their current garage. Deployed as garage-rankedDrivingVehicleIds.",
+      "description": "Empty input. Returns { vehicleIds: string[] } for the active caller, ordered by confirmed uses in the last 90 days, then most recent use, then ID. Starts are private, one per solo session or convoy started with the owner's selected vehicle. Rides with a vehicle ID saved before the first tracked start seed earlier use in the rolling window. Clients intersect the result with their current garage. Deployed as garage-rankedDrivingVehicleIds.",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",

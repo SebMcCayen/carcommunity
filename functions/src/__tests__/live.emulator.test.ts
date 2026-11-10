@@ -717,7 +717,9 @@ describe('live session lifecycle', () => {
     expect((await useRef.get()).get('startedAt')).toEqual(startTime);
     expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [olderCar, recentCar] });
 
-    await saveRide('new', recentCar, startTime);
+    // Saved iOS timestamps have second precision and can predate the same
+    // confirmed start. It was saved after tracking began, so it adds no use.
+    await saveRide('new', recentCar, Timestamp.fromMillis(startTime.toMillis() - 1_000));
     expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [olderCar, recentCar] });
     await call('live-stopSession', {});
 
