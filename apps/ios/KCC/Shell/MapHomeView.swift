@@ -468,6 +468,7 @@ struct MapHomeView: View {
     private let accessToken: String?
     let bottomClearance: CGFloat
     private let featureHealthReporter: FeatureHealthReporter?
+    private let markers: AnyView
     @State private var renderWatchdog: MapRenderWatchdog
 
     init(
@@ -475,13 +476,15 @@ struct MapHomeView: View {
         locationProvider: any LocationProvider,
         accessToken: String? = MapboxConfiguration.accessToken(),
         bottomClearance: CGFloat = 0,
-        featureHealthReporter: FeatureHealthReporter? = nil
+        featureHealthReporter: FeatureHealthReporter? = nil,
+        markers: AnyView = AnyView(EmptyView())
     ) {
         self.surface = surface
         self.locationProvider = locationProvider
         self.accessToken = accessToken
         self.bottomClearance = bottomClearance
         self.featureHealthReporter = featureHealthReporter
+        self.markers = markers
         _renderWatchdog = State(initialValue: MapRenderWatchdog())
     }
 
@@ -493,6 +496,7 @@ struct MapHomeView: View {
                     surface: surface,
                     locationProvider: locationProvider,
                     bottomClearance: bottomClearance,
+                    markers: markers,
                     onLoadingError: { kind in
                         featureHealthReporter?.report(
                             kind,
@@ -508,6 +512,8 @@ struct MapHomeView: View {
                 }
             } else {
                 mapPlaceholder
+                    .overlay { markers }
+                    .ignoresSafeArea(edges: .top)
             }
         }
         .onAppear(perform: updateFeatureHealthConditions)
@@ -609,6 +615,7 @@ private struct MapboxStandardMap: View {
     let surface: StubMapSurface
     let locationProvider: any LocationProvider
     let bottomClearance: CGFloat
+    let markers: AnyView
     @State private var viewport: Viewport
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
@@ -629,6 +636,7 @@ private struct MapboxStandardMap: View {
         surface: StubMapSurface,
         locationProvider: any LocationProvider,
         bottomClearance: CGFloat,
+        markers: AnyView,
         onLoadingError: @escaping @MainActor (FeatureHealthKind) -> Void,
         onFullFrameRendered: @escaping @MainActor () -> Void,
         onLoaded: @escaping @MainActor () -> Void
@@ -638,6 +646,7 @@ private struct MapboxStandardMap: View {
         self.locationProvider = locationProvider
         self.onLoaded = onLoaded
         self.bottomClearance = bottomClearance
+        self.markers = markers
         self.onFullFrameRendered = onFullFrameRendered
         self.onLoadingError = onLoadingError
         _viewport = State(initialValue: .camera(
@@ -686,6 +695,9 @@ private struct MapboxStandardMap: View {
                 }
             }
             .mapStyle(.standard)
+            // Use the Layers switch for pitch so it cannot win against a
+            // two-finger pan. Keep the SDK's native pinch, pan and rotation.
+            .gestureOptions(GestureOptions(pitchEnabled: false))
             // Keep Mapbox attribution/logo; hide only the requested scale
             // and the redundant SDK compass in favour of our accessible rail.
             .ornamentOptions(OrnamentOptions(
@@ -696,6 +708,12 @@ private struct MapboxStandardMap: View {
                 attributionButton: AttributionButtonOptions(position: .bottomLeft,
                     margins: CGPoint(x: 112, y: bottomClearance + 8))
             ))
+            .onStyleLoaded { _ in
+                // The marker overlay uses point(for:), which Mapbox does not
+                // support on Standard's globe at low zoom levels.
+                try? proxy.map?.setProjection(StyleProjection(name: .mercator))
+                surface.invalidateProjection()
+            }
             .onMapLoaded { _ in
                 onLoaded()
                 if !rendererAttached, let viewportController = proxy.viewport {
@@ -806,6 +824,9 @@ private struct MapboxStandardMap: View {
                 cameraRuntime.cancelIdleReturn()
                 applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
             }
+            // Mapbox projects from the native view's top-left. Expand the
+            // map and its marker layer together so their origins stay aligned.
+            .overlay { markers }
             .ignoresSafeArea(edges: .top)
         }
         .task(id: MapHomeMeFollowPolicy.subscriptionKey(

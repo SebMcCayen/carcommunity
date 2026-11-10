@@ -67,6 +67,7 @@ enum SettingsDestination: CaseIterable, Hashable, Sendable {
 /// callbacks that were actually supplied and keeps legal links available in
 /// config-less builds.
 struct SettingsScreen: View {
+    @AppStorage(AppThemePreference.storageKey) private var theme = AppThemePreference.system
     let actions: SettingsActions
 
     var body: some View {
@@ -132,6 +133,20 @@ struct SettingsScreen: View {
                 }
 
                 Section {
+                    Picker("settingsMenu.appearanceSection", selection: $theme) {
+                        Text("settingsMenu.themeSystem").tag(AppThemePreference.system)
+                        Text("settingsMenu.themeScheduled").tag(AppThemePreference.automatic)
+                        Text("settingsMenu.themeLight").tag(AppThemePreference.light)
+                        Text("settingsMenu.themeDark").tag(AppThemePreference.dark)
+                    }
+                    .pickerStyle(.menu)
+                    .frame(minHeight: 48)
+                    .accessibilityIdentifier("settings.appearance")
+                } footer: {
+                    Text(themeDescription)
+                }
+
+                Section {
                     legalLink(
                         title: "settingsMenu.privacy",
                         urlKey: "url.privacy",
@@ -162,6 +177,15 @@ struct SettingsScreen: View {
         .navigationTitle("settingsMenu.title")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("settings.screen")
+    }
+
+    private var themeDescription: LocalizedStringKey {
+        switch theme {
+        case .system: "settingsMenu.themeSystemDescription"
+        case .automatic: "settingsMenu.themeScheduledDescription"
+        case .light: "settingsMenu.themeLightDescription"
+        case .dark: "settingsMenu.themeDarkDescription"
+        }
     }
 
     private let accountDestinations: Set<SettingsDestination> = [
