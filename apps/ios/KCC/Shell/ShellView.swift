@@ -1333,7 +1333,9 @@ struct ShellView: View {
                     .rotationEffect(.degrees(-mapSurface.bearing))
                     .frame(width: 48, height: 48)
                     .kccMapControl()
+                    .contentShape(.interaction, Rectangle())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(Text(mapSurface.compassMode == .northUp
                 ? "shell.compassCourseUp" : "shell.compassNorthUp"))
             .accessibilityIdentifier("shell.compass")

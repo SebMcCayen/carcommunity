@@ -619,16 +619,17 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertGreaterThan(layers.frame.midX, app.frame.midX)
         XCTAssertGreaterThan(compass.frame.minY, layers.frame.maxY)
         XCTAssertEqual(compass.value as? String, "NorthUp")
-        compass.tap()
-        let courseUp = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "CourseUp"), object: compass
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [courseUp], timeout: 5), .completed)
-        compass.tap()
-        let northUp = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "NorthUp"), object: compass
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [northUp], timeout: 5), .completed)
+        for mode in ["CourseUp", "NorthUp"] {
+            compass.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                compass.exists && (compass.value as? String) == mode
+            }, object: nil)
+            let result = XCTWaiter.wait(for: [updated], timeout: 15)
+            if result != .completed {
+                chatProof(app, name: "compass-\(mode)-center-tap-failure", tree: true)
+            }
+            XCTAssertEqual(result, .completed, "One tap at the center of Compass must switch to \(mode)")
+        }
         layers.tap()
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
     }
