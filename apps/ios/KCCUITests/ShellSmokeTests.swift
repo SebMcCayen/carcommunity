@@ -33,6 +33,29 @@ final class ShellSmokeTests: XCTestCase {
     }
     #endif
 
+    func testCrownHuntInstructionHeadingsAreLocalized() {
+        let translations = [
+            (language: "en", intro: "What is Crown Hunt?", collect: "How to collect a crown"),
+            (language: "sv", intro: "Vad är Kronjakten?", collect: "Så samlar du en krona")
+        ]
+        for translation in translations {
+            let app = launch(language: translation.language)
+            app.buttons["shell.tab.social"].tap()
+
+            let crownHunt = app.buttons["shell.social.crownHunt"]
+            XCTAssertTrue(crownHunt.wait(for: \.isHittable, toEqual: true, timeout: 5))
+            crownHunt.tap()
+
+            let instructions = app.buttons["crown.instructions.open"]
+            XCTAssertTrue(instructions.wait(for: \.isHittable, toEqual: true, timeout: 10))
+            instructions.tap()
+
+            XCTAssertTrue(app.staticTexts[translation.intro].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts[translation.collect].exists)
+            app.terminate()
+        }
+    }
+
     func testClubsMenuRemainsDiscoverableWithoutBackendActivation() {
         for largeText in [false, true] {
             let app = launch(language: "en", largeText: largeText, theme: "Dark")
