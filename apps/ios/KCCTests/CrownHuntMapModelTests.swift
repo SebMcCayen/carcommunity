@@ -17,35 +17,16 @@ final class CrownHuntMapModelTests: XCTestCase {
         }
     }
 
-    private actor EffectsGate {
-        private var continuation: CheckedContinuation<CrownPerkEffects, Never>?
-        private var requestWaiters: [CheckedContinuation<Void, Never>] = []
-
-        func waitForValue() async -> CrownPerkEffects {
-            await withCheckedContinuation { continuation in
-                self.continuation = continuation
-                requestWaiters.forEach { $0.resume() }
-                requestWaiters.removeAll()
-            }
-        }
-
-        func waitForRequest() async {
-            guard continuation == nil else { return }
-            await withCheckedContinuation { requestWaiters.append($0) }
-        }
-
-        func resume(_ effects: CrownPerkEffects) {
-            continuation?.resume(returning: effects)
-            continuation = nil
-        }
-    }
-
-    private final class SuspendedPerkRepository: CrownPerkDeployRepository, @unchecked Sendable {
-        private let effectsGate = EffectsGate()
+    private final class PerkEffectsRepository: CrownPerkDeployRepository, @unchecked Sendable {
+        private let updates = AsyncStream<CrownPerkEffectSnapshot>.makeStream()
         private(set) var deployCount = 0
 
-        func effects(uid: String, now: Date) async -> CrownPerkEffects {
-            await effectsGate.waitForValue()
+        func effects(uid: String, now: Date) -> AsyncStream<CrownPerkEffectSnapshot> {
+            updates.stream
+        }
+
+        func send(_ snapshot: CrownPerkEffectSnapshot) {
+            updates.continuation.yield(snapshot)
         }
 
         func deploy(
@@ -57,19 +38,29 @@ final class CrownHuntMapModelTests: XCTestCase {
             deployCount += 1
             return CrownPerkDeployResult(
                 perkId: perkId,
-                kind: .trap,
+                kind: PerkKind.fromWire(perkId) ?? .trap,
+                effectId: "effect",
                 expiresAt: .distantFuture,
-                inventoryCount: 0,
+                inventoryCount: 1,
                 alreadyDeployed: false
             )
         }
+    }
 
-        func waitForEffectsRequest() async {
-            await effectsGate.waitForRequest()
+    private final class OwnedPerksRepository: PerkShopRepository {
+        func catalog() -> AsyncStream<PerkCatalogSnapshot> {
+            AsyncStream { $0.finish() }
         }
 
-        func resumeEffects(_ effects: CrownPerkEffects) async {
-            await effectsGate.resume(effects)
+        func inventory(uid: String) -> AsyncStream<[String: Int]> {
+            AsyncStream {
+                $0.yield(["spike_strip": 1, "shield": 2, "boost": 1])
+                $0.finish()
+            }
+        }
+
+        func buyPerk(perkId: String, idempotencyKey: String) async throws -> PerkPurchaseResult {
+            throw PerkPurchaseError(reason: .unknown)
         }
     }
 
@@ -183,45 +174,129 @@ final class CrownHuntMapModelTests: XCTestCase {
     }
 
     @MainActor
-    func testPerkRefreshDoesNotRestoreEffectsAfterStop() async {
-        let repository = SuspendedPerkRepository()
+    func testQueuedPerkSnapshotDoesNotRestoreEffectsAfterStop() async {
+        let repository = PerkEffectsRepository()
         let coordinator = CrownPerkMapCoordinator(
             repository: repository,
-            shopRepository: nil,
+            shopRepository: OwnedPerksRepository(),
             uid: "member",
             enabled: true,
             location: { nil }
         )
-        let refresh = Task { await coordinator.refreshEffects() }
-        await repository.waitForEffectsRequest()
-
+        await startPerks(coordinator, repository: repository, effects: .empty)
+        repository.send(.shield(.distantFuture))
         coordinator.stop()
-        await repository.resumeEffects(CrownPerkEffects(
-            shieldUntil: Date.distantFuture,
-            boostUntil: nil,
-            traps: []
-        ))
-        await refresh.value
+        await Task.yield()
 
         XCTAssertEqual(coordinator.effects, .empty)
+        XCTAssertFalse(coordinator.hasLoadedEffects)
     }
 
     @MainActor
     func testTrapDeployRejectsStaleLocation() async {
-        let repository = SuspendedPerkRepository()
+        let repository = PerkEffectsRepository()
         let now = Date(timeIntervalSince1970: 2_000)
         let coordinator = CrownPerkMapCoordinator(
             repository: repository,
-            shopRepository: nil,
+            shopRepository: OwnedPerksRepository(),
             uid: "member",
             enabled: true,
             location: { self.fix(at: now.addingTimeInterval(-61)) }
         )
+        defer { coordinator.stop() }
+        await startPerks(coordinator, repository: repository, effects: .empty)
 
         await coordinator.deploy(perkId: "spike_strip", kind: .trap, now: now)
 
         XCTAssertEqual(coordinator.status, .failed("spike_strip", .noLocation))
         XCTAssertEqual(repository.deployCount, 0)
+    }
+
+    @MainActor
+    func testActivePerksCannotBeSpentAgainUntilTheyExpire() async {
+        let repository = PerkEffectsRepository()
+        let now = Date(timeIntervalSince1970: 2_000)
+        let expiry = now.addingTimeInterval(0.5)
+        let coordinator = CrownPerkMapCoordinator(
+            repository: repository,
+            shopRepository: OwnedPerksRepository(),
+            uid: "member",
+            enabled: true,
+            location: { nil }
+        )
+        defer { coordinator.stop() }
+        let effects = CrownPerkEffects(
+            shieldUntil: expiry,
+            boostUntil: now.addingTimeInterval(59.5),
+            traps: [CrownOwnTrap(id: "trap", latitude: 57, longitude: 12, expiresAt: expiry)]
+        )
+        await startPerks(coordinator, repository: repository, effects: effects)
+
+        XCTAssertEqual(effects.activity(for: .shield, at: now), .timed(seconds: 1))
+        XCTAssertEqual(effects.activity(for: .boost, at: now), .timed(seconds: 60))
+        XCTAssertEqual(effects.activity(for: .trap, at: now), .traps(1))
+        XCTAssertEqual(effects.activity(for: .shield, at: expiry), .inactive)
+        XCTAssertEqual(effects.activity(for: .trap, at: expiry), .inactive)
+        XCTAssertTrue(coordinator.canDeploy(perkId: "shield", kind: .shield, now: expiry))
+        XCTAssertTrue(coordinator.canDeploy(perkId: "spike_strip", kind: .trap, now: expiry))
+        XCTAssertFalse(coordinator.canDeploy(perkId: "boost", kind: .boost, now: now))
+        XCTAssertFalse(coordinator.canDeploy(perkId: "unowned", kind: .shield, now: expiry))
+
+        await coordinator.deploy(perkId: "shield", kind: .shield, now: now)
+        await coordinator.deploy(perkId: "spike_strip", kind: .trap, now: now)
+        XCTAssertEqual(repository.deployCount, 0)
+        XCTAssertEqual(coordinator.status, .idle)
+    }
+
+    @MainActor
+    func testConfirmedActivationAndLiveTrapRemovalUpdateTheMenu() async {
+        let repository = PerkEffectsRepository()
+        let now = Date(timeIntervalSince1970: 2_000)
+        let coordinator = CrownPerkMapCoordinator(
+            repository: repository,
+            shopRepository: OwnedPerksRepository(),
+            uid: "member",
+            enabled: true,
+            location: { nil }
+        )
+        defer { coordinator.stop() }
+        await startPerks(coordinator, repository: repository, effects: CrownPerkEffects(
+            shieldUntil: nil,
+            boostUntil: nil,
+            traps: [CrownOwnTrap(id: "trap", latitude: 57, longitude: 12, expiresAt: .distantFuture)]
+        ))
+        coordinator.openMenu()
+
+        XCTAssertTrue(coordinator.canDeploy(perkId: "shield", kind: .shield, now: now))
+        await coordinator.deploy(perkId: "shield", kind: .shield, now: now)
+        XCTAssertEqual(repository.deployCount, 1)
+        XCTAssertFalse(coordinator.canDeploy(perkId: "shield", kind: .shield, now: now))
+
+        XCTAssertFalse(coordinator.canDeploy(perkId: "spike_strip", kind: .trap, now: now))
+        repository.send(.traps([]))
+        await waitForPerks { coordinator.canDeploy(perkId: "spike_strip", kind: .trap, now: now) }
+    }
+
+    @MainActor
+    private func startPerks(
+        _ coordinator: CrownPerkMapCoordinator,
+        repository: PerkEffectsRepository,
+        effects: CrownPerkEffects
+    ) async {
+        coordinator.start()
+        repository.send(.shield(effects.shieldUntil))
+        repository.send(.boost(effects.boostUntil))
+        repository.send(.traps(effects.traps))
+        await waitForPerks { coordinator.hasLoadedEffects && coordinator.hasLoadedInventory }
+    }
+
+    @MainActor
+    private func waitForPerks(_ condition: () -> Bool) async {
+        for _ in 0..<100 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Perk state did not update")
     }
 
     private func makeSpawn() -> CrownSpawn {
