@@ -59,6 +59,7 @@ import {
 } from './live-core';
 import { buildDiscoveryFields, discoveryExpiresAt, shouldRefreshDiscovery } from './nearby-core';
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
+import { writeVehicleUse } from '../garage/vehicleUsage';
 import { trackLiveSessionDistance } from '../points/liveDistance';
 import { recordCrownActivity } from '../crownHunt/spawnActivity';
 import { processTrapDrains } from '../crownHunt/pvp-drain';
@@ -101,6 +102,7 @@ const sessionGeneration = (session: LiveSession | null | undefined): number =>
 export async function activateDiscoveryGeneration(
   uid: string,
   session: LiveSession,
+  vehicleUse?: { requestId?: string },
 ): Promise<void> {
   const generation = sessionGeneration(session);
   await db.runTransaction(async (tx) => {
@@ -111,6 +113,22 @@ export async function activateDiscoveryGeneration(
       (fence.generation > generation || (fence.generation === generation && fence.active === false))
     ) {
       return;
+    }
+    if (vehicleUse && session.vehicleId) {
+      // Read in the same transaction so delayed starts cannot recreate a
+      // private event after the account's profile has been erased.
+      const owner = await tx.get(db.doc(`users/${uid}`));
+      if (owner.exists && owner.get('deleted') !== true) {
+        await writeVehicleUse(
+          tx,
+          uid,
+          'solo',
+          session.id,
+          session.vehicleId,
+          Timestamp.fromDate(new Date(session.startedAt)),
+          vehicleUse.requestId?.toLowerCase(),
+        );
+      }
     }
     tx.set(discoveryFenceRef(uid), { generation, sessionId: session.id, active: true });
     tx.delete(discoveryRef(uid));
@@ -366,7 +384,9 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
   if (!result.committed || !session) {
     throw new HttpsError('internal', 'Could not start live location session.');
   }
-  await activateDiscoveryGeneration(actor.uid, session);
+  await activateDiscoveryGeneration(actor.uid, session, {
+    requestId: parsed.input.startRequestId,
+  });
 
   return { sessionId: session.id, status: 'active', expiresAt: session.expiresAt };
 });

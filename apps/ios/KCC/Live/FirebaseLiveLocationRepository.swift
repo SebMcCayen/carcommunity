@@ -42,7 +42,14 @@ final class FirebaseLiveLocationRepository: LiveLocationRepository, @unchecked S
         if let vehicleId, !vehicleId.isEmpty {
             payload["vehicleId"] = vehicleId
         }
-        _ = try await functions.call(Self.startSessionCallable, payload: payload)
+        payload["startRequestId"] = UUID().uuidString.lowercased()
+        do {
+            _ = try await functions.call(Self.startSessionCallable, payload: payload)
+        } catch let error as KccFunctionsError where error.code == .invalidArgument {
+            // The previous backend rejects the new key before any write.
+            payload.removeValue(forKey: "startRequestId")
+            _ = try await functions.call(Self.startSessionCallable, payload: payload)
+        }
     }
 
     func updatePosition(_ coordinate: LiveCoordinate) async throws {

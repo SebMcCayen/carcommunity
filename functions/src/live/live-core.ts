@@ -153,6 +153,7 @@ const startSessionInputSchema = z
     // Firestore doc id; a stray value simply fails the ownership match and falls
     // back rather than erroring the start.
     vehicleId: z.string().trim().min(1).max(300).optional(),
+    startRequestId: z.uuid().optional(),
   })
   .strict();
 

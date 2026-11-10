@@ -19,6 +19,8 @@ sealed interface GarageState {
 interface GarageRepository {
     fun observeGarage(uid: String): Flow<GarageState>
 
+    suspend fun rankedDrivingVehicleIds(): List<String> = emptyList()
+
     /**
      * Creates a vehicle and returns its NEW id, as minted by garage-addVehicle
      * (which already responds with `{ vehicleId }`). The id is required by the

@@ -57,6 +57,7 @@ import { onCall } from '../access/callable';
 import { logger } from 'firebase-functions';
 import { FieldPath, FieldValue, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { db } from '../firebase';
+import { writeVehicleUse } from '../garage/vehicleUsage';
 import { requireActiveActor } from '../shared/memberActor';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
@@ -570,8 +571,7 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
 
   // Let Firestore generate the convoy id directly on the target collection.
   const ref = db.collection('convoys').doc();
-  // ITEM 1: the create is done inside a transaction whose ONLY read is the
-  // "am I already in a convoy" check, so the check and the membership write are
+  // ITEM 1: the "am I already in a convoy" check and membership write are
   // one atomic unit — two simultaneous creates by the same user cannot both land
   // (the second aborts + retries, sees the first convoy, and is rejected).
   await db.runTransaction(async (tx) => {
@@ -589,10 +589,26 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
     // it shares a time source with convoy.end's local-clock endedAt — see
     // buildConvoyDocument. (createdAt + member timestamps use serverTimestamp
     // sentinels, already retry-safe: the server stamps them at commit.)
+    const { vehicleId } = parsed.input;
+    // The legacy callable tolerates arbitrary vehicle IDs and falls back for
+    // live sharing. Only a valid owned choice is attributed in the picker.
+    const safeId =
+      vehicleId &&
+      /^[A-Za-z0-9._-]+$/.test(vehicleId) &&
+      vehicleId !== '.' &&
+      vehicleId !== '..' &&
+      !/^__.*__$/.test(vehicleId);
+    const vehicle = safeId ? await tx.get(db.collection('vehicles').doc(vehicleId)) : null;
+    const owner =
+      vehicle?.get('userId') === actor.uid ? await tx.get(db.doc(`users/${actor.uid}`)) : null;
+    const startedAt = Timestamp.now();
+    if (vehicleId && owner?.exists && owner.get('deleted') !== true) {
+      await writeVehicleUse(tx, actor.uid, 'convoy', ref.id, vehicleId, startedAt);
+    }
     const document = buildConvoyDocument(
       { ownerUid: actor.uid, title: title ?? null, ownerProfile, invitees: invited },
       () => FieldValue.serverTimestamp(),
-      Timestamp.fromDate(new Date()),
+      startedAt,
     );
     tx.set(ref, document);
   });
