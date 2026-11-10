@@ -296,6 +296,11 @@ struct ShellView: View {
                     .id(destination)
                     .zIndex(1)
             }
+            if let liveLocationCoordinator, liveLocationCoordinator.wired {
+                StationaryLivePrompt(coordinator: liveLocationCoordinator) { promptID in
+                    stopSingleSession(expectedStationaryPromptID: promptID)
+                }
+            }
         }
         .eraseToAnyView()
     }
@@ -2187,12 +2192,17 @@ struct ShellView: View {
         }
     }
 
-    private func stopSingleSession() {
+    private func stopSingleSession(expectedStationaryPromptID: UUID? = nil) {
         guard pendingSessionCommand == nil, let liveLocationCoordinator else { return }
         sessionActionError = false
         let identity = signedInUid
         pendingSessionCommand = .stopping
         sessionCommandTask = Task {
+            if let expectedStationaryPromptID,
+               liveLocationCoordinator.stationaryPromptID != expectedStationaryPromptID {
+                clearSessionCommand()
+                return
+            }
             let result = await liveLocationCoordinator.stopSharing()
             await finishSessionCommand(
                 result,
@@ -2551,8 +2561,11 @@ struct ShellView: View {
                 flag: .liveLocation,
                 memberGated: false,
                 access: access
-            )
+            ),
+            onStationaryPromptChanged: LiveStationaryNotifications.update,
+            beginAutomaticStop: LiveStationaryNotifications.beginStop
         )
+        LiveStationaryNotifications.coordinator = liveLocation
         // Observe the own session from the shell so a flag-disabled feature
         // can still reveal its control when an existing session needs Stop or
         // Hide access. Starting this listener does not request GPS permission.

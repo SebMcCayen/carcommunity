@@ -304,13 +304,84 @@ final class PushNotificationCoordinator {
 
 }
 
+/// The foreground prompt is presented by the shell. The same prompt can
+/// be answered from a local notification when the app is in the background.
+@MainActor
+enum LiveStationaryNotifications {
+    nonisolated static let continueAction = "liveStationaryContinue"
+    nonisolated private static let categoryID = "liveStationary"
+    static weak var coordinator: LiveLocationCoordinator?
+
+    static func category() -> UNNotificationCategory {
+        let action = UNNotificationAction(
+            identifier: continueAction,
+            title: String(localized: "liveLocation.stillSharingAction"),
+            options: []
+        )
+        return UNNotificationCategory(identifier: categoryID, actions: [action], intentIdentifiers: [], options: [])
+    }
+
+    nonisolated static func promptID(for request: UNNotificationRequest) -> UUID? {
+        guard request.trigger == nil, request.content.categoryIdentifier == categoryID else { return nil }
+        return UUID(uuidString: request.identifier)
+    }
+
+    static func update(previous: UUID?, current: UUID?) {
+        if let previous { remove(previous) }
+        guard let current else { return }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "liveLocation.stationaryPromptTitle")
+        content.body = String(localized: "liveLocation.stationaryPromptBody")
+        content.categoryIdentifier = categoryID
+        let request = UNNotificationRequest(identifier: current.uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { _ in
+            Task { @MainActor in
+                // Movement or a stop can clear the prompt while iOS queues it.
+                if Self.coordinator?.stationaryPromptID != current { Self.remove(current) }
+            }
+        }
+    }
+
+    private static func remove(_ id: UUID) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [id.uuidString])
+        center.removeDeliveredNotifications(withIdentifiers: [id.uuidString])
+    }
+
+    static func beginStop() -> @MainActor () -> Void {
+        let task = StopBackgroundTask()
+        return { task.end() }
+    }
+
+    @MainActor
+    private final class StopBackgroundTask {
+        private var id = UIBackgroundTaskIdentifier.invalid
+
+        init() {
+            // The stop immediately releases the live location stream. Let the
+            // callable finish if that was keeping the background process active.
+            id = UIApplication.shared.beginBackgroundTask(withName: "Stop stationary Live session") { [weak self] in
+                self?.end()
+            }
+        }
+
+        func end() {
+            guard id != .invalid else { return }
+            UIApplication.shared.endBackgroundTask(id)
+            id = .invalid
+        }
+    }
+}
+
 final class KCCAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate,
     MessagingDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        UNUserNotificationCenter.current().delegate = self
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.setNotificationCategories([LiveStationaryNotifications.category()])
         if FirebaseApp.app() != nil { Messaging.messaging().delegate = self }
         return true
     }
@@ -335,6 +406,11 @@ final class KCCAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationC
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
+        if let id = LiveStationaryNotifications.promptID(for: notification.request) {
+            return await MainActor.run {
+                LiveStationaryNotifications.coordinator?.stationaryPromptID == id ? [.list] : []
+            }
+        }
         let recipient = notification.request.content.userInfo["recipientUid"] as? String
         return await MainActor.run {
             PushNotificationCoordinator.shared.shouldPresent(recipientUID: recipient)
@@ -346,6 +422,14 @@ final class KCCAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationC
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
+        if let id = LiveStationaryNotifications.promptID(for: response.notification.request) {
+            if response.actionIdentifier == LiveStationaryNotifications.continueAction {
+                await MainActor.run {
+                    LiveStationaryNotifications.coordinator?.confirmStillSharing(promptID: id)
+                }
+            }
+            return
+        }
         let userInfo = response.notification.request.content.userInfo
         let recipient = userInfo["recipientUid"] as? String
         let deepLink = PushPayload.deepLink(from: userInfo)
