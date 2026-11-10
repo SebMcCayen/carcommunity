@@ -304,6 +304,7 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         coordinator.start(context: context(sessionId: "session-b"))
 
         await waitUntil { coordinator.state.presentsSummary }
+        await waitUntil { provider.activeFixStreamCount == 0 }
         XCTAssertEqual(provider.activeFixStreamCount, 0)
 
         coordinator.retry()
