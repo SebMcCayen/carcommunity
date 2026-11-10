@@ -1327,6 +1327,12 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "vehicleUsageEvents",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "friends",
       "fieldPath": "friendUid",
       "indexes": [

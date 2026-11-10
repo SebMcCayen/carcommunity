@@ -2043,7 +2043,7 @@ fun AuthenticatedApp(
                 }
                     .collectAsState(initial = GarageState.Loading)
 
-            // The user's cars for the "Start driving" popup's round-photo picker.
+            // The user's cars for the "Start driving" picker.
             // Observed ONLY while the chooser is open (one short-lived listener),
             // separate from the Garage-tab stream above so opening the chooser from
             // any tab shows the cars without navigating to the Garage. Degrades to a
@@ -2065,7 +2065,8 @@ fun AuthenticatedApp(
             // closes so the next open starts from the default again.
             var startDrivingCarId by remember { mutableStateOf<String?>(null) }
             val effectiveStartDrivingCarId =
-                startDrivingCarId ?: defaultStartDrivingVehicleId(createChooserVehicles)
+                startDrivingCarId?.takeIf { id -> createChooserVehicles.any { it.id == id } }
+                    ?: defaultStartDrivingVehicleId(createChooserVehicles)
 
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
@@ -8126,6 +8127,8 @@ fun AuthenticatedApp(
                         vehicles = createChooserVehicles,
                         selectedVehicleId = effectiveStartDrivingCarId,
                         onSelectVehicle = { startDrivingCarId = it },
+                        garageState = createChooserGarageState,
+                        loadRankedVehicleIds = garageRepository?.let { it::rankedDrivingVehicleIds },
                     )
                 }
 
@@ -8676,56 +8679,73 @@ internal fun ShellBottomBar(
     }
 }
 
-/**
- * Transparent chooser shown over the map when the user taps the "Create" tab:
- * a translucent-surfaced [AlertDialog] offering two ways to drive —
- * **Single session** ([onSingleSession], the existing solo live-share drive) or
- * **Convoy** ([onConvoy], deep-linking into the create-convoy flow). [onDismiss]
- * (Cancel or an outside tap) leaves the user on the map. The "+" tab is an
- * action, so dismissing simply drops back to the map (Create is never a
- * selected tab).
- */
+/** The map's shared vehicle and drive-type chooser. */
 @Composable
 internal fun CreateChooserDialog(
     onSingleSession: () -> Unit,
     onConvoy: () -> Unit,
     onDismiss: () -> Unit,
-    // The user's garage cars, the currently-selected one, and the tap handler —
-    // the round-photo picker at the top of the chooser. The chosen car applies to
-    // BOTH the Single and Convoy option below it (it is threaded into whichever
-    // start the user then taps). Empty list → the picker shows its "no cars" hint.
     vehicles: List<com.kungsbackacarcommunity.app.garage.Vehicle> = emptyList(),
     selectedVehicleId: String? = null,
     onSelectVehicle: (String) -> Unit = {},
+    garageState: GarageState = GarageState.Loaded(vehicles),
+    loadRankedVehicleIds: (suspend () -> List<String>)? = null,
 ) {
+    var showAll by remember { mutableStateOf(false) }
+    var rankedIds by remember { mutableStateOf<List<String>?>(null) }
+    val shouldRank = vehicles.size > 1 && loadRankedVehicleIds != null
+    LaunchedEffect(shouldRank) {
+        if (shouldRank && rankedIds == null && loadRankedVehicleIds != null) {
+            rankedIds = kotlinx.coroutines.withTimeoutOrNull(1_500) {
+                try {
+                    loadRankedVehicleIds()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } ?: emptyList()
+        }
+    }
     MapDetailSheet(
-        title = stringResource(R.string.shell_createChooserTitle),
-        onDismiss = onDismiss,
+        title = stringResource(if (showAll) R.string.shell_createChooserAllVehicles else R.string.shell_createChooserTitle),
+        onDismiss = { if (showAll) showAll = false else onDismiss() },
+        closeContentDescription = stringResource(if (showAll) R.string.shell_back else R.string.shell_placeMenuClose),
     ) {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                Text(stringResource(R.string.shell_createChooserBody))
-                com.kungsbackacarcommunity.app.live.StartDrivingCarPicker(
-                    vehicles = vehicles,
-                    selectedVehicleId = selectedVehicleId,
-                    onSelectVehicle = onSelectVehicle,
-                )
-                CreateChooserOption(
-                    icon = Icons.Filled.DirectionsCar,
-                    title = stringResource(R.string.shell_createChooserSingle),
-                    body = stringResource(R.string.shell_createChooserSingleBody),
-                    onClick = onSingleSession,
-                )
-                CreateChooserOption(
-                    icon = Icons.Filled.Groups,
-                    title = stringResource(R.string.shell_createChooserConvoy),
-                    body = stringResource(R.string.shell_createChooserConvoyBody),
-                    onClick = onConvoy,
-                )
-            }
-        // Each option keeps its existing immediate action; only presentation changes.
+        if (!showAll) Text(stringResource(R.string.shell_createChooserBody))
+        when (garageState) {
+            GarageState.Loading -> CircularProgressIndicator(Modifier.size(24.dp))
+            GarageState.Error -> Text(stringResource(R.string.garage_error))
+            is GarageState.Loaded -> com.kungsbackacarcommunity.app.live.StartDrivingCarPicker(
+                vehicles = vehicles,
+                selectedVehicleId = selectedVehicleId,
+                onSelectVehicle = { id ->
+                    onSelectVehicle(id)
+                    showAll = false
+                },
+                rankedVehicleIds = rankedIds.orEmpty(),
+                showAll = showAll,
+                onShowAll = { showAll = true },
+                rankingPending = shouldRank && rankedIds == null,
+            )
+        }
+        if (!showAll) {
+            CreateChooserOption(
+                icon = Icons.Filled.DirectionsCar,
+                title = stringResource(R.string.shell_createChooserSingle),
+                body = stringResource(R.string.shell_createChooserSingleBody),
+                onClick = onSingleSession,
+            )
+            CreateChooserOption(
+                icon = Icons.Filled.Groups,
+                title = stringResource(R.string.shell_createChooserConvoy),
+                body = stringResource(R.string.shell_createChooserConvoyBody),
+                onClick = onConvoy,
+            )
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.shell_liveSharePromptCancel))
             }
+        }
     }
 }
 

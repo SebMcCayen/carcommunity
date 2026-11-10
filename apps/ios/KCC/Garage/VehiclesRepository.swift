@@ -16,6 +16,8 @@ protocol VehiclesRepository: AnyObject, Sendable {
     /// terminating the stream (dropping the iteration) detaches the listener.
     func vehicles(uid: String) -> AsyncStream<GarageSnapshot>
 
+    func rankedDrivingVehicleIds() async throws -> [String]
+
     /// Creates a vehicle via the garage-addVehicle callable and returns its
     /// NEW id, as minted by the backend (which responds with `{ vehicleId }`).
     /// The id is what a later photo slice keys
@@ -49,6 +51,10 @@ protocol VehiclesRepository: AnyObject, Sendable {
     /// then keeps its placeholder, because a missing picture is cosmetic,
     /// never an error state.
     func imageDownloadURL(for imagePath: String) async -> URL?
+}
+
+extension VehiclesRepository {
+    func rankedDrivingVehicleIds() async throws -> [String] { [] }
 }
 
 /// Decides whether a freshly uploaded image is safe to remove after the

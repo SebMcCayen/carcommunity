@@ -70,6 +70,7 @@ import {
   setMainVehicle,
   updateVehicle,
 } from './garage/manageVehicle';
+import { rankedDrivingVehicleIds } from './garage/vehicleUsage';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { grantEarlyTester } from './badges/grantEarlyTester';
 import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
@@ -518,7 +519,7 @@ export const blocking = {
  * Garage domain (grouped export → deployed as `garage-addVehicle`,
  * `garage-updateVehicle`, `garage-setMainVehicle`, `garage-deleteVehicle`,
  * `garage-addVehiclePhoto`, `garage-removeVehiclePhoto`,
- * `garage-reorderVehiclePhotos`).
+ * `garage-reorderVehiclePhotos`, and the owner-only `garage-rankedDrivingVehicleIds`).
  *
  * Vehicle management + multi-photo gallery (contracts/functions/functions.json:
  * garage.addVehicle/updateVehicle/setMainVehicle/deleteVehicle/addVehiclePhoto/
@@ -528,6 +529,7 @@ export const blocking = {
  * per-vehicle photo cap + own-prefix validation, storage cleanup).
  */
 export const garage = {
+  rankedDrivingVehicleIds,
   addVehicle,
   updateVehicle,
   setMainVehicle,

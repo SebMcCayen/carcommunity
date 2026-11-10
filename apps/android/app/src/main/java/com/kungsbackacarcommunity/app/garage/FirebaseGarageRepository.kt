@@ -31,10 +31,14 @@ class FirebaseGarageRepository private constructor(
                         return@addSnapshotListener
                     }
                     val vehicles = snapshot?.documents?.mapNotNull { it.toVehicle() } ?: emptyList()
-                    trySend(GarageState.Loaded(vehicles.sortedWith(compareBy({ it.make.lowercase() }, { it.model.lowercase() }))))
+                    trySend(GarageState.Loaded(vehicles.sortedWith(compareBy({ it.make.lowercase() }, { it.model.lowercase() }, { it.id }))))
                 }
         awaitClose { registration.remove() }
     }
+
+    override suspend fun rankedDrivingVehicleIds(): List<String> =
+        (call("garage-rankedDrivingVehicleIds", emptyMap())?.get("vehicleIds") as? List<*>)
+            ?.filterIsInstance<String>().orEmpty()
 
     override suspend fun addVehicle(input: VehicleInput): String {
         val result = call(ADD_VEHICLE, input.toData())

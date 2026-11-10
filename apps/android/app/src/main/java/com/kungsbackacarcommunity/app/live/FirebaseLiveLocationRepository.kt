@@ -7,11 +7,13 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import com.kungsbackacarcommunity.app.garage.VehicleValidation
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import java.time.Instant
 import java.time.Year
+import java.util.UUID
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -39,16 +41,18 @@ class FirebaseLiveLocationRepository private constructor(
 ) : LiveLocationRepository {
 
     override suspend fun startSession(duration: LiveSessionDuration, vehicleId: String?) {
-        call(
-            START_SESSION,
-            buildMap {
-                put("duration", duration.key)
-                // Only send the car when one was chosen; omitting it lets the
-                // server fall back to the main car (the callable schema treats a
-                // blank string as invalid, so never send an empty one).
-                vehicleId?.takeIf { it.isNotBlank() }?.let { put("vehicleId", it) }
-            },
-        )
+        val payload = buildMap {
+            put("duration", duration.key)
+            vehicleId?.takeIf { it.isNotBlank() }?.let { put("vehicleId", it) }
+        }
+        try {
+            call(START_SESSION, payload + ("startRequestId" to UUID.randomUUID().toString()))
+        } catch (error: FirebaseFunctionsException) {
+            // The previous backend's strict schema rejects the new key before
+            // any write. Keep older deployments usable during rollout.
+            if (error.code != FirebaseFunctionsException.Code.INVALID_ARGUMENT) throw error
+            call(START_SESSION, payload)
+        }
     }
 
     override suspend fun updatePosition(coordinate: LiveCoordinate) {

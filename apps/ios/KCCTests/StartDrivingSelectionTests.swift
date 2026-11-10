@@ -46,6 +46,20 @@ final class StartDrivingSelectionTests: XCTestCase {
         )
     }
 
+    func testQuickVehiclesKeepUsageOrderAndFillRemainingSlotsFromGarage() {
+        let vehicles = [vehicle(id: "a"), vehicle(id: "b", isMain: true), vehicle(id: "c"), vehicle(id: "d")]
+        XCTAssertEqual(
+            StartDrivingSelection.quickVehicles(vehicles, rankedIds: ["deleted", "d", "d"]).map(\.id),
+            ["d", "b", "a"]
+        )
+        XCTAssertEqual(
+            StartDrivingSelection.quickVehicles(vehicles, rankedIds: ["d", "c", "a", "b"]).map(\.id),
+            ["d", "c", "a"]
+        )
+        XCTAssertEqual(StartDrivingSelection.quickVehicles(vehicles, rankedIds: []).map(\.id), ["b", "a", "c"])
+        XCTAssertEqual(StartDrivingSelection.effectiveVehicleId(selected: "b", vehicles: vehicles), "b")
+    }
+
     func testSingleSessionCommandsReconcileOnlyToTheirExpectedSharingState() {
         let requestedAt = Date(timeIntervalSince1970: 100)
         let starting = SingleSessionCommand.starting(at: requestedAt)

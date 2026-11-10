@@ -1,20 +1,14 @@
 package com.kungsbackacarcommunity.app.live
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -53,7 +47,7 @@ class StartDrivingCarPickerTest {
         )
 
     @Test
-    fun rendersOneRoundPhotoPerCar_andTapReportsItsId() {
+    fun showsTheVehicleNameAndYear_andTapReportsItsId() {
         val vehicles = listOf(car("a", "240"), car("b", "740", isMainCar = true))
         var picked: String? = null
         composeTestRule.setContent {
@@ -67,12 +61,12 @@ class StartDrivingCarPickerTest {
             }
         }
 
-        // One selectable item per car, labelled by make+model.
-        composeTestRule.onNodeWithContentDescription("Volvo 240").assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("Volvo 740").assertIsDisplayed()
+        // One selectable item per car, labelled by make, model and year.
+        composeTestRule.onNodeWithText("Volvo 240 (1988)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Volvo 740 (1988)").assertIsDisplayed()
 
         // Tapping the non-selected car reports its id up to the caller.
-        composeTestRule.onNodeWithContentDescription("Volvo 240").performClick()
+        composeTestRule.onNodeWithText("Volvo 240 (1988)").performClick()
         assertEquals("a", picked)
     }
 
@@ -94,61 +88,40 @@ class StartDrivingCarPickerTest {
             }
         }
 
-        composeTestRule.onNodeWithContentDescription("Volvo 740").assertIsSelected()
-        composeTestRule.onNodeWithContentDescription("Volvo 240").assertIsNotSelected()
+        composeTestRule.onNodeWithText("Volvo 740 (1988)").assertIsSelected()
+        composeTestRule.onNodeWithText("Volvo 240 (1988)").assertIsNotSelected()
     }
 
     @Test
-    fun preselectedCarOffScreen_isScrolledIntoView() {
-        // Six fixed-width round photos in a narrow (single-item) viewport: the
-        // preselected MAIN car is last, so at scroll 0 it sits well off the right
-        // edge. The picker must scroll it into view on open, otherwise the popup
-        // would open showing only unselected cars — the reported "main car isn't
-        // preselected" symptom. The first car must then be scrolled out of view.
-        val vehicles = (0..5).map { i -> car("v$i", "model$i", isMainCar = i == 5) }
-        val default = defaultStartDrivingVehicleId(vehicles)
+    fun ranksThreeVehicles_andShowsTheSelectedVehicleOutsideTheQuickList() {
+        val vehicles = (0..4).map { i -> car("v$i", "model$i", isMainCar = i == 4) }
+        var selected by mutableStateOf("v4")
+        var showAll by mutableStateOf(false)
         composeTestRule.setContent {
             KccTheme {
-                Box(Modifier.width(120.dp)) {
-                    StartDrivingCarPicker(
-                        vehicles = vehicles,
-                        selectedVehicleId = default,
-                        onSelectVehicle = {},
-                    )
-                }
+                StartDrivingCarPicker(
+                    vehicles = vehicles,
+                    selectedVehicleId = selected,
+                    onSelectVehicle = { selected = it; showAll = false },
+                    rankedVehicleIds = listOf("v2", "v0", "v3"),
+                    showAll = showAll,
+                    onShowAll = { showAll = true },
+                )
             }
         }
 
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithContentDescription("Volvo model5").assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("Volvo model0").assertIsNotDisplayed()
-    }
-
-    @Test
-    fun selectingFirstCarAfterScrolling_bringsItBackIntoView() {
-        // Start with the last car selected (row scrolls to the end, so the first
-        // car is off-screen). Selecting the first car must scroll the row back so
-        // it is visible again — index 0 is not treated as "nothing to do".
-        val vehicles = (0..5).map { i -> car("v$i", "model$i") }
-        var selected by mutableStateOf("v5")
-        composeTestRule.setContent {
-            KccTheme {
-                Box(Modifier.width(120.dp)) {
-                    StartDrivingCarPicker(
-                        vehicles = vehicles,
-                        selectedVehicleId = selected,
-                        onSelectVehicle = { selected = it },
-                    )
-                }
-            }
-        }
-
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithContentDescription("Volvo model0").assertIsNotDisplayed()
-
-        selected = "v0"
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithContentDescription("Volvo model0").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Volvo model2 (1988)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Volvo model0 (1988)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Volvo model3 (1988)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Volvo model1 (1988)").assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.shell_createChooserAllVehicles)).performClick()
+        composeTestRule.onNodeWithText("Volvo model4 (1988)").assertIsSelected()
+        composeTestRule.onNodeWithText("Volvo model1 (1988)").performClick()
+        assertEquals("v1", selected)
+        val summary = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.shell_createChooserSelectedVehicle, "Volvo model1 (1988)")
+        composeTestRule.onNodeWithText(summary).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Volvo model1 (1988)").assertDoesNotExist()
     }
 
     @Test
@@ -165,6 +138,6 @@ class StartDrivingCarPickerTest {
 
         // The "no cars" hint is shown; no car items exist.
         composeTestRule.onNodeWithText(str(R.string.shell_createChooserNoCars)).assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("Volvo 240").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Volvo 240 (1988)").assertDoesNotExist()
     }
 }
