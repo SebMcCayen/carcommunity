@@ -887,7 +887,11 @@ final class ShellSmokeTests: XCTestCase {
             // The center can fall between the icon and caption at this size.
             tab.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             if id == "social" {
-                XCTAssertTrue(element("shell.socialHub", in: app).waitForExistence(timeout: 15))
+                guard element("shell.socialHub", in: app).waitForExistence(timeout: 15) else {
+                    chatProof(app, name: "social-center-tap-failure", tree: true)
+                    XCTFail("One tap at the center of Social must open its panel")
+                    return
+                }
             } else if id == "chat" {
                 // The first cold chat render can outlive XCUITest's idle wait.
                 // Wait for the actual destination, without retrying the tap.

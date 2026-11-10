@@ -311,6 +311,43 @@ struct ShellView: View {
     // Each boundary wraps one stable layout/lifecycle segment, retaining the
     // shell's single map and coordinator identities through tab/route changes.
     private var shellBase: AnyView {
+        VStack(spacing: 0) {
+            shellTabContent
+            if !(selectedTab == .chat && chatKeyboardPresented) {
+                // Keep the footer above the map and its edge-to-edge overlays.
+                primaryNavigation
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                        primaryNavigationHeight = $0
+                    }
+                    .zIndex(1)
+            }
+        }
+        // Route host: sub-routes render full-screen OVER the tab shell (the
+        // Android shell's route-host pattern), each carrying its own back
+        // affordance that pops one level via the pure stack.
+        .overlay {
+            if let route = routes.current {
+                routeHost(for: route)
+            }
+        }
+        .overlay {
+            if addressSearchPresented, let savedPlacesCoordinator {
+                AddressSearchOverlay(
+                    coordinator: savedPlacesCoordinator,
+                    proximity: savedPlacesProximity,
+                    onSelect: showPlaceOnMap,
+                    onManage: {
+                        navSearchOpen = false
+                        routes = routes.opening(.savedPlaces)
+                    },
+                    onClose: { navSearchOpen = false }
+                )
+            }
+        }
+        .eraseToAnyView()
+    }
+
+    private var shellTabContent: some View {
         ZStack {
             // Exactly one native Mapbox view for the signed-in shell. Tabs and
             // routes cover it instead of recreating its Metal render surface.
@@ -355,37 +392,6 @@ struct ShellView: View {
         .overlay(alignment: .bottom) {
             if mapHomeChromeVisible && mapBottomDockVisible { mapBottomDock }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !(selectedTab == .chat && chatKeyboardPresented) {
-                primaryNavigation
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
-                        primaryNavigationHeight = $0
-                    }
-            }
-        }
-        // Route host: sub-routes render full-screen OVER the tab shell (the
-        // Android shell's route-host pattern), each carrying its own back
-        // affordance that pops one level via the pure stack.
-        .overlay {
-            if let route = routes.current {
-                routeHost(for: route)
-            }
-        }
-        .overlay {
-            if addressSearchPresented, let savedPlacesCoordinator {
-                AddressSearchOverlay(
-                    coordinator: savedPlacesCoordinator,
-                    proximity: savedPlacesProximity,
-                    onSelect: showPlaceOnMap,
-                    onManage: {
-                        navSearchOpen = false
-                        routes = routes.opening(.savedPlaces)
-                    },
-                    onClose: { navSearchOpen = false }
-                )
-            }
-        }
-        .eraseToAnyView()
     }
 
     private var shellBaseInteractions: AnyView {
