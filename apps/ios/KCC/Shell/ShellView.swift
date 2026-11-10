@@ -1204,7 +1204,11 @@ struct ShellView: View {
             if let coordinator = crownHuntComposition?.mapCoordinator, coordinator.isAvailable,
                coordinator.selectedTarget?.id == id || CrownCollectPresentation.isAwarded(coordinator.claimStatus) {
                 MapReadingPanel(title: "crownHunt.popupTitle", onClose: dismissMapReading, scrollsContent: false) {
-                    CrownHuntCollectContent(coordinator: coordinator)
+                    CrownHuntCollectContent(
+                        coordinator: coordinator,
+                        showLiveShareTip: featureFlags.isEnabled(.crownHuntLiveShareScoring)
+                            && liveLocationCoordinator?.isSharing != true
+                    )
                 }
             }
         case .savedPlaces:

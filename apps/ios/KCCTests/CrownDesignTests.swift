@@ -154,16 +154,30 @@ final class CrownDesignTests: XCTestCase {
             camera: .of(latitude: 57, longitude: 12, zoom: 14, bearing: 0, pitch: 0),
             visibleRadiusMeters: 200
         )
-        coordinator.select(markerId: "point:placed")
-        XCTAssertNotNil(coordinator.selectedTarget)
-        let panel = MapReadingPanel(title: "crownHunt.popupTitle", onClose: {}, scrollsContent: false) {
-            CrownHuntCollectContent(coordinator: coordinator)
-        }
+        for markerId in ["point:placed", "spawn:spawn"] {
+            coordinator.select(markerId: markerId)
+            XCTAssertEqual(coordinator.selectedTarget?.id, markerId)
+            for showTip in [false, true] {
+                let panel = MapReadingPanel(title: "crownHunt.popupTitle", onClose: {}, scrollsContent: false) {
+                    CrownHuntCollectContent(coordinator: coordinator, showLiveShareTip: showTip)
+                }
 
+                for language in ["sv", "en"] {
+                    let size = measure(panel, width: 288, size: .large, language: language, dark: false, height: 440)
+                    XCTAssertGreaterThan(size.height, 96, "The panel must include the header, details and action")
+                    XCTAssertLessThan(size.height, 440, "A short panel should take its content's height")
+                }
+            }
+        }
+    }
+
+    func testLiveShareTipAppearsBeforeCollection() {
+        let withoutTip = CrownCollectFeedback(state: .ready, status: .idle)
+        let withTip = CrownCollectFeedback(state: .ready, status: .idle, showLiveShareTip: true)
         for language in ["sv", "en"] {
-            let size = measure(panel, width: 288, size: .large, language: language, dark: false, height: 440)
-            XCTAssertGreaterThan(size.height, 96, "The panel must include the header, details and action")
-            XCTAssertLessThan(size.height, 440, "A short panel should take its content's height")
+            let before = measure(withoutTip, width: 288, size: .large, language: language, dark: false)
+            let after = measure(withTip, width: 288, size: .large, language: language, dark: false)
+            XCTAssertGreaterThan(after.height, before.height)
         }
     }
 
