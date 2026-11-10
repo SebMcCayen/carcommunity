@@ -107,19 +107,22 @@ struct PerkCard: View {
 
     var body: some View {
         CrownHuntCard {
-            VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                Text(
-                    CrownHuntPerkNames.displayName(
-                        perkId: item.entry.perkId,
-                        nameSv: item.entry.name,
-                        nameEn: item.entry.nameEn
+            HStack(spacing: KccSpacing.s3) {
+                CrownPerkIcon(kind: item.entry.kind, size: 48)
+                VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                    Text(
+                        CrownHuntPerkNames.displayName(
+                            perkId: item.entry.perkId,
+                            nameSv: item.entry.name,
+                            nameEn: item.entry.nameEn
+                        )
                     )
-                )
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Text(CrownHuntPerkNames.kindLabelKey(item.entry.kind))
-                    .font(.caption)
-                    .foregroundStyle(KccTheme.secondary)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(CrownHuntPerkNames.kindLabelKey(item.entry.kind))
+                        .font(.caption)
+                        .foregroundStyle(KccTheme.secondary)
+                }
             }
             Text(CrownHuntPerkNames.blurb(perkId: item.entry.perkId, blurbSv: item.entry.blurb))
                 .font(.subheadline)

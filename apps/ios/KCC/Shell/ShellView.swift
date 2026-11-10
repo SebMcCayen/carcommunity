@@ -95,6 +95,7 @@ struct ShellView: View {
     @State private var conversationsCoordinator: ConversationsCoordinator?
     @State private var chatHubCoordinator: ChatHubCoordinator?
     @State private var crownHuntComposition: CrownHuntComposition?
+    @State private var openCrownShopAfterDismiss = false
     @State private var partnersCoordinator: PartnersCoordinator?
     @State private var feedbackCoordinator: FeedbackCoordinator?
     @State private var openTicketsCoordinator: OpenTicketsCoordinator?
@@ -571,9 +572,12 @@ struct ShellView: View {
                 )
             }
         }
-        .sheet(isPresented: crownPerkMenuIsPresented) {
+        .sheet(isPresented: crownPerkMenuIsPresented, onDismiss: perkMenuDismissed) {
             if let coordinator = crownHuntComposition?.perkMapCoordinator {
-                CrownPerkDeploySheet(coordinator: coordinator)
+                CrownPerkDeploySheet(coordinator: coordinator) {
+                    openCrownShopAfterDismiss = true
+                    coordinator.menuPresented = false
+                }
             }
         }
         .sheet(isPresented: $showMapLayers) {
@@ -603,6 +607,15 @@ struct ShellView: View {
             }
         }
         .eraseToAnyView()
+    }
+
+    private func perkMenuDismissed() {
+        crownHuntComposition?.perkMapCoordinator?.resetStatus()
+        guard openCrownShopAfterDismiss else { return }
+        openCrownShopAfterDismiss = false
+        guard crownHuntComposition?.shopCoordinator.isShopEnabled == true else { return }
+        selectedTab = .map
+        routes = .empty.opening(.crownHuntShop)
     }
 
     private var shellPresentation: AnyView {
@@ -1510,13 +1523,14 @@ struct ShellView: View {
             } else {
                 unavailableRoute
             }
-        case .crownHunt:
+        case .crownHunt, .crownHuntShop:
             if let composition = crownHuntComposition {
                 CrownHuntHubView(
                     statsCoordinator: composition.statsCoordinator,
                     claimsCoordinator: composition.claimsCoordinator,
                     shopCoordinator: composition.shopCoordinator,
                     crownHuntEnabled: composition.flags.crownHuntEnabled,
+                    initialTab: route == .crownHuntShop ? .shop : .overview,
                     onBack: { routes = routes.poppingOne() }
                 )
                 .background(.background, ignoresSafeAreaEdges: .all)

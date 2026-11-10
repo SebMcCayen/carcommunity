@@ -20,7 +20,23 @@ struct CrownHuntHubView: View {
     let shopCoordinator: PerkShopCoordinator
     let crownHuntEnabled: Bool
     let onBack: () -> Void
-    @State private var selectedTab = CrownHubTab.overview
+    @State private var selectedTab: CrownHubTab
+
+    init(
+        statsCoordinator: CrownHuntStatsCoordinator,
+        claimsCoordinator: CrownHuntClaimsCoordinator,
+        shopCoordinator: PerkShopCoordinator,
+        crownHuntEnabled: Bool,
+        initialTab: CrownHubTab,
+        onBack: @escaping () -> Void
+    ) {
+        self.statsCoordinator = statsCoordinator
+        self.claimsCoordinator = claimsCoordinator
+        self.shopCoordinator = shopCoordinator
+        self.crownHuntEnabled = crownHuntEnabled
+        self.onBack = onBack
+        _selectedTab = State(initialValue: shopCoordinator.isShopEnabled ? initialTab : .overview)
+    }
 
     var body: some View {
         NavigationStack {
