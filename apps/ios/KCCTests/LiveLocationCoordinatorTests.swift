@@ -17,6 +17,14 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     private final class TestClock: @unchecked Sendable {
         private let lock = NSLock()
         private var current = Date(timeIntervalSince1970: 1_700_000_000)
+        private var watchdogTicks = 0
+
+        var tickCount: Int { lock.withLock { watchdogTicks } }
+
+        func tickWatchdog() async throws {
+            try await Task.sleep(nanoseconds: 5_000_000)
+            lock.withLock { watchdogTicks += 1 }
+        }
 
         var now: Date {
             lock.lock()
@@ -155,6 +163,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         }
 
         func stopSession() async throws {
+            try Task.checkCancellation()
             if let error = takeErrorSynchronized() { throw error }
             recordSynchronized { stopCount += 1 }
         }
@@ -206,20 +215,22 @@ final class LiveLocationCoordinatorTests: XCTestCase {
             now: { clock.now },
             // Fast expiry-watchdog tick so watchdog behavior is testable
             // without waiting out the production 15 s interval.
-            expiryTickWait: { try await Task.sleep(nanoseconds: 5_000_000) },
+            expiryTickWait: { try await clock.tickWatchdog() },
             publishRetryWait: publishRetryWait
         )
     }
 
     private func activeSession(
         id: String = "session-1",
-        expiresIn interval: TimeInterval = 6 * 3600
+        expiresIn interval: TimeInterval = 6 * 3600,
+        convoyAutoStarted: Bool = false
     ) -> LiveSessionInfo {
         LiveSessionInfo(
             sessionId: id,
             status: .active,
             duration: .sixHours,
-            expiresAt: clock.now.addingTimeInterval(interval)
+            expiresAt: clock.now.addingTimeInterval(interval),
+            convoyAutoStarted: convoyAutoStarted
         )
     }
 
@@ -241,6 +252,14 @@ final class LiveLocationCoordinatorTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 1_000_000)
         }
         XCTFail("Timed out waiting for condition", file: file, line: line)
+    }
+
+    @MainActor
+    private func waitForWatchdog() async {
+        let ticks = clock.tickCount
+        // One wake may already be resuming on the main actor. Two wakes
+        // guarantee at least one watchdog pass after the clock change.
+        await waitUntil { clock.tickCount >= ticks + 2 }
     }
 
     // MARK: - start/stop lifecycle
@@ -538,6 +557,130 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.keepsScreenAwake)
         XCTAssertTrue(repository.publishedCoordinates.isEmpty)
         XCTAssertNil(coordinator.readout.startedAt)
+    }
+
+    // MARK: - Stationary sharing
+
+    @MainActor
+    func testStationarySessionPromptsAtTenMinutesAndStopsAfterFiveMoreWithoutFixes() async throws {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        clock.advance(by: 600)
+        await waitForWatchdog()
+        XCTAssertNil(coordinator.stationaryPromptID, "The timer needs a first fix")
+
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+        await waitUntil { coordinator.receivedFixCount == 1 }
+        clock.advance(by: 599)
+        await waitForWatchdog()
+        XCTAssertNil(coordinator.stationaryPromptID)
+
+        clock.advance(by: 1)
+        await waitUntil { coordinator.stationaryPromptID != nil }
+        let promptID = try XCTUnwrap(coordinator.stationaryPromptID)
+        clock.advance(by: 299)
+        await waitForWatchdog()
+        XCTAssertEqual(coordinator.stationaryPromptID, promptID)
+        XCTAssertEqual(repository.stopCount, 0)
+
+        clock.advance(by: 1)
+        coordinator.confirmStillSharing(promptID: promptID) // too late
+        await waitUntil { coordinator.actionStatus == .idle && repository.stopCount == 1 }
+        await waitUntil { provider.activeFixStreamCount == 0 }
+        XCTAssertNil(coordinator.stationaryPromptID)
+        XCTAssertFalse(coordinator.keepsScreenAwake)
+    }
+
+    @MainActor
+    func testConfirmingStillSharingRestartsTheTimerAndIgnoresAnOldPrompt() async throws {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+        await waitUntil { coordinator.receivedFixCount == 1 }
+
+        clock.advance(by: 600)
+        await waitUntil { coordinator.stationaryPromptID != nil }
+        let originalID = try XCTUnwrap(coordinator.stationaryPromptID)
+        clock.advance(by: 120)
+        coordinator.confirmStillSharing(promptID: originalID)
+        XCTAssertNil(coordinator.stationaryPromptID)
+
+        clock.advance(by: 599)
+        await waitForWatchdog()
+        XCTAssertNil(coordinator.stationaryPromptID)
+        XCTAssertEqual(repository.stopCount, 0)
+
+        clock.advance(by: 1)
+        await waitUntil { coordinator.stationaryPromptID != nil }
+        let newID = try XCTUnwrap(coordinator.stationaryPromptID)
+        XCTAssertNotEqual(newID, originalID)
+        coordinator.confirmStillSharing(promptID: originalID)
+        XCTAssertEqual(coordinator.stationaryPromptID, newID)
+    }
+
+    @MainActor
+    func testMovementClearsThePromptWhileSmallPositionChangesKeepIt() async throws {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+        await waitUntil { coordinator.receivedFixCount == 1 }
+
+        clock.advance(by: 600)
+        await waitUntil { coordinator.stationaryPromptID != nil }
+        let promptID = try XCTUnwrap(coordinator.stationaryPromptID)
+        provider.emitFix(fix(latitude: 57.500045, longitude: 12.1))
+        await waitUntil { coordinator.receivedFixCount == 2 }
+        XCTAssertEqual(coordinator.stationaryPromptID, promptID)
+
+        provider.emitFix(fix(latitude: 57.50018, longitude: 12.1))
+        await waitUntil { coordinator.receivedFixCount == 3 }
+        XCTAssertNil(coordinator.stationaryPromptID)
+        clock.advance(by: 300)
+        await waitForWatchdog()
+        XCTAssertNil(coordinator.stationaryPromptID)
+        XCTAssertEqual(repository.stopCount, 0)
+    }
+
+    @MainActor
+    func testReplacingASoloSessionWithAConvoyClearsItsPromptAndExemptsTheConvoy() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+        await waitUntil { coordinator.receivedFixCount == 1 }
+
+        clock.advance(by: 600)
+        await waitUntil { coordinator.stationaryPromptID != nil }
+        repository.emitSession(activeSession(id: "convoy-session", convoyAutoStarted: true))
+        await waitUntil { coordinator.session?.sessionId == "convoy-session" }
+        XCTAssertNil(coordinator.stationaryPromptID)
+        provider.emitFix(fix(latitude: 57.5, longitude: 12.1))
+        await waitUntil { coordinator.receivedFixCount == 2 }
+
+        clock.advance(by: 600)
+        await waitForWatchdog()
+        XCTAssertNil(coordinator.stationaryPromptID)
+        clock.advance(by: 300)
+        await waitForWatchdog()
+        XCTAssertNil(coordinator.stationaryPromptID)
+        XCTAssertEqual(repository.stopCount, 0)
+        XCTAssertTrue(coordinator.isSharing)
     }
 
     @MainActor

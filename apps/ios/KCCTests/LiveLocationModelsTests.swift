@@ -224,6 +224,7 @@ final class LiveLocationModelsTests: XCTestCase {
                 "vehicleId": "vehicle-7",
                 "mainCar": ["imagePath": "vehicleImages/u/vehicle-7/cover"],
                 "convoyId": "convoy-2",
+                "convoyAutoStarted": true,
             ])
         )
         XCTAssertEqual(info.sessionId, "session-9")
@@ -233,6 +234,7 @@ final class LiveLocationModelsTests: XCTestCase {
         XCTAssertEqual(info.vehicleId, "vehicle-7")
         XCTAssertEqual(info.carImagePath, "vehicleImages/u/vehicle-7/cover")
         XCTAssertEqual(info.convoyId, "convoy-2")
+        XCTAssertTrue(info.convoyAutoStarted)
     }
 
     func testSessionInfoFromMapToleratesUnknownDurationAndBadExpiry() throws {
@@ -246,6 +248,7 @@ final class LiveLocationModelsTests: XCTestCase {
                 "expiresAt": "soon",
             ])
         )
+        XCTAssertFalse(info.convoyAutoStarted)
         XCTAssertNil(info.duration)
         XCTAssertNil(info.expiresAt)
         XCTAssertTrue(LiveLocation.isSharing(info, at: now))
