@@ -1365,7 +1365,6 @@ struct ShellView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
-                    .contentShape(Rectangle())
                     .foregroundStyle(tab == .create
                         ? (liveLocationCoordinator?.isSharing == true ? KccPalette.warmIvory : KccTheme.onGold)
                         : KccTheme.text)
@@ -1375,11 +1374,15 @@ struct ShellView: View {
                                 .fill(liveLocationCoordinator?.isSharing == true ? KccPalette.errorRed : KccPalette.crownGold)
                         }
                     }
+                    .background { KccTheme.overlay }
                     .overlay(alignment: .bottom) {
                         if selectedTab == tab {
                             Capsule().fill(KccPalette.crownGold).frame(width: 28, height: 3)
+                                .allowsHitTesting(false)
                         }
                     }
+                    // Keep the gap between the icon and title inside the tap target.
+                    .contentShape(.interaction, Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(LocalizedStringKey(tabTitle(tab))))

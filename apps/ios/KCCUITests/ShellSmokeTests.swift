@@ -884,8 +884,11 @@ final class ShellSmokeTests: XCTestCase {
         }
         for id in ["social", "garage", "map", "chat"] {
             let tab = app.buttons["shell.tab.\(id)"]
-            tab.tap()
-            if id == "chat" {
+            // The center can fall between the icon and caption at this size.
+            tab.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            if id == "social" {
+                XCTAssertTrue(element("shell.socialHub", in: app).waitForExistence(timeout: 15))
+            } else if id == "chat" {
                 // The first cold chat render can outlive XCUITest's idle wait.
                 // Wait for the actual destination, without retrying the tap.
                 XCTAssertTrue(element("chatHub.opaqueScreen", in: app).waitForExistence(timeout: 15))
