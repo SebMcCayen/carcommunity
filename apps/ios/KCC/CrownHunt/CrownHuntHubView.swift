@@ -136,8 +136,11 @@ struct CrownInstructionsScreen: View {
             LazyVStack(spacing: KccSpacing.s4) {
                 ForEach(sections, id: \.self) { section in
                     CrownHuntCard {
-                        Text(LocalizedStringKey("crownHunt.instr\(section)Title")).font(.headline)
-                        Text(LocalizedStringKey(section == "Rarities" ? "crownHunt.instrRaritiesIntro" : "crownHunt.instr\(section)Body"))
+                        // Build plain strings first so SwiftUI looks up the complete keys.
+                        let titleKey = "crownHunt.instr\(section)Title"
+                        let bodyKey = section == "Rarities" ? "crownHunt.instrRaritiesIntro" : "crownHunt.instr\(section)Body"
+                        Text(LocalizedStringKey(titleKey)).font(.headline)
+                        Text(LocalizedStringKey(bodyKey))
                             .font(.body).foregroundStyle(KccTheme.secondary)
                     }
                 }
