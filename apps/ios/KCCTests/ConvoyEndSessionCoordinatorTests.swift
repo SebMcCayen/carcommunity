@@ -145,6 +145,21 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
         XCTAssertTrue(h.saves.requests.isEmpty)
     }
 
+    func testFailedContinuationWithStillActiveSessionCanRetryWithoutSaving() async {
+        let h = Harness()
+        defer { h.stop() }
+        await h.update(h.autoSession())
+        await wait { h.convoys.hasObserver }
+        h.convoys.emit(h.convoy(.ended))
+        await wait { h.coordinator.presentsChoice }
+        h.liveRepository.failStart = true
+        await h.coordinator.chooseContinue()
+        XCTAssertTrue(h.coordinator.commandFailed)
+        XCTAssertTrue(h.coordinator.presentsChoice)
+        XCTAssertTrue(h.saves.requests.isEmpty)
+        XCTAssertNotNil(h.recording.state.summary)
+    }
+
     private func wait(_ condition: @MainActor () -> Bool) async {
         let deadline = Date().addingTimeInterval(3)
         while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(1)) }

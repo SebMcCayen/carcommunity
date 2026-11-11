@@ -2774,7 +2774,10 @@ struct ShellView: View {
     }
 
     private var convoyEndChoicePresented: Binding<Bool> {
-        Binding(get: { convoyEndSessionCoordinator?.presentsChoice == true }, set: { _ in })
+        Binding(get: {
+            convoyEndSessionCoordinator?.presentsChoice == true
+                && convoyEndSessionCoordinator?.commandFailed != true
+        }, set: { _ in })
     }
 
     private var convoyEndCommandFailurePresented: Binding<Bool> {
