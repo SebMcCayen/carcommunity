@@ -2221,7 +2221,11 @@
     "release010Build11Alerts": "Choose how old imported incidents can be on the map. New accounts default to one week.",
     "release010Build11SignIn": "Improved Apple sign-in error handling and updated privacy policy and terms links.",
     "release011Build12Highlight": "New iOS version for continued testing.",
-    "release011Build12Version": "The version and build numbers have been updated for the next round of testing."
+    "release011Build12Version": "The version and build numbers have been updated for the next round of testing.",
+    "release012Build13Highlight": "Improved navigation, chat, and profile in the iOS app.",
+    "release012Build13Navigation": "In-app navigation and improved handling of location and live sharing.",
+    "release012Build13Chat": "Improved chat views and more reliable keyboard handling.",
+    "release012Build13Profile": "Clearer display names when signing in with Apple and updated Crown Hunt instructions."
   },
   "driver": {
     "feed": {

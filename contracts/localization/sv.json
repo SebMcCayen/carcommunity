@@ -2221,7 +2221,11 @@
     "release010Build11Alerts": "Välj hur gamla importerade händelser som visas på kartan. Nya konton får en vecka som standard.",
     "release010Build11SignIn": "Förbättrad felhantering vid Apple-inloggning och uppdaterade länkar till integritetspolicy och villkor.",
     "release011Build12Highlight": "Ny iOS-version för fortsatt testning.",
-    "release011Build12Version": "Versionsnummer och byggnummer har uppdaterats inför nästa testomgång."
+    "release011Build12Version": "Versionsnummer och byggnummer har uppdaterats inför nästa testomgång.",
+    "release012Build13Highlight": "Förbättrad navigering, chatt och profil i iOS-appen.",
+    "release012Build13Navigation": "Navigering i appen och förbättrad hantering av plats och livedelning.",
+    "release012Build13Chat": "Förbättrade chattvyer och stabilare hantering av tangentbordet.",
+    "release012Build13Profile": "Tydligare visningsnamn vid inloggning med Apple och uppdaterade instruktioner för kronjakten."
   },
   "driver": {
     "feed": {
