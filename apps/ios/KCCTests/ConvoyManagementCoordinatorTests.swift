@@ -10,6 +10,7 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         private var listCallCount = 0
         var respondResult: ConvoyRespondResult
         var lifecycleResult: ConvoyLifecycleResult
+        var lifecycleDelay: Duration?
         var inviteResult: ConvoyInviteMutationResult
         var observedConvoys: [ConvoyItem?]
         private(set) var respondCalls: [(String, ConvoyAction)] = []
@@ -66,10 +67,12 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
             convoyId: String,
             action: ConvoyLifecycleAction
         ) async -> ConvoyLifecycleResult {
-            lock.withLock {
+            let (result, delay) = lock.withLock {
                 lifecycleCalls.append((convoyId, action))
-                return lifecycleResult
+                return (lifecycleResult, lifecycleDelay)
             }
+            if let delay { try? await Task.sleep(for: delay) }
+            return result
         }
 
         func invite(
@@ -81,6 +84,44 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
                 return inviteResult
             }
         }
+    }
+
+    @MainActor
+    func testFailedExitNeverBecomesConfirmedAndSuccessfulRejoinClearsPriorExit() async {
+        let active = item(id: "live", viewer: .accepted)
+        let repository = FakeRepository(listResults: [.loaded(snapshot(convoys: [active]))])
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+        let failed = await coordinator.runLifecycle(convoyId: "live", action: .end)
+        XCTAssertFalse(failed)
+        XCTAssertFalse(coordinator.locallyExitedConvoyIds.contains("live"))
+        XCTAssertTrue(coordinator.pendingExitConvoyIds.isEmpty)
+        repository.lifecycleResult = .left(.init(outcome: .left, newLeaderUid: nil))
+        let left = await coordinator.runLifecycle(convoyId: "live", action: .leave)
+        XCTAssertTrue(left)
+        XCTAssertTrue(coordinator.locallyExitedConvoyIds.contains("live"))
+        repository.respondResult = .updated(active)
+        _ = await coordinator.respond(convoyId: "live", action: .accept)
+        XCTAssertFalse(coordinator.locallyExitedConvoyIds.contains("live"))
+    }
+
+    @MainActor
+    func testSlowFailedExitRemainsPendingUntilMutationSettles() async {
+        let repository = FakeRepository(listResults: [.loaded(snapshot())])
+        repository.lifecycleDelay = .milliseconds(100)
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+        let request = Task { await coordinator.runLifecycle(convoyId: "convoy", action: .end) }
+        let deadline = Date().addingTimeInterval(2)
+        while coordinator.pendingExitConvoyIds.isEmpty, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertTrue(coordinator.pendingExitConvoyIds.contains("convoy"))
+        XCTAssertTrue(coordinator.locallyExitedConvoyIds.isEmpty)
+        let success = await request.value
+        XCTAssertFalse(success)
+        XCTAssertTrue(coordinator.pendingExitConvoyIds.isEmpty)
+        XCTAssertTrue(coordinator.locallyExitedConvoyIds.isEmpty)
     }
 
     @MainActor

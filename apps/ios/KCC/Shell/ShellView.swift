@@ -2685,7 +2685,8 @@ struct ShellView: View {
             convoyEndSessionCoordinator = ConvoyEndSessionCoordinator(
                 repository: FirebaseConvoyManagementRepository.createIfAvailable(),
                 live: liveLocation, recording: recording,
-                localExit: { convoyManagement.locallyExitedConvoyIds.contains($0) }
+                localExit: { convoyManagement.locallyExitedConvoyIds.contains($0) },
+                pendingExit: { convoyManagement.pendingExitConvoyIds.contains($0) }
             )
         }
         if pendingCreateIntent?.belongs(to: uid) == true {

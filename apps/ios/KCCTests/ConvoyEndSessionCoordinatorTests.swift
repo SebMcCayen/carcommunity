@@ -126,6 +126,25 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
         XCTAssertTrue(h.saves.requests.isEmpty)
     }
 
+    func testFailedExitKeepsRecordingAndCanStillOfferRemoteEndChoice() async {
+        let h = Harness()
+        defer { h.stop() }
+        await h.update(h.autoSession())
+        await wait { h.convoys.hasObserver }
+        h.exiting.pending = true
+        h.coordinator.tick()
+        XCTAssertTrue(h.saves.requests.isEmpty)
+        XCTAssertNotNil(h.recording.state.summary)
+        h.convoys.emit(h.convoy(.ended))
+        await h.update(h.autoSession(.stopped))
+        XCTAssertFalse(h.coordinator.presentsChoice)
+        XCTAssertTrue(h.saves.requests.isEmpty)
+        h.exiting.pending = false
+        h.coordinator.tick()
+        await wait { h.coordinator.presentsChoice }
+        XCTAssertTrue(h.saves.requests.isEmpty)
+    }
+
     private func wait(_ condition: @MainActor () -> Bool) async {
         let deadline = Date().addingTimeInterval(3)
         while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(1)) }
@@ -133,7 +152,7 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
     }
 
     private final class Clock: @unchecked Sendable { var date = Date(timeIntervalSince1970: 1_000) }
-    private final class Exit { var value = false }
+    private final class Exit { var value = false; var pending = false }
 
     @MainActor private final class Harness {
         let clock = Clock()
@@ -151,7 +170,7 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
             live = LiveLocationCoordinator(repository: liveRepository, provider: provider, now: { clock.date })
             recording = DriveRecordingCoordinator(repository: saves, provider: provider, now: { clock.date })
             coordinator = ConvoyEndSessionCoordinator(repository: convoys, live: live, recording: recording,
-                localExit: { _ in exiting.value }, now: { clock.date })
+                localExit: { _ in exiting.value }, pendingExit: { _ in exiting.pending }, now: { clock.date })
             live.start()
         }
 

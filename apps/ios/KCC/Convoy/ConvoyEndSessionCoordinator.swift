@@ -15,6 +15,7 @@ final class ConvoyEndSessionCoordinator {
     @ObservationIgnored private let live: LiveLocationCoordinator
     @ObservationIgnored private let recording: DriveRecordingCoordinator
     @ObservationIgnored private let localExit: (String) -> Bool
+    @ObservationIgnored private let pendingExit: (String) -> Bool
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var session: LiveSessionInfo?
     @ObservationIgnored private var context: DriveRecordingContext?
@@ -30,11 +31,13 @@ final class ConvoyEndSessionCoordinator {
 
     init(repository: ConvoyManagementRepository?, live: LiveLocationCoordinator,
          recording: DriveRecordingCoordinator, localExit: @escaping (String) -> Bool,
+         pendingExit: @escaping (String) -> Bool = { _ in false },
          now: @escaping @Sendable () -> Date = Date.init) {
         self.repository = repository
         self.live = live
         self.recording = recording
         self.localExit = localExit
+        self.pendingExit = pendingExit
         self.now = now
     }
 
@@ -117,6 +120,18 @@ final class ConvoyEndSessionCoordinator {
             return
         }
         let sharing = session?.sessionId == candidate.sessionId && LiveLocation.isSharing(session, at: now())
+        if candidate.convoyId.map(pendingExit) == true {
+            // End/Leave can be slow or fail. Hold the remote-end choice until
+            // the mutation settles, but never finalize the route on intent alone.
+            presentsChoice = false
+            deadline = nil
+            if sharing, let context {
+                candidateContext = context
+                recording.updateContext(context)
+                recording.start(context: context)
+            }
+            return
+        }
         if isContinuing {
             if let deadline, now() >= deadline { failContinuation() }
             return
