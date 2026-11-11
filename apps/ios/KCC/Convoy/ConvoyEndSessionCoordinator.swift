@@ -24,6 +24,7 @@ final class ConvoyEndSessionCoordinator {
     @ObservationIgnored private var decided: Set<String> = []
     @ObservationIgnored private var deadline: Date?
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var stopped = false
     @ObservationIgnored nonisolated(unsafe) private var observation: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var timer: Task<Void, Never>?
 
@@ -40,6 +41,7 @@ final class ConvoyEndSessionCoordinator {
     deinit { observation?.cancel(); timer?.cancel() }
 
     func update(session: LiveSessionInfo?, context: DriveRecordingContext?) {
+        guard !stopped else { return }
         self.session = session
         self.context = context
         if let previous = candidate, let session, session.sessionId != previous.sessionId {
@@ -89,7 +91,12 @@ final class ConvoyEndSessionCoordinator {
         }
     }
 
-    func stop() { clearCandidate() }
+    func stop() {
+        stopped = true
+        clearCandidate()
+        session = nil
+        context = nil
+    }
 
     private func reconcile() {
         guard let candidate else {

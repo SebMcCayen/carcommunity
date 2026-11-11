@@ -8,7 +8,11 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
         let h = Harness()
         defer { h.stop() }
         await h.update(h.autoSession())
-        await wait { h.convoys.hasObserver }
+        await wait { h.convoys.hasObserver && h.provider.activeFixStreamCount >= 2 }
+        h.provider.emitFix(LocationFix.of(latitude: 57, longitude: 12, timestamp: h.clock.date)!)
+        h.provider.emitFix(LocationFix.of(latitude: 57.0001, longitude: 12,
+            timestamp: h.clock.date.addingTimeInterval(3))!)
+        await wait { h.recording.state.summary?.pointCount == 2 }
         h.convoys.emit(h.convoy(.active))
         await h.update(h.autoSession(.stopped))
         XCTAssertFalse(h.coordinator.presentsChoice)
@@ -25,6 +29,7 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
         await h.update(h.soloSession(.stopped))
         await wait { h.saves.requests.count == 1 }
         XCTAssertEqual(h.saves.requests.first?.context.sourceSessionId, "auto")
+        XCTAssertEqual(h.saves.requests.first?.points.count, 2)
     }
 
     func testConvoyEndBeforeRTDBStopOffersEndAndSavesOnce() async {
@@ -105,6 +110,20 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
         h.convoys.emit(h.convoy(.ended))
         XCTAssertFalse(h.coordinator.presentsChoice)
         XCTAssertFalse(h.coordinator.isContinuing)
+    }
+
+    func testTeardownRejectsLateSessionAndConvoyCallbacks() async {
+        let h = Harness()
+        defer { h.stop() }
+        await h.update(h.autoSession())
+        await wait { h.convoys.hasObserver }
+        h.coordinator.stop()
+        h.recording.reset()
+        h.convoys.emit(h.convoy(.ended))
+        await h.update(h.autoSession())
+        XCTAssertFalse(h.coordinator.presentsChoice)
+        XCTAssertEqual(h.recording.state, .idle)
+        XCTAssertTrue(h.saves.requests.isEmpty)
     }
 
     private func wait(_ condition: @MainActor () -> Bool) async {

@@ -27,8 +27,8 @@ enum FollowMeTrail {
         now: Date,
         staleAfter: TimeInterval = staleAfter
     ) -> Bool {
-        guard let leaderUid,
-              leaderUid != selfUid,
+        guard leaderUid != nil,
+              selfUid != nil,
               leaderIsMember,
               let lastFreshAt
         else { return false }

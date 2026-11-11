@@ -126,10 +126,14 @@ final class ConvoyFollowMeCoordinator {
 
     private func reconcile() {
         guard let surface else { return }
+        let viewerIsMember = selfUid.map(acceptedMemberUids.contains) == true
+        let wasLeading = isLeading
+        isLeading = viewerIsMember && FollowMeTrail.isSelfLeading(leaderUid: state?.leaderUid, selfUid: selfUid)
+        if wasLeading && !isLeading { resetWriter(); publisher.reset() }
         let leaderUid = state?.leaderUid
         let positionFreshness = leaderUid.flatMap { positions[$0]?.updatedAt }
         let lastFreshAt = [positionFreshness, state?.updatedAt].compactMap { $0 }.max()
-        let shouldDraw = FollowMeTrail.shouldDraw(
+        let shouldDraw = viewerIsMember && FollowMeTrail.shouldDraw(
             leaderUid: leaderUid,
             selfUid: selfUid,
             leaderIsMember: leaderUid.map(acceptedMemberUids.contains) ?? false,
@@ -178,7 +182,7 @@ final class ConvoyFollowMeCoordinator {
     private func armStaleRecheckIfNeeded() {
         staleTask?.cancel()
         staleTask = nil
-        guard let leaderUid = state?.leaderUid, leaderUid != selfUid else { return }
+        guard state?.leaderUid != nil else { return }
         staleTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {

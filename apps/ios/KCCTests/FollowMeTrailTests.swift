@@ -28,7 +28,7 @@ final class FollowMeTrailTests: XCTestCase {
         XCTAssertEqual(FollowMeTrail.decode("Zm9vYmFy"), [])
     }
 
-    func testVisibilityRequiresOtherFreshAcceptedLeader() {
+    func testVisibilityIncludesAuthorAndRequiresFreshAcceptedLeader() {
         let now = Date(timeIntervalSince1970: 1_000)
         XCTAssertTrue(FollowMeTrail.shouldDraw(
             leaderUid: "leader",
@@ -37,7 +37,7 @@ final class FollowMeTrailTests: XCTestCase {
             lastFreshAt: now.addingTimeInterval(-1),
             now: now
         ))
-        XCTAssertFalse(FollowMeTrail.shouldDraw(
+        XCTAssertTrue(FollowMeTrail.shouldDraw(
             leaderUid: "me",
             selfUid: "me",
             leaderIsMember: true,
@@ -370,6 +370,7 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
             status: .active,
             members: [
                 ConvoyMember(uid: "me", displayName: nil, role: .member, inviteStatus: .accepted),
+                ConvoyMember(uid: "viewer", displayName: nil, role: .member, inviteStatus: .accepted),
                 ConvoyMember(uid: "leader", displayName: nil, role: .owner, inviteStatus: .accepted)
             ],
             viewer: ConvoyViewer(inviteStatus: .accepted, role: .member),

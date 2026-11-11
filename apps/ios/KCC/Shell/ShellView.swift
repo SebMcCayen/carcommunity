@@ -312,9 +312,9 @@ struct ShellView: View {
                         } label: {
                             Label {
                                 VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                                    Text(verbatim: invitation.title).font(.headline)
-                                    if let preview = invitation.previewText { Text(verbatim: preview).font(.subheadline) }
-                                }.frame(maxWidth: .infinity, alignment: .leading)
+                                    Text(verbatim: invitation.title).font(.headline).lineLimit(2)
+                                    if let preview = invitation.previewText { Text(verbatim: preview).font(.subheadline).lineLimit(2) }
+                                }.frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                             } icon: { Image(systemName: "car.2.fill") }
                         }
                         .buttonStyle(.plain)
@@ -1995,6 +1995,7 @@ struct ShellView: View {
             selectedTab = .chat
             routes = .empty
         case .convoys:
+            closeConvoyCreate()
             selectedConvoyId = link.entityId
             routes = routes.opening(.convoys)
         case .friends:
