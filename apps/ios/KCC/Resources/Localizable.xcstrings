@@ -37588,6 +37588,74 @@
         }
       }
     },
+    "whatsNew.release012Build13Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättrade chattvyer och stabilare hantering av tangentbordet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improved chat views and more reliable keyboard handling."
+          }
+        }
+      }
+    },
+    "whatsNew.release012Build13Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättrad navigering, chatt och profil i iOS-appen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improved navigation, chat, and profile in the iOS app."
+          }
+        }
+      }
+    },
+    "whatsNew.release012Build13Navigation": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigering i appen och förbättrad hantering av plats och livedelning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In-app navigation and improved handling of location and live sharing."
+          }
+        }
+      }
+    },
+    "whatsNew.release012Build13Profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tydligare visningsnamn vid inloggning med Apple och uppdaterade instruktioner för kronjakten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clearer display names when signing in with Apple and updated Crown Hunt instructions."
+          }
+        }
+      }
+    },
     "whatsNew.title": {
       "extractionState": "manual",
       "localizations": {
