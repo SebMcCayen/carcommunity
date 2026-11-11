@@ -21,7 +21,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: validate-ios-navigation-${{ github.ref }}
+  # Fresh namespace after an uncancellable backend-stuck main run.
+  group: validate-ios-navigation-v2-${{ github.ref }}
   cancel-in-progress: true
 
 env:
