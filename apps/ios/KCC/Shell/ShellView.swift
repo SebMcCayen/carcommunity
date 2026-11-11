@@ -1700,9 +1700,7 @@ struct ShellView: View {
                                 vehicleId: convoyCreateVehicleId,
                                 onCreated: completeConvoyCreation
                             )
-                        } else if let selectedConvoyId,
-                                  let convoy = convoyManagementCoordinator.snapshot?.convoys
-                                      .first(where: { $0.convoyId == selectedConvoyId && $0.viewer?.inviteStatus == .accepted }) {
+                        } else if let convoy = selectedConvoyDetail {
                             ConvoyDetailScreen(
                                 coordinator: convoyManagementCoordinator,
                                 convoy: convoy,
@@ -2122,14 +2120,20 @@ struct ShellView: View {
         convoyCreateReturnsToList = false
     }
 
+    /// Rendering and Back must agree: a pending invitation opens the list,
+    /// not a member detail that would swallow the first Back press.
+    private var selectedConvoyDetail: ConvoyItem? {
+        guard let selectedConvoyId else { return nil }
+        return convoyManagementCoordinator?.snapshot?.convoys.first {
+            $0.convoyId == selectedConvoyId && $0.viewer?.inviteStatus == .accepted
+        }
+    }
+
     private func closeConvoyScreen() {
         guard !convoyCreationIsWorking else { return }
         if convoyCreateCoordinator != nil, convoyCreateReturnsToList {
             closeConvoyCreate()
-        } else if let selectedId = selectedConvoyId,
-                  convoyManagementCoordinator?.snapshot?.convoys.contains(
-                      where: { $0.convoyId == selectedId }
-                  ) == true {
+        } else if selectedConvoyDetail != nil {
             selectedConvoyId = nil
         } else {
             selectedConvoyId = nil
