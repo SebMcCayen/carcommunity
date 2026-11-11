@@ -166,6 +166,7 @@
     "displayNameLabel": "Display name",
     "displayNamePlaceholder": "Your display name",
     "displayNameDescription": "This is the public name other members see (in events, chat and more). Your real Google account name is never shown.",
+    "iosDisplayNameDescription": "You choose the name other members see in events, chats and elsewhere in the app. You use your Apple Account to sign in.",
     "partnerStatsOptIn": "Contribute anonymised partner statistics",
     "partnerStatsNote": "On by default. You can turn it off now, or later under Privacy.",
     "defaultMapTitle": "Open map links in KCC",

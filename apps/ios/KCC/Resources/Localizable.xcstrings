@@ -25365,6 +25365,23 @@
         }
       }
     },
+    "onboarding.iosDisplayNameDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du väljer själv vilket namn andra medlemmar ser i evenemang, chattar och på andra ställen i appen. Du använder ditt Apple-konto för att logga in."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You choose the name other members see in events, chats and elsewhere in the app. You use your Apple Account to sign in."
+          }
+        }
+      }
+    },
     "onboarding.licenceConfirm": {
       "extractionState": "manual",
       "localizations": {
