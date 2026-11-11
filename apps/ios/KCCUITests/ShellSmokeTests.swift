@@ -240,7 +240,9 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(latestFrame.minY, titleBottom)
             XCTAssertLessThanOrEqual(latestFrame.maxY, emojiRow.frame.minY + 1)
             XCTAssertGreaterThan(emojiRow.frame.minY - titleBottom, 200)
-            composerInput(in: app).typeText("Fixture reply")
+            // SwiftUI can replace the editor's native accessibility element.
+            // Keep typing into the focused responder through the application.
+            app.typeText("Fixture reply")
             assertComposerDraft("Fixture reply", present: true, in: app)
             let send = app.buttons["chat.composer.send"]
             XCTAssertTrue(send.isHittable)
@@ -1224,18 +1226,19 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [dockReady], timeout: 15), .completed,
                 "The active-session dock must be laid out before footer interaction")
         }
-        // The menu can appear before the footer is laid out. Read current
-        // window and button geometry together. Individual tests exercise the
-        // controls they use with real taps once the footer is on screen.
+        // The menu can appear before the footer is laid out. Capture the fixed
+        // launch window once so each layout poll fetches only the button frame.
+        // Individual tests exercise the controls with real taps.
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 15))
+        let windowFrame = window.frame
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
+            XCTAssertTrue(button.waitForExistence(timeout: 15))
             let layout = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
-                    guard button.exists else { return false }
                     let frame = button.frame
-                    return frame.width >= 44 && frame.height >= 44 && window.frame.contains(frame)
+                    return frame.width >= 44 && frame.height >= 44 && windowFrame.contains(frame)
                 },
                 object: nil
             )
