@@ -927,10 +927,12 @@ final class ShellSmokeTests: XCTestCase {
         }
         for id in ["driver", "chats"] {
             let source = app.buttons["chatHub.source.\(id)"]
-            XCTAssertTrue(source.isHittable)
+            XCTAssertTrue(source.wait(for: \.isHittable, toEqual: true, timeout: 15))
             XCTAssertGreaterThanOrEqual(source.frame.height, 44)
             XCTAssertLessThanOrEqual(source.frame.height, 80)
-            source.tap()
+            // Exercise the same physical center tap as the footer and channel
+            // controls, after the newly opened chat surface becomes hittable.
+            source.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             assertSelected(source)
         }
 
@@ -1226,23 +1228,25 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [dockReady], timeout: 15), .completed,
                 "The active-session dock must be laid out before footer interaction")
         }
-        // The menu can appear before the footer is laid out. Capture the fixed
-        // launch window once so each layout poll fetches only the button frame.
-        // Individual tests exercise the controls with real taps.
+        // Existence can precede the first usable accessibility snapshot. On a
+        // cold hosted simulator that snapshot can itself take over 15 seconds;
+        // wait for interactive controls before checking their exact geometry.
+        // Re-read the window as well: its first launch frame can still change.
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 15))
-        let windowFrame = window.frame
         for id in ["map", "chat", "create", "social", "garage"] {
             let button = app.buttons["shell.tab.\(id)"]
-            XCTAssertTrue(button.waitForExistence(timeout: 15))
+            XCTAssertTrue(button.wait(for: \.isHittable, toEqual: true, timeout: 30),
+                "Primary action \(id) must become interactive after launch")
             let layout = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
                     let frame = button.frame
+                    let windowFrame = window.frame
                     return frame.width >= 44 && frame.height >= 44 && windowFrame.contains(frame)
                 },
                 object: nil
             )
-            let layoutResult = XCTWaiter.wait(for: [layout], timeout: 15)
+            let layoutResult = XCTWaiter.wait(for: [layout], timeout: 30)
             if layoutResult != .completed { chatProof(app, name: "primary-\(id)-layout-failure", tree: true) }
             XCTAssertEqual(layoutResult, .completed, "Primary action \(id) must be laid out after launch")
         }
