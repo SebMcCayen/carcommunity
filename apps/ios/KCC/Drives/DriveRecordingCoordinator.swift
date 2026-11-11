@@ -99,11 +99,12 @@ final class DriveRecordingCoordinator {
     /// behind the recorder's save/retry gate.
     func distanceMeters(for sessionId: String) -> Double? {
         guard case .recording(let summary) = state,
-              recorder?.context.sourceSessionId == sessionId else { return nil }
+              recorder?.context.liveSessionId == sessionId else { return nil }
         return summary.distanceMeters
     }
 
     func updateContext(_ context: DriveRecordingContext) {
+        let context = normalizedContext(context)
         guard desiredContext?.sourceSessionId == context.sourceSessionId
                 || recorder?.context.sourceSessionId == context.sourceSessionId else { return }
         let previousExpiry = desiredContext?.expiresAt ?? recorder?.context.expiresAt
@@ -122,6 +123,7 @@ final class DriveRecordingCoordinator {
     /// unavailable. A later grant from Settings/system permission immediately
     /// starts (or resumes) this same session without requiring an RTDB change.
     func start(context: DriveRecordingContext) {
+        let context = normalizedContext(context)
         guard repository != nil else { return }
         retryPendingRouteUploads()
         if journalBackedUpload != nil {
@@ -155,6 +157,26 @@ final class DriveRecordingCoordinator {
         desiredContext = context
         scheduleExpiry(for: context)
         beginDesiredRecordingIfPossible()
+    }
+
+    /// Called only after the replacement SOLO session has actually been observed.
+    /// Keep route, start time, idempotency key and convoy participants intact.
+    func continueAsSingle(from sessionId: String, context: DriveRecordingContext) {
+        guard let original = recorder?.context ?? desiredContext ?? journal?.restore(sessionId: sessionId)?.context,
+              original.liveSessionId == sessionId else {
+            start(context: context)
+            return
+        }
+        let continuation = original.continuing(with: context)
+        if recorder == nil, desiredContext == nil { start(context: continuation) }
+        else { updateContext(continuation) }
+    }
+
+    private func normalizedContext(_ context: DriveRecordingContext) -> DriveRecordingContext {
+        let previous = recorder?.context ?? desiredContext
+            ?? journal?.restore(sessionId: context.sourceSessionId)?.context
+        guard let previous, previous.continuationSessionId == context.sourceSessionId else { return context }
+        return previous.continuing(with: context)
     }
 
     /// Handles an authoritative inactive/nil live-session snapshot or local

@@ -20,6 +20,7 @@ final class ConvoyManagementCoordinator {
     private(set) var actionErrorConvoyId: String?
     private(set) var lastInviteResult: ConvoyInviteResult?
     private(set) var lastLeaveResult: ConvoyLeaveResult?
+    private(set) var locallyExitedConvoyIds: Set<String> = []
 
     var snapshot: ConvoyManagementSnapshot? {
         guard case .loaded(let snapshot) = state else { return nil }
@@ -151,6 +152,7 @@ final class ConvoyManagementCoordinator {
               let repository
         else { return false }
 
+        if action == .end || action == .leave { locallyExitedConvoyIds.insert(convoyId) }
         clearActionError()
         lastLeaveResult = nil
         supersedeListRequests()

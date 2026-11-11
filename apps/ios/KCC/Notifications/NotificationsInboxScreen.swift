@@ -1,26 +1,13 @@
 import SwiftUI
 
-/// The in-app notification inbox — the iOS slice of Android's
-/// `NotificationsScreen` (list + mark-read + mark-all-read). Deep-link routing
-/// on tap, swipe-to-delete, and the in-place friend/convoy actions are
-/// DELIBERATELY out of this slice: the tap destination is modelled
-/// (``NotificationDeepLink``) and exported for the future wiring PR, but no
-/// ``ShellView`` routing is wired here.
-///
-/// A dumb switch over ``NotificationsInboxUiState``: all decisions live in the
-/// pure ``NotificationsInboxCoordinator``. The `coordinator` is nil only in a
-/// context that never constructs one; a config-less build constructs the
-/// coordinator with a nil repository, which resolves to
-/// ``NotificationsInboxUiState/unavailable`` and renders the placeholder — the
-/// same seam every Firebase-backed surface honors.
-///
-/// Reached via ``ShellRoute/notifications`` — the shell wraps this screen in a
-/// `NavigationStack` and supplies the Back affordance.
+/// Notification rows use the shell's shared push/inbox destinations. Read-state
+/// changes are best effort and never block opening an invitation.
 struct NotificationsInboxScreen: View {
     /// Nil only where no coordinator is constructed; the unavailable STATE
     /// (config-less build) is modelled inside the coordinator.
     let coordinator: NotificationsInboxCoordinator?
     var onOpenSettings: (() -> Void)? = nil
+    var onOpen: ((NotificationDeepLink) -> Void)? = nil
     /// Embedded chat keeps its actions inline without a navigation bar.
     var showsNavigationTitle = true
 
@@ -28,6 +15,7 @@ struct NotificationsInboxScreen: View {
         titledContent
             .kccReadingSurface(pageBackground: true)
             .task { coordinator?.start() }
+            .onDisappear { coordinator?.stopViewing() }
             .toolbar { if showsNavigationTitle { toolbarContent } }
             .alert(
                 Text("notifications.markReadError"),
@@ -167,23 +155,17 @@ struct NotificationsInboxScreen: View {
 
     private func list(_ items: [AppNotification], coordinator: NotificationsInboxCoordinator) -> some View {
         List {
-            // A tap on an UNREAD row marks it read; a read row is inert. The
-            // list itself updates from the next listener snapshot, so the row's
-            // read styling follows the server, never an optimistic flip.
             ForEach(items) { item in
-                Group {
-                    if item.isRead {
-                        NotificationRow(item: item)
-                    } else {
-                        Button {
-                            Task { await coordinator.markRead(notificationId: item.id) }
-                        } label: {
-                            NotificationRow(item: item)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(coordinator.markReadStatus == .working)
+                Button {
+                    if let destination = coordinator.destination(for: item) { onOpen?(destination) }
+                    if !item.isRead {
+                        Task { await coordinator.markRead(notificationId: item.id) }
                     }
+                } label: {
+                    NotificationRow(item: item)
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("notifications.item.\(item.id)")
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }

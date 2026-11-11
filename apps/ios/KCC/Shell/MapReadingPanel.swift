@@ -6,12 +6,26 @@ struct MapReadingPanel<Content: View>: View {
     let title: LocalizedStringKey
     let onClose: () -> Void
     var scrollsContent = true
+    var leadingImage: String? = nil
+    var leadingTint: Color = KccTheme.driver
+    var docksToBottom = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                if docksToBottom {
+                    Capsule().fill(KccTheme.secondary).frame(width: 32, height: 4)
+                        .padding(.top, KccSpacing.s2).padding(.bottom, KccSpacing.s1)
+                        .accessibilityHidden(true)
+                }
             HStack(alignment: .center, spacing: KccSpacing.s2) {
-                Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+                if let leadingImage {
+                    Image(leadingImage).renderingMode(.template).resizable().scaledToFit()
+                        .foregroundStyle(leadingTint).frame(width: 40, height: 40)
+                        .accessibilityHidden(true)
+                }
+                Text(title).font(leadingImage == nil ? .headline : .title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: onClose) {
@@ -23,6 +37,11 @@ struct MapReadingPanel<Content: View>: View {
                 .accessibilityIdentifier("map.reading.close")
             }
             .padding(.horizontal, KccSpacing.s4)
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 16).onEnded { drag in
+                if docksToBottom && (drag.translation.height > 72 || drag.predictedEndTranslation.height > 120) { onClose() }
+            })
             Divider()
             if scrollsContent {
                 ScrollView { readingContent }
@@ -33,11 +52,18 @@ struct MapReadingPanel<Content: View>: View {
         }
         .foregroundStyle(KccTheme.text)
         .tint(KccTheme.driver)
-        .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border).allowsHitTesting(false) }
+        .background(docksToBottom ? KccTheme.overlay : KccTheme.surface, in: panelShape)
+        .overlay { panelShape.strokeBorder(KccTheme.border).allowsHitTesting(false) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map.reading.panel")
         .accessibilityAction(.escape, onClose)
+    }
+
+    private var panelShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: docksToBottom ? 24 : KccRadius.lg,
+            bottomLeadingRadius: docksToBottom ? 0 : KccRadius.lg,
+            bottomTrailingRadius: docksToBottom ? 0 : KccRadius.lg,
+            topTrailingRadius: docksToBottom ? 24 : KccRadius.lg)
     }
 
     private var readingContent: some View {

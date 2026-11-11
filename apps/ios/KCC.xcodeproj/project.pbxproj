@@ -226,6 +226,7 @@
 		737E58E0E53DB7D1303FA30B /* ChatHubScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FF7E3BFE7F8C80149FC411F /* ChatHubScreen.swift */; };
 		753376E615871D99B63908EA /* PartnersCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B8AC573ED81F9A257D3F9DB /* PartnersCoordinator.swift */; };
 		76269373C8A0BC47A9F4506C /* MapboxConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35A236A6E9190DE9D6FCBD3 /* MapboxConfigurationTests.swift */; };
+		76745F20231629AD71AFE449 /* ConvoyEndSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A30F339818D864C7BDDE4A /* ConvoyEndSessionCoordinator.swift */; };
 		77813EECDCF00ED29823BA03 /* DriveHistoryFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 993EB05B6669D0DBC46FAA42 /* DriveHistoryFeatureTests.swift */; };
 		778B16238C189A7458924B6B /* CrownHuntStatsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55BAB412E19A0A74C3C2DAC /* CrownHuntStatsCoordinatorTests.swift */; };
 		796D4208F306EAFA0B940C3E /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = DC7648C422455BCE5292D6D9 /* FirebaseAppCheck */; };
@@ -271,6 +272,7 @@
 		93D8327640479E52ED05A344 /* OnboardingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B89663DBE394C55F4F956DC /* OnboardingScreen.swift */; };
 		93E1C5BD9F27DEE79C995D99 /* InAppNavigationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679E0852DECCA69DC65B6C97 /* InAppNavigationScreen.swift */; };
 		93E6DAFE79F0203DBFB3C12D /* GroupDriveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03086898EF9A4C5C8962F4EA /* GroupDriveCoordinator.swift */; };
+		94943EF14F2F9965E4076185 /* ConvoyEndSessionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E9A33AB475ED11092525B3D /* ConvoyEndSessionCoordinatorTests.swift */; };
 		94B224E99B1DDE286A4FDF06 /* KccFunctionsError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CD341A4027796948864A5C /* KccFunctionsError.swift */; };
 		94B41B1A5E246C64CAC9C0A2 /* UserProfileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572CCA23CC0DA96FF2C71ACA /* UserProfileModels.swift */; };
 		96D76C83EDD1A0E685245B23 /* DriveRouteThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F5B67B7B0E1FB8B901CAEEE /* DriveRouteThumbnail.swift */; };
@@ -581,6 +583,7 @@
 		3DD6520A57347F9A43D53A91 /* NearbyWaveControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyWaveControls.swift; sourceTree = "<group>"; };
 		3E779154B4369CD7688C5153 /* CrownHuntHomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntHomeScreen.swift; sourceTree = "<group>"; };
 		3E7AA0EF6560E5A030A2AC96 /* CrownHuntClaimsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntClaimsRepository.swift; sourceTree = "<group>"; };
+		3E9A33AB475ED11092525B3D /* ConvoyEndSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyEndSessionCoordinatorTests.swift; sourceTree = "<group>"; };
 		3EB71A805F62274D65250E5B /* ConvoyReactionModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyReactionModelsTests.swift; sourceTree = "<group>"; };
 		3F1B2F5884AA5746B354DFF9 /* ClubModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubModels.swift; sourceTree = "<group>"; };
 		3FA17CDE68C688BB3DF03B54 /* MembershipScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipScreen.swift; sourceTree = "<group>"; };
@@ -827,6 +830,7 @@
 		C310CC90173A772AE9997E6D /* StubLocationProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubLocationProviderTests.swift; sourceTree = "<group>"; };
 		C3137C1DDC1B111033698002 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
 		C4EA9223DC573C164B3CA268 /* ChannelChatCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelChatCoordinatorTests.swift; sourceTree = "<group>"; };
+		C5A30F339818D864C7BDDE4A /* ConvoyEndSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyEndSessionCoordinator.swift; sourceTree = "<group>"; };
 		C5F6FBBFC2D0767100DF9FB7 /* DriveRecordingJournalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveRecordingJournalTests.swift; sourceTree = "<group>"; };
 		C723CECAC346226F99FA9C76 /* LiveLocationModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationModelsTests.swift; sourceTree = "<group>"; };
 		C741C27727AD13F508F2F932 /* ConvoyManagementRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyManagementRepository.swift; sourceTree = "<group>"; };
@@ -1128,6 +1132,7 @@
 				A64B3B4F425E9706B34B7F7C /* ConvoyCreateRepository.swift */,
 				927D2CC9BD7DE37F49B3D21E /* ConvoyCreateScreen.swift */,
 				DB62262FD1AEE1241B1630D7 /* ConvoyDesignViews.swift */,
+				C5A30F339818D864C7BDDE4A /* ConvoyEndSessionCoordinator.swift */,
 				6E0B74775D39809A502F6D71 /* ConvoyFollowMeCoordinator.swift */,
 				8161D168D30934989C0AE78C /* ConvoyFollowMeRepository.swift */,
 				908A55C9B91BFD5F81706548 /* ConvoyManagementCoordinator.swift */,
@@ -1683,6 +1688,7 @@
 				34DE0674B32B7522E972B970 /* ConvoyCreateCoordinatorTests.swift */,
 				6B44E35601837CE687F19B99 /* ConvoyCreateModelsTests.swift */,
 				66906F6DB393976AEC9C4B6E /* ConvoyDesignTests.swift */,
+				3E9A33AB475ED11092525B3D /* ConvoyEndSessionCoordinatorTests.swift */,
 				2E353AB6F42BBA8A274D432D /* ConvoyManagementCoordinatorTests.swift */,
 				0323E8145E9403B744C5203A /* ConvoyManagementModelsTests.swift */,
 				667567749288390662CCCFDE /* ConvoyReactionCoordinatorTests.swift */,
@@ -2047,6 +2053,7 @@
 				9EC7F972D759EF9807F18A12 /* ConvoyCreateRepository.swift in Sources */,
 				91464A291FE7F68519A5A178 /* ConvoyCreateScreen.swift in Sources */,
 				8B48D92945C7823F7772DF26 /* ConvoyDesignViews.swift in Sources */,
+				76745F20231629AD71AFE449 /* ConvoyEndSessionCoordinator.swift in Sources */,
 				4545B0A53B423BFA71E1D152 /* ConvoyFollowMeCoordinator.swift in Sources */,
 				38B1C94D584B3CF86AC413BC /* ConvoyFollowMeRepository.swift in Sources */,
 				9EC92E0C1F5BF7D0CE5A7C95 /* ConvoyListCoordinator.swift in Sources */,
@@ -2332,6 +2339,7 @@
 				6BBAE19A37A042FE6163233A /* ConvoyCreateCoordinatorTests.swift in Sources */,
 				C979B991064669608C36AA4C /* ConvoyCreateModelsTests.swift in Sources */,
 				72E271521BFC889599231DB3 /* ConvoyDesignTests.swift in Sources */,
+				94943EF14F2F9965E4076185 /* ConvoyEndSessionCoordinatorTests.swift in Sources */,
 				637A0A34BDC8DD05C8B8F59A /* ConvoyManagementCoordinatorTests.swift in Sources */,
 				CB74AD40DF3D54FF1EEFDBC4 /* ConvoyManagementModelsTests.swift in Sources */,
 				3ABBC5529ADE35738A161AF8 /* ConvoyReactionCoordinatorTests.swift in Sources */,

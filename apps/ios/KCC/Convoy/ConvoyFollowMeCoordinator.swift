@@ -22,6 +22,8 @@ final class ConvoyFollowMeCoordinator {
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var staleTask: Task<Void, Never>?
     @ObservationIgnored private var writeTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingPolyline: String?
+    @ObservationIgnored private var writerGeneration: UInt = 0
 
     init(
         repository: ConvoyFollowMeRepository,
@@ -107,13 +109,17 @@ final class ConvoyFollowMeCoordinator {
     }
 
     private func apply(_ nextState: ConvoyFollowMeState?) {
-        let wasLeading = isLeading
+        let activationChanged = state?.leaderUid != nextState?.leaderUid
+            || state?.activationId != nextState?.activationId
+        if activationChanged {
+            resetWriter()
+            publisher.reset()
+        }
         state = nextState
         isLeading = FollowMeTrail.isSelfLeading(
             leaderUid: nextState?.leaderUid,
             selfUid: selfUid
         )
-        if wasLeading, !isLeading { publisher.reset() }
         armStaleRecheckIfNeeded()
         reconcile()
     }
@@ -142,13 +148,31 @@ final class ConvoyFollowMeCoordinator {
                 now: now()
               )
         else { return }
-        // A newer flush contains the complete rolling geometry, so it safely
-        // supersedes a slower best-effort write and keeps teardown cancellable.
-        writeTask?.cancel()
+        pendingPolyline = polyline
+        flushPendingTrail(convoyId: convoyId)
+    }
+
+    /// Keep recording geometry during a slow write, then send the latest full
+    /// snapshot in order. An old SDK request cannot overwrite a newer activation.
+    private func flushPendingTrail(convoyId: String) {
+        guard writeTask == nil, let polyline = pendingPolyline else { return }
+        pendingPolyline = nil
+        let activationId = state?.activationId
+        let generation = writerGeneration
         writeTask = Task { [weak self, repository] in
-            _ = await repository.writeTrail(convoyId: convoyId, polyline: polyline)
-            guard !Task.isCancelled, let self, self.activeConvoyId == convoyId else { return }
+            _ = await repository.writeTrail(convoyId: convoyId, polyline: polyline, activationId: activationId)
+            guard !Task.isCancelled, let self, self.activeConvoyId == convoyId,
+                  self.writerGeneration == generation else { return }
+            self.writeTask = nil
+            self.flushPendingTrail(convoyId: convoyId)
         }
+    }
+
+    private func resetWriter() {
+        writerGeneration &+= 1
+        writeTask?.cancel()
+        writeTask = nil
+        pendingPolyline = nil
     }
 
     private func armStaleRecheckIfNeeded() {
@@ -171,9 +195,8 @@ final class ConvoyFollowMeCoordinator {
     private func cancelTasks() {
         observationTask?.cancel()
         staleTask?.cancel()
-        writeTask?.cancel()
+        resetWriter()
         observationTask = nil
         staleTask = nil
-        writeTask = nil
     }
 }

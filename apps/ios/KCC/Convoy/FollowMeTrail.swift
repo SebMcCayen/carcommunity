@@ -4,12 +4,13 @@ struct ConvoyFollowMeState: Equatable, Sendable {
     let leaderUid: String?
     let polyline: String?
     let updatedAt: Date?
+    var activationId: String? = nil
 }
 
 /// Firebase-free policy and CCRB v1 codec for the shared convoy leader trail.
 enum FollowMeTrail {
     static let windowMeters = 15_000.0
-    static let staleAfter: TimeInterval = 90
+    static let staleAfter: TimeInterval = 240
     static let staleRecheck: Duration = .seconds(30)
     static let writeThrottle: TimeInterval = 4
 

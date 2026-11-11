@@ -115,6 +115,10 @@ final class LiveLocationCoordinator {
     /// observed-session rule (`LiveLocation.isSharing`), not a local flag.
     var isSharing: Bool { LiveLocation.isSharing(session, at: now()) }
 
+    func wasLocallyStopped(sessionId: String) -> Bool {
+        locallyStoppedSessionId == sessionId
+    }
+
     /// Whether the shell should offer the management screen. A disabled flag
     /// hides an idle feature, while an already-active session keeps Stop/Hide
     /// reachable regardless of the current flag value.

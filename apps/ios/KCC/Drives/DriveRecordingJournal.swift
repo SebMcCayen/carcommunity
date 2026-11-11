@@ -76,7 +76,7 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
               let headerData = String(headerLine).data(using: .utf8),
               let header = try? JSONDecoder().decode(Header.self, from: headerData),
               header.version == 1,
-              sessionId == nil || header.sessionId == sessionId
+              sessionId == nil || header.sessionId == sessionId || header.continuationSessionId == sessionId
         else { return nil }
         let points = lines.dropFirst().prefix(DriveRecorder.maximumRoutePoints).compactMap {
             line -> RecordedDrivePoint? in
@@ -105,7 +105,8 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
                 },
                 expiresAt: header.expiresAtMilliseconds.map {
                     Date(timeIntervalSince1970: Double($0) / 1_000)
-                }
+                },
+                continuationSessionId: header.continuationSessionId
             ),
             points: points,
             stoppedAt: header.stoppedAtMilliseconds.map {
@@ -167,7 +168,8 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
             },
             stoppedAtMilliseconds: stoppedAt.map {
                 Int64(($0.timeIntervalSince1970 * 1_000).rounded())
-            }
+            },
+            continuationSessionId: context.continuationSessionId
         )
         return try? JSONEncoder().encode(header)
     }
@@ -209,6 +211,7 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
         let convoyMembers: [Member]
         let expiresAtMilliseconds: Int64?
         let stoppedAtMilliseconds: Int64?
+        let continuationSessionId: String?
     }
 
     private struct Member: Codable {
