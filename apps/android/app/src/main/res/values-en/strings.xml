@@ -2073,6 +2073,10 @@
     <string name="whatsNew_release010Build11SignIn">Improved Apple sign-in error handling and updated privacy policy and terms links.</string>
     <string name="whatsNew_release011Build12Highlight">New iOS version for continued testing.</string>
     <string name="whatsNew_release011Build12Version">The version and build numbers have been updated for the next round of testing.</string>
+    <string name="whatsNew_release012Build13Highlight">Improved navigation, chat, and profile in the iOS app.</string>
+    <string name="whatsNew_release012Build13Navigation">In-app navigation and improved handling of location and live sharing.</string>
+    <string name="whatsNew_release012Build13Chat">Improved chat views and more reliable keyboard handling.</string>
+    <string name="whatsNew_release012Build13Profile">Clearer display names when signing in with Apple and updated Crown Hunt instructions.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>
