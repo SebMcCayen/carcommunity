@@ -87,9 +87,10 @@ final class ConvoyEndSessionCoordinator {
         if shouldStop {
             Task { [weak self, live] in
                 // Never stop an unrelated session which arrived before dispatch.
-                guard live.session?.sessionId == candidate.sessionId else { return }
+                guard let self, !self.stopped,
+                      live.session?.sessionId == candidate.sessionId else { return }
                 let result = await live.stopSharing()
-                if result != .success { self?.commandFailed = true }
+                if !self.stopped, result != .success { self.commandFailed = true }
             }
         }
     }

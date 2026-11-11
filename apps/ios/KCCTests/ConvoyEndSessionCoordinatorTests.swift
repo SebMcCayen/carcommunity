@@ -160,6 +160,19 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
         XCTAssertNotNil(h.recording.state.summary)
     }
 
+    func testQueuedEndCommandCannotRunAfterIdentityTeardown() async {
+        let h = Harness()
+        await h.update(h.autoSession())
+        await wait { h.convoys.hasObserver }
+        h.convoys.emit(h.convoy(.ended))
+        await wait { h.coordinator.presentsChoice }
+        h.coordinator.chooseEnd()
+        h.stop()
+        // Let the queued stop task reach its dispatch fence after teardown.
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(h.liveRepository.stopCount, 0)
+    }
+
     private func wait(_ condition: @MainActor () -> Bool) async {
         let deadline = Date().addingTimeInterval(3)
         while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(1)) }
@@ -230,12 +243,14 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
     private final class Live: LiveLocationRepository, @unchecked Sendable {
         private let lock = NSLock()
         private var continuation: AsyncStream<LiveSessionInfo?>.Continuation?
+        private var stops = 0
+        var stopCount: Int { lock.withLock { stops } }
         var failStart = false
         func startSession(duration: LiveSessionDuration, vehicleId: String?) async throws {
             if failStart { throw KccFunctionsError(code: .unavailable) }
         }
         func updatePosition(_ coordinate: LiveCoordinate) async throws {}
-        func stopSession() async throws {}
+        func stopSession() async throws { lock.withLock { stops += 1 } }
         func hideMeNow() async throws {}
         func currentUserId() -> String? { "me" }
         func ownSessionUpdates(uid: String) -> AsyncStream<LiveSessionInfo?> {
