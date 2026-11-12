@@ -442,6 +442,26 @@ class ConvoyCoordinator(
 
     suspend fun decline(convoyId: String) = respond(convoyId, accept = false)
 
+    /** The exact invitation may be absent from the capped history list. The
+     * response transaction validates membership and competing active convoys. */
+    suspend fun respondToInvitation(convoyId: String, accept: Boolean): Boolean =
+        runRowAction(convoyId) {
+            when (val result = repository.respond(convoyId, accept)) {
+                is ConvoyMutationResult.Failed -> result.error
+                is ConvoyMutationResult.Updated -> {
+                    // Retain a confirmed join even if history refresh is capped or fails.
+                    val previous = statusState.value as? ConvoyListStatus.Loaded
+                    statusState.value = ConvoyListStatus.Loaded(
+                        convoys = listOf(result.convoy) + (previous?.convoys ?: emptyList()).filterNot { it.convoyId == convoyId },
+                        pendingInvites = (previous?.pendingInvites ?: emptyList()).filterNot { it.convoyId == convoyId },
+                        isExhaustive = previous?.isExhaustive ?: false,
+                    )
+                    null
+                }
+            }
+        }
+
+
     private suspend fun respond(convoyId: String, accept: Boolean): Boolean =
         runRowAction(convoyId) { repository.respond(convoyId, accept).errorOrNull() }
 

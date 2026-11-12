@@ -3,6 +3,8 @@
 Both native apps present the compact identity card above visible session controls
 and bottom navigation. The shell owns it across tab changes. It offers **Join**
 and **Decline** using the existing convoy response callable and membership rules.
+The exact invitation is validated by that callable, independently of the capped
+convoy history page; older pending invitations must remain directly actionable.
 Accepting hands off to the map and the existing server-started Live session.
 
 The card has a **30-second monotonic deadline from first presentation**. Repeated

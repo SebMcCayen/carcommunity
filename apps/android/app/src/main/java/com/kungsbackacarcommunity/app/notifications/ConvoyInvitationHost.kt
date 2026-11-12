@@ -104,12 +104,10 @@ internal fun ConvoyInvitationHost(
                 var marked = false
                 var success = false
                 try {
-                    // Refresh membership preconditions before using the existing accept path.
-                    coordinator.load()
                     marked = join && liveShareEnabled && !sharing &&
                         (coordinator.status.value as? ConvoyListStatus.Loaded)?.convoy(invitation.relatedEntityId!!)?.status == ConvoyStatus.Active &&
                         LiveShareStart.request(System.currentTimeMillis(), observedSharing = false)
-                    success = if (join) coordinator.accept(invitation.relatedEntityId!!) else coordinator.decline(invitation.relatedEntityId!!)
+                    success = coordinator.respondToInvitation(invitation.relatedEntityId!!, accept = join)
                     if (success) {
                         presentation = presentation.dismiss(id).update(items, elapsedRealtime(), available)
                         if (marked) { LiveShareStart.settled(System.currentTimeMillis()); marked = false }

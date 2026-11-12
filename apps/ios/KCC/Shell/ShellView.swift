@@ -364,22 +364,10 @@ struct ShellView: View {
         // Shell-owned task survives removal of the timed card.
         invitationAnswerTask = Task { @MainActor in
             defer { invitationBusyID = nil }
-            await coordinator.load()
+            let result = await coordinator.respondToInvitation(convoyId: convoyID, action: join ? .accept : .decline)
             guard !Task.isCancelled, case .signedIn(let currentUid, _) = session.state, currentUid == identity else { return }
-            guard let snapshot = coordinator.snapshot else {
-                invitationErrorID = invitation.id
-                invitationActionError = .generic
-                return
-            }
-            guard snapshot.pendingInvites.contains(where: { $0.convoyId == convoyID }) else {
-                notifications.dismissInvitation(expectedID: invitation.id)
-                return
-            }
-            let joined = await coordinator.respond(convoyId: convoyID, action: join ? .accept : .decline)
-            guard !Task.isCancelled, case .signedIn(let currentUid, _) = session.state, currentUid == identity else { return }
-            let success = join ? joined != nil : (coordinator.actionError == nil
-                && coordinator.snapshot?.pendingInvites.contains(where: { $0.convoyId == convoyID }) == false)
-            if success {
+            if case .updated(let convoy) = result {
+                let joined = join ? convoy : nil
                 notifications.dismissInvitation(expectedID: invitation.id)
                 if let joined {
                     routes = .empty
@@ -387,9 +375,9 @@ struct ShellView: View {
                 }
                 // Inbox bookkeeping must not keep the next invitation's actions busy.
                 Task { await notifications.markRead(notificationId: invitation.id) }
-            } else {
+            } else if case .failed(let error) = result {
                 invitationErrorID = invitation.id
-                invitationActionError = coordinator.actionError ?? .generic
+                invitationActionError = error
             }
         }
     }
