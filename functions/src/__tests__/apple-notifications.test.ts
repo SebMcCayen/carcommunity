@@ -150,6 +150,14 @@ describe('verified Apple renewal state', () => {
 });
 
 describe('Apple webhook orchestration', () => {
+  it('does not revoke an active chain when Apple refunds an older transaction', async () => {
+    const d = deps();
+    vi.mocked(d.verify).mockResolvedValue(
+      notification(1, transaction({ revocationDate: NOW.getTime() })),
+    );
+    expect(await runAppleNotification('signed', d)).toBe(200);
+    expect(d.apply).not.toHaveBeenCalled();
+  });
   it('is inert with the provider off and requests retry', async () => {
     const d = deps();
     vi.mocked(d.config).mockResolvedValue(null);

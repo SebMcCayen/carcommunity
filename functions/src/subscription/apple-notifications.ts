@@ -11,7 +11,11 @@ import {
   rethrowAppleVerificationError,
 } from './apple-store';
 import { appleAppAccountTokenForUid, AppleVerificationError } from './apple-store-core';
-import { appleNotificationState, type AppleSubscriptionState } from './apple-state-core';
+import {
+  appleNotificationState,
+  appleTransactionState,
+  type AppleSubscriptionState,
+} from './apple-state-core';
 import { applyAppleSubscriptionState } from './apple-state';
 import { hashPurchaseToken } from './subscription-core';
 import { PurchaseTokenOwnershipError } from './purchase-token-ownership-core';
@@ -98,12 +102,23 @@ export async function runAppleNotification(
     if (uid === null) return 503;
     if (!(await deps.accountAvailable(uid))) return 200;
     const now = deps.now();
+    const accountToken = appleAppAccountTokenForUid(uid);
+    const transactionState = appleTransactionState(notification.transaction, accountToken, now);
+    // V2 status describes the whole chain; a refund can describe an OLD
+    // transaction while that chain is still active/in grace. Its old dates
+    // cannot establish the current period, so preserve canonical state until a
+    // current transaction/renewal arrives instead of revoking a paying member.
+    if (
+      transactionState.outcome.status === 'revoked' &&
+      [1, 4].includes(notification.status as number)
+    )
+      return 200;
     const state = appleNotificationState(
       notification.transaction,
       notification.renewal,
       notification.status,
       notification.signedDate,
-      appleAppAccountTokenForUid(uid),
+      accountToken,
       now,
     );
     await deps.apply(uid, state, now);

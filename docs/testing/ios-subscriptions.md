@@ -100,6 +100,10 @@ Verify each scenario in sandbox, including the resulting server record and claim
   Supporter upgrade. A device transaction from an old period must not overwrite
   the newer server state. A device JWS for the same period must not erase the
   renewal/refund/grace state delivered by Apple's server.
+  If V2 reports the chain still active/in grace but the enclosed transaction is
+  revoked, the handler preserves canonical state: the refund can concern an
+  older period. A current transaction/renewal must supply the current dates and
+  tier; the handler does not infer these from the refunded period.
 - Disabled/deleted account and a manual/other-provider replacement: notifications
   must not recreate the account or overwrite the replacement entitlement.
 
@@ -139,3 +143,4 @@ delivery, or complete S80 visual/accessibility acceptance.
 - [Troubleshooting sandbox availability and capabilities](https://developer.apple.com/documentation/technotes/tn3186-troubleshooting-in-app-purchases-availability-in-the-sandbox)
 - [StoreKit Test sessions](https://developer.apple.com/documentation/storekittest/sktestsession)
 - [App Store Server Notifications V2 data](https://developer.apple.com/documentation/appstoreservernotifications/data)
+- [Apple's explanation of chain status and older-period refunds](https://developer.apple.com/videos/play/wwdc2023/10141/)

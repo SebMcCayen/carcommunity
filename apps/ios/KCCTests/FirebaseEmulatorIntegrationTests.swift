@@ -121,9 +121,13 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
         for action in ["suspend", "restore"] {
             let reviewedResult = try await adminFunctions.httpsCallable("admin-getAccessTarget").call(["targetUid": "native-member"])
             let reviewed = try XCTUnwrap(reviewedResult.data as? [String: Any])
+            // Decode SDK-owned Any values to immutable Sendable contract types
+            // before replaying the same request across async SDK calls.
+            let reviewedVersion = try XCTUnwrap(reviewed["version"] as? Int)
+            let reviewedBlacklistIDs = try XCTUnwrap(reviewed["blacklistIds"] as? [String])
             let decisionPayload: [String: Any] = ["targetUid": "native-member", "action": action,
-                "expectedActorUid": "native-admin", "expectedVersion": try XCTUnwrap(reviewed["version"]),
-                "expectedBlacklistIds": try XCTUnwrap(reviewed["blacklistIds"]),
+                "expectedActorUid": "native-admin", "expectedVersion": reviewedVersion,
+                "expectedBlacklistIds": reviewedBlacklistIDs,
                 "reason": "Native product-only access", "idempotencyKey": UUID().uuidString]
             _ = try await adminFunctions.httpsCallable("admin-updateAccess").call(decisionPayload)
             _ = try await adminFunctions.httpsCallable("admin-updateAccess").call(decisionPayload)
@@ -144,7 +148,8 @@ final class FirebaseEmulatorIntegrationTests: XCTestCase {
             let target: [String: String] = source == "event" ? ["source": source, "eventId": "native-moderation", "messageId": "native-event-message"] : ["source": source, "messageId": "native-public-message"]
             let evidenceResult = try await adminFunctions.httpsCallable("admin-getPublicModerationCase").call(target)
             let evidence = try XCTUnwrap(evidenceResult.data as? [String: Any])
-            let removal: [String: Any] = ["target": target, "expectedActorUid": "native-admin", "expectedVersion": try XCTUnwrap(evidence["version"]), "action": "remove", "reason": "Native public moderation", "idempotencyKey": UUID().uuidString]
+            let evidenceVersion = try XCTUnwrap(evidence["version"] as? String)
+            let removal: [String: Any] = ["target": target, "expectedActorUid": "native-admin", "expectedVersion": evidenceVersion, "action": "remove", "reason": "Native public moderation", "idempotencyKey": UUID().uuidString]
             _ = try await adminFunctions.httpsCallable("admin-decidePublicModeration").call(removal)
             _ = try await adminFunctions.httpsCallable("admin-decidePublicModeration").call(removal)
         }
