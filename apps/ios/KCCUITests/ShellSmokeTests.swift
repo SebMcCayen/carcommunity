@@ -212,8 +212,7 @@ final class ShellSmokeTests: XCTestCase {
             }
             XCTAssertTrue(input.isHittable)
             XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
-            input.tap()
-            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertTrue(focusComposerKeyboard(in: app), "The composer must open the software keyboard")
             let latest = app.staticTexts["chat.message.text.fixture-39"]
             let dismiss = app.buttons["chat.keyboard.dismiss"]
             XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
@@ -1152,6 +1151,21 @@ final class ShellSmokeTests: XCTestCase {
     private func composerInput(in app: XCUIApplication) -> XCUIElement {
         visibleComposerInput(in: app)
             ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
+    }
+
+    /// Keyboard focus is setup for the viewport assertions below. SwiftUI can
+    /// replace the vertical field's measuring editor during the first tap,
+    /// leaving a hittable but unfocused field at accessibility text sizes.
+    /// Re-resolve once if needed; still require the real software keyboard.
+    private func focusComposerKeyboard(in app: XCUIApplication) -> Bool {
+        for attempt in 0..<2 {
+            guard let editor = visibleComposerInput(in: app) else { break }
+            print("CHAT_COMPOSER_FOCUS attempt=\(attempt) type=\(editor.elementType.rawValue) frame=\(editor.frame)")
+            editor.tap()
+            if app.keyboards.firstMatch.waitForExistence(timeout: 10) { return true }
+        }
+        chatProof(app, name: "chat-composer-keyboard-focus-failure", tree: true)
+        return false
     }
 
     private func assertComposerDraft(_ text: String, present: Bool, in app: XCUIApplication,
