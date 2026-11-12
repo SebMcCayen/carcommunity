@@ -22,6 +22,8 @@
  * which is what makes it track growth.
  */
 
+import { TRAFIKVERKET_QUERY_LIMIT } from '../incidents/trafikverket-core';
+
 // ---------------------------------------------------------------------------
 // Trafikverket import — committed comparison reads + fingerprinted mutations.
 // ---------------------------------------------------------------------------
@@ -30,13 +32,14 @@
  * Parsed/renderable deviations mirrored per import run. A Situation may carry
  * more than one Deviation, so this is intentionally not called "situations".
  *
- * MEASURED 2026-08-01: ~2,775 active Situations nationally (see
- * incidents/trafikverket-core.ts). The query cap is 3,000
- * (TRAFIKVERKET_QUERY_LIMIT) — the modelled ceiling. We cost the measured
- * Earlier production telemetry observed about 4,600 imported deviation docs;
- * that is the comparison-read estimate. The Situation cap remains visible.
+ * MEASURED 2026-11-12: a national query with limit 5,000 returned 3,467
+ * Situations / 6,243 raw deviations. Passing that response through
+ * parseTrafikverketResponse produced 5,310 importable deviations (versus 4,590
+ * from the first 3,000 Situations). Cost the measured imported set, rather than
+ * treating the Situation query cap as a document count. This snapshot is an
+ * estimate for future runs; tune it from importer telemetry as the set changes.
  */
-export const TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN = 4_600;
+export const TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN = 5_310;
 
 /**
  * Conservative estimated share that is new or content-changed in a 30-minute
@@ -62,7 +65,7 @@ export const TRAFIKVERKET_ESTIMATED_DELETES_PER_RUN = Math.ceil(
 );
 
 /** Hard ceiling: the query limit the importer will never exceed in one run. */
-export const TRAFIKVERKET_SITUATIONS_CAP = 3_000;
+export const TRAFIKVERKET_SITUATIONS_CAP = TRAFIKVERKET_QUERY_LIMIT;
 
 // ---------------------------------------------------------------------------
 // Per-member daily usage (the VARIABLE model). Scaled by live member count.

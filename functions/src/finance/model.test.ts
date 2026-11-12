@@ -18,6 +18,7 @@ import {
 } from './assumptions';
 import { SCHEDULED_JOBS, unknownCallables, uncostedCallables } from './inventory';
 import { estimateFinance, resolveMemberCount, type ServiceLine } from './model';
+import { buildTrafikverketRequestBody } from '../incidents/trafikverket-core';
 
 function line(services: ServiceLine[], service: string, driverIncludes: string): ServiceLine {
   const found = services.find((l) => l.service === service && l.driver.includes(driverIncludes));
@@ -84,6 +85,21 @@ describe('estimateFinance — Firestore writes / free tier / Trafikverket', () =
     const readsLarge = line(large.googleCloud.services, 'Cloud Firestore', 'Document reads');
     expect(readsLarge.gross).toBeGreaterThan(reads.gross);
     expect(readsLarge.sekPerMonth).toBeGreaterThan(reads.sekPerMonth);
+  });
+
+  it('separates the Situation query cap from imported deviation reads and storage', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 0 });
+    const cap = est.googleCloud.trafikverketSituationsCap;
+    expect(buildTrafikverketRequestBody('test-key')).toContain(`limit="${cap}"`);
+    const deviations = est.googleCloud.trafikverketImportedDeviationsPerRun;
+    expect(deviations).toBeGreaterThan(cap); // multiple deviations per Situation
+
+    const importer = est.googleCloud.committedJobs.find(
+      (job) => job.id === 'incidents-syncTrafikverket',
+    );
+    expect(importer?.readsPerMonth).toBe(deviations * 48 * DAYS_PER_MONTH);
+    const storage = line(est.googleCloud.services, 'Cloud Firestore', 'Stored data');
+    expect(storage.gross).toBeCloseTo((deviations * 2_000) / 1024 ** 3, 12);
   });
 });
 

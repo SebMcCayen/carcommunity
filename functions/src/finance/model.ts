@@ -680,12 +680,12 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
 }
 
 /**
- * Firestore stored-data estimate (GiB). Incidents (~3k small docs, overwritten
- * each run) plus members' documents. Deliberately a flat, generous whole-app
+ * Firestore stored-data estimate (GiB). Imported deviation documents plus
+ * members' documents. Deliberately a flat, generous whole-app
  * estimate that grows slowly with members rather than a false-precision sum.
  */
 function estimateFirestoreStorageGiB(members: number): number {
-  const incidentsBytes = TRAFIKVERKET_SITUATIONS_CAP * 2_000; // ~2 KB/incident doc
+  const incidentsBytes = TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN * 2_000; // ~2 KB/incident doc
   const perMemberBytes = 200_000; // ~200 KB of docs per member (profile, garage, drives…)
   return (incidentsBytes + members * perMemberBytes) / BYTES_PER_GIB;
 }

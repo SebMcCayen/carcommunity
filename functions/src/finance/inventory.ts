@@ -24,6 +24,8 @@
  * classification is about ACKNOWLEDGEMENT, not a per-callable SEK figure.
  */
 
+import { TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN } from './assumptions';
+
 /** Which Firestore free-tiered metric a scheduled job's per-run work lands on. */
 export interface ScheduledJob {
   /** Deployed function id (group-action), for display. */
@@ -91,7 +93,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     deletesPerRun: 0,
     avgSeconds: 30,
     memoryGiB: 0.25,
-    note: 'Fingerprint sync: scans ~4.6k imported deviations, skips unchanged incident writes, writes one freshness doc, and safely reconciles vanished imports. Tune from created/changed/unchangedSkipped/missingDeleted telemetry.',
+    note: `Fingerprint sync: scans ~${TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN.toLocaleString('en')} imported deviations, skips unchanged incident writes, writes one freshness doc, and safely reconciles vanished imports. Tune from created/changed/unchangedSkipped/missingDeleted telemetry.`,
   },
   {
     id: 'metrics-captureDaily',

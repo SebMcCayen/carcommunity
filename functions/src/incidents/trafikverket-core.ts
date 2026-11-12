@@ -21,20 +21,18 @@ export const TRAFIKVERKET_ENDPOINT = 'https://api.trafikinfo.trafikverket.se/v2/
 /**
  * Max situations pulled per sync.
  *
- * Set to 3000 to capture the FULL national active set. When measured on
- * 2026-08-01 there were ~2,775 active Situations nationally; the previous cap
- * of 500 truncated ~82% of them, and because the response is roadwork-heavy the
- * short-lived incidents that matter most for a live map — accidents, closures —
- * were almost always dropped behind the roadwork flood before they could be
- * imported. 3000 clears that headroom (upstream count sits well under it), so
- * accidents and other short-lived incidents are no longer truncated out.
+ * Measured 2026-11-12: 3,467 active Situations nationally, so the previous
+ * 3,000 cap truncated the response. A 5,000 cap leaves headroom for the current
+ * national set; inspectTrafikverketResponse still withholds reconciliation if
+ * the response reaches this cap. Each Situation may contain multiple
+ * deviations, so this is not a ceiling on imported Firestore documents.
  *
  * The 30-minute national fetch is retained, but the importer now compares a
  * versioned content fingerprint and writes only new/changed deviations plus one
  * freshness metadata document. Mutation batches stay at ≤400 operations (see
  * runTrafikverketSync), below Firestore's 500-write WriteBatch limit.
  */
-export const TRAFIKVERKET_QUERY_LIMIT = 3000;
+export const TRAFIKVERKET_QUERY_LIMIT = 5000;
 
 /** Backend-only sync metadata location shared by the importer/read paths. */
 export const TRAFIKVERKET_SYNC_METADATA_COLLECTION = 'incidentSyncMetadata';

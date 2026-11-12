@@ -216,6 +216,7 @@ describe('trafikverket-core', () => {
     expect(body).toContain('objecttype="Situation"');
     expect(body).toContain('namespace="road.trafficinfo"'); // required for Situation
     expect(body).toContain('schemaversion="1.6"'); // 1.5 errors + imports nothing
+    expect(body).toContain('limit="5000"');
     expect(body).toContain('<FILTER></FILTER>'); // mandatory but empty
     expect(body).not.toContain('ManagedCause'); // old over-filter removed
     expect(body).toContain('authenticationkey="SECRET&amp;KEY"'); // XML-escaped
@@ -451,6 +452,24 @@ describe('trafikverket-core', () => {
     expect(importedIncidentDocId('D1')).toBe('tv_D1');
     // Same input → same id (idempotent upsert).
     expect(importedIncidentDocId('X')).toBe(importedIncidentDocId('X'));
+  });
+
+  it('withholds reconciliation at the national query cap', () => {
+    const situations = Array.from({ length: 5_000 }, (_, i) => ({
+      Id: `S${i}`,
+      Deviation: [{ Id: `D${i}` }],
+    }));
+    const belowCap = inspectTrafikverketResponse({
+      RESPONSE: { RESULT: [{ Situation: situations.slice(0, -1) }] },
+    });
+    expect(belowCap.situationsReceived).toBe(4_999);
+    expect(belowCap.reconciliationSkipReason).toBeNull();
+
+    const atCap = inspectTrafikverketResponse({
+      RESPONSE: { RESULT: [{ Situation: situations }] },
+    });
+    expect(atCap.situationsReceived).toBe(5_000);
+    expect(atCap.reconciliationSkipReason).toBe('query-limit-reached');
   });
 
   it('marks only structurally complete, below-limit responses safe to reconcile', () => {
