@@ -60,7 +60,8 @@ import { PurchaseTokenOwnershipError } from './purchase-token-ownership-core';
 import { isSubscriptionProviderEnabled } from './provider-config';
 import { getAppleSubscriptionProviderConfig } from './provider-config';
 import { AppleVerificationError, appleAppAccountTokenForUid } from './apple-store-core';
-import { AppleSignedDataError, verifyAppleTransaction } from './apple-store';
+import { AppleSignedDataError, verifyAppleTransactionState } from './apple-store';
+import { applyAppleSubscriptionState } from './apple-state';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -108,38 +109,22 @@ export const verify = onCall(
           'Apple transaction verification is not configured correctly.',
         );
       }
-      let appleReservationId: string | null = null;
-      let appleTokenHash: string | null = null;
       try {
         const verificationNow = new Date();
-        const outcome = await verifyAppleTransaction(
+        const state = await verifyAppleTransactionState(
           parsed.input.purchaseToken,
           appleAppAccountTokenForUid(actor.uid),
           config,
           verificationNow,
         );
-        // The signed JWS changes on renewal. Ownership therefore uses Apple's
-        // verified, stable subscription-chain identifier, never the raw JWS.
-        appleTokenHash = hashPurchaseToken(outcome.originalTransactionId);
-        appleReservationId = await reservePurchaseVerification(
-          appleTokenHash,
-          { uid: actor.uid, productId: outcome.productId },
-          verificationNow,
-        );
-        await applyEntitlement({
-          userId: actor.uid,
-          platform: 'apple',
-          status: outcome.status,
-          entitlement: outcome.entitlement,
-          tier: outcome.tier,
-          purchaseTokenHash: appleTokenHash,
-          startsAt: outcome.startsAt,
-          expiresAt: outcome.expiresAt,
-        });
+        const outcome = await applyAppleSubscriptionState(actor.uid, state, verificationNow);
+        if (outcome === null) {
+          throw new HttpsError('failed-precondition', 'Apple purchase is no longer current.');
+        }
         return {
           entitlement: outcome.entitlement,
           status: outcome.status,
-          tier: outcome.tier,
+          tier: outcome.tier ?? 'community',
         };
       } catch (error) {
         if (error instanceof AppleVerificationError || error instanceof AppleSignedDataError) {
@@ -168,16 +153,9 @@ export const verify = onCall(
             'Apple purchase conflicts with active access.',
           );
         }
+        if (error instanceof HttpsError) throw error;
         logger.error('Apple subscription verification failed unexpectedly', { uid: actor.uid });
         throw new HttpsError('internal', 'Apple verification failed.');
-      } finally {
-        if (appleReservationId !== null && appleTokenHash !== null) {
-          try {
-            await releasePurchaseVerification(actor.uid, appleTokenHash, appleReservationId);
-          } catch {
-            logger.warn('Apple verification lease release failed', { uid: actor.uid });
-          }
-        }
       }
     }
 

@@ -796,7 +796,8 @@ tier as lifecycle history, while `expiresAt` bounds the already-paid period.
 
 ### `subscriptionPurchaseTokens` — global provider-token replay lock
 
-Document ID: SHA-256 of the Google Play purchase token. Backend read/write only;
+Document ID: SHA-256 of the Google Play purchase token or Apple's verified
+`originalTransactionId` (stable subscription chain). Backend read/write only;
 clients (including admin clients) have no access.
 
 | Field       | Type        | Notes                                                      |
@@ -826,6 +827,27 @@ expires after two minutes if the function crashes.
 | `reservationId`     | `string`    | Unique invocation holder used for safe release      |
 | `leaseExpiresAt`    | `Timestamp` | Crash-safe upper bound for this verification holder |
 | `updatedAt`         | `Timestamp` | Last reservation write                              |
+
+### `subscriptionAppleEvents` — Apple lifecycle ordering
+
+Document ID: SHA-256 of the verified Apple `originalTransactionId`. Backend only;
+all client reads/writes (including admin clients) are denied. The Apple callable
+and V2 webhook serialize through `subscriptionPurchaseVerifications/{uid}` and
+write this marker in the same batch as the entitlement records.
+
+| Field                | Type        | Notes                                            |
+| -------------------- | ----------- | ------------------------------------------------ |
+| `uid`                | `string`    | Owning Firebase UID; canonical erasure query key |
+| `purchaseDateMillis` | `number`    | Verified purchase time for the applied period    |
+| `signedDateMillis`   | `number`    | Verified JWS/envelope signing time               |
+| `source`             | `string`    | `transaction` or `notification`                  |
+| `updatedAt`          | `Timestamp` | Server timestamp                                 |
+
+Later purchase periods supersede earlier periods. Within a period, signed
+server renewal information takes precedence over device-only transaction data;
+within a source, later signing times supersede earlier ones. Raw transaction
+IDs, signed payloads and account tokens are never stored. Markers are deleted
+by the bounded account-erasure query on `uid`; no composite index is needed.
 
 ---
 

@@ -96,6 +96,11 @@ simulated location are needed to check the user location indicator.
 
 ## Building and testing (CLI)
 
+Subscription tests can run locally before App Store payment setup. See
+[iOS subscription testing](../../docs/testing/ios-subscriptions.md) for the
+KCCStoreKit scheme, automated StoreKit tests, sandbox setup and Apple notification
+acceptance checklist.
+
 ```bash
 # From apps/ios — build for the simulator
 xcodebuild -project KCC.xcodeproj -scheme KCC \

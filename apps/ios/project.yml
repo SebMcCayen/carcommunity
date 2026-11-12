@@ -218,6 +218,18 @@ targets:
 # Release UI validation must not compile Debug-only unit-test instrumentation.
 # The normal KCC scheme keeps its full Debug unit + UI suite.
 schemes:
+  # Local product catalogue only. The normal KCC/Release schemes keep using Apple sandbox/production.
+  KCCStoreKit:
+    build:
+      targets:
+        KCC: all
+    run:
+      config: Debug
+      storeKitConfiguration: KCCTests/Resources/Subscriptions.storekit
+    test:
+      config: Debug
+      targets:
+        - KCCTests
   KCCReleaseSmoke:
     build:
       targets:

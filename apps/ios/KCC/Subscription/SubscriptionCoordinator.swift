@@ -41,8 +41,12 @@ final class SubscriptionCoordinator {
         }
         guard !status.isBusy else { return }
         status = .loading
+        // A temporarily unavailable catalogue must not prevent restore of an
+        // already-purchased entitlement. Never leave stale prices actionable.
+        products = []
         do {
-            products = try await store.products()
+            products = (try? await store.products()) ?? []
+            try Task.checkCancellation()
             let entitlements = await store.currentEntitlements()
             guard let preferred = Self.preferred(entitlements) else {
                 status = products.isEmpty ? .failed(.unavailable) : .ready

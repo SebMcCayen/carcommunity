@@ -1,7 +1,9 @@
 import SwiftUI
+import StoreKit
 
 struct MembershipScreen: View {
-    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var showingSubscriptions = false
 
     let access: AccountAccess
     let coordinator: SubscriptionCoordinator
@@ -33,8 +35,7 @@ struct MembershipScreen: View {
 
                 if access.activeMember || coordinator.currentTier != nil {
                     Button {
-                        guard let url = URL(string: "https://apps.apple.com/account/subscriptions") else { return }
-                        openURL(url)
+                        showingSubscriptions = true
                     } label: { Text("subscription.manageAction").frame(maxWidth: .infinity, minHeight: 48) }
                     .buttonStyle(.bordered)
                     Text("subscription.manageBody")
@@ -55,6 +56,14 @@ struct MembershipScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("membership.screen")
         .task { await coordinator.start() }
+        .refreshable { await coordinator.reloadAndReconcile() }
+        .manageSubscriptionsSheet(isPresented: $showingSubscriptions)
+        .onChange(of: showingSubscriptions) { _, presented in
+            if !presented { Task { await coordinator.reloadAndReconcile() } }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await coordinator.reloadAndReconcile() } }
+        }
         .onChange(of: access.activeMember) { _, _ in
             Task { await coordinator.reloadAndReconcile() }
         }

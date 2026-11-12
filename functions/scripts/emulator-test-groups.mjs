@@ -91,6 +91,7 @@ export const GROUPS = [
       'drives',
       'garage',
       'subscription-expiry',
+      'apple-state',
       'supporter-badge',
     ],
   },

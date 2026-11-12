@@ -414,14 +414,17 @@ Route-open `queryPurchasesAsync` reconciliation is intentionally included now
 for interrupted callbacks, renewal visibility, and reinstall. It is not a
 replacement for RTDN or multi-token effective-tier recomputation.
 
-Keep `apple.enabled` **false for public rollout** until App Store Server
-Notifications V2 has been configured and its signed notifications are handled
-server-side for renewals, refunds, revocations and billing-state changes. The
-current iOS app reconciles verified current entitlements when Membership opens,
-and the expiry sweep removes stale access, but those are recovery paths rather
-than real-time lifecycle delivery. Before enabling production, exercise first
-purchase, restore/reinstall, upgrade, downgrade, cancellation, expiry and
-cross-account replay in the StoreKit sandbox.
+Keep `apple.enabled` **false for public rollout** until the implemented
+`subscription-handleAppleNotification` HTTPS endpoint is deployed, configured as
+the App Store Server Notifications **V2** Sandbox/Production Server URL, and
+validated for renewals, refunds, revocations and billing-state changes. The
+handler verifies the envelope and nested JWS, shares the callable's per-account
+lease, and commits an ordering watermark with entitlement records. The iOS app
+also reconciles when Membership opens or returns from Apple's management sheet;
+expiry/representation sweeps remain recovery paths. Follow the
+[local and sandbox subscription test guide](testing/ios-subscriptions.md) before
+enabling production, including first purchase, restore/reinstall, upgrade,
+downgrade, cancellation, grace/retry, expiry and cross-account replay.
 
 ## Android Releases and the In-App Update Prompt
 

@@ -127,6 +127,7 @@ export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{
   // use the existing bounded/retryable query purge, never a Driver-only hook.
   { collection: 'clubCalendarSubscriptions', userField: 'uid' },
   { collection: 'clubCalendarTokens', userField: 'uid' },
+  { collection: 'subscriptionAppleEvents', userField: 'uid' },
   // Backend-only per-month leaderboard buckets, one document per (month, member)
   // at `memberMonthlyStats/{YYYY-MM}__{uid}` (functions/src/leaderboard). Each
   // bucket carries a `uid` field precisely so this owned-query purge reaches

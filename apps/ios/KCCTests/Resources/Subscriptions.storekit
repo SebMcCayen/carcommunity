@@ -1,0 +1,87 @@
+{
+  "identifier": "CarCommunitySubscriptions",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_failTransactionsEnabled": false,
+    "_locale": "sv_SE",
+    "_storefront": "SWE",
+    "_timeRate": 0
+  },
+  "subscriptionGroups": [
+    {
+      "id": "carcommunity_membership",
+      "localizations": [
+        {
+          "description": "Medlemskap",
+          "displayName": "CarCommunity",
+          "locale": "sv"
+        },
+        {
+          "description": "Membership",
+          "displayName": "CarCommunity",
+          "locale": "en_US"
+        }
+      ],
+      "name": "CarCommunity Membership",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "39.0",
+          "familyShareable": false,
+          "groupNumber": 2,
+          "internalID": "plus_monthly_test",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Plus-medlemskap per månad",
+              "displayName": "Plus",
+              "locale": "sv"
+            },
+            {
+              "description": "Monthly Plus membership",
+              "displayName": "Plus",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "plus_monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Plus Monthly (Local Test)",
+          "subscriptionGroupID": "carcommunity_membership",
+          "type": "RecurringSubscription"
+        },
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "119.0",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "supporter_monthly_test",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Supporter-medlemskap per månad",
+              "displayName": "Supporter",
+              "locale": "sv"
+            },
+            {
+              "description": "Monthly Supporter membership",
+              "displayName": "Supporter",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "supporter_monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Supporter Monthly (Local Test)",
+          "subscriptionGroupID": "carcommunity_membership",
+          "type": "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}
