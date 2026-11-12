@@ -98,6 +98,7 @@ struct LiveSessionStopContent: View {
 
             Button(role: .destructive, action: onStop) {
                 Label("liveLocation.stop", systemImage: "stop.fill")
+                    .foregroundStyle(KccPalette.warmIvory)
                     .frame(maxWidth: .infinity, minHeight: 48)
             }
             .buttonStyle(.borderedProminent)
@@ -105,7 +106,6 @@ struct LiveSessionStopContent: View {
             .disabled(busy)
             .accessibilityIdentifier("map.session.stop")
         }
-        .accessibilityIdentifier("map.session.stopPanel")
     }
 }
 

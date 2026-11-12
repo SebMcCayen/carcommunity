@@ -593,7 +593,11 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts[language == "sv" ? "Liveplats" : "Live location"].exists)
         XCTAssertTrue(app.staticTexts[language == "sv" ? "Liveposition aktiv" : "Live location active"].exists)
         let stop = app.buttons["map.session.stop"]
+        let stopExists = stop.waitForExistence(timeout: 5)
+        if !stopExists { chatProof(app, name: "live-stop-button-missing-\(language)", tree: true) }
+        XCTAssertTrue(stopExists, "The Stop button must retain its own accessibility identifier")
         reveal(stop, in: app.scrollViews["map.reading.content"], minimumHeight: 48)
+        if !stop.isHittable { chatProof(app, name: "live-stop-button-obscured-\(language)", tree: true) }
         XCTAssertTrue(stop.isHittable)
         XCTAssertEqual(stop.label, language == "sv" ? "Stoppa delning" : "Stop sharing")
         XCTAssertGreaterThanOrEqual(stop.frame.height, 48)
