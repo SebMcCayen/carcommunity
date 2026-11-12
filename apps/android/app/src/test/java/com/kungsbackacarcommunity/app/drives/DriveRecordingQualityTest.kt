@@ -41,6 +41,29 @@ class DriveRecordingQualityTest {
     }
 
     @Test
+    fun `repeated GPS excursions cannot discard most of a healthy 57 kilometre drive`() {
+        val quality = DriveRecordingQuality()
+        // Synthetic straight highway travel: 57 km at 120 km/h, 5 s samples.
+        // Repeated lateral excursions in the middle poison both adjacent raw
+        // segments. Clean fixes on either side still describe the whole drive.
+        val samples = (0..342).map { index ->
+            sample(
+                metres = 57_000.0 * index / 342,
+                elapsed = 1_000L + index * 5_000L,
+                longitude = if (index in 48..294 && index % 2 == 0) 12.025 else 12.0,
+            )
+        }
+        val rawPoints = samples.map { RecordedPoint(it.latitude, it.longitude, it.timestampMs) }
+        val accepted = samples.mapNotNull { quality.process(it, true) }
+        assertEquals(15_666.6667, DriveSummary.totalDistanceMetres(rawPoints), 0.01)
+        assertEquals(57_000.0, DriveSummary.totalDistanceMetres(accepted), 0.01)
+        assertEquals(rawPoints.first(), accepted.first())
+        assertEquals(rawPoints.last(), accepted.last())
+        assertEquals(124, quality.diagnostics.rejectedSpeed)
+        assertEquals(samples.size - 124, quality.diagnostics.acceptedPoints)
+    }
+
+    @Test
     fun `coarse stale invalid and duplicate samples are counted without poisoning anchor`() {
         val quality = DriveRecordingQuality()
         assertNotNull(quality.process(sample(), true))

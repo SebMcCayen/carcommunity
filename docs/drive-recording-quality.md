@@ -40,6 +40,12 @@ has no stationary/cadence suppression after its location request, so those two
 counters are zero there. These counts distinguish intentional suppression from
 faults; they do not measure how many real kilometres were lost.
 
+Reception gaps measure silence **between consecutive observed raw deliveries**
+within one continuous run. A final outage with no later delivery does not close
+a gap: trailing silence between the last delivery and Stop is not measured.
+Accepted-point gaps are a separate backend calculation and cannot reconstruct
+a missing path.
+
 Counters are checkpointed in the app-private recording journal and frozen with
 the save request for retries. Legacy journals still restore; their previous
 rejection history is unknown, so only their restored point count is seeded.
