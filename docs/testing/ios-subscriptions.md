@@ -136,6 +136,23 @@ Automated StoreKit and emulator results establish the scenarios they exercise;
 they do not establish a configured-device App Store purchase, Apple notification
 delivery, or complete S80 visual/accessibility acceptance.
 
+## Validation record — 2026-11-12
+
+- Backend: 2,733 unit tests pass; build, typecheck and lint pass. Seven local
+  Auth/Firestore integration tests pass, including ownership/state ordering,
+  claim repair, refund/cancellation/grace and client denial of internal markers.
+- iOS: app and unit/UI test bundles compile with Xcode 26.3. SDK test refund IDs
+  use the current unsigned type; existing emulator replay payloads decode typed
+  contract values to satisfy Swift 6 transfer checking.
+- StoreKit runtime acceptance is **not verified** locally. The 6 GB test machine's
+  CoreSimulator stalled before the test host launched on iOS 26.3 and iOS 18.5,
+  including after service restart. The stalled runs were stopped. Run the focused
+  tests above on a functioning simulator/device and complete iOS CI before
+  claiming these scenarios pass.
+- Real Apple-signed sandbox purchases and notification delivery await the App
+  Store setup above. No production deployment or provider/configuration change
+  was performed.
+
 ## Apple references
 
 - [Testing throughout development](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox)
