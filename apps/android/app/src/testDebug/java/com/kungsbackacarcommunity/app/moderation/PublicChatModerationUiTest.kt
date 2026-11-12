@@ -61,10 +61,12 @@ class PublicChatModerationUiTest {
         compose.onNodeWithTag("chat_admin_remove").performScrollTo().performClick()
         compose.onNodeWithTag("chat_admin_editor").assertExists()
         compose.runOnIdle { admin.value = false; repo.result = null }
+        compose.waitForIdle()
         compose.onNodeWithTag("chat_admin_editor").assertDoesNotExist()
         compose.onNodeWithTag("chat_admin_remove").assertDoesNotExist()
         compose.runOnIdle { admin.value = true }
-        compose.waitUntil { repo.contextCalls == 2 }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("Role regain must request a fresh capability", 2, repo.contextCalls) }
         compose.onNodeWithTag("chat_admin_remove").assertDoesNotExist()
         compose.onNodeWithTag("chat_admin_pause").assertDoesNotExist()
     }
@@ -91,7 +93,8 @@ class PublicChatModerationUiTest {
         compose.waitUntil { repo.contextCalls == 1 }
         compose.onNodeWithTag("chat_admin_remove").assertExists()
         compose.runOnIdle { uid.value = "different-account" }
-        compose.waitUntil { repo.contextCalls == 2 }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("Account change must request a fresh capability", 2, repo.contextCalls) }
         compose.onNodeWithTag("chat_admin_remove").assertDoesNotExist()
         compose.onNodeWithTag("chat_admin_pause").assertDoesNotExist()
     }

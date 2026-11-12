@@ -96,7 +96,7 @@ internal fun ModeratedMessageActionsSheet(
     var action by remember(target, session.uid) { mutableStateOf<ChatAdminAction?>(null) }
     var rejected by remember(target, session.uid) { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
-    LaunchedEffect(target, session.adminCandidate, session.repository, refresh) {
+    LaunchedEffect(target, session.uid, session.adminCandidate, session.repository, refresh) {
         context = null
         if (!session.adminCandidate) { context = null; action = null; return@LaunchedEffect }
         try {
