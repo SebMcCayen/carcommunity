@@ -290,6 +290,7 @@ struct ChannelChatScreen: View {
 /// inside the native vertical field instead of displacing the action offscreen.
 struct ChannelComposer: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @FocusState private var editorFocused: Bool
     @Binding var draft: String
     let canSend: Bool
     var onQuickEmoji: ((String) -> Void)? = nil
@@ -308,6 +309,7 @@ struct ChannelComposer: View {
     private var editor: some View {
         HStack(spacing: KccSpacing.s2) {
             TextField("chat.inputPlaceholder", text: $draft, axis: .vertical)
+                .focused($editorFocused)
                 .textFieldStyle(.plain)
                 .font(.body)
                 .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 1 : 2))
@@ -319,6 +321,11 @@ struct ChannelComposer: View {
                     RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border)
                         .allowsHitTesting(false)
                 }
+                // The padded 48pt surface is the tap target, including at
+                // accessibility sizes where UIKit's editor is narrower than
+                // SwiftUI's accessibility frame. Preserve native selection.
+                .contentShape(Rectangle())
+                .simultaneousGesture(TapGesture().onEnded { editorFocused = true })
                 .accessibilityIdentifier("chat.composer.input")
             Button(action: onSend) {
                 if dynamicTypeSize.isAccessibilitySize {
@@ -334,7 +341,7 @@ struct ChannelComposer: View {
             .accessibilityLabel(Text("chat.sendButton"))
             .accessibilityIdentifier("chat.composer.send")
             .disabled(!canSend)
-            ChatKeyboardDismissButton()
+            ChatKeyboardDismissButton(onDismiss: { editorFocused = false })
         }
         .padding(KccSpacing.s2)
     }

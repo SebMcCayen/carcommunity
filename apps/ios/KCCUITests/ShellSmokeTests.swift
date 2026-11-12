@@ -270,7 +270,10 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertFalse(app.keyboards.firstMatch.exists)
             assertComposerDraft("Fixture reply", present: true, in: app)
             XCTAssertTrue(app.buttons["chatHub.source.chats"].exists)
-            composerInput(in: app).tap()
+            // The padded visible field must focus too, not only the native
+            // glyph area. UIKit's AX activation point can land in this padding
+            // after a vertical editor is relaid out at accessibility sizes.
+            composerInput(in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.1)).tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
             send.tap()
             let reply = app.staticTexts["Fixture reply"]
