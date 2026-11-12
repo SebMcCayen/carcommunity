@@ -30,7 +30,7 @@ A selected traffic/weather camera opens its detail view and requests
 `roadCameras-photo` by opaque camera ID. Fixed speed cameras have no public
 photograph. No image download is triggered by showing map markers, panning,
 prefetching, or leaving a camera selected in the background. There is no automatic
-image refresh. Devices cache up to 20 photos /4 MiB for5 minutes; repeated opens
+image refresh. Devices cache up to 20 photos / 4 MiB for 5 minutes; repeated opens
 within that time reuse the local image. HTTP Last-Modified is shown as image
 update time when available; the daily catalog PhotoTime is never presented as the
 timestamp of a freshly fetched image.

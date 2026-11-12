@@ -258,7 +258,7 @@ private final class CameraStub: RoadCameraRepository {
     }
 
     private var samplePhoto: RoadCameraPhoto {
-        let pixel = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ1kAAAAASUVORK5CYII=")!
+        let pixel = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgKG0CAAFwAPgPVcyXAAAAAElFTkSuQmCC")!
         return RoadCameraPhoto(data: pixel, contentType: "image/png", photoTime: "2026-11-12T12:00:00Z")
     }
 }
