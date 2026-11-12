@@ -114,7 +114,10 @@ internal fun ConvoyInvitationHost(
                         presentation = presentation.dismiss(id).update(items, elapsedRealtime(), available)
                         if (marked) { LiveShareStart.settled(System.currentTimeMillis()); marked = false }
                         if (join) onJoined(invitation.relatedEntityId!!)
-                        try { repository.markRead(id) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
+                        // The read stamp is best-effort; it must not lock the next queued card.
+                        scope.launch {
+                            try { repository.markRead(id) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
+                        }
                     } else { errorId = id; actionFailed = true }
                 } finally {
                     if (marked) { if (success) LiveShareStart.settled(System.currentTimeMillis()) else LiveShareStart.failed() }

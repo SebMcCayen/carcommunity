@@ -385,7 +385,8 @@ struct ShellView: View {
                     routes = .empty
                     completeConvoyJoin(joined)
                 }
-                await notifications.markRead(notificationId: invitation.id)
+                // Inbox bookkeeping must not keep the next invitation's actions busy.
+                Task { await notifications.markRead(notificationId: invitation.id) }
             } else {
                 invitationErrorID = invitation.id
                 invitationActionError = coordinator.actionError ?? .generic
