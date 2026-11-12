@@ -185,7 +185,9 @@ struct ShellView: View {
         )
     }
 
-    var body: some View {
+    // Bound the modifier chains just like the presentation layers below. This
+    // keeps Swift's type checker within budget as shell lifecycle hooks grow.
+    private var shellWithFeatureTasks: AnyView {
         shellWithNavigation
             .modifier(ChatKeyboardObserver(isPresented: $chatKeyboardPresented))
             .environment(\.chatKeyboardPresented, chatKeyboardPresented)
@@ -202,6 +204,11 @@ struct ShellView: View {
                 guard signedInUid != nil else { return }
                 await appUpdateCoordinator.checkOnce()
             }
+            .eraseToAnyView()
+    }
+
+    private var shellWithSessionLifecycle: AnyView {
+        shellWithFeatureTasks
             .task(id: initialMapPermissionEligible) {
                 guard initialMapPermissionEligible else { return }
                 if locationPermissionCoordinator?.requestInitialMapAccess() == true {
@@ -226,6 +233,11 @@ struct ShellView: View {
                       initial: true) { _, keepAwake in
                 UIApplication.shared.isIdleTimerDisabled = keepAwake
             }
+            .eraseToAnyView()
+    }
+
+    var body: some View {
+        shellWithSessionLifecycle
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
                 if !enabled {
@@ -273,21 +285,23 @@ struct ShellView: View {
             .task(id: convoyFollowMeSubscriptionKey) {
                 syncFollowMe()
             }
-            .onDisappear {
-                UIApplication.shared.isIdleTimerDisabled = false
-                // RootView removes the entire shell on sign-out or when a live
-                // account update becomes restricted. Stop exact-location and
-                // background drive collection synchronously during that swap.
-                liveLocationCoordinator?.standDownForRestrictedAccess()
-                convoyEndSessionCoordinator?.stop()
-                driveRecordingCoordinator?.reset()
-                invitationAnswerTask?.cancel()
-                invitationAnswerTask = nil
-                notificationsCoordinator?.stopObserving()
-                billboardsCoordinator?.stop()
-                clubsCoordinator?.stop()
-                mapSurface.setBillboardMarkers([])
-            }
+            .onDisappear(perform: tearDownShell)
+    }
+
+    private func tearDownShell() {
+        UIApplication.shared.isIdleTimerDisabled = false
+        // RootView removes the entire shell on sign-out or when a live
+        // account update becomes restricted. Stop exact-location and
+        // background drive collection synchronously during that swap.
+        liveLocationCoordinator?.standDownForRestrictedAccess()
+        convoyEndSessionCoordinator?.stop()
+        driveRecordingCoordinator?.reset()
+        invitationAnswerTask?.cancel()
+        invitationAnswerTask = nil
+        notificationsCoordinator?.stopObserving()
+        billboardsCoordinator?.stop()
+        clubsCoordinator?.stop()
+        mapSurface.setBillboardMarkers([])
     }
 
     /// A retained sibling overlay, rather than a modal presentation: covering
