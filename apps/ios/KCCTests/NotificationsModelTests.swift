@@ -1,4 +1,6 @@
 import XCTest
+import SwiftUI
+import UIKit
 
 @testable import KCC
 
@@ -313,5 +315,40 @@ final class ConvoyInvitationPresentationTests: XCTestCase {
         ])
         XCTAssertEqual(decoded?.inviterDisplayName, "Linnea Andersson")
         XCTAssertEqual(decoded?.inviterAvatarPath, "profileImages/member/avatar")
+    }
+}
+
+
+extension ConvoyInvitationPresentationTests {
+    @MainActor
+    func testNativeCardSnapshotsInLightDarkAndLargeText() {
+        for (name, style, size) in [
+            ("light", UIUserInterfaceStyle.light, DynamicTypeSize.large),
+            ("dark", UIUserInterfaceStyle.dark, DynamicTypeSize.large),
+            ("large-text", UIUserInterfaceStyle.light, DynamicTypeSize.accessibility3)
+        ] {
+            let card = ConvoyInvitationCard(invitation: invite("snapshot"),
+                deadline: ProcessInfo.processInfo.systemUptime + 30, busy: false, error: nil,
+                onJoin: {}, onDecline: {})
+            let controller = UIHostingController(rootView:
+                VStack { Spacer(minLength: 0); card.padding(KccSpacing.s4) }
+                    .background(KccTheme.page).environment(\.dynamicTypeSize, size))
+            controller.overrideUserInterfaceStyle = style
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            window.rootViewController = controller
+            window.makeKeyAndVisible()
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            XCTAssertEqual(image.size.width, 390)
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "convoy-invitation-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            window.isHidden = true
+        }
     }
 }
