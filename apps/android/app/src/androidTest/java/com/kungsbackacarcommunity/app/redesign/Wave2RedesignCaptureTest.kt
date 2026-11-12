@@ -133,14 +133,6 @@ class Wave2RedesignCaptureTest {
                             Box(Modifier.weight(1f).testTag("wave2-case-$selected")) {
                                 key(selected) {
                                     when (selected) {
-                                        "drive-finish-saving", "drive-finish-saved" ->
-                                            com.kungsbackacarcommunity.app.drives.DriveSavedDialog(
-                                                message = androidx.compose.ui.res.stringResource(com.kungsbackacarcommunity.app.R.string.savedDrives_savedDialogMessage),
-                                                confirmLabel = androidx.compose.ui.res.stringResource(com.kungsbackacarcommunity.app.R.string.savedDrives_savedDialogOk),
-                                                historyLabel = androidx.compose.ui.res.stringResource(com.kungsbackacarcommunity.app.R.string.savedDrives_savedDialogHistory),
-                                                onDismiss = {}, onHistory = {},
-                                                isSaved = selected == "drive-finish-saved",
-                                            )
                                         "map-place", "map-live" -> Wave2MapPreview(selected)
                                         "chat", "driver", "driver-detail" -> Wave2ChatPreview(selected)
                                         "events", "event-detail", "event-detail-paid", "event-detail-creator",

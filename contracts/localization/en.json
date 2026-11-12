@@ -119,6 +119,7 @@
     "duration4h": "4 hours",
     "start": "Share my location",
     "stop": "Stop sharing",
+    "stopSavesToHistory": "When you stop sharing, your drive is automatically saved to your history.",
     "hideNow": "Hide me now",
     "lastUpdated": "Last updated",
     "whoCanSeeTitle": "Who can see me?",

@@ -104,6 +104,7 @@
     <string name="liveLocation_duration4h">4 hours</string>
     <string name="liveLocation_start">Share my location</string>
     <string name="liveLocation_stop">Stop sharing</string>
+    <string name="liveLocation_stopSavesToHistory">When you stop sharing, your drive is automatically saved to your history.</string>
     <string name="liveLocation_hideNow">Hide me now</string>
     <string name="liveLocation_lastUpdated">Last updated</string>
     <string name="liveLocation_whoCanSeeTitle">Who can see me?</string>

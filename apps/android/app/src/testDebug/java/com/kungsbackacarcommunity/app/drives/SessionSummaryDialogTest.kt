@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -67,6 +68,39 @@ class SessionSummaryDialogTest {
     @Test
     fun keptPendingSave_showsNoPrompt() {
         setDialog(state = RecordingState.KeptPendingSave(elapsedMillis = 60_000L))
+        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun normalSaveAndRetryProgressStaySilentUntilAFailureNeedsAttention() {
+        val state = mutableStateOf<RecordingState>(RecordingState.PromptSave(2, 60_000L))
+        var retried = 0
+        composeTestRule.setContent {
+            KccTheme {
+                SessionSummaryDialog(
+                    state = state.value,
+                    pointsProvider = { points },
+                    onRetry = { retried++; state.value = RecordingState.Saving },
+                    onDiscard = {},
+                )
+            }
+        }
+        for (next in listOf(
+            RecordingState.PromptSave(2, 60_000L),
+            RecordingState.Saving,
+            RecordingState.SavedPendingChoice(60_000L, savePending = true),
+            RecordingState.KeptPendingSave(60_000L),
+        )) {
+            composeTestRule.runOnIdle { state.value = next }
+            composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertDoesNotExist()
+        }
+        composeTestRule.runOnIdle {
+            state.value = RecordingState.Failed(2, 60_000L, code = "UNAVAILABLE")
+        }
+        composeTestRule.onNodeWithText(str(R.string.savedDrives_retryAction)).performClick()
+        assertEquals(1, retried)
+        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { state.value = RecordingState.Kept }
         composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertDoesNotExist()
     }
 

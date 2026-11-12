@@ -104,6 +104,7 @@
     <string name="liveLocation_duration4h">4 timmar</string>
     <string name="liveLocation_start">Dela min position</string>
     <string name="liveLocation_stop">Stoppa delning</string>
+    <string name="liveLocation_stopSavesToHistory">När du stoppar delningen sparas körningen automatiskt i din historik.</string>
     <string name="liveLocation_hideNow">Dölj mig nu</string>
     <string name="liveLocation_lastUpdated">Senast uppdaterad</string>
     <string name="liveLocation_whoCanSeeTitle">Vem kan se mig?</string>
