@@ -44,7 +44,7 @@ final class StoreKitSubscriptionIntegrationTests: XCTestCase {
         try session.forceRenewalOfSubscription(productIdentifier: plusMonthlyProductID)
         let renewal = try await waitForEntitlement(store) { $0.id != purchase.id }
         XCTAssertEqual(renewal.appAccountToken, token)
-        try session.refundTransaction(identifier: Int(renewal.id))
+        try session.refundTransaction(identifier: UInt(renewal.id))
         for _ in 0..<100 {
             if await store.currentEntitlements().isEmpty { return }
             try await Task.sleep(for: .milliseconds(50))
