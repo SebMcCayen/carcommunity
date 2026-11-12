@@ -44,7 +44,12 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         private var continuations: [UUID: AsyncStream<LiveSessionInfo?>.Continuation] = [:]
         private(set) var startedDurations: [LiveSessionDuration] = []
         private(set) var startedVehicleIds: [String?] = []
-        private(set) var publishedCoordinates: [LiveCoordinate] = []
+        private var storedPublishedCoordinates: [LiveCoordinate] = []
+        // The async repository method can resume off the main actor. Readers
+        // must take the same lock as the writer before copying its Array.
+        var publishedCoordinates: [LiveCoordinate] {
+            lock.withLock { storedPublishedCoordinates }
+        }
         private(set) var updateAttemptCount = 0
         private(set) var stopCount = 0
         private(set) var hideCount = 0
@@ -128,7 +133,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
                 return publishErrors.isEmpty ? nil : publishErrors.removeFirst()
             }()
             if let publishError { throw publishError }
-            recordSynchronized { publishedCoordinates.append(coordinate) }
+            recordSynchronized { storedPublishedCoordinates.append(coordinate) }
             // Simulated slow network: park the publish until released, so
             // tests can pile fixes up behind an in-flight call.
             let shouldHold: Bool = {
@@ -440,6 +445,9 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         let repository = FakeLiveLocationRepository()
         let provider = StubLocationProvider(authorization: .whileInUse)
         let coordinator = makeCoordinator(repository: repository, provider: provider)
+        // Keep the owner alive through the asynchronous publication and
+        // release its subscription explicitly after all assertions.
+        defer { coordinator.shutdown() }
         coordinator.start()
         repository.emitSession(activeSession())
         await waitUntil { provider.activeFixStreamCount == 1 }
