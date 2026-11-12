@@ -179,30 +179,6 @@ sealed interface RecordingState {
 }
 
 /**
- * Whether end-of-session feedback may open and whether failure must retract it.
- * KeptPendingSave may show a saving screen immediately; only Kept is confirmed
- * success. The host retains that confirmed result after releasing the recorder.
- */
-object DriveSaveConfirmation {
-    /** Retract in the stop callback itself, even if StateFlow conflates a fast failure. */
-    fun onStopRejected(state: RecordingState, confirmed: Boolean, onRetract: () -> Unit) {
-        if (state is RecordingState.Recording && !confirmed) onRetract()
-    }
-
-    /** Open feedback without waiting for the network; pending state is not success. */
-    fun shouldShow(state: RecordingState): Boolean =
-        state is RecordingState.KeptPendingSave || state is RecordingState.Kept
-
-    /**
-     * Whether an already-shown confirmation must be RETRACTED because the
-     * background save DEFINITIVELY failed ([RecordingState.Failed]) — so the
-     * failure safety-net is the sole surface and the app never leaves a "saved"
-     * confirmation standing over a drive that was not persisted.
-     */
-    fun shouldRetract(state: RecordingState): Boolean = state is RecordingState.Failed
-}
-
-/**
  * Whether a live-sharing session should ALSO record a drive for History.
  *
  * Sharing and saving are free for authenticated active accounts. Subscription

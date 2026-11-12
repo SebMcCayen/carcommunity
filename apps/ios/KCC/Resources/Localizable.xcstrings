@@ -22917,6 +22917,23 @@
         }
       }
     },
+    "liveLocation.stopSavesToHistory": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "När du stoppar delningen sparas körningen automatiskt i din historik."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you stop sharing, your drive is automatically saved to your history."
+          }
+        }
+      }
+    },
     "liveLocation.viewOthersMemberOnly": {
       "extractionState": "manual",
       "localizations": {

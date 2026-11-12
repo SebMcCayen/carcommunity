@@ -119,6 +119,7 @@
     "duration4h": "4 timmar",
     "start": "Dela min position",
     "stop": "Stoppa delning",
+    "stopSavesToHistory": "När du stoppar delningen sparas körningen automatiskt i din historik.",
     "hideNow": "Dölj mig nu",
     "lastUpdated": "Senast uppdaterad",
     "whoCanSeeTitle": "Vem kan se mig?",

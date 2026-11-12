@@ -1245,74 +1245,10 @@ class DriveRecordingTest {
         assertEquals(RouteUploadRunner.DEFAULT_MAX_ATTEMPTS, uploader.attempts)
     }
 
-    // ---------------------------------------------------------------------
-    // DriveSaveConfirmation — the OPTIMISTIC "Drive saved" confirmation
-    // reconciled against the background save, as a pure state function. The
-    // host raises the confirmation the instant the drive is committed to keep
-    // (KeptPendingSave) rather than waiting for the save to complete (Kept),
-    // and retracts it if the save definitively fails (Failed).
-    // ---------------------------------------------------------------------
-
     @Test
-    fun `confirmation shows the instant the drive is kept-pending, before the save lands`() {
-        // The whole point: KeptPendingSave means the background drives-save is STILL
-        // in flight, yet the confirmation is already due — so ending a session is
-        // instant rather than gated on the network round-trip.
-        assertTrue(
-            DriveSaveConfirmation.shouldShow(RecordingState.KeptPendingSave(elapsedMillis = 1_000L)),
-        )
-    }
-
-    @Test
-    fun `confirmation stays shown on the terminal Kept so it is not re-raised after dismiss`() {
-        // shouldShow is also true on Kept, so a host keying a one-shot raise on this
-        // predicate does not re-fire across KeptPendingSave -> Kept (the boolean never
-        // flips back to false), and a confirmation the user already dismissed while the
-        // save settled is never popped back up when it finally lands.
-        assertTrue(DriveSaveConfirmation.shouldShow(RecordingState.Kept))
-    }
-
-    @Test
-    fun `confirmation is not shown before the drive is committed to keep`() {
-        // Recording, the raised prompt, the in-flight save, and the pending
-        // Keep/Delete choice are all BEFORE the keep is committed — no confirmation.
-        assertFalse(DriveSaveConfirmation.shouldShow(RecordingState.Idle))
-        assertFalse(DriveSaveConfirmation.shouldShow(RecordingState.Recording(pointCount = 3, elapsedMillis = 5L)))
-        assertFalse(DriveSaveConfirmation.shouldShow(RecordingState.PromptSave(pointCount = 3, elapsedMillis = 5L)))
-        assertFalse(DriveSaveConfirmation.shouldShow(RecordingState.Saving))
-        assertFalse(
-            DriveSaveConfirmation.shouldShow(
-                RecordingState.SavedPendingChoice(elapsedMillis = 5L, savePending = true),
-            ),
-        )
-    }
-
-    @Test
-    fun `a failed save retracts the confirmation and is never shown`() {
-        // Never claim "saved" over a drive that was not persisted: a definitive
-        // failure both is NOT a show-state and IS a retract-state, so the host hides
-        // the optimistic confirmation and lets the failure safety-net surface.
-        val failed = RecordingState.Failed(pointCount = 3, elapsedMillis = 5L, code = "UNAVAILABLE")
-        assertFalse(DriveSaveConfirmation.shouldShow(failed))
-        assertTrue(DriveSaveConfirmation.shouldRetract(failed))
-    }
-
-    @Test
-    fun `only a failure retracts the confirmation`() {
-        // The keep states and terminals other than Failed must never retract a shown
-        // confirmation.
-        assertFalse(DriveSaveConfirmation.shouldRetract(RecordingState.KeptPendingSave(elapsedMillis = 5L)))
-        assertFalse(DriveSaveConfirmation.shouldRetract(RecordingState.Kept))
-        assertFalse(DriveSaveConfirmation.shouldRetract(RecordingState.Deleted))
-        assertFalse(DriveSaveConfirmation.shouldRetract(RecordingState.Discarded))
-        assertFalse(DriveSaveConfirmation.shouldRetract(RecordingState.Idle))
-    }
-
-    @Test
-    fun `the coordinator drives the exact optimistic-then-confirm sequence the host reconciles`() = runTest {
-        // End-to-end on the real coordinator with a GATED save: the states the host's
-        // reconcile keys on appear in the expected order — the confirmation is due
-        // (shouldShow) while the save is still pending, and stays due once it lands.
+    fun `a drive kept while saving waits for the background save to complete`() = runTest {
+        // Gate the real coordinator's save to prove an early auto-keep does not
+        // release the recording until persistence has completed.
         val repo = RecordingFakeRepository(shouldFail = false)
         val gate = CompletableDeferred<Unit>()
         val gatedRepo =
@@ -1338,31 +1274,20 @@ class DriveRecordingTest {
         c.stop()
         c.autoSave(title = null)
 
-        // Save parked → SavedPendingChoice(savePending); an early keep parks in
-        // KeptPendingSave, where the confirmation is already due.
+        // An early auto-keep waits for the pending save.
         assertTrue((c.state.value as RecordingState.SavedPendingChoice).savePending)
         c.keep()
         assertTrue(c.state.value is RecordingState.KeptPendingSave)
-        assertTrue(DriveSaveConfirmation.shouldShow(c.state.value))
 
-        // Let the background save land → terminal Kept; the confirmation stays due
-        // (so the host does not re-raise it) and is not retracted.
+        // The shell may release the recording only after the save lands.
         gate.complete(Unit)
         advanceUntilIdle()
         assertEquals(RecordingState.Kept, c.state.value)
-        assertTrue(DriveSaveConfirmation.shouldShow(c.state.value))
-        assertFalse(DriveSaveConfirmation.shouldRetract(c.state.value))
     }
 
     @Test
     fun `the fast path (save already landed) reaches Kept with a non-null ride id for the host`() = runTest {
-        // The Kept fast path: the background save landed BEFORE the auto-keep, so
-        // keep() resolves straight to Kept without ever passing through
-        // KeptPendingSave. The host's single reconcile effect raises the confirmation
-        // in this same Kept branch and reads savedRideId for the History deep-link, so
-        // that id MUST be non-null here — otherwise the deep-link would be permanently
-        // broken (the null-rideId race). shouldShow is true on Kept so the host raises
-        // it deterministically without relying on a second effect having run first.
+        // An already-completed save can be kept and released immediately.
         val repo = RecordingFakeRepository(shouldFail = false) // returns rideId = "ride"
         val c = liveCoordinator(repo)
         c.start()
@@ -1375,16 +1300,13 @@ class DriveRecordingTest {
 
         c.keep()
         assertEquals(RecordingState.Kept, c.state.value)
-        assertTrue(DriveSaveConfirmation.shouldShow(c.state.value))
-        assertNotNull("the host reads this for the History deep-link on the fast path", c.savedRideId)
+        assertNotNull("the saved drive remains addressable in History", c.savedRideId)
         assertEquals("ride", c.savedRideId)
     }
 
     @Test
-    fun `an early keep whose background save fails retracts the confirmation for the safety-net`() = runTest {
-        // The never-lose-a-drive path: keep tapped while the save is in flight, then
-        // the save gives up. The coordinator surfaces Failed, which the host reconcile
-        // reads as "retract the optimistic confirmation" so the failure prompt shows.
+    fun `a failed background save preserves the recording for retry after auto-keep`() = runTest {
+        // A failed background save remains available to the failure dialog.
         val c =
             DriveRecordingCoordinator(
                 repository = FailingRepository(IllegalStateException("boom")),
@@ -1400,8 +1322,6 @@ class DriveRecordingTest {
         advanceUntilIdle()
 
         assertTrue(c.state.value is RecordingState.Failed)
-        assertFalse(DriveSaveConfirmation.shouldShow(c.state.value))
-        assertTrue(DriveSaveConfirmation.shouldRetract(c.state.value))
     }
 }
 
