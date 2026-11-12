@@ -76,7 +76,7 @@ struct ShellView: View {
     @State private var invitationAnswerTask: Task<Void, Never>?
     @State private var invitationBusyID: String?
     @State private var invitationErrorID: String?
-    @State private var invitationActionFailed = false
+    @State private var invitationActionError: ConvoyActionError?
     @State private var clubDeepLinkID: String?
     @State private var clubsCoordinator: ClubsCoordinator?
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
@@ -330,8 +330,8 @@ struct ShellView: View {
                 Spacer(minLength: 0)
                 ConvoyInvitationCard(invitation: invitation, deadline: notifications.convoyInvitationDeadline,
                     busy: invitationBusyID != nil,
-                    error: invitationActionFailed && invitationErrorID == invitation.id
-                        ? String(localized: "convoy.errorGeneric") : nil,
+                    error: invitationErrorID == invitation.id
+                        ? invitationActionError.map(ConvoyManagementStrings.errorKey) : nil,
                     onJoin: { answerInvitation(invitation, join: true) },
                     onDecline: { answerInvitation(invitation, join: false) })
             }
@@ -366,7 +366,12 @@ struct ShellView: View {
             defer { invitationBusyID = nil }
             await coordinator.load()
             guard !Task.isCancelled, case .signedIn(let currentUid, _) = session.state, currentUid == identity else { return }
-            guard coordinator.snapshot?.pendingInvites.contains(where: { $0.convoyId == convoyID }) == true else {
+            guard let snapshot = coordinator.snapshot else {
+                invitationErrorID = invitation.id
+                invitationActionError = .generic
+                return
+            }
+            guard snapshot.pendingInvites.contains(where: { $0.convoyId == convoyID }) else {
                 notifications.dismissInvitation(expectedID: invitation.id)
                 return
             }
@@ -383,7 +388,7 @@ struct ShellView: View {
                 await notifications.markRead(notificationId: invitation.id)
             } else {
                 invitationErrorID = invitation.id
-                invitationActionFailed = true
+                invitationActionError = coordinator.actionError ?? .generic
             }
         }
     }

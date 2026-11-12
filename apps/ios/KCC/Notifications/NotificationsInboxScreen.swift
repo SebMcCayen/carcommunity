@@ -238,7 +238,7 @@ struct ConvoyInvitationCard: View {
     let invitation: AppNotification
     let deadline: TimeInterval
     let busy: Bool
-    let error: String?
+    let error: LocalizedStringKey?
     let onJoin: () -> Void
     let onDecline: () -> Void
     @State private var avatarURL: URL?
@@ -266,7 +266,7 @@ struct ConvoyInvitationCard: View {
                 Image(systemName: "car.2.fill").font(.title2).foregroundStyle(KccPalette.crownGold).accessibilityHidden(true)
             }.accessibilityElement(children: .combine)
             if let error {
-                Text(verbatim: error).font(.subheadline).foregroundStyle(KccTheme.error)
+                Text(error).font(.subheadline).foregroundStyle(KccTheme.error)
                     .accessibilityIdentifier("convoy.invitation.error")
             }
             HStack(spacing: KccSpacing.s2) {
