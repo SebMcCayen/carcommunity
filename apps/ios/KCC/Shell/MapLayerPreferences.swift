@@ -80,6 +80,7 @@ final class MapLayerPreferences {
     private enum Key {
         static let traffic = "map.layers.traffic"
         static let trafficAlerts = "map.layers.trafficAlerts"
+        static let cameraPrefix = "map.layers.camera."
         static let mode = "map.layers.mode"
         static let basemap = "map.layers.basemap"
         static let threeD = "map.layers.3d"
@@ -89,6 +90,7 @@ final class MapLayerPreferences {
 
     @ObservationIgnored private let defaults: UserDefaults
 
+    private(set) var cameraLayers: Set<RoadCameraType>
     private(set) var trafficEnabled: Bool
     private(set) var trafficAlertsEnabled: Bool
     /// Nil means follow the current system/app appearance.
@@ -100,6 +102,7 @@ final class MapLayerPreferences {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        cameraLayers = Set(RoadCameraType.allCases.filter { defaults.bool(forKey: Key.cameraPrefix + $0.rawValue) })
         incidentMaxAge = IncidentAgeOption.fromStoredName(defaults.string(forKey: Key.incidentMaxAge))
         trafficEnabled = defaults.object(forKey: Key.traffic) as? Bool
             ?? Self.trafficDefault
@@ -129,6 +132,11 @@ final class MapLayerPreferences {
         // Persist even All: an explicit choice must survive future initialization.
         defaults.set(option.rawValue, forKey: Key.incidentMaxAge)
         incidentMaxAge = option
+    }
+
+    func setCameraLayer(_ type: RoadCameraType, enabled: Bool) {
+        if enabled { cameraLayers.insert(type) } else { cameraLayers.remove(type) }
+        defaults.set(enabled, forKey: Key.cameraPrefix + type.rawValue)
     }
 
     func setTrafficEnabled(_ enabled: Bool) {

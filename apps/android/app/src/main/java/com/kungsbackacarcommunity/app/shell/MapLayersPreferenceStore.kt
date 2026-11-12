@@ -81,6 +81,15 @@ class MapLayersPreferenceStore(context: Context) {
     private var nightMode: MapMode? =
         MapLayersPreferences.nightModeFromStored(prefs.getString(KEY_NIGHT, null))
 
+    /** Independent, opt-in camera layers; kept device-local across sign-outs. */
+    fun readRoadCameraLayer(type: com.kungsbackacarcommunity.app.roadcameras.RoadCameraType): Boolean =
+        prefs.getBoolean("camera_${type.wire}", false)
+
+    fun writeRoadCameraLayer(type: com.kungsbackacarcommunity.app.roadcameras.RoadCameraType, enabled: Boolean) {
+        if (readRoadCameraLayer(type) == enabled) return
+        prefs.edit().putBoolean("camera_${type.wire}", enabled).apply()
+    }
+
     fun readBasemap(): MapBasemap {
         val stored = prefs.getString(KEY_BASEMAP, null)
         return MapBasemap.entries.firstOrNull { it.name == stored } ?: MapBasemap.Standard

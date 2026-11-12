@@ -667,8 +667,11 @@ fun TurnByTurnNavScreen(
     // (`MapHome`'s LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled)):
     // the layer switched off pushes an EMPTY list rather than freezing the last
     // one, so flipping it while driving takes the badges off immediately.
-    LaunchedEffect(engine, incidentMarkers, incidentsLayerEnabled) {
-        engine.setIncidentMarkers(if (incidentsLayerEnabled) incidentMarkers else emptyList())
+    val roadCameraViewport by engine.cameraSnapshot.collectAsState()
+    val roadCameraMarkers = com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current
+        ?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude).orEmpty()
+    LaunchedEffect(engine, incidentMarkers, incidentsLayerEnabled, roadCameraMarkers) {
+        engine.setIncidentMarkers((if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers)
     }
 
     // Tell the host where this map is looking, so its ONE incident poll follows
@@ -994,6 +997,13 @@ fun TurnByTurnNavScreen(
                 }
             },
         )
+
+        val cameraLayerState = com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current
+        val cameraTap by engine.roadCameraTap.collectAsState()
+        cameraLayerState?.selected(cameraTap)?.let { camera ->
+            com.kungsbackacarcommunity.app.roadcameras.RoadCameraDetailsSheet(
+                camera, cameraLayerState.repository, engine::consumeRoadCameraTap)
+        }
 
         // The SHARED map-layers popup from the map home — the same composable,
         // so navigation offers the same rows, in the same order, with the same
@@ -1441,6 +1451,11 @@ private class TurnByTurnEngine(
     /** Whether the app is in front of the user, sampled at report time. */
     private val isForeground: () -> Boolean,
 ) : MapProjection {
+    /** Camera taps belong to this navigation map's own selected-detail flow. */
+    private val roadCameraTapFlow = MutableStateFlow<String?>(null)
+    val roadCameraTap = roadCameraTapFlow.asStateFlow()
+    fun consumeRoadCameraTap() { roadCameraTapFlow.value = null }
+
     /** Latest progress snapshot for the bottom ETA bar (null until the first tick). */
     private val progressFlow = MutableStateFlow<NavProgress?>(null)
     val progress: StateFlow<NavProgress?> = progressFlow.asStateFlow()
@@ -1941,12 +1956,18 @@ private class TurnByTurnEngine(
                     // rendered rather than lost, and redrawn here after every
                     // day/night reload (which drops every annotation).
                     //
-                    // No click listener, deliberately: the incident detail sheet
-                    // is composed by the map home, which is not on screen while
-                    // navigating, so a tap would open nothing.
+                    // Camera markers open their own on-demand sheet in this screen.
+                    // Existing incident markers remain read-only while navigating.
                     runCatching {
                         val manager = mapView.annotations.createPointAnnotationManager()
                         IncidentMarkerLayer.configure(manager)
+                        manager.addClickListener(com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener { annotation ->
+                            val id = incidentIdsByAnnotation[annotation.id]
+                            if (id?.startsWith(com.kungsbackacarcommunity.app.roadcameras.ROAD_CAMERA_MARKER_PREFIX) == true) {
+                                roadCameraTapFlow.value = id
+                                true
+                            } else false
+                        })
                         incidentMarkerManager = manager
                         lastAppliedIncidents = null
                         applyIncidentMarkersIfChanged(incidentMarkers)

@@ -59,6 +59,10 @@
     "./notifications": {
       "types": "./dist/notifications.d.ts",
       "default": "./dist/notifications.js"
+    },
+    "./road-cameras": {
+      "types": "./dist/road-cameras.d.ts",
+      "default": "./dist/road-cameras.js"
     }
   },
   "scripts": {

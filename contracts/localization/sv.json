@@ -2381,5 +2381,17 @@
     "suspendedTitle": "Åtkomsten är begränsad",
     "body": "Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.",
     "retry": "Kontrollera igen"
+  },
+  "roadCameras": {
+    "speedLayer": "Fasta fartkameror",
+    "trafficLayer": "Trafikkameror",
+    "roadConditionLayer": "Väglagskameror",
+    "layerHelp": "Visa kameror på kartan",
+    "loading": "Hämtar kamerabild…",
+    "unavailable": "Kamerabilden kunde inte hämtas.",
+    "rateLimited": "Gränsen för kamerabilder är nådd. Försök igen senare.",
+    "photoTime": "Bild uppdaterad %1$s",
+    "retry": "Försök igen",
+    "catalogUnavailable": "Kameror kunde inte uppdateras. Sparade kameror visas om de finns."
   }
 }

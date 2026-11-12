@@ -404,13 +404,18 @@ describe('resolveMemberCount', () => {
 
 describe('uncosted / unknown function surfacing', () => {
   // These are intentionally visible gaps: existing per-member assumptions
-  // have no Driver page-frequency input. Keep the exact list guarded so any
+  // have no Driver page-frequency input. Camera catalog opens and photo views
+  // also need telemetry-based variable estimates; server quotas bound their
+  // exposure, but must not disguise missing usage estimates as zero cost.
+  // Keep the exact list guarded so any
   // further uncosted addition still requires an explicit decision.
   const pendingDriverEstimates = [
     'account.getAccess',
     'account.listWarnings',
     'driverFeed.detail',
     'driverFeed.list',
+    'roadCameras.catalog',
+    'roadCameras.photo',
   ];
   it('only explicitly reviewed pending estimates remain uncosted', () => {
     expect(uncostedCallables()).toEqual(pendingDriverEstimates);

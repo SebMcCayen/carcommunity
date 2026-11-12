@@ -1397,6 +1397,22 @@
           "queryScope": "COLLECTION_GROUP"
         }
       ]
+    },
+    {
+      "collectionGroup": "roadCameraRateLimits",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "roadCameraCatalogPages",
+      "fieldPath": "cameras",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "roadCameraRecords",
+      "fieldPath": "photoUrl",
+      "indexes": []
     }
   ]
 }

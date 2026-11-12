@@ -2381,5 +2381,17 @@
     "suspendedTitle": "Access is restricted",
     "body": "Your access to CarCommunity is restricted. Contact the administrators if you have questions.",
     "retry": "Check again"
+  },
+  "roadCameras": {
+    "speedLayer": "Fixed speed cameras",
+    "trafficLayer": "Traffic cameras",
+    "roadConditionLayer": "Road condition cameras",
+    "layerHelp": "Show cameras on the map",
+    "loading": "Loading camera image…",
+    "unavailable": "The camera image could not be loaded.",
+    "rateLimited": "Camera image limit reached. Try again later.",
+    "photoTime": "Image updated %1$s",
+    "retry": "Try again",
+    "catalogUnavailable": "Cameras could not be updated. Saved cameras are shown when available."
   }
 }

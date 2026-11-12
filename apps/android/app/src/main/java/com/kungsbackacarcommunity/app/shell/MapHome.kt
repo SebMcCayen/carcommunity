@@ -445,8 +445,11 @@ fun MapHome(
     // "Traffic alerts" layer is enabled. When it is off we push an empty set so
     // the surface clears the markers (and the Trafikverket attribution hides),
     // giving the toggle a real on/off effect on the map.
-    LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled) {
-        mapSurface.setIncidentMarkers(if (incidentsLayerEnabled) incidentMarkers else emptyList())
+    val roadCameraLayers = com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current
+    val roadCameraViewport by mapSurface.cameraSnapshot.collectAsState()
+    val roadCameraMarkers = roadCameraLayers?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude).orEmpty()
+    LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled, roadCameraMarkers) {
+        mapSurface.setIncidentMarkers((if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers)
     }
 
     // Push the community event pins onto the surface whenever they change (or the
@@ -1010,6 +1013,23 @@ internal fun MapLayersPopup(
             onCheckedChange = onIncidentsChange,
             switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
         )
+        com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current?.let { cameras ->
+            com.kungsbackacarcommunity.app.roadcameras.RoadCameraType.entries.forEach { type ->
+                LayerToggleRow(
+                    label = stringResource(com.kungsbackacarcommunity.app.roadcameras.cameraLabel(type)),
+                    supportingText = stringResource(R.string.roadCameras_layerHelp),
+                    leading = { com.kungsbackacarcommunity.app.roadcameras.RoadCameraBadge(type) },
+                    checked = cameras.enabled(type),
+                    onCheckedChange = { cameras.setEnabled(type, it) },
+                    switchTestTag = "map_layers_camera_${type.wire}",
+                )
+            }
+            if (cameras.anyEnabled) {
+                Text(stringResource(R.string.incidents_sourceTrafikverket), style = MaterialTheme.typography.bodySmall)
+                if (cameras.catalogFailed) Text(stringResource(R.string.roadCameras_catalogUnavailable),
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        }
         if (basemap == MapBasemap.Standard) {
             LayerToggleRow(
                 label = stringResource(R.string.shell_layers3d),

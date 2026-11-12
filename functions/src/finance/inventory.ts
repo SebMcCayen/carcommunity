@@ -80,6 +80,19 @@ export interface ScheduledJob {
  */
 export const SCHEDULED_JOBS: ScheduledJob[] = [
   {
+    id: 'roadCameras-sync',
+    source: 'roadCameras/sync.ts:sync',
+    label: 'Trafikverket camera catalog',
+    schedule: '15 4 * * *',
+    runsPerDay: 1,
+    readsPerRun: 4502,
+    writesPerRun: 100,
+    deletesPerRun: 20,
+    avgSeconds: 30,
+    memoryGiB: 0.25,
+    note: 'Estimated 4,500 camera records scanned daily; changed-only writes plus a bounded public snapshot. Two metadata requests, no image polling. Photo callables are capped at 128 MiB/day of encoded responses globally; catalog responses at 100/day and 2 MiB each. Camera-specific variable usage needs telemetry.',
+  },
+  {
     id: 'incidents-syncTrafikverket',
     source: 'incidents/trafikverket.ts:syncTrafikverket',
     label: 'Trafikverket import',
@@ -536,6 +549,8 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   // at most two docs + one old-locator delete; revoke one update + one delete.
   // The shared authority wrapper retains its projection/mirror initialization.
   // The separate provider HTTP feed's bounded reads are documented in its README.
+  'roadCameras.catalog': 'uncosted',
+  'roadCameras.photo': 'uncosted',
   'clubCalendar.manage': 'variable-member',
   'auth.completeOnboarding': 'variable-member',
   'auth.recordLogin': 'variable-member',

@@ -2220,4 +2220,14 @@
     <string name="carCommunityAccess_suspendedTitle">Access is restricted</string>
     <string name="carCommunityAccess_body">Your access to CarCommunity is restricted. Contact the administrators if you have questions.</string>
     <string name="carCommunityAccess_retry">Check again</string>
+    <string name="roadCameras_speedLayer">Fixed speed cameras</string>
+    <string name="roadCameras_trafficLayer">Traffic cameras</string>
+    <string name="roadCameras_roadConditionLayer">Road condition cameras</string>
+    <string name="roadCameras_layerHelp">Show cameras on the map</string>
+    <string name="roadCameras_loading">Loading camera image…</string>
+    <string name="roadCameras_unavailable">The camera image could not be loaded.</string>
+    <string name="roadCameras_rateLimited">Camera image limit reached. Try again later.</string>
+    <string name="roadCameras_photoTime">Image updated %1$s</string>
+    <string name="roadCameras_retry">Try again</string>
+    <string name="roadCameras_catalogUnavailable">Cameras could not be updated. Saved cameras are shown when available.</string>
 </resources>
