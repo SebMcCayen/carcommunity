@@ -531,16 +531,7 @@ struct MapHomeView: View {
         .onDisappear {
             featureHealthReporter?.updateConditions(foreground: false, surfaceShown: false)
         }
-        // Load-state chip, mirroring Android's `LoadingRoadsChip`: visible
-        // while style/tiles load, gone once the map is interactive.
-        .overlay(alignment: .top) {
-            if surface.loadState == .loading {
-                loadingRoadsChip
-                    .padding(.top, KccSpacing.s4)
-            }
-        }
-        // Only the config-less placeholder simulates loading. The real map
-        // clears the chip from Mapbox's onMapLoaded event.
+        // Keep load tracking for renderer health without covering the map with status copy.
         .task {
             guard accessToken == nil else { return }
             await surface.simulateInitialLoadIfNeeded()
@@ -595,17 +586,7 @@ struct MapHomeView: View {
         )
     }
 
-    private var loadingRoadsChip: some View {
-        HStack(spacing: KccSpacing.s2) {
-            ProgressView()
-                .controlSize(.small)
-            Text("shell.loadingRoads")
-                .font(.subheadline)
-        }
-        .padding(.horizontal, KccSpacing.s3)
-        .padding(.vertical, KccSpacing.s1 + 2)
-        .background(.regularMaterial, in: Capsule())
-    }
+
 }
 
 /// Mapbox-specific rendering stays confined to this file. The initial camera

@@ -25,10 +25,10 @@
 import Foundation
 import Observation
 
-/// Load state of the map render, driving the transient "Loading roads…"
-/// status line in the shell. Mirrors a typical tile/style load lifecycle.
+/// Renderer load state for lifecycle and health tracking. Loading remains
+/// internal so tile work never adds status text over the map.
 enum MapLoadState: Sendable {
-    /// Style/tiles are being fetched — the shell shows "Loading roads…".
+    /// Style/tiles are being fetched.
     case loading
 
     /// The map is interactive — the status line is hidden.
@@ -517,7 +517,7 @@ protocol MapProjection: AnyObject {
 
 /// Seam between the map-first shell and the actual map renderer.
 ///
-/// The entire shell (search bar, "Loading roads…" state, floating controls,
+/// The entire shell (search bar, renderer load state, floating controls,
 /// "Create route" CTA, bottom nav) is written against this abstraction so it
 /// compiles, unit-tests, and passes CI **without** a device, GPS, or a Mapbox
 /// access token. ``StubMapSurface`` currently carries the shell state and
@@ -531,7 +531,7 @@ protocol MapProjection: AnyObject {
 /// - ``setUserMarker(_:)`` — supply/clear the caller's live-sharing marker
 ///   state (``MapUserMarker``: a label plus `isLiveSharing`, which drives the
 ///   puck's green/blue pulse).
-/// - ``loadState`` — drives the shell's "Loading roads…" indicator.
+/// - ``loadState`` — renderer lifecycle state, without visible loading copy.
 /// - ``trafficEnabled`` / ``setTrafficEnabled(_:)`` — the optional
 ///   traffic-congestion overlay the layers control toggles. A surface that
 ///   cannot draw traffic (the stub) still exposes the flag so the shell
@@ -544,8 +544,7 @@ protocol MapProjection: AnyObject {
 ///   re-centres (stub exposes the flag only).
 @MainActor
 protocol MapSurface: MapProjection {
-    /// Current load state; the shell shows "Loading roads…" while
-    /// ``MapLoadState/loading``.
+    /// Current renderer load state for lifecycle and diagnostics.
     var loadState: MapLoadState { get }
 
     /// The user marker the surface should draw, or nil when none is set.
@@ -1077,8 +1076,8 @@ final class StubMapSurface: MapSurface {
         self.autoLoad = autoLoad
     }
 
-    /// Simulate a short tile/style load once, so the "Loading roads…" line
-    /// appears briefly then clears — the iOS analogue of the `LaunchedEffect`
+    /// Simulate a short tile/style load once for config-less lifecycle checks
+    /// — the iOS analogue of the `LaunchedEffect`
     /// Android's stub runs when its map content enters composition. The
     /// (future) map view calls this from its `.task` when it appears. Does
     /// nothing when `autoLoad` is false, so tests can pin the state
@@ -1463,8 +1462,7 @@ final class StubMapSurface: MapSurface {
         billboardMarkers = markers
     }
 
-    /// How long the simulated tile/style load takes — long enough for the
-    /// "Loading roads…" line to be seen, short enough not to feel broken.
+    /// Duration of the config-less renderer's simulated tile/style load.
     /// Matches Android's `STUB_LOAD_MILLIS`.
     private static let stubLoadMillis = 700
 

@@ -20,6 +20,8 @@ final class ConvoyManagementCoordinator {
     private(set) var actionErrorConvoyId: String?
     private(set) var lastInviteResult: ConvoyInviteResult?
     private(set) var lastLeaveResult: ConvoyLeaveResult?
+    private(set) var locallyExitedConvoyIds: Set<String> = []
+    private(set) var pendingExitConvoyIds: Set<String> = []
 
     var snapshot: ConvoyManagementSnapshot? {
         guard case .loaded(let snapshot) = state else { return nil }
@@ -76,6 +78,9 @@ final class ConvoyManagementCoordinator {
             return nil
         }
 
+        // The server may emit the NEW auto-session before accept returns.
+        // An old confirmed leave of this convoy must not stop that new session.
+        if action == .accept { locallyExitedConvoyIds.remove(convoyId) }
         supersedeListRequests()
         busyConvoyIds.insert(convoyId)
         defer { busyConvoyIds.remove(convoyId) }
@@ -151,19 +156,26 @@ final class ConvoyManagementCoordinator {
               let repository
         else { return false }
 
+        let exitsConvoy = action == .end || action == .leave
+        if exitsConvoy { pendingExitConvoyIds.insert(convoyId) }
         clearActionError()
         lastLeaveResult = nil
         supersedeListRequests()
         busyConvoyIds.insert(convoyId)
-        defer { busyConvoyIds.remove(convoyId) }
+        defer {
+            busyConvoyIds.remove(convoyId)
+            pendingExitConvoyIds.remove(convoyId)
+        }
         switch await repository.lifecycle(convoyId: convoyId, action: action) {
         case .updated(let convoy):
             guard !Task.isCancelled else { return false }
+            if exitsConvoy { locallyExitedConvoyIds.insert(convoyId) }
             applyUpdatedConvoy(convoy)
             await refreshAfterMutation(using: repository)
             return true
         case .left(let result):
             guard !Task.isCancelled else { return false }
+            locallyExitedConvoyIds.insert(convoyId)
             lastLeaveResult = result
             removeConvoy(id: convoyId)
             await refreshAfterMutation(using: repository)

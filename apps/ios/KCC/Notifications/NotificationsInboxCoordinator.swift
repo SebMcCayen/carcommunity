@@ -64,6 +64,34 @@ final class NotificationsInboxCoordinator {
 
     private(set) var state: NotificationsInboxUiState
     private(set) var markReadStatus: MarkReadStatus = .idle
+    private(set) var convoyInvitation: AppNotification?
+    @ObservationIgnored private var inboxVisible = false
+    @ObservationIgnored private var dismissedInvitations: Set<String> = []
+
+    /// Foreground observation does not mark the inbox seen or items read.
+    func observe() {
+        guard subscription == nil, repository != nil, uid != nil else { return }
+        subscribe()
+    }
+
+    func stopViewing() { inboxVisible = false }
+
+    func stopObserving() {
+        subscription?.cancel()
+        subscription = nil
+        convoyInvitation = nil
+        inboxVisible = false
+    }
+
+    func dismissInvitation() {
+        if let id = convoyInvitation?.id { dismissedInvitations.insert(id) }
+        convoyInvitation = nil
+    }
+
+    func destination(for item: AppNotification) -> NotificationDeepLink? {
+        guard let uid else { return nil }
+        return Notifications.deepLink(for: item, recipientUid: uid)
+    }
 
     /// The id of the newest item ``stampSeenMarkerIfNewer(_:)`` last stamped
     /// for — dedupes repeat deliveries of the SAME newest item (e.g. a
@@ -109,6 +137,8 @@ final class NotificationsInboxCoordinator {
     /// driven off the loaded snapshot (see ``apply(_:)``) so it also re-fires
     /// on later arrivals, not just on this initial call.
     func start() {
+        inboxVisible = true
+        convoyInvitation = nil
         // Re-entry (SwiftUI re-runs the .task after a tab switch): keep the live
         // subscription, but re-stamp the seen-marker so a previously-FAILED
         // stamp gets another attempt on reopen — matching Android's
@@ -209,7 +239,7 @@ final class NotificationsInboxCoordinator {
     /// Failures are swallowed: the dot simply persists until the next
     /// newest-item change (Android's `markSeen` on the inbox route).
     private func stampSeenMarkerIfNewer(_ newestId: String?) {
-        guard let newestId, newestId != lastSeenMarkerNotificationId, let repository else { return }
+        guard inboxVisible, let newestId, newestId != lastSeenMarkerNotificationId, let repository else { return }
         lastSeenMarkerNotificationId = newestId
         // No `self` capture needed: `repository` is already unwrapped into a
         // local, so the task cannot extend the coordinator's lifetime either
@@ -250,6 +280,12 @@ final class NotificationsInboxCoordinator {
                 )
             }
         case .loaded(let items):
+            let presentIDs = Set(items.map(\.id))
+            dismissedInvitations.formIntersection(presentIDs)
+            convoyInvitation = inboxVisible ? nil : Notifications.sortedForInbox(items).first {
+                $0.category == .convoyInvite && !$0.isRead && !dismissedInvitations.contains($0.id)
+            }
+
             listenerFailureReported = false
             state = items.isEmpty ? .empty : .loaded(items)
             // `items` is already newest-first (Notifications.sortedForInbox),

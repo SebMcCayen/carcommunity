@@ -37,19 +37,27 @@ struct DriveRecordingContext: Equatable, Sendable {
     let carImagePath: String?
     let convoyMembers: [ConvoyDriveMember]
     let expiresAt: Date?
+    /// Local journal metadata only: a convoy-to-solo handoff keeps one saved drive.
+    let continuationSessionId: String?
 
-    init(
-        sourceSessionId: String,
-        vehicleId: String?,
-        carImagePath: String?,
-        convoyMembers: [ConvoyDriveMember],
-        expiresAt: Date? = nil
-    ) {
+    init(sourceSessionId: String, vehicleId: String?, carImagePath: String?,
+         convoyMembers: [ConvoyDriveMember], expiresAt: Date? = nil,
+         continuationSessionId: String? = nil) {
         self.sourceSessionId = sourceSessionId
         self.vehicleId = vehicleId
         self.carImagePath = carImagePath
         self.convoyMembers = convoyMembers
         self.expiresAt = expiresAt
+        self.continuationSessionId = continuationSessionId
+    }
+
+    var liveSessionId: String { continuationSessionId ?? sourceSessionId }
+
+    func continuing(with next: DriveRecordingContext) -> DriveRecordingContext {
+        DriveRecordingContext(sourceSessionId: sourceSessionId,
+            vehicleId: next.vehicleId ?? vehicleId, carImagePath: next.carImagePath ?? carImagePath,
+            convoyMembers: convoyMembers, expiresAt: next.expiresAt,
+            continuationSessionId: next.sourceSessionId)
     }
 }
 
@@ -155,7 +163,8 @@ struct DriveRecorder: Sendable {
             vehicleId: update.vehicleId ?? context.vehicleId,
             carImagePath: update.carImagePath ?? context.carImagePath,
             convoyMembers: update.convoyMembers.isEmpty ? context.convoyMembers : update.convoyMembers,
-            expiresAt: update.expiresAt ?? context.expiresAt
+            expiresAt: update.expiresAt ?? context.expiresAt,
+            continuationSessionId: update.continuationSessionId ?? context.continuationSessionId
         )
     }
 

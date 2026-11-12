@@ -104,6 +104,7 @@ struct ShellView: View {
     @State private var subscriptionCoordinator: SubscriptionCoordinator
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
     @State private var driveRecordingCoordinator: DriveRecordingCoordinator?
+    @State private var convoyEndSessionCoordinator: ConvoyEndSessionCoordinator?
     @State private var locationPermissionCoordinator: LocationPermissionCoordinator?
     @AppStorage("kcc.location.initialMapExplanationShown") private var initialMapExplanationShown = false
     @State private var initialMapPermissionPrompt = false
@@ -270,7 +271,9 @@ struct ShellView: View {
                 // account update becomes restricted. Stop exact-location and
                 // background drive collection synchronously during that swap.
                 liveLocationCoordinator?.standDownForRestrictedAccess()
+                convoyEndSessionCoordinator?.stop()
                 driveRecordingCoordinator?.reset()
+                notificationsCoordinator?.stopObserving()
                 billboardsCoordinator?.stop()
                 clubsCoordinator?.stop()
                 mapSurface.setBillboardMarkers([])
@@ -295,6 +298,37 @@ struct ShellView: View {
                     .background(KccTheme.page, ignoresSafeAreaEdges: .all)
                     .id(destination)
                     .zIndex(1)
+            }
+            if let coordinator = notificationsCoordinator,
+               let invitation = coordinator.convoyInvitation, routes.current != .notifications,
+               scenePhase == .active, navigationDestination == nil {
+                VStack {
+                    HStack(spacing: KccSpacing.s2) {
+                        Button {
+                            let destination = coordinator.destination(for: invitation)
+                            coordinator.dismissInvitation()
+                            if let destination { openNotificationDeepLink(destination) }
+                            Task { await coordinator.markRead(notificationId: invitation.id) }
+                        } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                                    Text(verbatim: invitation.title).font(.headline).lineLimit(2)
+                                    if let preview = invitation.previewText { Text(verbatim: preview).font(.subheadline).lineLimit(2) }
+                                }.frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            } icon: { Image(systemName: "car.2.fill") }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("convoy.invitation.banner")
+                        Button(action: coordinator.dismissInvitation) {
+                            Image(systemName: "xmark").frame(width: 48, height: 48)
+                        }.accessibilityLabel(Text("convoy.close"))
+                    }
+                    .padding(KccSpacing.s3).foregroundStyle(KccTheme.text)
+                    .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.lg))
+                    .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.driver) }
+                    .padding(KccSpacing.s4)
+                    Spacer(minLength: 0)
+                }.zIndex(2)
             }
             if let liveLocationCoordinator, liveLocationCoordinator.wired {
                 StationaryLivePrompt(coordinator: liveLocationCoordinator) { promptID in
@@ -690,6 +724,19 @@ struct ShellView: View {
         } message: {
             Text(appUpdateMessage)
         }
+        .alert("convoy.endedContinueTitle", isPresented: convoyEndChoicePresented) {
+            Button("convoy.endedContinueAsSingle") {
+                Task { await convoyEndSessionCoordinator?.chooseContinue() }
+            }
+            Button("convoy.endedContinueEnd", role: .cancel) {
+                convoyEndSessionCoordinator?.chooseEnd()
+            }
+        } message: {
+            Text("convoy.endedContinueBody")
+        }
+        .alert("liveLocation.statusError", isPresented: convoyEndCommandFailurePresented) {
+            Button("notifications.errorDismiss", role: .cancel) { convoyEndSessionCoordinator?.commandFailed = false }
+        } message: { Text("liveLocation.error") }
         .alert("appUpdate.iosStoreUnavailable", isPresented: $appStoreUnavailable) {
             Button("notifications.errorDismiss", role: .cancel) {}
         }
@@ -1165,7 +1212,8 @@ struct ShellView: View {
                         if case .crown = selection {
                             mapReadingPanel(selection)
                                 .id(selection)
-                                .frame(maxHeight: available)
+                                .frame(height: min(available, max(240, min(420, geometry.size.height * 0.62))), alignment: .bottom)
+                                .padding(.horizontal, -KccSpacing.s4)
                         } else {
                             mapReadingPanel(selection)
                                 .id(selection)
@@ -1220,11 +1268,26 @@ struct ShellView: View {
         case .crown(let id):
             if let coordinator = crownHuntComposition?.mapCoordinator, coordinator.isAvailable,
                coordinator.selectedTarget?.id == id || CrownCollectPresentation.isAwarded(coordinator.claimStatus) {
-                MapReadingPanel(title: "crownHunt.popupTitle", onClose: dismissMapReading, scrollsContent: false) {
+                MapReadingPanel(
+                    title: coordinator.selectedTarget?.popupTitle ?? "crownHunt.popupTitle",
+                    onClose: dismissMapReading, scrollsContent: false,
+                    leadingImage: coordinator.selectedTarget?.popupGlyph,
+                    leadingTint: coordinator.selectedTarget?.popupAccent ?? KccTheme.driver,
+                    docksToBottom: true
+                ) {
                     CrownHuntCollectContent(
                         coordinator: coordinator,
                         showLiveShareTip: featureFlags.isEnabled(.crownHuntLiveShareScoring)
-                            && liveLocationCoordinator?.isSharing != true
+                            && liveLocationCoordinator?.isSharing != true,
+                        onNavigate: { target in
+                            let name: String
+                            switch target {
+                            case .point(let point): name = point.title
+                            case .spawn(let spawn): name = CrownHuntStrings.rarityName(spawn.rarity)
+                            }
+                            navigateToPlace(PlaceSuggestion(id: target.id, name: name, address: nil,
+                                point: MapPoint(longitude: target.longitude, latitude: target.latitude)))
+                        }
                     )
                 }
             }
@@ -1561,7 +1624,8 @@ struct ShellView: View {
             routeNavigation {
                 NotificationsInboxScreen(
                     coordinator: notificationsCoordinator,
-                    onOpenSettings: { routes = routes.opening(.notificationSettings) }
+                    onOpenSettings: { routes = routes.opening(.notificationSettings) },
+                    onOpen: openNotificationDeepLink
                 )
             }
         case .notificationSettings:
@@ -1636,9 +1700,7 @@ struct ShellView: View {
                                 vehicleId: convoyCreateVehicleId,
                                 onCreated: completeConvoyCreation
                             )
-                        } else if let selectedConvoyId,
-                                  let convoy = convoyManagementCoordinator.snapshot?.convoys
-                                      .first(where: { $0.convoyId == selectedConvoyId }) {
+                        } else if let convoy = selectedConvoyDetail {
                             ConvoyDetailScreen(
                                 coordinator: convoyManagementCoordinator,
                                 convoy: convoy,
@@ -1913,6 +1975,11 @@ struct ShellView: View {
             return
         }
         _ = pushNotifications.consumePendingDeepLink()
+        openNotificationDeepLink(link)
+    }
+
+    private func openNotificationDeepLink(_ link: NotificationDeepLink) {
+        guard signedInUid != nil else { return }
         switch link.target {
         case .dm:
             if let uid = link.entityId { openDm(uid: uid, displayName: nil) }
@@ -1926,6 +1993,7 @@ struct ShellView: View {
             selectedTab = .chat
             routes = .empty
         case .convoys:
+            closeConvoyCreate()
             selectedConvoyId = link.entityId
             routes = routes.opening(.convoys)
         case .friends:
@@ -2052,14 +2120,20 @@ struct ShellView: View {
         convoyCreateReturnsToList = false
     }
 
+    /// Rendering and Back must agree: a pending invitation opens the list,
+    /// not a member detail that would swallow the first Back press.
+    private var selectedConvoyDetail: ConvoyItem? {
+        guard let selectedConvoyId else { return nil }
+        return convoyManagementCoordinator?.snapshot?.convoys.first {
+            $0.convoyId == selectedConvoyId && $0.viewer?.inviteStatus == .accepted
+        }
+    }
+
     private func closeConvoyScreen() {
         guard !convoyCreationIsWorking else { return }
         if convoyCreateCoordinator != nil, convoyCreateReturnsToList {
             closeConvoyCreate()
-        } else if let selectedId = selectedConvoyId,
-                  convoyManagementCoordinator?.snapshot?.convoys.contains(
-                      where: { $0.convoyId == selectedId }
-                  ) == true {
+        } else if selectedConvoyDetail != nil {
             selectedConvoyId = nil
         } else {
             selectedConvoyId = nil
@@ -2357,6 +2431,8 @@ struct ShellView: View {
         dmCoordinator = nil
         memberProfileTarget = nil
         if routes.current == .convoys { routes = routes.poppingOne() }
+        convoyEndSessionCoordinator?.stop()
+        convoyEndSessionCoordinator = nil
         convoyManagementCoordinator = nil
         convoyAwareness.sync(convoy: nil, repository: nil, currentUid: nil)
         nearbyLive.deactivate()
@@ -2609,6 +2685,14 @@ struct ShellView: View {
             journal: driveJournal,
             uploadSpool: driveJournal?.routeUploadSpool
         )
+        if let recording = driveRecordingCoordinator {
+            convoyEndSessionCoordinator = ConvoyEndSessionCoordinator(
+                repository: FirebaseConvoyManagementRepository.createIfAvailable(),
+                live: liveLocation, recording: recording,
+                localExit: { convoyManagement.locallyExitedConvoyIds.contains($0) },
+                pendingExit: { convoyManagement.pendingExitConvoyIds.contains($0) }
+            )
+        }
         if pendingCreateIntent?.belongs(to: uid) == true {
             pendingCreateIntent = nil
             presentSingleSessionAction(using: liveLocation)
@@ -2616,6 +2700,12 @@ struct ShellView: View {
 
         // Convoy discovery is independent of the map's live-session wiring.
         // Load it last so a slow callable cannot delay location controls.
+        notificationsCoordinator?.observe()
+        await pushNotifications.refreshPermissionState()
+        if uid == signedInUid, pushNotifications.permissionState == .notDetermined,
+           notificationsAvailable {
+            await pushNotifications.requestPermission()
+        }
         await convoyManagement.load()
         // The shell may have disappeared (restriction/sign-out) or switched
         // identities while the callable was suspended. Its onDisappear path
@@ -2687,20 +2777,22 @@ struct ShellView: View {
         )
     }
 
+    private var convoyEndChoicePresented: Binding<Bool> {
+        Binding(get: {
+            convoyEndSessionCoordinator?.presentsChoice == true
+                && convoyEndSessionCoordinator?.commandFailed != true
+        }, set: { _ in })
+    }
+
+    private var convoyEndCommandFailurePresented: Binding<Bool> {
+        Binding(get: { convoyEndSessionCoordinator?.commandFailed == true },
+                set: { if !$0 { convoyEndSessionCoordinator?.commandFailed = false } })
+    }
+
     private func reconcileDriveRecording() {
-        guard let driveRecordingCoordinator, let liveLocationCoordinator,
-              liveLocationCoordinator.hasReceivedSessionSnapshot else { return }
+        guard let liveLocationCoordinator, liveLocationCoordinator.hasReceivedSessionSnapshot else { return }
         let session = liveLocationCoordinator.session
-        if let session {
-            driveRecordingCoordinator.updateContext(driveRecordingContext(session))
-        }
-        guard LiveLocation.isSharing(session, at: Date()), let session else {
-            driveRecordingCoordinator.endSession(
-                context: session.map(driveRecordingContext)
-            )
-            return
-        }
-        driveRecordingCoordinator.start(context: driveRecordingContext(session))
+        convoyEndSessionCoordinator?.update(session: session, context: session.map(driveRecordingContext))
     }
 
     private func driveRecordingContext(_ session: LiveSessionInfo) -> DriveRecordingContext {

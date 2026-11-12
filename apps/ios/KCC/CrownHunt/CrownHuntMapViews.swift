@@ -107,6 +107,7 @@ struct CrownMarkerTile: View {
 struct CrownHuntCollectContent: View {
     @Bindable var coordinator: CrownHuntMapCoordinator
     let showLiveShareTip: Bool
+    var onNavigate: ((CrownMapTarget) -> Void)? = nil
     @State private var reportingTarget: CrownMapTarget?
 
     var body: some View {
@@ -140,6 +141,14 @@ struct CrownHuntCollectContent: View {
                     ))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("crown.collect")
+                    if let target = coordinator.selectedTarget, let onNavigate {
+                        Button { onNavigate(target) } label: {
+                            Label("crownHunt.navigate", systemImage: "arrow.triangle.turn.up.right.diamond")
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("crown.navigate")
+                    }
                 }
             }
         }
@@ -278,6 +287,32 @@ private struct CrownPlacementReportSheet: View {
     }
 }
 
+extension CrownMapTarget {
+    var popupTitle: LocalizedStringKey {
+        switch self {
+        case .point(let point): LocalizedStringKey(point.title)
+        case .spawn(let spawn): CrownHuntStrings.rarityKey(spawn.rarity)
+        }
+    }
+
+    /// The same tier-specific artwork used on the map and by Android's popup.
+    var popupGlyph: String {
+        switch self {
+        case .point: "crown-royal"
+        case .spawn(let spawn):
+            ["crown-band", "crown-jewelled_band", "crown-five_point", "crown-royal"][min(3, max(0, CrownMarkerStyle.rank(for: spawn.rarity)))]
+        }
+    }
+
+    var popupAccent: Color {
+        switch self {
+        case .point: KccTheme.driver
+        case .spawn(let spawn):
+            [KccPalette.crownCommon, KccPalette.crownUncommon, KccPalette.crownRare, KccPalette.crownGold][min(3, max(0, CrownMarkerStyle.rank(for: spawn.rarity)))]
+        }
+    }
+}
+
 private struct CrownTargetDetails: View {
     let target: CrownMapTarget
     let compact: Bool
@@ -286,17 +321,14 @@ private struct CrownTargetDetails: View {
         VStack(alignment: .leading, spacing: compact ? KccSpacing.s1 : KccSpacing.s2) {
             switch target {
             case .point(let point):
-                Label(point.title, systemImage: "crown.fill").font(titleFont)
                 if let detail = point.detail, !detail.isEmpty { Text(detail).font(detailFont) }
                 Text(CrownHuntStrings.kpValue(point.rewardPoints)).font(.headline)
             case .spawn(let spawn):
-                Label(CrownHuntStrings.rarityKey(spawn.rarity), systemImage: "crown.fill").font(titleFont)
                 Text(CrownHuntStrings.kpValue(spawn.rewardPoints)).font(.headline)
             }
         }
     }
 
-    private var titleFont: Font { (compact ? Font.subheadline : .title3).weight(.semibold) }
     private var detailFont: Font { compact ? .footnote : .body }
 }
 

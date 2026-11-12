@@ -17,6 +17,31 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testForegroundInviteIsVisibleWithoutMarkingInboxSeenAndRoutesAfterRead() async {
+        let repository = FakeNotificationsRepository()
+        let invite = AppNotification(id: "invite", category: .convoyInvite, title: "Konvoj",
+                                     relatedEntityId: "convoy-1")
+        repository.script([.loaded([invite])])
+        let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
+        coordinator.observe()
+        await waitFor(coordinator) { $0.convoyInvitation?.id == invite.id }
+        XCTAssertEqual(repository.markSeenCount, 0)
+        XCTAssertEqual(coordinator.destination(for: invite), .init(target: .convoys, entityId: "convoy-1"))
+        coordinator.dismissInvitation()
+        repository.emit(.loaded([invite]))
+        await Task.yield()
+        XCTAssertNil(coordinator.convoyInvitation)
+        coordinator.start()
+        await waitFor(coordinator) { _ in repository.markSeenCount == 1 }
+        coordinator.stopViewing()
+        repository.emit(.loaded([AppNotification(id: "next", category: .convoyInvite, title: "Nästa")]))
+        await waitFor(coordinator) { $0.convoyInvitation?.id == "next" }
+        XCTAssertEqual(repository.markSeenCount, 1)
+        coordinator.stopObserving()
+        XCTAssertNil(coordinator.convoyInvitation)
+    }
+
     // MARK: - fake
 
     private final class FakeNotificationsRepository: NotificationsRepository, @unchecked Sendable {

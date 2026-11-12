@@ -631,6 +631,48 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         XCTAssertEqual(provider.activeFixStreamCount, 0)
     }
 
+    func testConvoyToSoloPreservesOneDriveAndRecoversContinuationFromJournal() async {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        let url = temporaryJournalURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let journal = FileDriveRecordingJournal(fileURL: url)
+        let coordinator = DriveRecordingCoordinator(repository: repository, provider: provider,
+            journal: journal, now: { clock.value })
+        coordinator.start(context: context(sessionId: "convoy"))
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(fix(start, offset: 0))
+        provider.emitFix(fix(start, offset: 3, latitude: 57.0001))
+        await waitUntil { coordinator.state.summary?.pointCount == 2 }
+        coordinator.continueAsSingle(from: "convoy", context: context(sessionId: "solo"))
+        coordinator.start(context: context(sessionId: "solo"))
+        XCTAssertEqual(coordinator.state.summary?.pointCount, 2)
+        XCTAssertNotNil(coordinator.distanceMeters(for: "solo"))
+        XCTAssertNil(coordinator.distanceMeters(for: "convoy"))
+        XCTAssertEqual(journal.restore(sessionId: "solo")?.context.sourceSessionId, "convoy")
+        XCTAssertTrue(repository.requests.isEmpty)
+        coordinator.reset()
+
+        // reset intentionally deletes a live journal. Model a process death by
+        // restoring the protected journal into a fresh owner-scoped instance.
+        journal.begin(context: context(sessionId: "convoy").continuing(with: context(sessionId: "solo")), startedAt: start)
+        journal.append(point(start, offset: 0))
+        journal.append(RecordedDrivePoint(latitude: 57.0001, longitude: 12,
+            timestampMilliseconds: Int64(start.addingTimeInterval(3).timeIntervalSince1970 * 1_000)))
+        let resumed = DriveRecordingCoordinator(repository: repository, provider: provider,
+            journal: journal, now: { clock.value })
+        resumed.start(context: context(sessionId: "solo"))
+        XCTAssertEqual(resumed.state.summary?.pointCount, 2)
+        clock.value = start.addingTimeInterval(20)
+        resumed.endSession(context: context(sessionId: "solo"))
+        await waitUntil { repository.requests.count == 1 }
+        XCTAssertEqual(repository.requests.first?.context.sourceSessionId, "convoy")
+        XCTAssertEqual(repository.requests.first?.points.count, 2)
+        resumed.reset()
+    }
+
     private func makeCoordinator(
         _ repository: FakeRepository,
         _ provider: StubLocationProvider,

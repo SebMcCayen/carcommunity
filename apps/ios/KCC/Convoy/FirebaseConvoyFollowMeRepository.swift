@@ -24,15 +24,28 @@ final class FirebaseConvoyFollowMeRepository: ConvoyFollowMeRepository, @uncheck
         }
     }
 
-    func writeTrail(convoyId: String, polyline: String) async -> Bool {
+    func writeTrail(convoyId: String, polyline: String, activationId: String?) async -> Bool {
+        let reference = document(convoyId)
         do {
-            try await document(convoyId).updateData([
-                "polyline": polyline,
-                "updatedAt": FieldValue.serverTimestamp()
-            ])
-            return true
+            // Firestore SDK requests may survive Task cancellation. Compare the
+            // captured activation inside every transaction retry, including a
+            // same-member off/on cycle, before touching the new trail.
+            let result = try await firestore.runTransaction { transaction, errorPointer in
+                do {
+                    let snapshot = try transaction.getDocument(reference)
+                    guard snapshot.exists, snapshot.get("activationId") as? String == activationId else { return false }
+                    transaction.updateData([
+                        "polyline": polyline,
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], forDocument: reference)
+                    return true
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+            }
+            return result as? Bool == true
         } catch {
-            // Leadership may have changed between the local fix and this best-effort write.
             return false
         }
     }
@@ -47,7 +60,8 @@ final class FirebaseConvoyFollowMeRepository: ConvoyFollowMeRepository, @uncheck
                 continuation.yield(ConvoyFollowMeState(
                     leaderUid: snapshot.get("leaderUid") as? String,
                     polyline: snapshot.get("polyline") as? String,
-                    updatedAt: (snapshot.get("updatedAt") as? Timestamp)?.dateValue()
+                    updatedAt: (snapshot.get("updatedAt") as? Timestamp)?.dateValue(),
+                    activationId: snapshot.get("activationId") as? String
                 ))
             }
             let box = ConvoyFollowMeListenerBox(registration: registration)

@@ -28,7 +28,7 @@ final class FollowMeTrailTests: XCTestCase {
         XCTAssertEqual(FollowMeTrail.decode("Zm9vYmFy"), [])
     }
 
-    func testVisibilityRequiresOtherFreshAcceptedLeader() {
+    func testVisibilityIncludesAuthorAndRequiresFreshAcceptedLeader() {
         let now = Date(timeIntervalSince1970: 1_000)
         XCTAssertTrue(FollowMeTrail.shouldDraw(
             leaderUid: "leader",
@@ -37,7 +37,7 @@ final class FollowMeTrailTests: XCTestCase {
             lastFreshAt: now.addingTimeInterval(-1),
             now: now
         ))
-        XCTAssertFalse(FollowMeTrail.shouldDraw(
+        XCTAssertTrue(FollowMeTrail.shouldDraw(
             leaderUid: "me",
             selfUid: "me",
             leaderIsMember: true,
@@ -156,6 +156,48 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
         let leading = await coordinator.setLeading(false)
         XCTAssertEqual(leading, false)
         XCTAssertEqual(repository.toggles, [FollowMeToggle(convoyId: convoy.convoyId, active: false)])
+    }
+
+    func testLeaderTakeoverAndToggleOffReplaceAndClearTheSharedTrail() async {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let repository = ConvoyFollowMeRepositoryFake()
+        let coordinator = ConvoyFollowMeCoordinator(repository: repository, now: { now })
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        let convoy = makeConvoy()
+        coordinator.sync(convoy: convoy, currentUid: "viewer", positions: [:], surface: surface)
+        let first = [MapPoint(longitude: 12, latitude: 57), MapPoint(longitude: 12.001, latitude: 57)]
+        repository.emit(.init(leaderUid: "leader", polyline: FollowMeTrail.encode(first), updatedAt: now,
+                              activationId: "a"), convoyId: convoy.convoyId)
+        await waitUntil { surface.followMeTrail == first }
+        let second = [MapPoint(longitude: 13, latitude: 58), MapPoint(longitude: 13.001, latitude: 58)]
+        repository.emit(.init(leaderUid: "me", polyline: FollowMeTrail.encode(second), updatedAt: now,
+                              activationId: "b"), convoyId: convoy.convoyId)
+        await waitUntil { surface.followMeTrail == second }
+        repository.emit(nil, convoyId: convoy.convoyId)
+        await waitUntil { surface.followMeTrail == nil }
+        coordinator.stop()
+    }
+
+    func testSameLeaderReactivationResetsGeometryAndCapturesNewActivation() async {
+        let clock = FollowMeTestClock(date: Date(timeIntervalSince1970: 1_000))
+        let repository = ConvoyFollowMeRepositoryFake()
+        let coordinator = ConvoyFollowMeCoordinator(repository: repository, now: { clock.date })
+        let surface = StubMapSurface(initialState: .loaded, autoLoad: false)
+        let convoy = makeConvoy()
+        coordinator.sync(convoy: convoy, currentUid: "me", positions: ["me": .init(uid: "me",
+            latitude: 57, longitude: 12, updatedAt: clock.date)], surface: surface)
+        repository.emit(.init(leaderUid: "me", polyline: "", updatedAt: clock.date, activationId: "a"), convoyId: convoy.convoyId)
+        await waitUntil { repository.writes.count == 1 }
+        clock.date = clock.date.addingTimeInterval(5)
+        coordinator.sync(convoy: convoy, currentUid: "me", positions: ["me": .init(uid: "me",
+            latitude: 57.001, longitude: 12, updatedAt: clock.date)], surface: surface)
+        await waitUntil { repository.writes.count == 2 }
+        XCTAssertEqual(FollowMeTrail.decode(repository.writes.last?.polyline).count, 2)
+        repository.emit(.init(leaderUid: "me", polyline: "", updatedAt: clock.date, activationId: "b"), convoyId: convoy.convoyId)
+        await waitUntil { repository.writes.count == 3 }
+        XCTAssertEqual(repository.writes.last?.activationId, "b")
+        XCTAssertEqual(FollowMeTrail.decode(repository.writes.last?.polyline).count, 1)
+        coordinator.stop()
     }
 
     func testActivationAnnouncesOnlyAfterServerSuccess() async {
@@ -328,6 +370,7 @@ final class ConvoyFollowMeCoordinatorTests: XCTestCase {
             status: .active,
             members: [
                 ConvoyMember(uid: "me", displayName: nil, role: .member, inviteStatus: .accepted),
+                ConvoyMember(uid: "viewer", displayName: nil, role: .member, inviteStatus: .accepted),
                 ConvoyMember(uid: "leader", displayName: nil, role: .owner, inviteStatus: .accepted)
             ],
             viewer: ConvoyViewer(inviteStatus: .accepted, role: .member),
@@ -372,6 +415,7 @@ private struct FollowMeToggle: Equatable {
 private struct FollowMeWrite: Equatable {
     let convoyId: String
     let polyline: String
+    var activationId: String? = nil
 }
 
 private final class ConvoyFollowMeRepositoryFake: ConvoyFollowMeRepository, @unchecked Sendable {
@@ -392,9 +436,9 @@ private final class ConvoyFollowMeRepositoryFake: ConvoyFollowMeRepository, @unc
         return result.0
     }
 
-    func writeTrail(convoyId: String, polyline: String) async -> Bool {
+    func writeTrail(convoyId: String, polyline: String, activationId: String?) async -> Bool {
         lock.withLock {
-            writes.append(FollowMeWrite(convoyId: convoyId, polyline: polyline))
+            writes.append(FollowMeWrite(convoyId: convoyId, polyline: polyline, activationId: activationId))
         }
         return true
     }
