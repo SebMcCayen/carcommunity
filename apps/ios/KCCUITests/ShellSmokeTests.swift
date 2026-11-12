@@ -564,7 +564,18 @@ final class ShellSmokeTests: XCTestCase {
                 "Leaving Map must dismiss the Stop panel without stopping sharing")
             XCTAssertTrue(bar.wait(for: \.isHittable, toEqual: true, timeout: 5))
 
+            app.buttons["shell.search"].tap()
+            let query = app.textFields["addressSearch.query"]
+            XCTAssertTrue(query.waitForExistence(timeout: 5))
+            let hideKeyboard = app.buttons["addressSearch.keyboard.dismiss"]
+            XCTAssertTrue(hideKeyboard.waitForExistence(timeout: 5))
+            hideKeyboard.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.wait(for: \.exists, toEqual: false, timeout: 5))
+            XCTAssertTrue(query.exists, "The search overlay stays open after hiding its keyboard")
+            XCTAssertTrue(stop.isHittable)
             stop.tap()
+            XCTAssertTrue(query.wait(for: \.exists, toEqual: false, timeout: 5),
+                "Stop must close address search before opening the docked panel")
             assertLiveStopPanel(app, language: "sv")
             app.buttons["map.session.stop"].tap()
             assertDriveSavedWithoutPrompt(app)

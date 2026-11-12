@@ -2060,6 +2060,7 @@ struct ShellView: View {
             canShareLive: coordinator.canShare
         )
         if coordinator.isSharing {
+            closeAddressSearch()
             selectMapReading(.stopLive)
         } else if actions.showChooser {
             startDrivingGarage = GarageCoordinator(
