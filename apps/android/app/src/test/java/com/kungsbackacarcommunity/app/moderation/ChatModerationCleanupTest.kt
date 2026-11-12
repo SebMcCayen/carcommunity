@@ -88,7 +88,10 @@ class ChatModerationCleanupTest {
             finishSubmittedChatModeration(timeoutMillis = 1000L) { delay(2000) }
             fail("The completion deadline must apply even after UI cancellation")
         } catch (error: IOException) {
-            assertTrue(error.cause is kotlinx.coroutines.TimeoutCancellationException)
+            // Coroutine stacktrace recovery may copy the IOException and retain
+            // the original exception as its cause in Gradle's debug test runtime.
+            assertTrue(generateSequence(error as Throwable) { it.cause }
+                .any { it is kotlinx.coroutines.TimeoutCancellationException })
         }
     }
 }
