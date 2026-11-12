@@ -1311,15 +1311,17 @@ internal fun LiveSharePopup(
     )
     if (rows.showStop) {
         // The prominent stop action. Only present when the caller wires
-        // [onStop] — i.e. the shell's centre-control sheet, where this
-        // sheet is now how a running session is ended. Stopping raises
-        // the save/discard summary exactly as the bottom-bar control
-        // used to (the host's stop handler flips isSharing). Error
-        // colours make it the unmistakable primary action.
+        // [onStop] — i.e. the shell's centre-control sheet. The host saves
+        // the drive in the background after the session ends.
+        Text(
+            text = stringResource(R.string.liveLocation_stopSavesToHistory),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Button(
             onClick = {
-                onStop?.invoke()
                 onDismiss()
+                onStop?.invoke()
             },
             modifier = Modifier.fillMaxWidth(),
             colors =
