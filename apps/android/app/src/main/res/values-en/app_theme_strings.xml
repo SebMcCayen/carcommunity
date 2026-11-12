@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_theme_title">App theme</string>
+    <string name="app_theme_help">Applies to the map and the rest of the app.</string>
+    <string name="app_theme_automatic">Auto</string>
+    <string name="app_theme_schedule_help">Switches automatically at your chosen times in your phone\'s local time zone.</string>
+    <string name="app_theme_day_from">Day from %1$s</string>
+    <string name="app_theme_night_from">Night from %1$s</string>
+    <string name="app_theme_day_start">When does day mode start?</string>
+    <string name="app_theme_night_start">When does night mode start?</string>
+    <string name="app_theme_different_times">Choose different start times for day and night.</string>
+    <string name="app_theme_save">Save</string>
+    <string name="app_theme_cancel">Cancel</string>
+</resources>

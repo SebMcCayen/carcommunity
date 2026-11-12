@@ -1136,7 +1136,7 @@ fun AuthenticatedApp(
                 )
 
             // Device-local persistence for the map-layers popup toggles (traffic
-            // alerts, Mapbox congestion overlay, night-mode override, 3D buildings).
+            // alerts, Mapbox congestion overlay, 3D buildings).
             // Seeds the hoisted states / the surface below on start-up and records
             // every toggle, so a user's map layers survive a cold restart instead of
             // snapping back to defaults. Mirrors compassModeStore just below.
@@ -1144,54 +1144,9 @@ fun AuthenticatedApp(
             val mapLayersStore =
                 remember(mapLayersContext) { MapLayersPreferenceStore(mapLayersContext) }
 
-            // The map's manual day/night override (null = follow the app theme).
-            //
-            // Owned HERE, not inside MapHome, precisely because [route] above can
-            // unmount MapHome: opening any full-screen route swaps the shell's
-            // `else` branch away, disposing MapHome and — when this state lived
-            // there — silently discarding the user's Day choice, so returning to
-            // the map snapped it back to Night on a dark-themed device. This
-            // scope survives every route change, so the override sticks for the
-            // session. rememberSaveable additionally carries it across rotation,
-            // and — seeded from [mapLayersStore] and written back below — across a
-            // cold restart / process kill too (matching the compass preference).
-            val mapNightModeOverride =
-                rememberSaveable(
-                    stateSaver = Saver(
-                        save = { it?.name },
-                        // Safe parse: valueOf THROWS on an unknown constant (enum
-                        // renamed by an update, corrupt saved state), which would
-                        // crash the restore; find falls back to "follow the app
-                        // theme".
-                        restore = { saved ->
-                            (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } }
-                        },
-                    ),
-                    // Seed from disk: the stored override, or null (follow the app
-                    // theme) when unset. rememberSaveable restores its own bundle
-                    // value across system-initiated process death; on a genuine cold
-                    // start (bundle gone) this lambda runs and reads the durable store.
-                ) { mutableStateOf(mapLayersStore.readNightMode()) }
-
-            // Persist any day/night change durably so it survives a cold restart.
-            // The first run writes the seed back (an idempotent same-value no-op),
-            // and every toggle records the user's new pick (null clears it back to
-            // "follow the app theme").
-            LaunchedEffect(mapNightModeOverride.value) {
-                mapLayersStore.writeNightMode(mapNightModeOverride.value)
-            }
-
             // The map's compass orientation (course-up default vs north-up).
             //
-            // Owned HERE for the SAME reason mapNightModeOverride is: opening a
-            // full-screen route disposes MapHome, so holding this only inside it
-            // would drop the user's pick on the way back. Unlike the day/night
-            // override — which is a session preference kept alive only by
-            // rememberSaveable — the compass choice is DURABLY persisted:
-            // [CompassModePreferenceStore] (device-local SharedPreferences) seeds
-            // the state on start-up and records every change, so a user who picks
-            // north-up keeps it across a cold restart, while a user who has never
-            // chosen gets the first-run default (course-up, MapCompassMode.DEFAULT).
+            // Hoisted above the route switch and persisted across cold starts.
             val compassModeContext = LocalContext.current
             val compassModeStore =
                 remember(compassModeContext) { CompassModePreferenceStore(compassModeContext) }
@@ -6242,14 +6197,6 @@ fun AuthenticatedApp(
                         trafikverketDataShown = trafikverketDataShown,
                         trafficEnabled = mapTrafficOn,
                         onTrafficEnabledChange = { mapSurface.setTrafficEnabled(it) },
-                        nightMode = mapNightModeOverride.value?.let { it == MapMode.Night },
-                        onNightModeChange = { on ->
-                            val mode = if (on) MapMode.Night else MapMode.Day
-                            mapNightModeOverride.value = mode
-                            // Apply to the shell surface too, so the map home is
-                            // already in the chosen mode when navigation exits.
-                            mapSurface.setMapMode(mode)
-                        },
                         is3d = mapIs3d,
                         on3dEnabledChange = { mapSurface.set3dEnabled(it) },
                         // The map home's chat bubble + unread DOT, opening the
@@ -6768,7 +6715,6 @@ fun AuthenticatedApp(
                                     mapSurface = mapSurface,
                                     // Shell-owned so it survives route changes
                                     // (see the declaration for the bug this fixes).
-                                    nightModeOverrideState = mapNightModeOverride,
                                     // Shell-owned + store-backed so the compass
                                     // pick survives route changes AND a cold
                                     // restart; default is course-up (see the

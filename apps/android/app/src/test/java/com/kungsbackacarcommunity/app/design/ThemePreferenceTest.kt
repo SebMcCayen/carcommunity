@@ -122,4 +122,30 @@ class ThemePreferenceTest {
         }
     }
 
+    @Test fun `custom schedule includes boundaries and supports day across midnight`() {
+        val schedule = AutomaticThemeSchedule(LocalTime.of(21, 15), LocalTime.of(8, 30))
+        listOf(
+            LocalTime.of(21, 14, 59) to true,
+            LocalTime.of(21, 15) to false,
+            LocalTime.MIDNIGHT to false,
+            LocalTime.of(8, 29, 59) to false,
+            LocalTime.of(8, 30) to true,
+            LocalTime.NOON to true,
+        ).forEach { (time, dark) ->
+            assertEquals(dark, ThemePreference.AUTOMATIC.resolveDark(false, time, schedule))
+            assertEquals(dark, ThemePreference.AUTOMATIC.resolveDark(true, time, schedule))
+        }
+    }
+
+    @Test fun `invalid stored schedules recover safely`() {
+        listOf(-1 to 100, 1440 to 100, 100 to 1440, 100 to 100).forEach { (day, night) ->
+            assertEquals(AutomaticThemeSchedule.DEFAULT, AutomaticThemeSchedule.fromStoredMinutes(day, night))
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `equal day and night starts are rejected`() {
+        AutomaticThemeSchedule(LocalTime.NOON, LocalTime.NOON)
+    }
+
 }

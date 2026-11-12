@@ -300,10 +300,6 @@ private const val ROUTE_LINE_BELOW_LAYER_ID = "road-label-navigation"
  *   value comes from the shell surface so both maps agree, and this screen
  *   applies it to its OWN style using the shared traffic source/layer + day-night
  *   ramp ([MapboxMapSurface.addTrafficLayer]).
- * @param nightMode the day/night choice, or null to follow the app theme (the
- *   pre-existing behaviour). Drives BOTH the navigation style URI and the
- *   layers popup's switch. [onNightModeChange] reports a manual flip to the host,
- *   which owns the override for the whole session.
  * @param is3d / [on3dEnabledChange] tilted vs flat. Applied here as the
  *   NAVIGATION camera's pitch override — a follow camera owns its own pitch, so
  *   flattening it is the honest equivalent of the map home's flat 2D camera.
@@ -373,8 +369,6 @@ fun TurnByTurnNavScreen(
     trafikverketDataShown: Boolean = false,
     trafficEnabled: Boolean = false,
     onTrafficEnabledChange: (Boolean) -> Unit = {},
-    nightMode: Boolean? = null,
-    onNightModeChange: (Boolean) -> Unit = {},
     is3d: Boolean = true,
     on3dEnabledChange: (Boolean) -> Unit = {},
     hasUnreadChat: Boolean = false,
@@ -527,10 +521,8 @@ fun TurnByTurnNavScreen(
     // app. This screen composes inside AppRoot's KccTheme, so the local is
     // provided. On the default Automatic preference the two are identical, so
     // navigation styling is unchanged for anyone who never opens the setting.
-    // The manual override wins when the user has made one (the layers popup's
-    // Night switch); otherwise the app theme decides, exactly as before.
-    val themeIsDark = LocalKccDarkTheme.current
-    val night = nightMode ?: themeIsDark
+    // Navigation style and chrome follow the same resolved app-wide theme.
+    val night = LocalKccDarkTheme.current
     val navStyleUri =
         if (night) {
             NavigationStyles.NAVIGATION_NIGHT_STYLE
@@ -930,17 +922,10 @@ fun TurnByTurnNavScreen(
                                                 modifier = Modifier.testTag(TURN_BY_TURN_REPORT_TAG),
                                             )
 
-                                        // Map layers — the map home's control opening the
-                                        // map home's popup. The "active" tint follows the
-                                        // same rule: traffic on, OR the user has manually
-                                        // DEVIATED from the theme's day/night default, OR
-                                        // 3D is off. A system-driven Night (dark theme,
-                                        // untouched) must not light it up, which is why
-                                        // the night term tests `nightMode != null` first.
+                                        // Same app-wide theme and layer controls as MapHome.
                                         MapCircleControlKind.Layers -> {
                                             val layersActive =
                                                 trafficEnabled ||
-                                                    (nightMode != null && nightMode != themeIsDark) ||
                                                     !is3d
                                             CircleControl(
                                                 icon = Icons.Filled.Layers,
@@ -1035,11 +1020,6 @@ fun TurnByTurnNavScreen(
                 trafikverketDataShown = trafikverketDataShown,
                 trafficOn = trafficEnabled,
                 onTrafficChange = onTrafficEnabledChange,
-                // The switch shows the EFFECTIVE mode (manual override, else the
-                // theme), matching the map home, so it never disagrees with the
-                // map behind it while an override is unset.
-                nightMode = night,
-                onNightModeChange = onNightModeChange,
                 is3d = is3d,
                 on3dChange = on3dEnabledChange,
                 browsingZoom = mapZoomController.browsingZoom,

@@ -22,6 +22,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.design.ThemeController
+import com.kungsbackacarcommunity.app.design.ThemePreference
+import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
+import com.kungsbackacarcommunity.app.design.LocalThemeController
 import com.kungsbackacarcommunity.app.CreateChooserDialog
 import com.kungsbackacarcommunity.app.convoy.ConvoyBar
 import com.kungsbackacarcommunity.app.convoy.ConvoyBarState
@@ -104,17 +109,28 @@ fun MapShellCataloguePreview(
     val live = screen == "map-session" || screen == "map-convoy"
     var panel by remember(screen) { mutableStateOf(screen.takeUnless { live }) }
     var selectedTab by remember { mutableStateOf(ShellTab.Map) }
-    val nightOverride = remember { mutableStateOf(initialMapMode) }
+    val inheritedDark = LocalKccDarkTheme.current
+    val theme = remember {
+        object : ThemeController {
+            private var mode by mutableStateOf(when (initialMapMode) {
+                MapMode.Day -> ThemePreference.LIGHT
+                MapMode.Night -> ThemePreference.DARK
+                null -> if (inheritedDark) ThemePreference.DARK
+                    else ThemePreference.LIGHT
+            })
+            override val preference get() = mode
+            override fun setPreference(preference: ThemePreference) { mode = preference }
+        }
+    }
     var incidentsOn by remember { mutableStateOf(true) }
     var age by remember { mutableStateOf(IncidentAgeOption.ALL) }
     var participating by remember { mutableStateOf(true) }
     val traffic by surface.trafficEnabled.collectAsState()
-    val mode by surface.mapMode.collectAsState()
     val is3d by surface.is3d.collectAsState()
     val dismiss = { panel = null; onSheetDismiss() }
     val action: (String) -> Unit = { onLocalAction(it); dismiss() }
 
-    CompositionLocalProvider(LocalMapZoomController provides zoom) {
+    CatalogueThemeProvider(theme, inheritedDark, zoom) {
         // AuthenticatedApp owns this lifecycle in production. Standalone native
         // captures must activate rendering as well as waiting for a loaded style.
         DisposableEffect(surface) {
@@ -149,7 +165,6 @@ fun MapShellCataloguePreview(
                         onSearch = {},
                         onOpenSavedPlaces = { panel = "map-saved" },
                         moreMenuEntries = emptyList(),
-                        nightModeOverrideState = nightOverride,
                         incidentReportingEnabled = true,
                         incidentsLayerEnabled = incidentsOn,
                         onIncidentsLayerEnabledChange = { incidentsOn = it },
@@ -207,19 +222,14 @@ fun MapShellCataloguePreview(
                 "map-layers" -> MapLayersPopup(
                     incidentsOn = incidentsOn, onIncidentsChange = { incidentsOn = it },
                     trafikverketDataShown = false, trafficOn = traffic,
-                    nightMode = mode == MapMode.Night, is3d = is3d,
+                    is3d = is3d,
                     onTrafficChange = surface::setTrafficEnabled,
-                    onNightModeChange = { night ->
-                        nightOverride.value = if (night) MapMode.Night else MapMode.Day
-                        surface.setMapMode(nightOverride.value!!)
-                    },
                     on3dChange = surface::set3dEnabled,
                     browsingZoom = zoom.browsingZoom, onBrowsingZoomChange = zoom::setBrowsingZoom,
                     incidentMaxAge = age, onIncidentMaxAgeChange = { age = it },
                     crownHuntParticipating = participating,
                     onCrownHuntParticipatingChange = { participating = it },
-                    onDismiss = dismiss, followsTheme = nightOverride.value == null,
-                    onFollowTheme = { nightOverride.value = null },
+                    onDismiss = dismiss,
                 )
                 "map-saved" -> SavedPlacesPickerSheet(
                     places = catalogueSavedPlaces, onSelect = { action("saved:${it.id}") }, onDismiss = dismiss,
@@ -244,6 +254,13 @@ fun MapShellCataloguePreview(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CatalogueThemeProvider(theme: ThemeController, inheritedDark: Boolean, zoom: MapZoomController, content: @Composable () -> Unit) {
+    KccTheme(darkTheme = theme.preference.resolveDark(inheritedDark)) {
+        CompositionLocalProvider(LocalMapZoomController provides zoom, LocalThemeController provides theme, content = content)
     }
 }
 

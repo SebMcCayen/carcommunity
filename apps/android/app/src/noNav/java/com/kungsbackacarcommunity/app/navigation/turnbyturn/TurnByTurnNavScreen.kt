@@ -82,8 +82,6 @@ fun TurnByTurnNavScreen(
     @Suppress("UNUSED_PARAMETER") trafikverketDataShown: Boolean = false,
     @Suppress("UNUSED_PARAMETER") trafficEnabled: Boolean = false,
     @Suppress("UNUSED_PARAMETER") onTrafficEnabledChange: (Boolean) -> Unit = {},
-    @Suppress("UNUSED_PARAMETER") nightMode: Boolean? = null,
-    @Suppress("UNUSED_PARAMETER") onNightModeChange: (Boolean) -> Unit = {},
     @Suppress("UNUSED_PARAMETER") is3d: Boolean = true,
     @Suppress("UNUSED_PARAMETER") on3dEnabledChange: (Boolean) -> Unit = {},
     @Suppress("UNUSED_PARAMETER") hasUnreadChat: Boolean = false,
