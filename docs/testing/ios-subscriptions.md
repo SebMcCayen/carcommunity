@@ -40,6 +40,9 @@ production acceptance of local test certificates.
 
 1. Ensure Apple Developer membership and Paid Apps Agreement are active; complete
    the required banking and tax information.
+   The Xcode target explicitly links StoreKit. Confirm that the matching explicit
+   bundle ID has this capability enabled in Certificates, Identifiers & Profiles
+   and that the signing profile uses that ID (not a wildcard).
 2. In the app with bundle ID `com.kungsbackacarcommunity.app`, create
    `plus_monthly` and `supporter_monthly` as auto-renewable **one-month**
    subscriptions in **one group**. Configure levels, names, Swedish/English
@@ -133,5 +136,6 @@ delivery, or complete S80 visual/accessibility acceptance.
 
 - [Testing throughout development](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox)
 - [Testing with sandbox](https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox)
+- [Troubleshooting sandbox availability and capabilities](https://developer.apple.com/documentation/technotes/tn3186-troubleshooting-in-app-purchases-availability-in-the-sandbox)
 - [StoreKit Test sessions](https://developer.apple.com/documentation/storekittest/sktestsession)
 - [App Store Server Notifications V2 data](https://developer.apple.com/documentation/appstoreservernotifications/data)

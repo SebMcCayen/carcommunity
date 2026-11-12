@@ -34,6 +34,8 @@ targets:
     sources:
       - path: KCC
     dependencies:
+      # Explicit SDK linkage is XcodeGen's In-App Purchase capability setup.
+      - sdk: StoreKit.framework
       # App Check protects authenticated callables. Its provider factory is
       # installed before FirebaseApp.configure in FirebaseBootstrap.
       - package: Firebase

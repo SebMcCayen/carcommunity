@@ -69,6 +69,7 @@
 		1E5DD46908B417DC64B27812 /* DriveRecordingModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B001FB0596C8AAE386BE012C /* DriveRecordingModelsTests.swift */; };
 		1E9975E9B863634926D0BAC2 /* CrownHuntFeatureFlagsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8762FA4089D8E6940ABB67D4 /* CrownHuntFeatureFlagsTests.swift */; };
 		1ED18C0DD0C842274AFC90A9 /* SavedPlacesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D47DC5F4210E2337814CE4 /* SavedPlacesTests.swift */; };
+		1F36BB6DEAAC32073C070088 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CC1041BEC42960AF7CBB0908 /* StoreKit.framework */; };
 		1F6A49D1FE89AAF25A64ABD7 /* DriveDesignViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 942A6DAE6D0FDBCFBDF4F62B /* DriveDesignViews.swift */; };
 		1FF6ACAA1D6E4A22FC0044C5 /* AccountDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D763F1BD23666E2332D73FB3 /* AccountDeletionTests.swift */; };
 		201903E2A7F0ECD5B05CBB55 /* ConversationsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15892EE69827A386C169C05 /* ConversationsRepository.swift */; };
@@ -847,6 +848,7 @@
 		CAE444D801E18A1F91EB93CA /* FirebaseCrownHuntClaimsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseCrownHuntClaimsRepository.swift; sourceTree = "<group>"; };
 		CB67D4C9FF1BC7325C26244A /* PartnersModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnersModels.swift; sourceTree = "<group>"; };
 		CBEA02F100F50B1530E6E18B /* PointsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsRepository.swift; sourceTree = "<group>"; };
+		CC1041BEC42960AF7CBB0908 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		CC4F12F49825BF49BD345CDA /* NearbyLiveModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyLiveModels.swift; sourceTree = "<group>"; };
 		CDEB2AB98D1A071F70D7F572 /* ConfiglessMapMarkerFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfiglessMapMarkerFixture.swift; sourceTree = "<group>"; };
 		CEE267B626CBCA7F0EE420C2 /* AppAccessSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAccessSession.swift; sourceTree = "<group>"; };
@@ -944,6 +946,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1F36BB6DEAAC32073C070088 /* StoreKit.framework in Frameworks */,
 				796D4208F306EAFA0B940C3E /* FirebaseAppCheck in Frameworks */,
 				8D0B56DF9BD0EB28E457338C /* FirebaseAuth in Frameworks */,
 				2EC5800FD4E02C0186D0E3E2 /* FirebaseFirestore in Frameworks */,
@@ -1335,6 +1338,7 @@
 				4354374B4D732A7906C4993A /* KCC */,
 				F609A800CAF387D91FC4893D /* KCCTests */,
 				E1CDCF4151740237E2053815 /* KCCUITests */,
+				F88A1D562093FFDF66ACF94A /* Frameworks */,
 				4CDCB20F1F46BDF788444D9D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1795,6 +1799,14 @@
 				D4AB2B5B8163CD602E2EAE3C /* Resources */,
 			);
 			path = KCCTests;
+			sourceTree = "<group>";
+		};
+		F88A1D562093FFDF66ACF94A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				CC1041BEC42960AF7CBB0908 /* StoreKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		FF035C12CDCD538F8CD24182 /* GroupDrive */ = {
