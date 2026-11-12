@@ -4,7 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.test.platform.app.InstrumentationRegistry
+import android.graphics.Bitmap
+import android.os.Build
+import java.io.File
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -27,13 +32,14 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ConvoyInvitationHostTest {
     @get:Rule val rule = createComposeRule()
+    private val restoration by lazy { StateRestorationTester(rule) }
     private val notifications = Inbox()
     private val convoys = Convoys()
     private var elapsed by mutableLongStateOf(0L)
     private var joined = 0
 
     private fun show(dark: Boolean = false) {
-        rule.setContent {
+        restoration.setContent {
             KccTheme(darkTheme = dark) {
                 Column(Modifier.fillMaxSize().background(if (dark) KccPalette.nightOverlay else KccPalette.warmIvory)) {
                     Spacer(Modifier.weight(1f))
@@ -53,6 +59,7 @@ class ConvoyInvitationHostTest {
                 "invite", NotificationCategory.CONVOY_INVITE, "Konvoj", "Linnea bjuder in", null,
                 false, System.currentTimeMillis(), relatedEntityId = "convoy", inviterDisplayName = "Linnea Andersson")))
         }
+        rule.waitUntil(5_000) { rule.onAllNodesWithTag("convoy_invitation_card").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("convoy_invitation_card").assertIsDisplayed()
     }
 
@@ -111,12 +118,35 @@ class ConvoyInvitationHostTest {
         assertEquals(0, joined)
     }
 
+    @Test fun activityRecreationDoesNotRenewDeadline() {
+        show()
+        rule.runOnIdle { elapsed = 20_000 }
+        restoration.emulateSavedInstanceStateRestore()
+        rule.onNodeWithTag("convoy_invitation_card").assertIsDisplayed()
+        rule.runOnIdle { elapsed = 30_000 }
+        rule.waitUntil(5_000) { rule.onAllNodesWithTag("convoy_invitation_card").fetchSemanticsNodes().isEmpty() }
+        assertTrue(notifications.readIDs.isEmpty())
+    }
+
+    @Test fun compactCardStaysAboveLiveBarInLightTheme() {
+        show()
+        checkPlacementAndCapture("light")
+    }
+
     @Test fun compactCardStaysAboveLiveBarInDarkTheme() {
         show(dark = true)
+        checkPlacementAndCapture("dark")
+    }
+
+    private fun checkPlacementAndCapture(theme: String) {
         rule.onNodeWithText("Linnea Andersson").assertIsDisplayed()
         val card = rule.onNodeWithTag("convoy_invitation_card").fetchSemanticsNode().boundsInRoot
         val live = rule.onNodeWithTag("fixture_live_bar").fetchSemanticsNode().boundsInRoot
         assertTrue(card.bottom <= live.top)
+        if (!Build.FINGERPRINT.contains("robolectric", ignoreCase = true)) {
+            val output = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "convoy-invitation-$theme.png")
+            output.outputStream().use { rule.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
     }
 
     private class Inbox : NotificationsRepository {

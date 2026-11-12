@@ -8455,6 +8455,7 @@ fun AuthenticatedApp(
                     Box(Modifier.fillMaxSize().padding(horizontal = KccSpacing.s4)
                         .padding(bottom = with(invitationDensity) { clearance.toDp() } + KccSpacing.s2),
                         contentAlignment = Alignment.BottomCenter) {
+                        key(uid) {
                         com.kungsbackacarcommunity.app.notifications.ConvoyInvitationHost(
                             uid = uid,
                             repository = notificationsRepository,
@@ -8472,6 +8473,7 @@ fun AuthenticatedApp(
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        }
                     }
                 }
 

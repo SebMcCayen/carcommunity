@@ -73,6 +73,7 @@ struct ShellView: View {
     @State private var mapDockHeight: CGFloat = 0
     @State private var mapSessionHeight: CGFloat = 0
     @State private var invitationFooterHeight: CGFloat = 0
+    @State private var invitationAnswerTask: Task<Void, Never>?
     @State private var invitationBusyID: String?
     @State private var invitationErrorID: String?
     @State private var invitationActionFailed = false
@@ -280,6 +281,8 @@ struct ShellView: View {
                 liveLocationCoordinator?.standDownForRestrictedAccess()
                 convoyEndSessionCoordinator?.stop()
                 driveRecordingCoordinator?.reset()
+                invitationAnswerTask?.cancel()
+                invitationAnswerTask = nil
                 notificationsCoordinator?.stopObserving()
                 billboardsCoordinator?.stop()
                 clubsCoordinator?.stop()
@@ -359,16 +362,16 @@ struct ShellView: View {
         invitationBusyID = invitation.id
         invitationErrorID = nil
         // Shell-owned task survives removal of the timed card.
-        Task { @MainActor in
+        invitationAnswerTask = Task { @MainActor in
             defer { invitationBusyID = nil }
             await coordinator.load()
-            guard identity == signedInUid else { return }
+            guard !Task.isCancelled, case .signedIn(let currentUid, _) = session.state, currentUid == identity else { return }
             guard coordinator.snapshot?.pendingInvites.contains(where: { $0.convoyId == convoyID }) == true else {
                 notifications.dismissInvitation(expectedID: invitation.id)
                 return
             }
             let joined = await coordinator.respond(convoyId: convoyID, action: join ? .accept : .decline)
-            guard identity == signedInUid else { return }
+            guard !Task.isCancelled, case .signedIn(let currentUid, _) = session.state, currentUid == identity else { return }
             let success = join ? joined != nil : (coordinator.actionError == nil
                 && coordinator.snapshot?.pendingInvites.contains(where: { $0.convoyId == convoyID }) == false)
             if success {
