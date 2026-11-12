@@ -250,3 +250,68 @@ final class NotificationsModelTests: XCTestCase {
         )
     }
 }
+
+final class ConvoyInvitationPresentationTests: XCTestCase {
+    private let startedAt = Date(timeIntervalSince1970: 1_000)
+    private func invite(_ id: String, created: TimeInterval = 1_000) -> AppNotification {
+        AppNotification(id: id, category: .convoyInvite, title: "Konvoj",
+            createdAt: Date(timeIntervalSince1970: created), relatedEntityId: "convoy-\(id)",
+            inviterDisplayName: "Linnea Andersson")
+    }
+
+    func testExpiresAtThirtySecondsWithoutChangingDurableInvitation() {
+        let item = invite("one")
+        var presentation = ConvoyInvitationPresentation(startedAt: startedAt)
+        presentation.update([item], now: 200)
+        XCTAssertEqual(presentation.currentID, "one")
+        XCTAssertEqual(presentation.deadline, 230)
+        presentation.update([item], now: 229.999)
+        XCTAssertEqual(presentation.currentID, "one")
+        presentation.update([item], now: 230)
+        XCTAssertNil(presentation.currentID)
+        XCTAssertFalse(item.isRead)
+        presentation.update([item], now: 240)
+        XCTAssertNil(presentation.currentID)
+    }
+
+    func testRepeatedSnapshotPreservesDeadlineAndQueuesNextInvitation() {
+        let first = invite("first"), second = invite("second", created: 1_001)
+        var presentation = ConvoyInvitationPresentation(startedAt: startedAt)
+        presentation.update([first], now: 200)
+        presentation.update([first, second], now: 210)
+        XCTAssertEqual(presentation.currentID, "first")
+        XCTAssertEqual(presentation.deadline, 230)
+        presentation.update([first, second], now: 230)
+        XCTAssertEqual(presentation.currentID, "second")
+        XCTAssertEqual(presentation.deadline, 260)
+        presentation.dismiss("first")
+        XCTAssertEqual(presentation.currentID, "second")
+    }
+
+    func testOldInitialSnapshotIsIgnoredAndArrivalDuringLoadingIsKept() {
+        var presentation = ConvoyInvitationPresentation(startedAt: startedAt)
+        presentation.update([invite("old", created: 999), invite("fresh", created: 1_001)], now: 200)
+        XCTAssertEqual(presentation.currentID, "fresh")
+        XCTAssertTrue(presentation.seenIDs.contains("old"))
+    }
+
+    func testReadRemovedAndInboxVisibleRetirePresentation() {
+        var presentation = ConvoyInvitationPresentation(startedAt: startedAt)
+        presentation.update([invite("one")], now: 200)
+        presentation.update([], now: 210)
+        XCTAssertNil(presentation.currentID)
+        presentation.update([invite("two")], now: 220, available: false)
+        presentation.update([invite("two")], now: 225)
+        XCTAssertNil(presentation.currentID)
+    }
+
+    func testDecodesStructuredInviterWithoutInferringConvoyOwner() {
+        let decoded = AppNotification.decode(id: "invite", fields: [
+            "title": "Konvoj", "category": "convoy_invite", "relatedEntityId": "convoy-1",
+            "convoyInvitation": ["inviterUid": "member-not-owner", "inviterDisplayName": "Linnea Andersson",
+                                 "inviterAvatarPath": "profileImages/member/avatar"]
+        ])
+        XCTAssertEqual(decoded?.inviterDisplayName, "Linnea Andersson")
+        XCTAssertEqual(decoded?.inviterAvatarPath, "profileImages/member/avatar")
+    }
+}

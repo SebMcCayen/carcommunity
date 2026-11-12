@@ -508,15 +508,21 @@ async function resolveInvitees(
  */
 async function notifyInvitees(
   inviteeUids: string[],
-  inviterDisplayName: string | null,
+  inviterUid: string,
+  inviterProfile: ProfileProjection | null,
   convoyId: string,
   convoyTitle: string | null,
 ): Promise<void> {
-  const inviterName = inviterDisplayName ?? 'En vän';
+  const inviterName = inviterProfile?.displayName ?? 'En vän';
   await Promise.all(
     inviteeUids.map((uid) =>
       writeInAppNotification(uid, {
         category: 'convoy_invite',
+        convoyInvitation: {
+          inviterUid,
+          inviterDisplayName: inviterProfile?.displayName ?? null,
+          inviterAvatarPath: inviterProfile?.avatarPath ?? null,
+        },
         title: 'Konvoj-inbjudan',
         previewText: `${inviterName} har bjudit in dig till en konvoj${
           convoyTitle ? `: ${convoyTitle}` : ''
@@ -617,7 +623,8 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
   // single path convoy.invite uses.
   await notifyInvitees(
     invited.map((i) => i.uid),
-    ownerProfile.displayName,
+    actor.uid,
+    ownerProfile,
     ref.id,
     title ?? null,
   );
@@ -1426,7 +1433,8 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
   const freshData = fresh.data() ?? {};
   await notifyInvitees(
     addedUids,
-    inviterProfile?.displayName ?? null,
+    actor.uid,
+    inviterProfile,
     convoyId,
     typeof freshData.title === 'string' ? freshData.title : null,
   );

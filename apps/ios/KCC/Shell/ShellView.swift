@@ -72,6 +72,10 @@ struct ShellView: View {
     @State private var mapReadingSelection: MapReadingSelection?
     @State private var mapDockHeight: CGFloat = 0
     @State private var mapSessionHeight: CGFloat = 0
+    @State private var invitationFooterHeight: CGFloat = 0
+    @State private var invitationBusyID: String?
+    @State private var invitationErrorID: String?
+    @State private var invitationActionFailed = false
     @State private var clubDeepLinkID: String?
     @State private var clubsCoordinator: ClubsCoordinator?
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
@@ -207,6 +211,9 @@ struct ShellView: View {
             .task(id: savedPlacesLocationSubscriptionKey) {
                 await observeSavedPlacesLocation()
             }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                notificationsCoordinator?.setInvitationForeground(phase == .active)
+            }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active, signedInUid != nil else { return }
                 appUpdateCoordinator.scheduleRequiredUpdateRecheck()
@@ -299,44 +306,83 @@ struct ShellView: View {
                     .id(destination)
                     .zIndex(1)
             }
-            if let coordinator = notificationsCoordinator,
-               let invitation = coordinator.convoyInvitation, routes.current != .notifications,
-               scenePhase == .active, navigationDestination == nil {
-                VStack {
-                    HStack(spacing: KccSpacing.s2) {
-                        Button {
-                            let destination = coordinator.destination(for: invitation)
-                            coordinator.dismissInvitation()
-                            if let destination { openNotificationDeepLink(destination) }
-                            Task { await coordinator.markRead(notificationId: invitation.id) }
-                        } label: {
-                            Label {
-                                VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                                    Text(verbatim: invitation.title).font(.headline).lineLimit(2)
-                                    if let preview = invitation.previewText { Text(verbatim: preview).font(.subheadline).lineLimit(2) }
-                                }.frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                            } icon: { Image(systemName: "car.2.fill") }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("convoy.invitation.banner")
-                        Button(action: coordinator.dismissInvitation) {
-                            Image(systemName: "xmark").frame(width: 48, height: 48)
-                        }.accessibilityLabel(Text("convoy.close"))
-                    }
-                    .padding(KccSpacing.s3).foregroundStyle(KccTheme.text)
-                    .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-                    .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.driver) }
-                    .padding(KccSpacing.s4)
-                    Spacer(minLength: 0)
-                }.zIndex(2)
-            }
+            invitationOverlay.zIndex(2)
             if let liveLocationCoordinator, liveLocationCoordinator.wired {
                 StationaryLivePrompt(coordinator: liveLocationCoordinator) { promptID in
                     stopSingleSession(expectedStationaryPromptID: promptID)
                 }
             }
         }
+        .onPreferenceChange(InvitationFooterHeightKey.self) { invitationFooterHeight = $0 }
         .eraseToAnyView()
+    }
+
+    @ViewBuilder private var invitationOverlay: some View {
+        if let notifications = notificationsCoordinator,
+           let invitation = notifications.convoyInvitation,
+           routes.current != .notifications, scenePhase == .active {
+            let footer = routes.current == nil && navigationDestination == nil ? invitationFooterHeight : 0
+            let dock = mapHomeChromeVisible && navigationDestination == nil ? mapSessionHeight : 0
+            VStack {
+                Spacer(minLength: 0)
+                ConvoyInvitationCard(invitation: invitation, deadline: notifications.convoyInvitationDeadline,
+                    busy: invitationBusyID != nil,
+                    error: invitationActionFailed && invitationErrorID == invitation.id
+                        ? String(localized: "convoy.errorGeneric") : nil,
+                    onJoin: { answerInvitation(invitation, join: true) },
+                    onDecline: { answerInvitation(invitation, join: false) })
+            }
+            .padding(.horizontal, KccSpacing.s4)
+            .padding(.bottom, footer + dock + KccSpacing.s2)
+            .task(id: invitation.id) {
+                guard let repository = FirebaseConvoyManagementRepository.createIfAvailable(),
+                      let convoyID = invitation.relatedEntityId else { return }
+                do {
+                    for try await convoy in repository.observeConvoy(convoyId: convoyID) {
+                        guard !Task.isCancelled else { return }
+                        if convoy == nil || convoy?.status == .ended || convoy?.viewer?.inviteStatus != .invited {
+                            notifications.dismissInvitation(expectedID: invitation.id)
+                            return
+                        }
+                    }
+                } catch { /* The response callable still validates a transient listener failure. */ }
+            }
+        }
+    }
+
+    private func answerInvitation(_ invitation: AppNotification, join: Bool) {
+        guard invitationBusyID == nil, let convoyID = invitation.relatedEntityId,
+              let coordinator = convoyManagementCoordinator, let notifications = notificationsCoordinator,
+              notifications.convoyInvitation?.id == invitation.id,
+              ProcessInfo.processInfo.systemUptime < notifications.convoyInvitationDeadline else { return }
+        let identity = signedInUid
+        invitationBusyID = invitation.id
+        invitationErrorID = nil
+        // Shell-owned task survives removal of the timed card.
+        Task { @MainActor in
+            defer { invitationBusyID = nil }
+            await coordinator.load()
+            guard identity == signedInUid else { return }
+            guard coordinator.snapshot?.pendingInvites.contains(where: { $0.convoyId == convoyID }) == true else {
+                notifications.dismissInvitation(expectedID: invitation.id)
+                return
+            }
+            let joined = await coordinator.respond(convoyId: convoyID, action: join ? .accept : .decline)
+            guard identity == signedInUid else { return }
+            let success = join ? joined != nil : (coordinator.actionError == nil
+                && coordinator.snapshot?.pendingInvites.contains(where: { $0.convoyId == convoyID }) == false)
+            if success {
+                notifications.dismissInvitation(expectedID: invitation.id)
+                if let joined {
+                    routes = .empty
+                    completeConvoyJoin(joined)
+                }
+                await notifications.markRead(notificationId: invitation.id)
+            } else {
+                invitationErrorID = invitation.id
+                invitationActionFailed = true
+            }
+        }
     }
 
     // Build 2 exhausted the device main-thread stack while decoding this
@@ -351,6 +397,9 @@ struct ShellView: View {
                 // Keep the footer above the map and its edge-to-edge overlays.
                 primaryNavigation
                     .fixedSize(horizontal: false, vertical: true)
+                    .background { GeometryReader { proxy in
+                        Color.clear.preference(key: InvitationFooterHeightKey.self, value: proxy.size.height)
+                    } }
                     .zIndex(1)
             }
         }
@@ -3205,4 +3254,9 @@ extension ShellTab {
         featureFlags: .contractDefaults,
         diagnostics: IOSDiagnosticsComposition()
     )
+}
+
+private struct InvitationFooterHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

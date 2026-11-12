@@ -174,5 +174,7 @@ private fun DocumentSnapshot.toNotification(): AppNotification? {
         // degrades to NONE, i.e. a plain non-actionable row.
         actionType = NotificationActionType.fromWire(getString("actionType")),
         relatedEntityId = getString("relatedEntityId"),
+        inviterDisplayName = getString("convoyInvitation.inviterDisplayName"),
+        inviterAvatarPath = getString("convoyInvitation.inviterAvatarPath"),
     )
 }

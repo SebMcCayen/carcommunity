@@ -2381,5 +2381,10 @@
     "suspendedTitle": "Access is restricted",
     "body": "Your access to CarCommunity is restricted. Contact the administrators if you have questions.",
     "retry": "Check again"
-  }
+  },
+  "convoy.invitationFrom": "invites you to a convoy",
+  "convoy.invitationJoin": "Join",
+  "convoy.invitationDecline": "Decline",
+  "convoy.invitationInboxHint": "Stays in Notifications",
+  "convoy.invitationClosesIn": "Closes in %1$d s"
 }

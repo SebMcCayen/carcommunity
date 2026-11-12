@@ -689,6 +689,11 @@ export interface InAppNotificationInput {
   actionType?: NotificationActionType;
   relatedEntityId?: string | null;
   batchId?: string | null;
+  convoyInvitation?: {
+    inviterUid: string;
+    inviterDisplayName: string | null;
+    inviterAvatarPath: string | null;
+  };
 }
 
 /**
@@ -701,6 +706,9 @@ export function buildNotificationDocument(
 ): Record<string, unknown> {
   return {
     category: input.category,
+    ...(input.category === 'convoy_invite' && input.convoyInvitation
+      ? { convoyInvitation: input.convoyInvitation }
+      : {}),
     title: input.title.slice(0, MAX_NOTIFICATION_TITLE_LENGTH),
     previewText: input.previewText.slice(0, MAX_NOTIFICATION_PREVIEW_LENGTH),
     body: input.body ? input.body.slice(0, MAX_NOTIFICATION_BODY_LENGTH) : null,

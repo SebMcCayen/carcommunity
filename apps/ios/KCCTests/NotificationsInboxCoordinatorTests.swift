@@ -21,7 +21,7 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
     func testForegroundInviteIsVisibleWithoutMarkingInboxSeenAndRoutesAfterRead() async {
         let repository = FakeNotificationsRepository()
         let invite = AppNotification(id: "invite", category: .convoyInvite, title: "Konvoj",
-                                     relatedEntityId: "convoy-1")
+                                     createdAt: .now.addingTimeInterval(1), relatedEntityId: "convoy-1")
         repository.script([.loaded([invite])])
         let coordinator = NotificationsInboxCoordinator(repository: repository, uid: "me-uid")
         coordinator.observe()
@@ -35,7 +35,7 @@ final class NotificationsInboxCoordinatorTests: XCTestCase {
         coordinator.start()
         await waitFor(coordinator) { _ in repository.markSeenCount == 1 }
         coordinator.stopViewing()
-        repository.emit(.loaded([AppNotification(id: "next", category: .convoyInvite, title: "Nästa")]))
+        repository.emit(.loaded([AppNotification(id: "next", category: .convoyInvite, title: "Nästa", createdAt: .now, relatedEntityId: "convoy-2")]))
         await waitFor(coordinator) { $0.convoyInvitation?.id == "next" }
         XCTAssertEqual(repository.markSeenCount, 1)
         coordinator.stopObserving()

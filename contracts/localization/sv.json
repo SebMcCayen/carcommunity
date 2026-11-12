@@ -2381,5 +2381,10 @@
     "suspendedTitle": "Åtkomsten är begränsad",
     "body": "Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.",
     "retry": "Kontrollera igen"
-  }
+  },
+  "convoy.invitationFrom": "bjuder in till konvoj",
+  "convoy.invitationJoin": "Gå med",
+  "convoy.invitationDecline": "Neka",
+  "convoy.invitationInboxHint": "Finns kvar i Notifikationer",
+  "convoy.invitationClosesIn": "Rutan stängs om %1$d s"
 }

@@ -100,6 +100,8 @@ data class AppNotification(
     val createdAtMillis: Long?,
     val actionType: NotificationActionType = NotificationActionType.NONE,
     val relatedEntityId: String? = null,
+    val inviterDisplayName: String? = null,
+    val inviterAvatarPath: String? = null,
 )
 
 object Notifications {

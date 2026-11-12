@@ -85,6 +85,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -4241,6 +4242,8 @@ fun AuthenticatedApp(
                 }
             }
 
+            var invitationFooterHeightPx by remember { mutableIntStateOf(0) }
+            var invitationDockHeightPx by remember { mutableIntStateOf(0) }
             CompositionLocalProvider(
                 LocalSnackbarHostState provides snackbarHostState,
                 com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader provides
@@ -6847,6 +6850,7 @@ fun AuthenticatedApp(
                                     // (between the search icon and the avatar) while
                                     // a session runs: elapsed time + distance driven.
                                     liveSessionBar = liveSessionBarSlot,
+                                    onSessionDockHeightChanged = { invitationDockHeightPx = it },
                                     // Convoy status bar in the map's bottom dock,
                                     // directly ABOVE the persistent footer. Every control
                                     // (member count, focus, invite, leave/End) is
@@ -7759,7 +7763,8 @@ fun AuthenticatedApp(
                         // Drawn AFTER the body so it sits on top, exactly the way
                         // Scaffold's bottomBar slot did. NavigationBar applies its
                         // own navigation-bar inset.
-                        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+                        Box(modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { invitationFooterHeightPx = it.height }) {
+                            DisposableEffect(Unit) { onDispose { invitationFooterHeightPx = 0 } }
                             ShellBottomBar(
                                 selected = selectedTab,
                                 onSelect = { tab ->
@@ -8439,6 +8444,35 @@ fun AuthenticatedApp(
                             openRootRoute(ShellRoute.CrownHunt)
                         },
                     )
+                }
+
+                if (notificationsRepository != null && convoyRepository != null && convoyBarCoordinator != null) {
+                    val invitationDensity = LocalDensity.current
+                    val dock = if (mapCover == MapCover.None && route == null && navDestination == null) invitationDockHeightPx else 0
+                    val systemBottom = WindowInsets.navigationBars.getBottom(invitationDensity)
+                    val imeBottom = WindowInsets.ime.getBottom(invitationDensity)
+                    val clearance = maxOf(invitationFooterHeightPx + dock, systemBottom, imeBottom)
+                    Box(Modifier.fillMaxSize().padding(horizontal = KccSpacing.s4)
+                        .padding(bottom = with(invitationDensity) { clearance.toDp() } + KccSpacing.s2),
+                        contentAlignment = Alignment.BottomCenter) {
+                        com.kungsbackacarcommunity.app.notifications.ConvoyInvitationHost(
+                            uid = uid,
+                            repository = notificationsRepository,
+                            convoyRepository = convoyRepository,
+                            coordinator = convoyBarCoordinator,
+                            inboxVisible = notificationsCoordinator?.inboxVisible?.collectAsState()?.value == true,
+                            sharing = isSharingUi,
+                            liveShareEnabled = canShareLive,
+                            onJoined = { convoyId ->
+                                convoyOpenCreate = false
+                                convoyFocusStore.requestConvoyFocusOnJoin(convoyId)
+                                clearRoutes()
+                                chatHubOpen = false
+                                selectedTab = ShellTab.Map
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
 
                 SnackbarHost(

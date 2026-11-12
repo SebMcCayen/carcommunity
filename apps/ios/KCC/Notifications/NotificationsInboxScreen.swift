@@ -231,3 +231,89 @@ struct NotificationRow: View {
         NotificationsInboxScreen(coordinator: nil)
     }
 }
+
+
+/// Selected compact identity design, shared with the Android invitation card.
+struct ConvoyInvitationCard: View {
+    let invitation: AppNotification
+    let deadline: TimeInterval
+    let busy: Bool
+    let error: String?
+    let onJoin: () -> Void
+    let onDecline: () -> Void
+    @State private var avatarURL: URL?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            HStack(spacing: KccSpacing.s3) {
+                AsyncImage(url: avatarURL) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else {
+                        Image(systemName: "person.fill").foregroundStyle(KccTheme.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity).background(KccTheme.subtle)
+                    }
+                }.frame(width: 48, height: 48).clipShape(Circle()).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                    Text(verbatim: invitation.inviterDisplayName?.trimmedNonBlank ?? String(localized: "notifications.categoryConvoyInvite"))
+                        .font(.headline)
+                    if invitation.inviterDisplayName?.trimmedNonBlank != nil {
+                        Text("convoy.invitationFrom").font(.subheadline).foregroundStyle(KccTheme.secondary)
+                    } else {
+                        Text(verbatim: invitation.previewText ?? invitation.title)
+                            .font(.subheadline).foregroundStyle(KccTheme.secondary)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "car.2.fill").font(.title2).foregroundStyle(KccPalette.crownGold).accessibilityHidden(true)
+            }.accessibilityElement(children: .combine)
+            if let error {
+                Text(verbatim: error).font(.subheadline).foregroundStyle(KccTheme.error)
+                    .accessibilityIdentifier("convoy.invitation.error")
+            }
+            HStack(spacing: KccSpacing.s2) {
+                Button(action: onDecline) {
+                    Text("convoy.invitationDecline").frame(maxWidth: .infinity, minHeight: 48)
+                        .contentShape(Rectangle())
+                }.buttonStyle(.plain).background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.md))
+                    .overlay { RoundedRectangle(cornerRadius: KccRadius.md).strokeBorder(KccTheme.border) }
+                    .accessibilityIdentifier("convoy.invitation.decline")
+                Button(action: onJoin) {
+                    Group {
+                        if busy { ProgressView().tint(KccPalette.inkBlack) }
+                        else { Text("convoy.invitationJoin").fontWeight(.semibold) }
+                    }.frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
+                }.buttonStyle(.plain).foregroundStyle(KccPalette.inkBlack)
+                    .background(KccPalette.crownGold, in: RoundedRectangle(cornerRadius: KccRadius.md))
+                    .accessibilityIdentifier("convoy.invitation.join")
+            }.disabled(busy)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: KccSpacing.s3) { footer; Spacer(minLength: 0); countdown }
+                VStack(alignment: .leading, spacing: KccSpacing.s1) { footer; countdown }
+            }.font(.footnote).foregroundStyle(KccTheme.secondary)
+        }
+        .padding(KccSpacing.s4)
+        .padding(.leading, KccSpacing.s1)
+        .foregroundStyle(KccTheme.text)
+        .background(KccTheme.surface)
+        .overlay(alignment: .leading) { Rectangle().fill(KccPalette.crownGold).frame(width: KccSpacing.s1).accessibilityHidden(true) }
+        .clipShape(RoundedRectangle(cornerRadius: KccRadius.lg))
+        .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+        .accessibilityIdentifier("convoy.invitation.banner")
+        .task(id: invitation.inviterAvatarPath) {
+            avatarURL = nil
+            guard let path = invitation.inviterAvatarPath else { return }
+            let url = await FirebaseUserProfileRepository.createIfAvailable()?.avatarDownloadURL(for: path)
+            guard !Task.isCancelled else { return }
+            avatarURL = url
+        }
+    }
+
+    private var footer: some View { Text("convoy.invitationInboxHint") }
+    private var countdown: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            Text(verbatim: String.localizedStringWithFormat(
+                NSLocalizedString("convoy.invitationClosesIn", comment: "Invitation display time"),
+                max(1, min(30, Int(ceil(deadline - ProcessInfo.processInfo.systemUptime))))
+            ))
+        }.accessibilityHidden(true)
+    }
+}

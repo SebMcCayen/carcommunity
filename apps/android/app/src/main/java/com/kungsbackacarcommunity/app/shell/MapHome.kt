@@ -294,6 +294,7 @@ fun MapHome(
     compassModeState: MutableState<MapCompassMode>? = null,
     // Session chrome docks above the persistent footer (catalogue S16).
     liveSessionBar: (@Composable () -> Unit)? = null,
+    onSessionDockHeightChanged: (Int) -> Unit = {},
     // Full-width convoy controls join the bottom session dock only while active.
     convoyBar: (@Composable () -> Unit)? = null,
     // Optional convoy awareness layer (member markers + off-screen direction
@@ -760,9 +761,12 @@ fun MapHome(
         }
 
         if (!searchExpanded && (liveSessionBar != null || convoyBar != null)) {
+            androidx.compose.runtime.DisposableEffect(Unit) {
+                onDispose { onSessionDockHeightChanged(0) }
+            }
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .onSizeChanged { bottomChromeHeightPx = it.height }
+                    .onSizeChanged { bottomChromeHeightPx = it.height; onSessionDockHeightChanged(it.height) }
                     .testTag("map_home_session_dock")
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
