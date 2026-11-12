@@ -300,7 +300,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   // Authorization and old receipts precede charging. Denials return through
   // commit before throwing, so a newly imposed pause cannot roll back.
   const outcome = await db.runTransaction(async (tx) => {
-    await requireChatSender(tx, actor.uid);
+    await requireChatSender(tx, actor.uid, 'public');
     const tombstone = await tx.get(
       db.collection('communityChatDeletedMessages').doc(messageRef.id),
     );

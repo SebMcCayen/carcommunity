@@ -656,6 +656,9 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'admin.listPublicReports': 'admin-rare',
   'admin.listMemberMessages': 'admin-rare',
   'admin.getPublicModerationCase': 'admin-rare',
+  'admin.getChatModerationContext': 'admin-rare',
+  'admin.moderateChatMessage': 'admin-rare',
+  'moderation.getMyChatWriteStatus': 'variable-member',
   'admin.decidePublicModeration': 'admin-rare',
 
   'admin.getAccessTarget': 'admin-rare',

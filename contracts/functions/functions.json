@@ -1576,6 +1576,24 @@
       "source": "docs/admin-public-moderation.md"
     },
     {
+      "name": "admin.getChatModerationContext",
+      "domain": "admin",
+      "description": "Returns an actor-bound version and remove/warn/pause capabilities for exactly one Community or event message. Transactional active admin/owner and CarCommunity-access authorization; no PM, convoy or shared-club access. Used by Android long-press moderation.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/android-chat-moderation.md"
+    },
+    {
+      "name": "admin.moderateChatMessage",
+      "domain": "admin",
+      "description": "Atomically removes one public message and/or pauses its author, with optional warning, private audit and durable idempotency receipt. Mandatory reason, actor binding and reviewed version; commit-time role, access, message and target checks. Pause is 1–43200 minutes or 1–30 days (24-hour days), enforced only for Community/event writes. PM, convoys and Driver/shared clubs are unaffected. Removal preserves event tombstone/community retry tombstone and resumable quote cleanup.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/android-chat-moderation.md"
+    },
+    {
       "name": "admin.decidePublicModeration",
       "domain": "admin",
       "description": "Mandatory reason, reviewed version, actor binding and durable receipt. Commit-time authority, transactional message/report/audit decision; bounded resumable public quote redaction.",
@@ -1583,6 +1601,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/admin-public-moderation.md"
+    },
+    {
+      "name": "moderation.getMyChatWriteStatus",
+      "domain": "moderation",
+      "description": "Active signed-in own-account public-writing status with serverNowMillis, pauseUntilMillis and own reason. Strict empty payload; no target UID, no moderation history. A public-chat pause never blocks this status read. Used with the owner-only restriction change signal for a monotonic client countdown independent of the device wall clock.",
+      "access": "signedIn",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/android-chat-moderation.md"
     },
     {
       "name": "moderation.reportPublicContent",

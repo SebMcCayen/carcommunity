@@ -177,7 +177,9 @@ fun CommunityChannelRoute(
         if (newest != null && newest.senderUid != uid) coordinator.markRead()
     }
 
+    val publicModeration = com.kungsbackacarcommunity.app.moderation.rememberPublicChatModerationSession(uid)
     ChannelChatContent(
+        publicModeration = publicModeration,
         protectCommunity = true,
         cooldownSeconds = rememberChatCooldownSeconds(coordinator.cooldown),
         onSendConfirmed = { text, mentions, reply, id -> coordinator.send(text, mentions, reply, id) },

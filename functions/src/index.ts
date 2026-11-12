@@ -5,6 +5,8 @@ import {
   decidePublicModeration,
 } from './admin/publicModeration';
 import { listMemberHistory } from './admin/memberHistory';
+import { getChatModerationContext, moderateChatMessage } from './admin/chatModeration';
+import { getMyChatWriteStatus } from './moderation/getMyChatWriteStatus';
 import { getAccess, onAccessWrite, onIdentityWrite } from './access/carCommunity';
 import { getAccessTarget, updateAccess, listAccessBlocks } from './access/adminAccess';
 /**
@@ -330,6 +332,8 @@ export const auth = {
  * here via the Admin SDK — clients can never set or modify them.
  */
 export const admin = {
+  getChatModerationContext,
+  moderateChatMessage,
   listPublicReports,
   listMemberMessages,
   getPublicModerationCase,
@@ -1527,6 +1531,7 @@ export const chatchannels = {
  * admin triage. See functions/src/moderation/moderation-core.ts.
  */
 export const moderation = {
+  getMyChatWriteStatus,
   reportPublicContent,
   reportUser: moderationReportUser,
 };

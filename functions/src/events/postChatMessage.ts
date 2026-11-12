@@ -61,7 +61,7 @@ export const postChatMessage = onCall(
         : db.collection('events').doc(input.eventId).collection('messages').doc(input.clientId);
     const outcome = await db.runTransaction(async (tx) => {
       const participant = await requireChatParticipant(request, input.eventId, tx);
-      await requireChatSender(tx, participant.uid);
+      await requireChatSender(tx, participant.uid, 'public');
       const existing = await tx.get(messageRef);
       if (existing.exists) {
         if (existing.get('authorUserId') !== participant.uid)

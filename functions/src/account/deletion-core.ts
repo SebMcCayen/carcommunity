@@ -91,6 +91,7 @@ export function parseDeleteAccountInput(data: unknown): ParseResult<DeleteAccoun
 export const PURGE_DOC_TREES = [
   'userWarnings',
   'accountWarningSignals',
+  'carCommunityChatRestrictions',
   'carCommunityAccess',
   'adminMemberOperations',
   'users',

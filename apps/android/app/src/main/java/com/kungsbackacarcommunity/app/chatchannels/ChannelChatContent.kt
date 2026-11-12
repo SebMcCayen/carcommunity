@@ -261,7 +261,10 @@ fun ChannelChatContent(
     protectCommunity: Boolean = false,
     onSendConfirmed: (suspend (String, List<String>, ChannelReplyTo?, String) -> Boolean)? = null,
     onRetryConfirmed: (suspend (ChannelMessage) -> Boolean)? = null,
+    publicModeration: com.kungsbackacarcommunity.app.moderation.PublicChatModerationSession? = null,
 ) {
+    val publicSession = publicModeration?.takeIf { surface == ChatSurface.CommunityChannel && it.uid == currentUid }
+    val writingPaused = com.kungsbackacarcommunity.app.moderation.rememberPublicChatWritingPaused(publicSession)
     val sendScope = rememberCoroutineScope()
     val draftAttempt = rememberChatDraftSendAttempt()
     var submitting by remember { mutableStateOf(false) }
@@ -384,9 +387,9 @@ fun ChannelChatContent(
                     canLoadOlder = canLoadOlder,
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
-                    retryEnabled = cooldownSeconds == 0 && !submitting,
+                    retryEnabled = cooldownSeconds == 0 && !submitting && !writingPaused,
                     onRetry = { message ->
-                        if (cooldownSeconds == 0 && !submitting) {
+                        if (cooldownSeconds == 0 && !submitting && !writingPaused) {
                             val confirm = onRetryConfirmed
                             if (confirm == null) onRetry(message) else {
                                 submitting = true
@@ -434,7 +437,7 @@ fun ChannelChatContent(
                         }
                     },
                     onViewProfile = onViewProfile,
-                    ownMessageActionsEnabled = chatRepliesEnabled,
+                    ownMessageActionsEnabled = chatRepliesEnabled || publicSession?.adminCandidate == true,
                     onShowLocationOnMap = onShowLocationOnMap,
                     // Long-press opens the shared context menu. It opens whenever
                     // there is ANY action to offer: Reply (on any message, incl.
@@ -457,7 +460,7 @@ fun ChannelChatContent(
                                                 .ReportAvailability.BackendMissing
                                         },
                                 )
-                        if (chatRepliesEnabled || moderationActions) {
+                        if (chatRepliesEnabled || moderationActions || publicSession?.adminCandidate == true) {
                             actionsMessageId = message.id
                         }
                     },
@@ -593,6 +596,7 @@ fun ChannelChatContent(
         // Delivery stays visible in the existing pending/failed bubble. Only restore
         // a rejected snapshot when the user has not started another draft meanwhile.
         fun submit(text: String, clearDraft: Boolean) {
+            if (writingPaused) return
             if (submitting || cooldownSeconds > 0 || !ChannelThread.isSendable(text)) return
             val submittedDraft = draft
             val revision = draftRevision
@@ -641,6 +645,7 @@ fun ChannelChatContent(
                 }
             }
         }
+        com.kungsbackacarcommunity.app.moderation.PublicChatPauseNotice(publicSession?.pause, writingPaused)
         ChatCooldownNotice(cooldownSeconds)
         ChannelChatComposer(
             draft = draft,
@@ -666,8 +671,8 @@ fun ChannelChatContent(
             },
             onSend = { submit(draft.text, clearDraft = true) },
             onQuickEmoji = { submit(it, clearDraft = false) },
-            canSend = ChannelThread.isSendable(draft.text) && cooldownSeconds == 0 && !submitting,
-            quickEmojiEnabled = cooldownSeconds == 0 && !submitting,
+            canSend = ChannelThread.isSendable(draft.text) && cooldownSeconds == 0 && !submitting && !writingPaused,
+            quickEmojiEnabled = cooldownSeconds == 0 && !submitting && !writingPaused,
             placeholder = stringResource(R.string.channel_inputPlaceholder),
             sendLabel = stringResource(R.string.channel_send),
             inputModifier = Modifier.testTag(CHANNEL_INPUT_TEST_TAG),
@@ -683,6 +688,8 @@ fun ChannelChatContent(
         // now also open on your own (for Reply), so block/report are gated here.
         val canModerate = MessageModeration.canActOn(actionsMessage.senderUid, currentUid)
         MessageActionsSheet(
+            publicModeration = publicSession,
+            publicTarget = publicSession?.let { com.kungsbackacarcommunity.app.moderation.PublicChatTarget("community", actionsMessage.id, expectedAuthorUid = actionsMessage.senderUid) },
             memberName = actionsMessage.senderDisplayName,
             preview = MessageActionsPreview(actionsMessage.senderDisplayName, actionsMessage.text),
             canReply = chatRepliesEnabled,
