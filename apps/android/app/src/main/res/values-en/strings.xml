@@ -1019,6 +1019,7 @@
     <string name="savedDrives_loadMore">Show more</string>
     <string name="savedDrives_loadingMore">Loading more...</string>
     <string name="savedDrives_loadMoreError">Couldn\'t load more drives. Try again.</string>
+    <string name="savedDrives_reportProblem">Report a problem with this drive</string>
     <string name="imageEditor_title">Edit photo</string>
     <string name="imageEditor_hint">Drag to move, pinch to zoom, and twist with two fingers to rotate. The area inside the frame is what others will see.</string>
     <string name="imageEditor_frameDescription">Drag the corners to reshape the crop area.</string>
@@ -1642,6 +1643,7 @@
     <string name="feedback_thankYouIssue">An issue was created on GitHub where you can follow the problem.</string>
     <string name="feedback_issueNumber">Issue #%1$d</string>
     <string name="feedback_openTicketsButton">View open tickets</string>
+    <string name="feedback_driveContext">This report is linked to this drive. The issue will not include your route or location data.</string>
     <string name="openTickets_title">Open tickets</string>
     <string name="openTickets_intro">Known problems others have reported. Have the same problem? Give it a thumbs up or add a comment.</string>
     <string name="openTickets_loading">Loading tickets…</string>

@@ -5,6 +5,7 @@ struct RestoredDriveRecording: Sendable {
     let context: DriveRecordingContext
     let points: [RecordedDrivePoint]
     let stoppedAt: Date?
+    var recordingDiagnostics: DriveRecordingDiagnostics? = nil
 }
 
 protocol DriveRecordingJournal: AnyObject {
@@ -13,7 +14,12 @@ protocol DriveRecordingJournal: AnyObject {
     func updateContext(_ context: DriveRecordingContext)
     func markStopped(at date: Date)
     func append(_ point: RecordedDrivePoint)
+    func updateDiagnostics(_ diagnostics: DriveRecordingDiagnostics, sessionId: String)
     func clear()
+}
+
+extension DriveRecordingJournal {
+    func updateDiagnostics(_ diagnostics: DriveRecordingDiagnostics, sessionId: String) {}
 }
 
 /// Crash-resilient, app-private route journal. The first line is a tiny
@@ -23,6 +29,7 @@ protocol DriveRecordingJournal: AnyObject {
 /// saved summary closes, on discard/sign-out, or for a different live session.
 final class FileDriveRecordingJournal: DriveRecordingJournal {
     private let fileURL: URL
+    private var diagnosticsURL: URL { fileURL.appendingPathExtension("diagnostics") }
 
     var routeUploadSpool: FileDriveRouteUploadSpool {
         FileDriveRouteUploadSpool(
@@ -111,11 +118,13 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
             points: points,
             stoppedAt: header.stoppedAtMilliseconds.map {
                 Date(timeIntervalSince1970: Double($0) / 1_000)
-            }
+            },
+            recordingDiagnostics: restoreDiagnostics(sessionId: header.sessionId)
         )
     }
 
     func begin(context: DriveRecordingContext, startedAt: Date) {
+        try? FileManager.default.removeItem(at: diagnosticsURL)
         guard let data = encodedHeader(context: context, startedAt: startedAt, stoppedAt: nil)
         else { return }
         writeAtomically(data + Data([0x0a]))
@@ -198,8 +207,35 @@ final class FileDriveRecordingJournal: DriveRecordingJournal {
         }
     }
 
+    /// A tiny atomic sidecar avoids rewriting a growing route every few fixes.
+    /// Its session key prevents a previous drive's totals from being restored.
+    func updateDiagnostics(_ diagnostics: DriveRecordingDiagnostics, sessionId: String) {
+        guard diagnostics.isValid,
+              FileManager.default.fileExists(atPath: fileURL.path),
+              let data = try? JSONEncoder().encode(
+                DiagnosticsCheckpoint(sessionId: sessionId, diagnostics: diagnostics)
+              ) else { return }
+        try? data.write(to: diagnosticsURL,
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    private func restoreDiagnostics(sessionId: String) -> DriveRecordingDiagnostics? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: diagnosticsURL.path),
+              let size = attributes[.size] as? NSNumber, size.intValue <= 4_096,
+              let data = try? Data(contentsOf: diagnosticsURL),
+              let checkpoint = try? JSONDecoder().decode(DiagnosticsCheckpoint.self, from: data),
+              checkpoint.sessionId == sessionId, checkpoint.diagnostics.isValid else { return nil }
+        return checkpoint.diagnostics
+    }
+
     func clear() {
         try? FileManager.default.removeItem(at: fileURL)
+        try? FileManager.default.removeItem(at: diagnosticsURL)
+    }
+
+    private struct DiagnosticsCheckpoint: Codable {
+        let sessionId: String
+        let diagnostics: DriveRecordingDiagnostics
     }
 
     private struct Header: Codable {

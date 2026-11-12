@@ -12,10 +12,12 @@ final class FeedbackCoordinator {
         status = repository == nil ? .unavailable : .idle
     }
 
-    func submit(form: FeedbackReportForm, context: FeedbackClientContext) async {
+    var isAvailable: Bool { repository != nil }
+
+    func submit(form: FeedbackReportForm, context: FeedbackClientContext, rideId: String? = nil) async {
         guard status != .submitting,
               let repository,
-              let input = FeedbackReports.input(from: form, context: context)
+              let input = FeedbackReports.input(from: form, context: context, rideId: rideId)
         else { return }
         status = .submitting
         do {

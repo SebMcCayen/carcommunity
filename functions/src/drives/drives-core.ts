@@ -44,6 +44,7 @@ import {
   totalDistanceMetres,
 } from './drive-calculations';
 import { buildRouteThumbnail } from './route-thumbnail';
+import { computeCalculationDiagnostics, recordingDiagnosticsSchema } from './recording-diagnostics';
 
 export const DRIVE_TITLE_MAX_LENGTH = 200;
 /** Bound the submitted track: ~5.5 h at 1 Hz. Clients downsample beyond it. */
@@ -75,6 +76,9 @@ const saveDriveInputSchema = z
     startedAt: z.string().datetime(),
     endedAt: z.string().datetime(),
     routePoints: z.array(routePointSchema).max(MAX_ROUTE_POINTS).optional(),
+    // Telemetry is advisory: corrupt/older/future snapshots must never lose a
+    // valid drive. Drop the whole malformed object, retaining no unknown fields.
+    recordingDiagnostics: recordingDiagnosticsSchema.optional().catch(undefined),
     /**
      * Client recording identifier for idempotent retries — repeat saves with
      * the same sourceSessionId return the existing drive.
@@ -176,9 +180,7 @@ export function parseDeleteDriveInput(data: unknown): ParseResult<DeleteDriveInp
 // Guards
 // ---------------------------------------------------------------------------
 
-export type GuardResult =
-  | { ok: true }
-  | { ok: false; code: 'invalid-argument'; message: string };
+export type GuardResult = { ok: true } | { ok: false; code: 'invalid-argument'; message: string };
 
 export function guardDriveTimes(startedAt: string, endedAt: string): GuardResult {
   if (new Date(endedAt).getTime() <= new Date(startedAt).getTime()) {
@@ -193,14 +195,14 @@ export function guardDriveTimes(startedAt: string, endedAt: string): GuardResult
  * already discards implausible segments, and GPS clocks can straddle the
  * user-visible start/stop moments slightly.
  */
-export function guardRoutePoints(
-  points: readonly RoutePointInput[] | undefined,
-): GuardResult {
+export function guardRoutePoints(points: readonly RoutePointInput[] | undefined): GuardResult {
   if (!points || points.length === 0) {
     return { ok: true };
   }
   for (let i = 1; i < points.length; i += 1) {
-    if ((points[i] as RoutePointInput).timestampMs < (points[i - 1] as RoutePointInput).timestampMs) {
+    if (
+      (points[i] as RoutePointInput).timestampMs < (points[i - 1] as RoutePointInput).timestampMs
+    ) {
       return {
         ok: false,
         code: 'invalid-argument',
@@ -334,6 +336,9 @@ export function buildRideDocument(
     // canonical (matches the Android read side). Empty array (not null) on a solo
     // drive or an older client, so the read side is a plain "no members" list.
     convoyMembers: dedupeConvoyMembers(input.convoyMembers),
+    // Owner-only, coordinate-free aggregates share the drive's deletion lifecycle.
+    ...(input.recordingDiagnostics ? { recordingDiagnostics: input.recordingDiagnostics } : {}),
+    calculationDiagnostics: computeCalculationDiagnostics(input.routePoints),
     createdAt: serverTimestamp(),
   };
 }

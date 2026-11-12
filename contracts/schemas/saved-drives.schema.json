@@ -4,10 +4,76 @@
   "title": "Saved drives contract",
   "description": "Language-neutral saved-drive shapes shared by iOS, Android, backend, and admin. ride mirrors the Firestore `rides/{rideId}` document (docs/firebase-data-model.md). Stats are computed server-side by drives.save from the submitted recording; the full route GPS track lives only in Cloud Storage under the member-gated rideRoutes/{uid}/{rideId}/ prefix, with one bounded exception — routeThumbnail, a ~64-point simplified overview of the route stored on the document so the History list can draw a drive's shape without a second read. maxSpeedMetersPerSecond IS stored (an explicit 2026-07 product decision reversing the earlier 'no top-speed field exists anywhere' rule); it is a neutral stat shown beside distance and duration and must never be turned into a record, ranking or achievement. Drives saved before that decision carry neither field and are not backfilled; clients render their missing-value placeholder. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
   "$defs": {
+    "recordingDiagnostics": {
+      "type": "object",
+      "description": "Optional, bounded client-reported quality counters. No coordinates, identifiers or free text. maxGapMs/gapCount describe monotonic delivery silence within one process run; the transient clock anchor resets on restore while counters survive. Gaps exceed 15 seconds. Stored owner-only with the ride; not returned by listHistory. Malformed, incomplete or future-version client summaries are discarded without blocking a valid drive save. Requires backend support before releasing updated clients.",
+      "properties": {
+        "version": { "const": 1 },
+        "algorithmVersion": { "const": "recording-quality-v1" },
+        "receivedPoints": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "acceptedPoints": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "rejectedInvalid": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "rejectedAccuracy": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "rejectedStale": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "rejectedTime": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "rejectedSpeed": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "droppedCapacity": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "droppedStationary": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "droppedThrottled": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "maxGapMs": { "type": "integer", "minimum": 0, "maximum": 604800000 },
+        "gapCount": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "resumedCount": { "type": "integer", "minimum": 0, "maximum": 10000000 }
+      },
+      "required": [
+        "version",
+        "algorithmVersion",
+        "receivedPoints",
+        "acceptedPoints",
+        "rejectedInvalid",
+        "rejectedAccuracy",
+        "rejectedStale",
+        "rejectedTime",
+        "rejectedSpeed",
+        "droppedCapacity",
+        "droppedStationary",
+        "droppedThrottled",
+        "maxGapMs",
+        "gapCount",
+        "resumedCount"
+      ],
+      "additionalProperties": false
+    },
+    "calculationDiagnostics": {
+      "type": "object",
+      "description": "Server-derived observations of the unchanged distance algorithm. Endpoint contradiction allows 100 metres uncertainty and is a diagnostic signal, never a distance correction. Added only to new saves; old rides are not backfilled. Owner-only ride field, not in listHistory.",
+      "properties": {
+        "algorithmVersion": { "const": "haversine-segment-v1" },
+        "totalSegments": { "type": "integer", "minimum": 0, "maximum": 20000 },
+        "rejectedTimeSegments": { "type": "integer", "minimum": 0, "maximum": 20000 },
+        "rejectedSpeedSegments": { "type": "integer", "minimum": 0, "maximum": 20000 },
+        "gapCount": { "type": "integer", "minimum": 0, "maximum": 20000 },
+        "maxAcceptedGapMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "endpointDistanceMeters": { "type": ["number", "null"], "minimum": 0, "maximum": 21000000 },
+        "distanceBelowEndpoint": { "type": "boolean" }
+      },
+      "required": [
+        "algorithmVersion",
+        "totalSegments",
+        "rejectedTimeSegments",
+        "rejectedSpeedSegments",
+        "gapCount",
+        "maxAcceptedGapMs",
+        "endpointDistanceMeters",
+        "distanceBelowEndpoint"
+      ],
+      "additionalProperties": false
+    },
     "ride": {
       "type": "object",
       "description": "Firestore `rides/{rideId}`. Owner-only read (membership not required — drives saved during a previous membership stay listable); all writes go through drives.save / drives.delete.",
       "properties": {
+        "recordingDiagnostics": { "$ref": "#/$defs/recordingDiagnostics" },
+        "calculationDiagnostics": { "$ref": "#/$defs/calculationDiagnostics" },
         "userId": { "$ref": "common.schema.json#/$defs/uid" },
         "title": { "type": ["string", "null"], "maxLength": 200 },
         "distanceMeters": {
@@ -321,6 +387,7 @@
       "type": "object",
       "description": "Input for drives.save (member-only). Distance/duration/average speed/maximum speed and the route thumbnail are all computed server-side from routePoints; implausible GPS jumps (>200 km/h implied speed) are excluded from both distance and maximum speed.",
       "properties": {
+        "recordingDiagnostics": { "$ref": "#/$defs/recordingDiagnostics" },
         "title": { "type": "string", "minLength": 1, "maxLength": 200 },
         "startedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "endedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },

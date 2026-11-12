@@ -131,6 +131,82 @@ final class DriveRecordingModelsTests: XCTestCase {
         XCTAssertEqual(normalized?.utf16.count, DriveSaveRequest.maximumTitleLength)
     }
 
+    func testRecordingDiagnosticsCountRejectionsIntentionalDropsAndReceiptGaps() throws {
+        var recorder = DriveRecorder(startedAt: start, context: context())
+        func event(_ decision: RecordingLocationDecision, _ uptime: Double) -> RecordingLocationEvent {
+            RecordingLocationEvent(decision: decision, receivedUptime: uptime)
+        }
+        XCTAssertTrue(recorder.add(event(.accepted(fix(latitude: 57, longitude: 12, offset: 0)), 100)))
+        XCTAssertFalse(recorder.add(event(.accepted(fix(latitude: 57, longitude: 12, offset: 1)), 101)))
+        XCTAssertFalse(recorder.add(event(.accepted(fix(latitude: 57.00001, longitude: 12, offset: 1)), 102)))
+        XCTAssertFalse(recorder.add(event(.rejected(.accuracy), 103)))
+        XCTAssertFalse(recorder.add(event(.rejected(.speed), 104)))
+        XCTAssertFalse(recorder.add(event(.rejected(.stale), 124)))
+        XCTAssertFalse(recorder.add(event(.rejected(.invalid), 125)))
+        XCTAssertFalse(recorder.add(event(.rejected(.time), 126)))
+        XCTAssertTrue(recorder.add(event(.accepted(fix(latitude: 57.0001, longitude: 12, offset: 30)), 130)))
+        let diagnostics = recorder.recordingDiagnostics
+        XCTAssertEqual(diagnostics.receivedPoints, 9)
+        XCTAssertEqual(diagnostics.acceptedPoints, 2)
+        XCTAssertEqual(diagnostics.droppedStationary, 1)
+        XCTAssertEqual(diagnostics.droppedThrottled, 1)
+        XCTAssertEqual(diagnostics.rejectedAccuracy, 1)
+        XCTAssertEqual(diagnostics.rejectedSpeed, 1)
+        XCTAssertEqual(diagnostics.rejectedStale, 1)
+        XCTAssertEqual(diagnostics.rejectedInvalid, 1)
+        XCTAssertEqual(diagnostics.rejectedTime, 1)
+        XCTAssertEqual(diagnostics.maxGapMs, 20_000)
+        XCTAssertEqual(diagnostics.gapCount, 1)
+        let payload = recorder.request(endedAt: start.addingTimeInterval(40), title: nil).payload
+        let wire = try XCTUnwrap(payload["recordingDiagnostics"] as? [String: Any])
+        XCTAssertEqual(wire["algorithmVersion"] as? String, "recording-quality-v1")
+        XCTAssertFalse(wire.keys.contains("latitude"))
+        XCTAssertFalse(wire.keys.contains("receivedUptime"))
+    }
+
+    func testRestoredDiagnosticsKeepCountersButResetMonotonicReceiptEpoch() {
+        var recorder = DriveRecorder(startedAt: start, context: context())
+        _ = recorder.add(RecordingLocationEvent(decision: .accepted(
+            fix(latitude: 57, longitude: 12, offset: 0)), receivedUptime: 9_000))
+        _ = recorder.add(RecordingLocationEvent(decision: .rejected(.accuracy), receivedUptime: 9_020))
+        var restored = DriveRecorder(startedAt: start, context: context(), restoring: recorder.points,
+            diagnostics: recorder.recordingDiagnostics)
+        _ = restored.add(RecordingLocationEvent(decision: .rejected(.stale), receivedUptime: 100))
+        XCTAssertEqual(restored.recordingDiagnostics.receivedPoints, 3)
+        XCTAssertEqual(restored.recordingDiagnostics.acceptedPoints, 1)
+        XCTAssertEqual(restored.recordingDiagnostics.rejectedAccuracy, 1)
+        XCTAssertEqual(restored.recordingDiagnostics.rejectedStale, 1)
+        XCTAssertEqual(restored.recordingDiagnostics.resumedCount, 1)
+        XCTAssertEqual(restored.recordingDiagnostics.maxGapMs, 20_000)
+        XCTAssertEqual(restored.recordingDiagnostics.gapCount, 1)
+    }
+
+    func testInvalidTimestampCannotTrapOrEnterTheSaveRequest() {
+        var recorder = DriveRecorder(startedAt: start, context: context())
+        for timestamp in [Date(timeIntervalSince1970: .infinity), Date(timeIntervalSince1970: -1)] {
+            let invalid = LocationFix.of(latitude: 57, longitude: 12, timestamp: timestamp)!
+            XCTAssertFalse(recorder.add(invalid))
+        }
+        XCTAssertEqual(recorder.recordingDiagnostics.rejectedInvalid, 2)
+        XCTAssertTrue(recorder.points.isEmpty)
+    }
+
+    func testCapacityDropsAreCountedAndTelemetrySaturatesAtItsBound() {
+        let points = (0..<DriveRecorder.maximumRoutePoints).map { index in
+            RecordedDrivePoint(latitude: 57 + Double(index) * 0.000001, longitude: 12,
+                timestampMilliseconds: 1_700_000_000_000 + Int64(index * 2_000))
+        }
+        var diagnostics = DriveRecordingDiagnostics()
+        diagnostics.receivedPoints = DriveRecordingDiagnostics.maximumCount
+        diagnostics.droppedCapacity = DriveRecordingDiagnostics.maximumCount
+        var recorder = DriveRecorder(startedAt: start, context: context(), restoring: points,
+            diagnostics: diagnostics)
+        XCTAssertFalse(recorder.add(fix(latitude: 58, longitude: 12, offset: 100_000)))
+        XCTAssertEqual(recorder.recordingDiagnostics.droppedCapacity, DriveRecordingDiagnostics.maximumCount)
+        XCTAssertEqual(recorder.recordingDiagnostics.receivedPoints, DriveRecordingDiagnostics.maximumCount)
+        XCTAssertEqual(recorder.points.count, DriveRecorder.maximumRoutePoints)
+    }
+
     private func context() -> DriveRecordingContext {
         DriveRecordingContext(
             sourceSessionId: "session",

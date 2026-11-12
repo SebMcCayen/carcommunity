@@ -28,6 +28,84 @@ class DriveRecordingJournalTest {
 
     private val session = "sess-abc"
 
+    @Test
+    fun `diagnostic snapshot survives restart and clear removes its bounded sidecar`() = runTest {
+        val dir = tempFolder.newFolder("diagnostics")
+        val j = DriveRecordingJournal(dir)
+        j.begin(session, 1_000L)
+        j.appendPoints(session, listOf(RecordedPoint(57.0, 12.0, 1_100L)))
+        val diagnostics = DriveRecordingDiagnostics(receivedPoints = 4, acceptedPoints = 1, rejectedAccuracy = 3)
+        repeat(100) { j.writeDiagnostics(session, diagnostics) }
+        assertEquals(2, dir.listFiles()!!.size)
+        assertEquals(diagnostics, j.load(session)!!.diagnostics)
+        val c = resumeCoordinator(CoroutineScope(UnconfinedTestDispatcher(testScheduler)), JournalFakeRepository(), j)
+        c.start()
+        assertEquals(diagnostics.copy(resumedCount = 1), c.recordingDiagnostics)
+        c.stop()
+        assertEquals(1, j.load(session)!!.diagnostics!!.resumedCount)
+        j.clear(session)
+        assertTrue(dir.listFiles()!!.isEmpty())
+    }
+
+    @Test
+    fun `legacy journal restore seeds counters from known accepted points`() = runTest {
+        val j = journal()
+        j.begin(session, 1_000L)
+        j.appendPoints(session, listOf(RecordedPoint(57.0, 12.0, 1_100L)))
+        val c = resumeCoordinator(CoroutineScope(UnconfinedTestDispatcher(testScheduler)), JournalFakeRepository(), j)
+        c.start()
+        assertEquals(1, c.recordingDiagnostics.receivedPoints)
+        assertEquals(1, c.recordingDiagnostics.acceptedPoints)
+        assertEquals(1, c.recordingDiagnostics.resumedCount)
+    }
+
+    @Test
+    fun `rejections persist even when no route point was accepted`() {
+        val j = journal()
+        val c = DriveRecordingCoordinator(JournalFakeRepository(), session, clock = { 1_000L }, journal = j)
+        c.start()
+        c.addSample(DriveLocationSample(57.0, 12.0, 1_000, 1_000, 1_000, 1_000, 500.0))
+        c.stop()
+        val snapshot = j.load(session)!!
+        assertTrue(snapshot.points.isEmpty())
+        assertEquals(1, snapshot.diagnostics!!.receivedPoints)
+        assertEquals(1, snapshot.diagnostics!!.rejectedAccuracy)
+    }
+
+    @Test
+    fun `quality decisions reach route journal and save payload with the same counters`() = runTest {
+        val j = journal()
+        val repo = JournalFakeRepository()
+        val c = DriveRecordingCoordinator(repo, session, clock = { 1_000L }, journal = j)
+        c.start()
+        c.addSample(DriveLocationSample(57.0, 12.0, 1_000, 1_000, 1_000, 1_000, 5.0))
+        c.addSample(DriveLocationSample(58.0, 13.0, 6_000, 6_000, 6_000, 6_000, 500.0))
+        c.addSample(DriveLocationSample(57.001, 12.0, 11_000, 11_000, 11_000, 11_000, 5.0))
+        c.stop()
+        assertEquals(2, j.load(session)!!.points.size)
+        assertEquals(c.recordingDiagnostics, j.load(session)!!.diagnostics)
+        c.save(null)
+        val diagnostics = repo.lastRequest!!["recordingDiagnostics"] as Map<*, *>
+        assertEquals(3, diagnostics["receivedPoints"])
+        assertEquals(2, diagnostics["acceptedPoints"])
+        assertEquals(1, diagnostics["rejectedAccuracy"])
+        assertFalse(diagnostics.keys.any { it.toString().contains("latitude", ignoreCase = true) })
+        assertNull(j.load(session))
+    }
+
+    @Test
+    fun `crash between point append and checkpoint retains rejection evidence`() = runTest {
+        val j = journal()
+        j.begin(session, 1_000L)
+        j.appendPoints(session, listOf(RecordedPoint(57.0, 12.0, 1_100L), RecordedPoint(57.001, 12.0, 11_100L)))
+        j.writeDiagnostics(session, DriveRecordingDiagnostics(receivedPoints = 4, acceptedPoints = 1, rejectedAccuracy = 3))
+        val c = resumeCoordinator(CoroutineScope(UnconfinedTestDispatcher(testScheduler)), JournalFakeRepository(), j)
+        c.start()
+        assertEquals(5, c.recordingDiagnostics.receivedPoints)
+        assertEquals(2, c.recordingDiagnostics.acceptedPoints)
+        assertEquals(3, c.recordingDiagnostics.rejectedAccuracy)
+    }
+
     // --- Pure journal round-trip -----------------------------------------
 
     @Test
@@ -231,10 +309,13 @@ class DriveRecordingJournalTest {
      * tests assert.
      */
     private class JournalFakeRepository : DrivesRepository {
+        var lastRequest: Map<String, Any?>? = null
         override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
-        override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
-            DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+        override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
+            lastRequest = request
+            return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+        }
 
         override suspend fun deleteDrive(rideId: String) = Unit
     }

@@ -17613,6 +17613,23 @@
         }
       }
     },
+    "feedback.driveContext": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rapporten kopplas till den här körningen. Körspår och platsuppgifter delas inte i ärendet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This report is linked to this drive. The issue will not include your route or location data."
+          }
+        }
+      }
+    },
     "feedback.error": {
       "extractionState": "manual",
       "localizations": {
@@ -30410,6 +30427,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Title (optional)"
+          }
+        }
+      }
+    },
+    "savedDrives.reportProblem": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rapportera problem med körningen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report a problem with this drive"
           }
         }
       }

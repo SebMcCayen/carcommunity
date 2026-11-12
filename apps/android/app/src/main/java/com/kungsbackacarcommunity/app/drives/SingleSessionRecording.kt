@@ -73,6 +73,7 @@ object SingleSessionRecording {
     val stopReason: StateFlow<SavePromptReason> = stopReasonState.asStateFlow()
 
     private var locationController: DriveLocationSource? = null
+    private var locationSourceGeneration = 0L
 
     /**
      * The uid whose session this recording belongs to; see [clearIfNotOwnedBy].
@@ -177,7 +178,7 @@ object SingleSessionRecording {
             //
             // Gated on the coordinator still RECORDING so a stream is never re-opened
             // once the session has stopped and is awaiting its save/discard prompt.
-            if (locationController == null &&
+            if (locationController?.isRunning != true &&
                 existing.state.value is RecordingState.Recording
             ) {
                 attachLocationController(existing, controllerFactory)
@@ -242,19 +243,22 @@ object SingleSessionRecording {
         // session's speed, so the readout starts blank and the first fix fills it.
         CurrentSpeed.clear()
         val controller = controllerFactory() ?: return
+        locationController?.stop()
+        val generation = ++locationSourceGeneration
         // Only KEEP the source if it actually started streaming: start() returns
         // false when the runtime permission is (still) absent. Leaving
         // locationController null in that case lets the next retry try again rather
         // than pinning a source that delivers nothing for the whole session.
         val started =
-            controller.start { latitude, longitude, timestampMs, speedMps ->
-                coordinator.addFix(latitude, longitude, timestampMs)
+            controller.start fix@{ sample ->
+                if (locationSourceGeneration != generation || activeState.value !== coordinator) return@fix
+                coordinator.addSample(sample)
                 // Speed goes to the live-session bar's readout ONLY. It is passed to
                 // the holder rather than the recorder deliberately: nothing about a
                 // saved drive derives from it, and the drive payload carries no speed.
                 // Stamped with the DEVICE clock, not the fix's own GPS `timestampMs`,
                 // because the reader ages it against System.currentTimeMillis.
-                CurrentSpeed.onFix(speedMps, System.currentTimeMillis())
+                CurrentSpeed.onFix(sample.speedMps, System.currentTimeMillis())
             }
         locationController = if (started) controller else null
     }
@@ -283,6 +287,7 @@ object SingleSessionRecording {
         // member gate) but a previous session left a number behind.
         CurrentSpeed.clear()
         val coordinator = activeState.value ?: return
+        locationSourceGeneration++
         locationController?.stop()
         locationController = null
         coordinator.stop()
@@ -303,6 +308,7 @@ object SingleSessionRecording {
      * next session starts clean. Also stops the GPS source defensively.
      */
     fun clear() {
+        locationSourceGeneration++
         locationController?.stop()
         locationController = null
         CurrentSpeed.clear()

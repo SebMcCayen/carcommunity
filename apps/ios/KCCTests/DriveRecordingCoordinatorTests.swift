@@ -673,6 +673,34 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         resumed.reset()
     }
 
+    func testRejectedRecordingEventsReachSaveAndRetriesKeepTheSameDiagnostics() async throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.failures = [KccFunctionsError(code: .unavailable)]
+        let coordinator = makeCoordinator(repository, provider, clock)
+        coordinator.start(context: context())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitRecordingEvent(RecordingLocationEvent(decision: .accepted(fix(start, offset: 0)),
+            receivedUptime: 100))
+        provider.emitRecordingEvent(RecordingLocationEvent(decision: .rejected(.accuracy), receivedUptime: 120))
+        provider.emitRecordingEvent(RecordingLocationEvent(decision: .accepted(
+            fix(start, offset: 30, latitude: 57.0001)), receivedUptime: 130))
+        await waitUntil { coordinator.state.summary?.pointCount == 2 }
+        clock.value = start.addingTimeInterval(40)
+        coordinator.endSession(context: context())
+        await waitUntil { repository.requests.count == 2 }
+        let first = try XCTUnwrap(repository.requests.first)
+        XCTAssertEqual(first, repository.requests[1])
+        XCTAssertEqual(first.recordingDiagnostics?.receivedPoints, 3)
+        XCTAssertEqual(first.recordingDiagnostics?.acceptedPoints, 2)
+        XCTAssertEqual(first.recordingDiagnostics?.rejectedAccuracy, 1)
+        XCTAssertEqual(first.recordingDiagnostics?.gapCount, 1)
+        XCTAssertEqual(first.points.count, 2)
+        coordinator.reset()
+    }
+
     private func makeCoordinator(
         _ repository: FakeRepository,
         _ provider: StubLocationProvider,

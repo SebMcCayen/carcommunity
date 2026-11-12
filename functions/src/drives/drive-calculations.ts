@@ -32,7 +32,7 @@ const EARTH_RADIUS_METRES = 6_371_000;
  * and excluded from distance totals.
  * 200 km/h = ~55.6 m/s — generous but safely above road speeds.
  */
-const MAX_PLAUSIBLE_SPEED_MPS = 55.6;
+export const MAX_PLAUSIBLE_SPEED_MPS = 55.6;
 
 /**
  * Maximum plausible forward ACCELERATION for a car (m/s²), used ONLY by
@@ -82,10 +82,7 @@ export function haversineDistanceMetres(
   const dLon = toRadians(lon2 - lon1);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRadians(lat1)) *
-      Math.cos(toRadians(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return EARTH_RADIUS_METRES * c;
 }
@@ -229,10 +226,7 @@ export function driveDurationSeconds(startedAt: Date, endedAt: Date): number {
  * Calculate average speed in metres per second.
  * Returns null if durationSeconds is zero.
  */
-export function averageSpeedMps(
-  distanceMetres: number,
-  durationSeconds: number,
-): number | null {
+export function averageSpeedMps(distanceMetres: number, durationSeconds: number): number | null {
   if (durationSeconds <= 0) return null;
   return distanceMetres / durationSeconds;
 }

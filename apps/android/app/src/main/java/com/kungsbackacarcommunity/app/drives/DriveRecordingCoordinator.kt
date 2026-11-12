@@ -120,6 +120,9 @@ class DriveRecordingCoordinator(
      * and drained on [stop]. Main-thread only, like the recorder it shadows.
      */
     private val pendingJournalPoints = ArrayList<RecordedPoint>()
+    private var quality = DriveRecordingQuality()
+
+    val recordingDiagnostics: DriveRecordingDiagnostics get() = quality.diagnostics
 
     /** Wall-clock of the last journal flush, for the time-based flush trigger. */
     private var lastJournalFlushMillis = 0L
@@ -223,6 +226,20 @@ class DriveRecordingCoordinator(
             val rebuilt =
                 DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId, convoyMembers = convoyMembers)
             restored.points.forEach { rebuilt.addPoint(it) }
+            // The atomic checkpoint can lag a route flush, and a damaged final
+            // point can disappear on restore. Keep rejection evidence, reconcile
+            // accepted facts, and never turn an unknown lost sample into a route.
+            val checkpoint = restored.diagnostics
+            val missingAccepted = (rebuilt.pointCount - (checkpoint?.acceptedPoints ?: 0)).coerceAtLeast(0)
+            val previousDiagnostics = checkpoint?.copy(
+                acceptedPoints = rebuilt.pointCount,
+                receivedPoints = (checkpoint.receivedPoints.toLong() + missingAccepted)
+                    .coerceAtMost(DriveRecordingDiagnostics.MAX_COUNT.toLong()).toInt(),
+            ) ?: DriveRecordingDiagnostics(receivedPoints = rebuilt.pointCount, acceptedPoints = rebuilt.pointCount)
+            quality = DriveRecordingQuality(
+                previousDiagnostics.copy(resumedCount = DriveRecordingQuality.increment(previousDiagnostics.resumedCount)),
+                rebuilt.snapshot().lastOrNull(),
+            )
             recorder = rebuilt
             startedAtMillis = started
             stoppedAtMillis = null
@@ -245,6 +262,7 @@ class DriveRecordingCoordinator(
             return
         }
         val started = clock()
+        quality = DriveRecordingQuality()
         recorder =
             DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId, convoyMembers = convoyMembers)
         startedAtMillis = started
@@ -266,13 +284,29 @@ class DriveRecordingCoordinator(
         val recorder = recorder ?: return
         if (stateFlow.value !is RecordingState.Recording) return
         val point = RecordedPoint(latitude, longitude, timestampMs)
+        val capacityAvailable = !recorder.isFull
         val accepted = recorder.addPoint(point)
+        quality.recordLegacy(accepted, capacityAvailable)
+        onRecordedPoint(recorder, point, accepted)
+    }
+
+    /** Production GPS path: reject bad fixes before the route/journal sees them. */
+    fun addSample(sample: DriveLocationSample) {
+        val recorder = recorder ?: return
+        if (stateFlow.value !is RecordingState.Recording) return
+        val point = quality.process(sample, capacityAvailable = !recorder.isFull)
+        if (point == null) {
+            maybeFlushJournal(force = false)
+            return
+        }
+        onRecordedPoint(recorder, point, recorder.addPoint(point))
+    }
+
+    private fun onRecordedPoint(recorder: DriveRecorder, point: RecordedPoint, accepted: Boolean) {
         // Journal only the fixes the recorder actually kept (#849), so a resume
         // replays an identical drive. Batched to keep disk writes coarse.
-        if (accepted && journal != null) {
-            pendingJournalPoints.add(point)
-            maybeFlushJournal(force = false)
-        }
+        if (accepted && journal != null) pendingJournalPoints.add(point)
+        maybeFlushJournal(force = false)
         // Coarse progress telemetry: one line every MILESTONE_INTERVAL accepted
         // fixes, so a long drive shows it is recording + journalling without a
         // per-fix log. Guarded on `accepted` so dropped (out-of-order/full) fixes
@@ -298,7 +332,6 @@ class DriveRecordingCoordinator(
      */
     private fun maybeFlushJournal(force: Boolean) {
         val journal = journal ?: return
-        if (pendingJournalPoints.isEmpty()) return
         val now = clock()
         val due =
             force ||
@@ -306,6 +339,7 @@ class DriveRecordingCoordinator(
                 now - lastJournalFlushMillis >= JOURNAL_FLUSH_INTERVAL_MS
         if (!due) return
         journal.appendPoints(sourceSessionId, pendingJournalPoints)
+        journal.writeDiagnostics(sourceSessionId, quality.diagnostics)
         pendingJournalPoints.clear()
         lastJournalFlushMillis = now
     }
@@ -376,7 +410,9 @@ class DriveRecordingCoordinator(
         val endedAt = stoppedAtMillis ?: clock()
         stateFlow.value = RecordingState.Saving
         try {
-            val result = repository.saveDrive(recorder.buildSaveRequest(title, endedAt))
+            val result = repository.saveDrive(
+                recorder.buildSaveRequest(title, endedAt) + ("recordingDiagnostics" to quality.diagnostics.toWire()),
+            )
             // Snapshot the fixes for the background upload only now that the save
             // succeeded, and only when an upload can actually run: snapshot()
             // copies up to ~20k points, so this skips that copy on a failed save,
@@ -476,7 +512,7 @@ class DriveRecordingCoordinator(
                     // Build the payload HERE (off the UI thread). The payload is
                     // idempotent per sourceSessionId, so a retry re-sends the exact
                     // same request (and stored duration).
-                    val request = recorder.buildSaveRequest(title, endedAt)
+                    val request = recorder.buildSaveRequest(title, endedAt) + ("recordingDiagnostics" to quality.diagnostics.toWire())
                     val result = saveWithRetry(request)
                     savedResult = result
                     // The drive is safely persisted server-side — drop the on-disk

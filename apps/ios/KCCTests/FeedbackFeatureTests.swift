@@ -37,6 +37,22 @@ final class FeedbackFeatureTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testDriveReportKeepsExplicitSelectionPrivateAndGenericReportDoesNotInheritIt() async {
+        let repository = FakeFeedbackRepository(result: .success(FeedbackSubmitResult(
+            reportId: "report", issueURL: nil, issueNumber: nil
+        )))
+        let coordinator = FeedbackCoordinator(repository: repository)
+        let context = FeedbackClientContext.sanitized(appVersion: "1.0", osVersion: "iOS", deviceModel: "iPhone")
+        let form = FeedbackReportForm(description: "Distance is too short")
+        await coordinator.submit(form: form, context: context, rideId: "selected-owned-drive")
+        XCTAssertEqual(repository.inputs.first?.rideId, "selected-owned-drive")
+        XCTAssertEqual(repository.inputs.first?.description, form.description)
+        coordinator.reset()
+        await coordinator.submit(form: form, context: context)
+        XCTAssertNil(repository.inputs.last?.rideId)
+    }
+
     func testReportInputStripsControlsBoundsUTF16AndSanitizesContext() {
         let context = FeedbackClientContext.sanitized(
             appVersion: "  1.2\nsecret  ",

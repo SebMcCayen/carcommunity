@@ -92,7 +92,11 @@ describe('feedback-core input parsing', () => {
     expect(result.input.summary).toBeNull();
     expect(result.input.appVersion).toBeNull();
 
-    const payload = buildGitHubIssuePayload(result.input, 'rep_android', '2026-07-09T12:00:00.000Z');
+    const payload = buildGitHubIssuePayload(
+      result.input,
+      'rep_android',
+      '2026-07-09T12:00:00.000Z',
+    );
     expect(payload.title).toBe('[Android] Something broke');
     expect(payload.labels).toEqual([FEEDBACK_ISSUE_LABEL]);
   });
@@ -204,7 +208,7 @@ describe('feedback-core public GitHub issue', () => {
     expect(unsupported).toEqual({
       ok: false,
       message:
-        "Expected { description, summary?, appVersion?, osVersion?, deviceModel?, platform?: 'android'|'ios' }.",
+        "Expected { description, summary?, appVersion?, osVersion?, deviceModel?, platform?: 'android'|'ios', rideId? }.",
     });
   });
 });

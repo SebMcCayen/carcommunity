@@ -161,4 +161,22 @@ final class StubLocationProviderTests: XCTestCase {
         XCTAssertEqual(a, fix)
         XCTAssertEqual(b, fix)
     }
+    @MainActor
+    func testRecordingStreamHonorsAuthorizationAndReleasesDemandOnCancellation() async {
+        let provider = StubLocationProvider(authorization: .denied)
+        let stream = provider.recordingEvents()
+        XCTAssertEqual(provider.activeFixStreamCount, 1)
+        provider.emitRecordingEvent(RecordingLocationEvent(decision: .rejected(.accuracy), receivedUptime: 1))
+        provider.setAuthorization(.whileInUse)
+        provider.emitRecordingEvent(RecordingLocationEvent(decision: .rejected(.stale), receivedUptime: 2))
+        var received: [RecordingLocationEvent] = []
+        let task = Task { for await event in stream { received.append(event) } }
+        await waitUntil { received.count == 1 }
+        if let event = received.first, case .rejected(.stale) = event.decision {} else {
+            XCTFail("Unauthorized recording evidence must not be delivered")
+        }
+        task.cancel()
+        await waitUntil { provider.activeFixStreamCount == 0 }
+    }
+
 }

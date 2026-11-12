@@ -68,6 +68,62 @@ protocol LocationProvider: AnyObject {
     /// (starting a stream never triggers a permission prompt); a grant
     /// arriving later makes fixes flow without a re-subscribe.
     func fixes() -> AsyncStream<LocationFix>
+
+    /// Dedicated recording demand also receives coordinate-free rejection
+    /// outcomes, so poor samples cannot disappear before diagnostics see them.
+    func recordingEvents() -> AsyncStream<RecordingLocationEvent>
+}
+
+/// Decisions retain coordinates only for the accepted, private route stream.
+/// Rejections contain a closed reason, never the rejected location.
+enum RecordingLocationRejection: Sendable {
+    case invalid, accuracy, stale, time, speed
+}
+
+enum RecordingLocationDecision: Sendable {
+    case accepted(LocationFix)
+    case rejected(RecordingLocationRejection)
+
+    var fix: LocationFix? {
+        if case .accepted(let fix) = self { return fix }
+        return nil
+    }
+}
+
+struct RecordingLocationEvent: Sendable {
+    let decision: RecordingLocationDecision
+    /// Monotonic RECEIPT time, local-only. Never persisted or uploaded.
+    let receivedUptime: TimeInterval
+
+    private static let receiptEpoch = ContinuousClock.now
+
+    /// Includes device sleep, unlike an awake-only uptime clock. Epoch is
+    /// process-local and never serialized, so relaunch cannot create a gap.
+    static var receiptUptime: TimeInterval {
+        let elapsed = receiptEpoch.duration(to: ContinuousClock.now).components
+        return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1_000_000_000_000_000_000
+    }
+}
+
+extension LocationProvider {
+    /// Compatibility for existing fakes and foreground-only implementations.
+    /// Production CoreLocationProvider overrides this to include rejections.
+    func recordingEvents() -> AsyncStream<RecordingLocationEvent> {
+        let source = fixes()
+        return AsyncStream { continuation in
+            let task = Task { @MainActor in
+                for await fix in source {
+                    guard !Task.isCancelled else { break }
+                    continuation.yield(RecordingLocationEvent(
+                        decision: .accepted(fix),
+                        receivedUptime: RecordingLocationEvent.receiptUptime
+                    ))
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 /// ``LocationProvider`` with no device or CoreLocation dependency — the
@@ -109,6 +165,9 @@ final class StubLocationProvider: LocationProvider {
 
     @ObservationIgnored
     private var fixContinuations: [UUID: AsyncStream<LocationFix>.Continuation] = [:]
+
+    @ObservationIgnored
+    private var recordingContinuations: [UUID: AsyncStream<RecordingLocationEvent>.Continuation] = [:]
 
     init(authorization: LocationAuthorization = .notDetermined) {
         self.authorization = authorization
@@ -153,6 +212,20 @@ final class StubLocationProvider: LocationProvider {
         }
     }
 
+    func recordingEvents() -> AsyncStream<RecordingLocationEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            recordingContinuations[id] = continuation
+            activeFixStreamCount += 1
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.recordingContinuations.removeValue(forKey: id) != nil else { return }
+                    self.activeFixStreamCount -= 1
+                }
+            }
+        }
+    }
+
     // MARK: - Scripting hooks (tests / config-less builds)
 
     /// Sets the authorization and notifies every live
@@ -181,5 +254,12 @@ final class StubLocationProvider: LocationProvider {
         for sink in fixContinuations.values {
             sink.yield(fix)
         }
+        emitRecordingEvent(RecordingLocationEvent(decision: .accepted(fix),
+            receivedUptime: RecordingLocationEvent.receiptUptime))
+    }
+
+    func emitRecordingEvent(_ event: RecordingLocationEvent) {
+        guard authorization.isAuthorized else { return }
+        for sink in recordingContinuations.values { sink.yield(event) }
     }
 }

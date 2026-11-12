@@ -15,6 +15,7 @@ final class FirebaseFeedbackRepository: FeedbackRepository, @unchecked Sendable 
         if let appVersion = input.appVersion { payload["appVersion"] = appVersion }
         if let osVersion = input.osVersion { payload["osVersion"] = osVersion }
         if let deviceModel = input.deviceModel { payload["deviceModel"] = deviceModel }
+        if let rideId = input.rideId { payload["rideId"] = rideId }
 
         let raw = try await functions.call(Self.callable, payload: payload)
         guard let response = raw as? [String: Any],
