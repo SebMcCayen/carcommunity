@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { initializeApp, deleteApp, type FirebaseApp } from 'firebase/app';
 import {
   connectAuthEmulator,
-  createUserWithEmailAndPassword,
   getAuth,
   signInWithEmailAndPassword,
   signOut,
@@ -16,6 +15,7 @@ import {
   type Functions,
 } from 'firebase/functions';
 import { getApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { beforeAll, beforeEach, afterAll, describe, expect, it } from 'vitest';
 import { GLOBAL_PHOTO_BYTES_PER_DAY, PHOTO_RESERVED_BYTES } from './quota';
@@ -55,7 +55,7 @@ let originalMeta: FirebaseFirestore.DocumentData | undefined;
 let app: FirebaseApp;
 let auth: Auth;
 let functions: Functions;
-let uid: string;
+const uid = `${prefix}-user`;
 let rateRef: FirebaseFirestore.DocumentReference;
 
 const call = async (name: string, data: unknown = {}) =>
@@ -81,7 +81,9 @@ beforeAll(async () => {
   functions = getFunctions(app, 'europe-west1');
   const [host, port] = functionsHost.split(':');
   connectFunctionsEmulator(functions, host!, Number(port));
-  uid = (await createUserWithEmailAndPassword(auth, email, password)).user.uid;
+  // A deterministic emulator-only UID keeps the counter key independent of
+  // credential objects. The real client still signs in through Auth below.
+  await getAdminAuth(adminApp).createUser({ uid, email, password });
   rateRef = db.doc(`roadCameraRateLimits/${createHash('sha256').update(uid).digest('hex')}`);
   // Wait for provisioning before replacing the profile fixture. This suite
   // isolates the camera actor gate from cross-product identity initialization;
