@@ -12,7 +12,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CALLABLE_COST_CLASS, SCHEDULED_JOBS } from './inventory';
+import {
+  CALLABLE_COST_CLASS,
+  SCHEDULED_JOBS,
+  REPOSITORY_SCHEDULED_JOBS,
+  DRIVER_SCHEDULED_JOBS,
+} from './inventory';
 
 interface RegistryFn {
   name: string;
@@ -102,7 +107,7 @@ describe('SCHEDULED_JOBS mirrors every onSchedule export in functions/src', () =
 
   it('every onSchedule export is costed (a new scheduled function cannot hide its cost)', () => {
     const discovered = discoverScheduledSources();
-    const inventoried = new Set(SCHEDULED_JOBS.map((j) => j.source));
+    const inventoried = new Set(REPOSITORY_SCHEDULED_JOBS.map((j) => j.source));
     const missing = discovered.filter((src) => !inventoried.has(src)).sort();
 
     // If this fails, add the named function to SCHEDULED_JOBS in
@@ -120,7 +125,7 @@ describe('SCHEDULED_JOBS mirrors every onSchedule export in functions/src', () =
 
   it('does not list a scheduled job the source no longer has (no stale/renamed entries)', () => {
     const discovered = new Set(discoverScheduledSources());
-    const stale = SCHEDULED_JOBS.map((j) => j.source)
+    const stale = REPOSITORY_SCHEDULED_JOBS.map((j) => j.source)
       .filter((src) => !discovered.has(src))
       .sort();
     expect(
@@ -137,4 +142,50 @@ describe('SCHEDULED_JOBS mirrors every onSchedule export in functions/src', () =
     expect(new Set(ids).size).toBe(ids.length);
     expect(new Set(sources).size).toBe(sources.length);
   });
+
+  it('includes the six separately deployed Driver schedules without exempting repository jobs', () => {
+    expect(DRIVER_SCHEDULED_JOBS.map((job) => job.id).sort()).toEqual([
+      'driver-cleanupExpiredDataExports',
+      'driver-clubsMaintenance',
+      'driver-maintainClubEvents',
+      'driver-processAccountDeletions',
+      'driver-processDataExports',
+      'driver-processExpiredSuspensions',
+    ]);
+    expect(SCHEDULED_JOBS).toEqual([...REPOSITORY_SCHEDULED_JOBS, ...DRIVER_SCHEDULED_JOBS]);
+    expect(DRIVER_SCHEDULED_JOBS.every((job) => job.source.startsWith('deployed:driver:'))).toBe(
+      true,
+    );
+    expect(REPOSITORY_SCHEDULED_JOBS.every((job) => !job.source.startsWith('deployed:'))).toBe(
+      true,
+    );
+    expect(
+      DRIVER_SCHEDULED_JOBS.find((job) => job.id === 'driver-clubsMaintenance')?.runsPerDay,
+    ).toBe(1440);
+  });
+
+  it('matches repository job CPU and memory to the actual Firebase deploy manifest', async () => {
+    process.env.GCLOUD_PROJECT ??= 'demo-test';
+    process.env.FIREBASE_CONFIG ??= JSON.stringify({
+      projectId: 'demo-test',
+      databaseURL: 'https://demo-test.firebaseio.com',
+      storageBucket: 'demo-test.appspot.com',
+    });
+    const entry = (await import('../index')) as Record<string, unknown>;
+    for (const job of REPOSITORY_SCHEDULED_JOBS) {
+      const [group, name] = job.id.split('-');
+      if (!group || !name) throw new Error(`Malformed scheduled job id: ${job.id}`);
+      const functions = entry[group] as Record<
+        string,
+        {
+          __endpoint: { cpu?: number; availableMemoryMb?: number };
+        }
+      >;
+      const deployed = functions[name];
+      if (!deployed) throw new Error(`Scheduled job missing from deploy manifest: ${job.id}`);
+      const endpoint = deployed.__endpoint;
+      expect(job.cpu, job.id).toBe(endpoint.cpu ?? 1);
+      expect(job.memoryGiB, job.id).toBe((endpoint.availableMemoryMb ?? 256) / 1024);
+    }
+  }, 30_000);
 });

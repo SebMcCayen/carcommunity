@@ -25,6 +25,7 @@
  */
 
 import { TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN } from './assumptions';
+import { CPU_SCHEDULED } from '../shared/instanceLimits';
 
 /** Which Firestore free-tiered metric a scheduled job's per-run work lands on. */
 export interface ScheduledJob {
@@ -53,7 +54,9 @@ export interface ScheduledJob {
   deletesPerRun: number;
   /** Average wall-clock seconds per run (for Functions compute cost). */
   avgSeconds: number;
-  /** Memory configured, GiB (for GB-seconds). */
+  /** Allocated vCPU; billed time is multiplied by this value. */
+  cpu: number;
+  /** Memory configured, GiB (for GiB-seconds). */
   memoryGiB: number;
   /** One-line note on what it does / where the number comes from. */
   note: string;
@@ -78,7 +81,7 @@ export interface ScheduledJob {
  * every 15 min → 96, every 20 min → 72, every 30 min → 48, hourly → 24, every 3
  * hours → 8, every 6 hours → 4, daily → 1, weekly → ~0.143, monthly → ~0.033.
  */
-export const SCHEDULED_JOBS: ScheduledJob[] = [
+export const REPOSITORY_SCHEDULED_JOBS: ScheduledJob[] = [
   {
     id: 'incidents-syncTrafikverket',
     source: 'incidents/trafikverket.ts:syncTrafikverket',
@@ -92,6 +95,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 0,
     deletesPerRun: 0,
     avgSeconds: 30,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: `Fingerprint sync: scans ~${TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN.toLocaleString('en')} imported deviations, skips unchanged incident writes, writes one freshness doc, and safely reconciles vanished imports. Tune from created/changed/unchangedSkipped/missingDeleted telemetry.`,
   },
@@ -105,6 +109,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 40,
     deletesPerRun: 0,
     avgSeconds: 10,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: '~40 count()/sum() aggregations + 1 snapshot write per day.',
   },
@@ -118,6 +123,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 20,
     avgSeconds: 8,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Sweeps expired crowd-sourced incidents; small delete volume.',
   },
@@ -131,6 +137,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 0,
     avgSeconds: 8,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Queues reminder notifications for upcoming events.',
   },
@@ -144,6 +151,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 0,
     avgSeconds: 8,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Hourly transition of events between statuses.',
   },
@@ -157,6 +165,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 0,
     avgSeconds: 5,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Daily regeneration of the public homepage event feed (GitHub commit only when changed; no Firestore writes).',
   },
@@ -170,6 +179,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 0,
     avgSeconds: 6,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Activates/deactivates billboards on their schedule.',
   },
@@ -183,6 +193,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 5,
     deletesPerRun: 5,
     avgSeconds: 5,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Clears expired live-location discovery docs every 5 min.',
   },
@@ -196,6 +207,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 0,
     avgSeconds: 6,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Spawns crowns into approved cells.',
   },
@@ -209,6 +221,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 3,
     avgSeconds: 6,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Expires uncollected crowns.',
   },
@@ -222,6 +235,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 0,
     avgSeconds: 8,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Downgrades lapsed entitlements.',
   },
@@ -239,6 +253,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 401,
     deletesPerRun: 0,
     avgSeconds: 20,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Downgrade-only integrity backstop: re-converges entitlement claim/flag to the authoritative subscriptions record. Provider-gated (inert while off).',
   },
@@ -256,6 +271,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 2,
     deletesPerRun: 0,
     avgSeconds: 2,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Cosmetic-only private deadline sweep; 288 bounded queries/day, usually empty. Due repairs preserve claims, receipt fields and owner visibility. Per-run estimates assume <=50 members; tune after telemetry.',
   },
@@ -269,7 +285,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 20,
     deletesPerRun: 0,
     avgSeconds: 10,
-    memoryGiB: 0.25,
+    cpu: CPU_SCHEDULED,
+    memoryGiB: 0.5,
     note: 'Recomputes time-based badge progress.',
   },
   {
@@ -284,6 +301,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 20,
     deletesPerRun: 20,
     avgSeconds: 15,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Daily retention sweep — deletes read items >7d and unread >30d.',
   },
@@ -303,6 +321,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 20,
     deletesPerRun: 20,
     avgSeconds: 20,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.5,
     note: 'GDPR erasure — purges soft-deleted accounts once their grace period is due.',
   },
@@ -316,6 +335,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 20,
     deletesPerRun: 2,
     avgSeconds: 20,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.5,
     note: 'Warns/removes long-inactive accounts.',
   },
@@ -329,6 +349,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 50,
     deletesPerRun: 0,
     avgSeconds: 20,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Builds daily partner interaction aggregates.',
   },
@@ -347,6 +368,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 30,
     deletesPerRun: 20,
     avgSeconds: 15,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Deletes expired partner-interaction aggregates past retention.',
   },
@@ -363,6 +385,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     deletesPerRun: 0,
     // Route decode + H3 binning over a rolling 90-day window; the heaviest job.
     avgSeconds: 120,
+    cpu: 1,
     memoryGiB: 1,
     note: 'Anonymised H3 drive-density aggregate over consented drives.',
   },
@@ -376,6 +399,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 20,
     deletesPerRun: 0,
     avgSeconds: 15,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Evening community chat digest.',
   },
@@ -389,6 +413,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 30,
     deletesPerRun: 0,
     avgSeconds: 20,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Monthly diagnostics retention sweep — negligible.',
   },
@@ -414,6 +439,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 10,
     deletesPerRun: 1,
     avgSeconds: 5,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Mirrors OPEN android-issue GitHub tickets into Firestore for the in-app browser (flag-gated). GitHub list call each run.',
   },
@@ -433,6 +459,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 500,
     deletesPerRun: 0,
     avgSeconds: 20,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.5,
     note: 'Hourly precompute of the social leaderboards; bounded per-member scan (grows with membership). Publishes public JSON via GitHub.',
   },
@@ -450,6 +477,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 100,
     deletesPerRun: 0,
     avgSeconds: 8,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Detects lagging crown claims in a bounded window; files GitHub issues (budgeted) when found.',
   },
@@ -465,6 +493,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 80,
     deletesPerRun: 0,
     avgSeconds: 8,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Hourly detector for members hitting the daily points cap; files GitHub issues (budgeted).',
   },
@@ -481,6 +510,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 120,
     deletesPerRun: 0,
     avgSeconds: 20,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.5,
     note: 'Daily just after midnight; finalizes last season + opens the new one on a month boundary.',
   },
@@ -498,9 +528,111 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 20,
     deletesPerRun: 50,
     avgSeconds: 60,
+    cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
     note: 'Weekly OSM safe-stop POI ingestion per spawn area (Overpass API); rewrites the POI set.',
   },
+];
+
+/**
+ * Driver is a separate deployed codebase sharing this project's billing.
+ * Snapshot: Cloud Scheduler + Functions metadata, 2026-11-12. Sources below
+ * refer to its deployed archive, not this repository. Durations are the last
+ * seven days' billable instance seconds / requests (Cloud Monitoring).
+ * Reads model idle queues (including the minimum charge per empty query);
+ * rare queued export/deletion/fan-out mutations remain workload-dependent.
+ */
+export const DRIVER_SCHEDULED_JOBS: ScheduledJob[] = [
+  {
+    id: 'driver-processExpiredSuspensions',
+    source: 'deployed:driver:lib/index.js:processExpiredSuspensions',
+    label: 'Driver suspension expiry',
+    schedule: 'every 15 minutes',
+    runsPerDay: 96,
+    writesPerRun: 0,
+    readsPerRun: 1,
+    deletesPerRun: 0,
+    avgSeconds: 0.344,
+    cpu: 1,
+    memoryGiB: 0.25,
+    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+  },
+  {
+    id: 'driver-processAccountDeletions',
+    source: 'deployed:driver:lib/index.js:processAccountDeletions',
+    label: 'Driver account deletion',
+    schedule: 'every day 03:00',
+    runsPerDay: 1,
+    writesPerRun: 0,
+    readsPerRun: 1,
+    deletesPerRun: 0,
+    avgSeconds: 3.883,
+    cpu: 1,
+    memoryGiB: 0.25,
+    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+  },
+  {
+    id: 'driver-cleanupExpiredDataExports',
+    source: 'deployed:driver:lib/index.js:cleanupExpiredDataExports',
+    label: 'Driver export cleanup',
+    schedule: 'every day 04:00',
+    runsPerDay: 1,
+    writesPerRun: 0,
+    readsPerRun: 1,
+    deletesPerRun: 0,
+    avgSeconds: 3.573,
+    cpu: 1,
+    memoryGiB: 0.25,
+    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+  },
+  {
+    id: 'driver-maintainClubEvents',
+    source: 'deployed:driver:lib/shared-club-events.js:maintainClubEvents',
+    label: 'Driver club event maintenance',
+    schedule: 'every 15 minutes',
+    runsPerDay: 96,
+    writesPerRun: 0,
+    readsPerRun: 3,
+    deletesPerRun: 0,
+    avgSeconds: 0.66,
+    cpu: 1,
+    memoryGiB: 0.25,
+    note: 'Driver codebase; verified 2026-11-12 (UTC). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+  },
+  {
+    id: 'driver-clubsMaintenance',
+    source: 'deployed:driver:lib/shared-clubs.js:clubsMaintenance',
+    label: 'Driver club maintenance',
+    schedule: 'every 1 minutes',
+    runsPerDay: 1440,
+    writesPerRun: 0,
+    readsPerRun: 3,
+    deletesPerRun: 0,
+    avgSeconds: 0.115,
+    cpu: 1,
+    memoryGiB: 0.25,
+    note: 'Driver codebase; verified 2026-11-12 (UTC). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+  },
+  {
+    id: 'driver-processDataExports',
+    source: 'deployed:driver:lib/index.js:processDataExports',
+    label: 'Driver data exports',
+    schedule: 'every 15 minutes',
+    runsPerDay: 96,
+    writesPerRun: 0,
+    readsPerRun: 1,
+    deletesPerRun: 0,
+    avgSeconds: 0.478,
+    cpu: 1,
+    memoryGiB: 0.25,
+    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+  },
+];
+
+/** All 34 scheduled jobs in the shared production project, counted once. */
+export const SCHEDULED_JOBS: ScheduledJob[] = [
+  ...REPOSITORY_SCHEDULED_JOBS,
+  ...DRIVER_SCHEDULED_JOBS,
 ];
 
 /**

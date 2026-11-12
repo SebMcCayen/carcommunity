@@ -41,12 +41,16 @@ import {
 import {
   ADMIN_WEB_MAP_LOADS_PER_MONTH,
   FALLBACK_MEMBER_COUNT,
+  FIRESTORE_TTL_DELETES_PER_DAY,
+  FUNCTION_INTERNET_EGRESS_BYTES_PER_MONTH,
   NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
   NAV_USING_FRACTION,
   PER_MEMBER_PER_DAY,
   RTDB_STORAGE_BYTES,
   SECRET_MANAGER_ACTIVE_VERSIONS,
   STORAGE_BYTES_PER_MEMBER,
+  STORAGE_UPLOADS_PER_MEMBER_PER_DAY,
+  STORAGE_DOWNLOAD_OPS_PER_MEMBER_PER_DAY,
   TRAFIKVERKET_ESTIMATED_DELETES_PER_RUN,
   TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN,
   TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN,
@@ -69,20 +73,18 @@ import {
 /**
  * Average wall-clock seconds of a member-triggered callable. Most callables
  * return in well under a second; 0.4 s is a round, slightly generous figure.
- * Only used for Cloud Functions compute (GB-seconds / vCPU-seconds), which sits
- * far under the free tier for this app, so precision here barely moves the bill.
+ * Used for Cloud Functions compute (GiB-seconds / vCPU-seconds). Scheduled
+ * jobs have independent duration and resource assumptions in the inventory.
  */
 const MEMBER_INVOCATION_AVG_SECONDS = 0.4;
 
-/** vCPU per function instance (gen2 default). Used for vCPU-seconds compute. */
-const FUNCTION_VCPU = 1;
+/** Ordinary member callables retain one vCPU; scheduled jobs use their own cpu. */
+const MEMBER_FUNCTION_VCPU = 1;
 
-/** Memory (GiB) of a member-triggered function instance, for GB-seconds compute. */
+/** Memory (GiB) of a member-triggered function instance, for GiB-seconds compute. */
 const PER_MEMBER_MEMORY_GIB = 0.25;
 
-/** Decimal GB (10^9 bytes) — RTDB and Cloud Storage quote decimal GB. */
-const BYTES_PER_GB = 1_000_000_000;
-/** Binary GiB (2^30) — Firestore stored data quotes GiB. */
+/** Binary GiB (2^30) — the deployed Firestore, RTDB and Storage billing SKUs. */
 const BYTES_PER_GIB = 1024 ** 3;
 
 // --- Result shape ------------------------------------------------------------
@@ -369,6 +371,15 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     committedDeletesPerDay >= variableDeletesPerDay,
     'Free tier 20k deletes/day.',
   );
+  const ttlDeletesLine = firestoreDailyLine(
+    'Cloud Firestore',
+    'Automatic TTL deletes',
+    FIRESTORE_TTL_DELETES_PER_DAY,
+    0,
+    FIRESTORE.ttlDeleteUsd,
+    true,
+    'No free quota for automatic TTL deletions; separate from manual cleanup deletes.',
+  );
 
   // Firestore stored data — small; assume incidents + members' docs stay under
   // 1 GiB. Modelled as a flat, generous estimate (not per-member exact).
@@ -403,105 +414,138 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     'Free tier 2M invocations/month.',
   );
 
-  const scheduledGbSeconds = SCHEDULED_JOBS.reduce(
+  const scheduledGibSeconds = SCHEDULED_JOBS.reduce(
     (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH * j.avgSeconds * j.memoryGiB,
     0,
   );
-  const memberGbSeconds =
+  const memberGibSeconds =
     memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * PER_MEMBER_MEMORY_GIB;
-  const gbSecondsPerMonth = scheduledGbSeconds + memberGbSeconds;
-  const gbSecondsLine = monthlyLine(
+  const gibSecondsPerMonth = scheduledGibSeconds + memberGibSeconds;
+  const gibSecondsLine = monthlyLine(
     'Cloud Functions',
-    'Compute — memory (GB-seconds)',
-    'GB-s / month',
-    gbSecondsPerMonth,
-    FUNCTIONS.free.gbSecondsPerMonth,
-    FUNCTIONS.gbSecondUsd,
+    'Compute — memory (GiB-seconds)',
+    'GiB-s / month',
+    gibSecondsPerMonth,
+    FUNCTIONS.free.gibSecondsPerMonth,
+    FUNCTIONS.gibSecondUsd,
     true,
-    'Free tier 400k GB-seconds/month.',
+    'Gen2 request-based billing; 360k GiB-seconds/month shared per billing account.',
   );
 
   const scheduledCpuSeconds = SCHEDULED_JOBS.reduce(
-    (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH * j.avgSeconds * FUNCTION_VCPU,
+    (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH * j.avgSeconds * j.cpu,
     0,
   );
   const memberCpuSeconds =
-    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * FUNCTION_VCPU;
+    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * MEMBER_FUNCTION_VCPU;
   const cpuSecondsPerMonth = scheduledCpuSeconds + memberCpuSeconds;
   const cpuSecondsLine = monthlyLine(
     'Cloud Functions',
-    'Compute — vCPU (GHz-seconds)',
+    'Compute — vCPU (allocated seconds)',
     'vCPU-s / month',
     cpuSecondsPerMonth,
-    FUNCTIONS.free.ghzSecondsPerMonth,
-    FUNCTIONS.ghzSecondUsd,
+    FUNCTIONS.free.vcpuSecondsPerMonth,
+    FUNCTIONS.vcpuSecondUsd,
     true,
-    'Free tier 200k vCPU-seconds/month.',
+    'Gen2 request-based billing; per-job allocated CPU; 180k vCPU-seconds/month shared per billing account.',
+  );
+  const functionEgressLine = monthlyLine(
+    'Cloud Functions',
+    'Internet data transfer (Europe)',
+    'GiB / month',
+    FUNCTION_INTERNET_EGRESS_BYTES_PER_MONTH / BYTES_PER_GIB,
+    FUNCTIONS.free.egressGiBPerMonth,
+    FUNCTIONS.egressGiBUsd,
+    true,
+    'Dated 1.2 GiB/month usage estimate; the North America transfer allowance does not cover Belgium.',
   );
 
   // ---- Realtime Database (live location) -----------------------------------
-  const rtdbStorageGb = RTDB_STORAGE_BYTES / BYTES_PER_GB;
+  const rtdbStorageGiB = RTDB_STORAGE_BYTES / BYTES_PER_GIB;
   const rtdbStorageLine = monthlyLine(
     'Realtime Database',
     'Stored data (live sessions)',
-    'GB',
-    rtdbStorageGb,
-    RTDB.free.storageGb,
-    RTDB.storageGbMonthUsd,
+    'GiB',
+    rtdbStorageGiB,
+    RTDB.free.storageGiB,
+    RTDB.storageGiBMonthUsd,
     false,
-    'Live nodes are tiny + ephemeral; free tier 1 GB.',
+    'Live nodes are tiny + ephemeral; free tier 1 GiB.',
   );
-  const rtdbDownloadGbPerMonth =
-    (members * PER_MEMBER_PER_DAY.rtdbDownloadBytes * DAYS_PER_MONTH) / BYTES_PER_GB;
+  const rtdbDownloadGiBPerDay = (members * PER_MEMBER_PER_DAY.rtdbDownloadBytes) / BYTES_PER_GIB;
   const rtdbDownloadLine = monthlyLine(
     'Realtime Database',
     'Downloaded bytes (watching live markers)',
-    'GB / month',
-    rtdbDownloadGbPerMonth,
-    RTDB.free.downloadGbPerMonth,
-    RTDB.downloadGbUsd,
+    'GiB / month',
+    rtdbDownloadGiBPerDay * DAYS_PER_MONTH,
+    RTDB.free.downloadGiBPerDay * DAYS_PER_MONTH,
+    RTDB.downloadGiBUsd,
     false,
-    'Scales with members watching live location; free tier 10 GB/month.',
+    '360 MiB/day free, reset daily; assumes steady daily usage, with no carry-over between days.',
   );
 
   // ---- Cloud Storage (images) ----------------------------------------------
-  const storageStoredGb = (members * STORAGE_BYTES_PER_MEMBER) / BYTES_PER_GB;
+  const storageStoredGiB = (members * STORAGE_BYTES_PER_MEMBER) / BYTES_PER_GIB;
   const storageStoredLine = monthlyLine(
     'Cloud Storage',
     'Stored images',
-    'GB',
-    storageStoredGb,
-    STORAGE.free.storageGb,
-    STORAGE.storageGbMonthUsd,
+    'GiB',
+    storageStoredGiB,
+    STORAGE.free.storageGiB,
+    STORAGE.storageGiBMonthUsd,
     false,
-    'Members’ uploaded photos; free tier 5 GB.',
+    'Members’ uploaded photos in Belgium; SKU A703-5CB6-E0BF has no storage free tier.',
   );
-  const storageDownloadGbPerMonth =
-    (members * PER_MEMBER_PER_DAY.storageDownloadBytes * DAYS_PER_MONTH) / BYTES_PER_GB;
+  const storageDownloadGiBPerMonth =
+    (members * PER_MEMBER_PER_DAY.storageDownloadBytes * DAYS_PER_MONTH) / BYTES_PER_GIB;
   const storageDownloadLine = monthlyLine(
     'Cloud Storage',
     'Downloaded images (egress)',
-    'GB / month',
-    storageDownloadGbPerMonth,
-    STORAGE.free.downloadGbPerMonth,
-    STORAGE.downloadGbUsd,
+    'GiB / month',
+    storageDownloadGiBPerMonth,
+    STORAGE.free.downloadGiBPerMonth,
+    0,
     false,
-    'Free tier 100 GB/month.',
+    'Legacy REGIONAL bucket SKU 22EB-AAE8-FBCD: first 100 GiB/month free, then marginal transfer tiers.',
+  );
+  storageDownloadLine.sekPerMonth = usdToSek(
+    tieredUsd(storageDownloadGiBPerMonth, STORAGE.downloadTiers),
+  );
+  const storageUploadLine = monthlyLine(
+    'Cloud Storage',
+    'Image upload operations',
+    'operations / month',
+    members * STORAGE_UPLOADS_PER_MEMBER_PER_DAY * DAYS_PER_MONTH,
+    STORAGE.free.uploadsPerMonth,
+    STORAGE.uploadUsd,
+    false,
+    'Legacy REGIONAL class A SKU 4DBF-185F-A415; first 5,000 operations/month free.',
+  );
+  const storageGetLine = monthlyLine(
+    'Cloud Storage',
+    'Image download operations',
+    'operations / month',
+    members * STORAGE_DOWNLOAD_OPS_PER_MEMBER_PER_DAY * DAYS_PER_MONTH,
+    STORAGE.free.downloadOpsPerMonth,
+    STORAGE.downloadOperationUsd,
+    false,
+    'Legacy REGIONAL class B SKU 7870-010B-2763; first 50,000 operations/month free.',
   );
 
   // ---- Cloud Scheduler (per job) -------------------------------------------
-  const schedulerBillableJobs = Math.max(0, SCHEDULED_JOBS.length - SCHEDULER.freeJobs);
+  const schedulerJobDays = SCHEDULED_JOBS.length * DAYS_PER_MONTH;
+  const schedulerBillableJobDays = Math.max(0, schedulerJobDays - SCHEDULER.freeJobDaysPerMonth);
   const schedulerLine: ServiceLine = {
     service: 'Cloud Scheduler',
     driver: 'Scheduled jobs',
-    unit: 'jobs',
-    gross: SCHEDULED_JOBS.length,
-    freeTier: SCHEDULER.freeJobs,
-    billable: schedulerBillableJobs,
-    sekPerMonth: usdToSek(schedulerBillableJobs * SCHEDULER.usdPerJobPerMonth),
+    unit: 'job-days / month',
+    gross: schedulerJobDays,
+    freeTier: SCHEDULER.freeJobDaysPerMonth,
+    billable: schedulerBillableJobDays,
+    sekPerMonth: usdToSek(schedulerBillableJobDays * SCHEDULER.usdPerJobDay),
     committed: true,
-    free: schedulerBillableJobs === 0,
-    note: `${SCHEDULED_JOBS.length} scheduled jobs; 3 free per billing account, then $${SCHEDULER.usdPerJobPerMonth}/job/month.`,
+    free: schedulerBillableJobDays === 0,
+    note: `${SCHEDULED_JOBS.length} scheduled jobs; 93 job-days/month free per billing account, then $0.10 per 31 job-days. Includes Driver.`,
   };
 
   // ---- Secret Manager -------------------------------------------------------
@@ -519,7 +563,7 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     sekPerMonth: usdToSek(secretBillableVersions * SECRET_MANAGER.usdPerActiveVersionPerMonth),
     committed: true,
     free: secretBillableVersions === 0,
-    note: 'Trafikverket API key; free tier 6 active versions.',
+    note: 'Verified 2026-11-12: 9 enabled + 1 disabled version-replicas. Both states are billed; first 6 free per billing account.',
   };
 
   // ---- No-cost services (listed, never omitted) ----------------------------
@@ -567,14 +611,18 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     writesLine,
     readsLine,
     deletesLine,
+    ttlDeletesLine,
     storedLine,
     invocationsLine,
-    gbSecondsLine,
+    gibSecondsLine,
     cpuSecondsLine,
+    functionEgressLine,
     rtdbStorageLine,
     rtdbDownloadLine,
     storageStoredLine,
     storageDownloadLine,
+    storageUploadLine,
+    storageGetLine,
     schedulerLine,
     secretLine,
     ...noCostLines,
