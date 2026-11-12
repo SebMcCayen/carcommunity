@@ -12,6 +12,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.callbackFlow
 
 /** Neither a local role flag nor a cached document grants a moderation capability. */
@@ -89,9 +91,15 @@ class FirebasePublicChatModerationRepository private constructor(
     override suspend fun decide(payload: Map<String, Any?>) {
         checkAccount()
         check(payload["expectedActorUid"] == uid)
-        functions.getHttpsCallable("admin-moderateChatMessage").call(payload)
-            .awaitOrThrow { "Moderation request cancelled" }
-        checkAccount()
+        finishSubmittedChatModeration {
+            completeChatModerationCleanup(payload, ::checkAccount, { sameDecision ->
+                functions.getHttpsCallable("admin-moderateChatMessage").call(sameDecision)
+                    .awaitOrThrow { "Moderation request cancelled" }.data
+            })
+        }
+        // The bounded submitted operation can finish after its sheet disappears, but its
+        // cancelled UI owner must not run stale success/dismiss callbacks afterwards.
+        currentCoroutineContext().ensureActive()
     }
 
     companion object {

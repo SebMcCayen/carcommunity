@@ -34,6 +34,12 @@ warning or extend a pause. Conflicting decisions require fresh review. Existing
 owner/self-sanction guards remain in force. An administrator can remove their
 own public message, but cannot warn or pause themselves through that decision.
 
+Community quote cleanup is paged. Android continues the same confirmed receipt
+without minting a new decision key, even when live deletion disposes the original
+sheet. Each attempt is limited to ten calls and two minutes, with account checks
+around every call. More extensive or interrupted cleanup can be resumed through
+the existing admin moderation tools; no new offline decision queue is created.
+
 Public message creation checks the server-owned restriction in the same
 transaction as the new message. This serializes a new send with a concurrent
 pause. A message committed before the pause is not retroactively rejected.

@@ -1,6 +1,11 @@
 package com.kungsbackacarcommunity.app.moderation
 
 import kotlinx.coroutines.flow.Flow
+import java.io.IOException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /** Public surfaces are explicit: this capability cannot address PM, convoy or Driver club paths. */
 data class PublicChatTarget(val source: String, val messageId: String, val eventId: String? = null, val expectedAuthorUid: String? = null) {
@@ -82,6 +87,41 @@ fun previewPublicPauseUntil(context: PublicChatModerationContext, draft: ChatMod
 
 data class PublicChatWritePause(val untilMillis: Long, val reason: String, val deadlineElapsedMillis: Long) {
     fun activeAt(elapsedMillis: Long): Boolean = elapsedMillis < deadlineElapsedMillis
+}
+
+internal class ChatModerationCleanupIncompleteException : IllegalStateException("Quote cleanup needs another attempt")
+
+/** Called only after explicit confirmation; deletion may immediately dispose its original sheet. */
+internal suspend fun finishSubmittedChatModeration(
+    timeoutMillis: Long = 120_000L,
+    block: suspend () -> Unit,
+) = withContext(NonCancellable) {
+    try {
+        withTimeout(timeoutMillis) { block() }
+    } catch (error: TimeoutCancellationException) {
+        // A completion deadline is retryable. It is distinct from the caller leaving the screen.
+        throw IOException("Moderation completion timed out; retry the same decision", error)
+    }
+}
+
+/** Resume the server receipt with exactly the same decision; never mint a new key for cleanup. */
+internal suspend fun completeChatModerationCleanup(
+    payload: Map<String, Any?>,
+    checkAccount: () -> Unit,
+    call: suspend (Map<String, Any?>) -> Any?,
+    maxCalls: Int = 10,
+) {
+    require(maxCalls in 1..10)
+    repeat(maxCalls) {
+        checkAccount()
+        val response = call(payload)
+        checkAccount()
+        val cleanup = (response as? Map<*, *>)?.get("cleanup") as? Map<*, *>
+            ?: error("Missing moderation cleanup result")
+        val more = cleanup["hasMore"] as? Boolean ?: error("Invalid moderation cleanup result")
+        if (!more) return
+    }
+    throw ChatModerationCleanupIncompleteException()
 }
 
 /** A response is anchored to request start, so transport latency cannot prolong the pause UI. */
