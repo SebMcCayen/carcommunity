@@ -69,10 +69,10 @@ internal fun ConvoyInvitationCard(
                 if (error != null) Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.error,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
-                    OutlinedButton(onDecline, enabled = !busy, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("convoy_invitation_decline")) {
+                    OutlinedButton(onDecline, shape = RoundedCornerShape(12.dp), enabled = !busy, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("convoy_invitation_decline")) {
                         Text(stringResource(R.string.convoy_invitationDecline))
                     }
-                    Button(onJoin, enabled = !busy, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("convoy_invitation_join")) {
+                    Button(onJoin, shape = RoundedCornerShape(12.dp), enabled = !busy, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("convoy_invitation_join")) {
                         if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         else Text(stringResource(R.string.convoy_invitationJoin))
                     }
