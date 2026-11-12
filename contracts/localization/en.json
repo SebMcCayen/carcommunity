@@ -1385,6 +1385,7 @@
     "spawnCollecting": "Collecting...",
     "spawnMoveCloser": "Move closer",
     "spawnMoveCloserDetail": "You need to be within %1$d m of the crown.",
+    "spawnReadyToCollect": "Within reach – you can collect this crown.",
     "spawnProximityLabel": "Get closer",
     "spawnProximityRemaining": "%1$s to go",
     "spawnStopFirst": "Stop the car first",

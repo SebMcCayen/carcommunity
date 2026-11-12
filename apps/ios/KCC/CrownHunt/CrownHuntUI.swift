@@ -1,5 +1,35 @@
 import SwiftUI
 
+enum CrownProximityText {
+    /// Same 1 km switch and rounding as Android; the caller supplies the UI locale.
+    static func distance(_ meters: Double, short: Bool = false, locale: Locale, bundle: Bundle = .main) -> String {
+        guard meters.isFinite, meters >= 0 else { return "" }
+        if meters >= 1_000 {
+            let kilometres = (meters / 100).rounded() / 10
+            let value = String(format: "%.1f", locale: locale, kilometres)
+            return format(short ? "crownHunt.spawnDistanceValueKm" : "crownHunt.spawnDistanceKm",
+                          value, locale: locale, bundle: bundle)
+        }
+        return format(short ? "crownHunt.spawnDistanceValue" : "crownHunt.spawnDistance",
+                      Int64(meters.rounded()), locale: locale, bundle: bundle)
+    }
+
+    static func radiusHint(_ proximity: CrownProximity, locale: Locale, bundle: Bundle = .main) -> String {
+        format("crownHunt.spawnMoveCloserDetail", Int64(proximity.collectRadiusMeters.rounded()),
+               locale: locale, bundle: bundle)
+    }
+
+    static func remaining(_ proximity: CrownProximity, locale: Locale, bundle: Bundle = .main) -> String {
+        format("crownHunt.spawnProximityRemaining",
+               distance(proximity.remainingToRingMeters, short: true, locale: locale, bundle: bundle),
+               locale: locale, bundle: bundle)
+    }
+
+    private static func format(_ key: String, _ value: CVarArg, locale: Locale, bundle: Bundle) -> String {
+        String(format: bundle.localizedString(forKey: key, value: nil, table: nil), locale: locale, value)
+    }
+}
+
 /// Shared SwiftUI building blocks for the Crown-Hunt screens: a card container,
 /// a centered message state (loading / empty / error / unavailable), and the
 /// localized-key mappers for claim results and rarities. Kept in one place so

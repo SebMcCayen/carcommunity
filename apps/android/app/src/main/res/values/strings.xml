@@ -1282,6 +1282,7 @@
     <string name="crownHunt_spawnClose">Stäng</string>
     <string name="crownHunt_spawnMoveCloser">Kör närmare</string>
     <string name="crownHunt_spawnMoveCloserDetail">Du behöver vara inom %1$d m från kronan.</string>
+    <string name="crownHunt_spawnReadyToCollect">Inom räckhåll – du kan hämta kronan.</string>
     <string name="crownHunt_spawnProximityLabel">Kom närmare</string>
     <string name="crownHunt_spawnProximityRemaining">%1$s kvar</string>
     <string name="crownHunt_spawnStopFirst">Stanna bilen först</string>

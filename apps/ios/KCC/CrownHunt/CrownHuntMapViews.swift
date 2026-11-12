@@ -117,7 +117,7 @@ struct CrownHuntCollectContent: View {
             let state = coordinator.collectState(now: context.date)
             let feedback = CrownCollectFeedback(
                 state: state, status: coordinator.claimStatus, collected: collected, expired: expired,
-                showLiveShareTip: showLiveShareTip
+                showLiveShareTip: showLiveShareTip, proximity: coordinator.selectedProximity(now: context.date)
             )
             VStack(alignment: .leading, spacing: KccSpacing.s2) {
                 ViewThatFits(in: .vertical) {
@@ -332,12 +332,57 @@ private struct CrownTargetDetails: View {
     private var detailFont: Font { compact ? .footnote : .body }
 }
 
+private struct CrownDistanceLabel: View {
+    @Environment(\.locale) private var locale
+    let meters: Double
+
+    var body: some View {
+        Text(verbatim: CrownProximityText.distance(meters, locale: locale))
+    }
+}
+
+struct CrownProximityView: View {
+    @Environment(\.locale) private var locale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let proximity: CrownProximity
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s2) {
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Text("crownHunt.spawnProximityLabel").fontWeight(.semibold)
+                    Spacer(minLength: KccSpacing.s2)
+                    remaining
+                }
+                VStack(alignment: .leading, spacing: KccSpacing.s1) {
+                    Text("crownHunt.spawnProximityLabel").fontWeight(.semibold)
+                    remaining
+                }
+            }
+            ProgressView(value: proximity.fraction)
+                .tint(KccTheme.driver)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: proximity.fraction)
+                .accessibilityLabel("crownHunt.spawnProximityLabel")
+                .accessibilityValue(Text(verbatim: CrownProximityText.remaining(proximity, locale: locale)))
+                .accessibilityIdentifier("crown.proximity")
+        }
+    }
+
+    private var remaining: some View {
+        Text(verbatim: CrownProximityText.remaining(proximity, locale: locale))
+            .foregroundStyle(KccTheme.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 struct CrownCollectFeedback: View {
+    @Environment(\.locale) private var locale
     let state: CrownCollectState
     let status: CrownMapClaimStatus
     var collected = false
     var expired = false
     var showLiveShareTip = false
+    var proximity: CrownProximity? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
@@ -346,6 +391,12 @@ struct CrownCollectFeedback: View {
             } else if collected, !CrownCollectPresentation.isAwarded(status) {
                 Label("crownHunt.spawnResultAlreadyCollected", systemImage: "checkmark.circle")
             } else if showsLocationState {
+                if let proximity, case .tooFar = state {
+                    CrownProximityView(proximity: proximity)
+                } else if let proximity {
+                    CrownDistanceLabel(meters: proximity.distanceMeters)
+                        .accessibilityIdentifier("crown.distance")
+                }
                 collectState
                 if showLiveShareTip {
                     Label("crownHunt.liveShareTip", systemImage: "info.circle")
@@ -369,9 +420,15 @@ struct CrownCollectFeedback: View {
 
     @ViewBuilder private var collectState: some View {
         switch state {
-        case .ready: Label("crownHunt.pointCollectHint", systemImage: "checkmark.circle")
+        case .ready: Label("crownHunt.spawnReadyToCollect", systemImage: "checkmark.circle")
         case .noPosition: Label("crownHunt.spawnNoPositionDetail", systemImage: "location.slash")
-        case .tooFar(let distance): Label(format("crownHunt.spawnMoveCloserDetail", Int(distance.rounded())), systemImage: "figure.walk")
+        case .tooFar:
+            if let proximity {
+                // This sentence describes the allowed radius, not our distance.
+                Label(CrownProximityText.radiusHint(proximity, locale: locale), systemImage: "figure.walk")
+            } else {
+                Label("crownHunt.pointCollectRangeHint", systemImage: "figure.walk")
+            }
         case .waitingForSignal: Label("crownHunt.spawnWaitingForSignal", systemImage: "location.circle")
         case .confirming, .moving: Label("crownHunt.spawnConfirming", systemImage: "hand.raised")
         case .featureOff: Label("crownHunt.spawnResultFeatureDisabled", systemImage: "crown")

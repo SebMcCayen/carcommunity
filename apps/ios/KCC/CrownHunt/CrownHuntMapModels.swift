@@ -314,6 +314,23 @@ enum CrownCollectState: Equatable, Sendable {
     case featureOff
 }
 
+/// Presentation only: the collection gate remains responsible for readiness.
+/// Matches Android's last-500-metres approach bar and distance to the ring.
+struct CrownProximity: Equatable, Sendable {
+    let distanceMeters: Double
+    let collectRadiusMeters: Double
+
+    init?(distanceMeters: Double, collectRadiusMeters: Double) {
+        guard distanceMeters.isFinite, distanceMeters >= 0,
+              collectRadiusMeters.isFinite, collectRadiusMeters > 0 else { return nil }
+        self.distanceMeters = distanceMeters
+        self.collectRadiusMeters = collectRadiusMeters
+    }
+
+    var remainingToRingMeters: Double { max(0, distanceMeters - collectRadiusMeters) }
+    var fraction: Double { max(0, 1 - remainingToRingMeters / 500) }
+}
+
 enum CrownCollectGate {
     static func evaluate(
         spawn: CrownSpawn,

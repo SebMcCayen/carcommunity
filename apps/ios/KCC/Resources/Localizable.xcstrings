@@ -13584,6 +13584,23 @@
         }
       }
     },
+    "crownHunt.spawnReadyToCollect": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inom räckhåll – du kan hämta kronan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Within reach – you can collect this crown."
+          }
+        }
+      }
+    },
     "crownHunt.spawnResultAlreadyCollected": {
       "extractionState": "manual",
       "localizations": {

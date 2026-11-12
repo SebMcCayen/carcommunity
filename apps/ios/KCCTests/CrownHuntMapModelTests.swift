@@ -3,6 +3,45 @@ import XCTest
 @testable import KCC
 
 final class CrownHuntMapModelTests: XCTestCase {
+    func testProximityMeasuresToTheRingAndMatchesAndroidApproachWindow() throws {
+        for radius in [30.0, 75.0, 150.0] {
+            for (gap, fraction) in [(-1.0, 1.0), (0.0, 1.0), (1.0, 0.998),
+                                    (250.0, 0.5), (500.0, 0.0), (5_000.0, 0.0)] {
+                let proximity = try XCTUnwrap(CrownProximity(distanceMeters: radius + gap, collectRadiusMeters: radius))
+                XCTAssertEqual(proximity.remainingToRingMeters, max(0, gap), accuracy: 0.0001)
+                XCTAssertEqual(proximity.fraction, fraction, accuracy: 0.0001)
+            }
+        }
+        for distance in [-1.0, Double.nan, .infinity] {
+            XCTAssertNil(CrownProximity(distanceMeters: distance, collectRadiusMeters: 75))
+        }
+        for radius in [0.0, -1, Double.nan, .infinity] {
+            XCTAssertNil(CrownProximity(distanceMeters: 100, collectRadiusMeters: radius))
+        }
+    }
+
+    func testProximityFormatsMetresKilometresAndTheActualRadiusInBothLanguages() throws {
+        let proximity = try XCTUnwrap(CrownProximity(distanceMeters: 1_550, collectRadiusMeters: 150))
+        for language in ["sv", "en"] {
+            let locale = Locale(identifier: language)
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            let swedish = language == "sv"
+            XCTAssertEqual(CrownProximityText.distance(120.5, locale: locale, bundle: bundle),
+                           swedish ? "121 m bort" : "121 m away")
+            XCTAssertEqual(CrownProximityText.distance(999, short: true, locale: locale, bundle: bundle), "999 m")
+            XCTAssertEqual(CrownProximityText.distance(1_000, locale: locale, bundle: bundle),
+                           swedish ? "1,0 km bort" : "1.0 km away")
+            XCTAssertEqual(CrownProximityText.distance(1_450, short: true, locale: locale, bundle: bundle),
+                           swedish ? "1,5 km" : "1.5 km")
+            XCTAssertEqual(CrownProximityText.remaining(proximity, locale: locale, bundle: bundle),
+                           swedish ? "1,4 km kvar" : "1.4 km to go")
+            XCTAssertEqual(CrownProximityText.radiusHint(proximity, locale: locale, bundle: bundle),
+                           swedish ? "Du behöver vara inom 150 m från kronan." : "You need to be within 150 m of the crown.")
+            XCTAssertEqual(CrownProximityText.distance(.nan, locale: locale, bundle: bundle), "")
+        }
+    }
+
     func testDistantDayCrownsUseAndroidLightPairsWithoutChangingReadyOrNightColors() {
         let expectedSurfaces: [UInt32] = [0xFFECE9E3, 0xFFE6F3EB, 0xFFEEE7FA, 0xFFFFF0CC]
         let expectedInks: [UInt32] = [0xFF5B6168, 0xFF1B6E4B, 0xFF6640A0, 0xFF946000]
