@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_theme_title">Appens tema</string>
+    <string name="app_theme_help">Gäller både kartan och resten av appen.</string>
+    <string name="app_theme_automatic">Auto</string>
+    <string name="app_theme_schedule_help">Växlar automatiskt vid dina valda tider i telefonens lokala tidszon.</string>
+    <string name="app_theme_day_from">Dag från %1$s</string>
+    <string name="app_theme_night_from">Natt från %1$s</string>
+    <string name="app_theme_day_start">När börjar dagtemat?</string>
+    <string name="app_theme_night_start">När börjar nattemat?</string>
+    <string name="app_theme_different_times">Välj olika starttider för dag och natt.</string>
+    <string name="app_theme_save">Spara</string>
+    <string name="app_theme_cancel">Avbryt</string>
+</resources>

@@ -9,9 +9,7 @@ import android.content.Context
  * - **Traffic alerts** — the Trafikverket + crowd-sourced incidents layer
  *   ([incidentsDefault]).
  * - **Traffic** — the Mapbox congestion overlay ([trafficCongestionDefault]).
- * - **Night mode** — the day/night light-preset override
- *   ([nightModeFromStored]); `null` means "follow the resolved app theme", which
- *   is the first-run behaviour.
+ * - Legacy night-mode values are only read during migration to the app-wide theme.
  * - **3D buildings** — the tilted 3D vs. flat 2D camera ([threeDDefault]).
  *
  * Kept as a pure object — no Android types touch these constants / parsers — so
@@ -123,16 +121,11 @@ class MapLayersPreferenceStore(context: Context) {
         prefs.edit().putBoolean(KEY_3D, enabled).apply()
     }
 
-    /**
-     * The stored day/night override, or `null` (follow the app theme) when the
-     * user has never overridden it. Crash-safe on an unknown/corrupt value via
-     * [MapLayersPreferences.nightModeFromStored].
-     */
+    /** Legacy override, read once by ThemePreferenceStore during upgrade. */
     fun readNightMode(): MapMode? = nightMode
 
     /**
-     * Records the day/night override so it survives a restart. `null` (back to
-     * "follow the app theme") clears the stored name. A no-op when unchanged.
+     * Clears the legacy override after migration. Also used to seed upgrade tests.
      */
     fun writeNightMode(mode: MapMode?) {
         if (mode == nightMode) return

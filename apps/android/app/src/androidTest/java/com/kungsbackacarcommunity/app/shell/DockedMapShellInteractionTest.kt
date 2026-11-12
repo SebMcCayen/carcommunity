@@ -172,18 +172,19 @@ class DockedMapShellInteractionTest {
             }
         }
         awaitSheet()
-        val system = rule.onNode(hasText(str(R.string.shell_layersAppearanceSystem)) and hasClickAction())
-        system.performScrollTo().assertIsSelected()
+        val automatic = rule.onNodeWithTag(MAP_HOME_LAYERS_AUTOMATIC_TAG)
         val night = rule.onNodeWithTag(MAP_HOME_LAYERS_NIGHT_TAG)
+        night.performScrollTo().assertIsSelected()
         night.performScrollTo().performClick().assertIsSelected()
-        system.assertIsNotSelected()
+        automatic.assertIsNotSelected()
         // These are mutually-exclusive choices, not the former on/off night toggle.
         night.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ToggleableState))
         rule.onNode(hasText(str(R.string.shell_layersAppearanceDay)) and hasClickAction())
             .performScrollTo().performClick().assertIsSelected()
         rule.runOnIdle { assertEquals(MapMode.Day, surface.mapMode.value) }
-        system.performScrollTo().performClick().assertIsSelected()
-        rule.runOnIdle { assertEquals(MapMode.Night, surface.mapMode.value) }
+        automatic.performScrollTo().performClick().assertIsSelected()
+        rule.onNodeWithTag(APP_THEME_DAY_START_TAG).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag(APP_THEME_NIGHT_START_TAG).performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("map_layers_focus_expand").performScrollTo().performClick()
         rule.onNodeWithTag(MAP_HOME_LAYERS_ZOOM_TAG).performScrollTo().assertIsDisplayed()
             .performTouchInput { click(Offset(width * 0.75f, height / 2f)) }

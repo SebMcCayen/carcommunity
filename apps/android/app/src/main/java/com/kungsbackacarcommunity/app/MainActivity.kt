@@ -12,6 +12,7 @@ import com.kungsbackacarcommunity.app.design.applyKccSystemBars
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipationController
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipationPreferenceStore
 import com.kungsbackacarcommunity.app.design.ThemePreference
+import com.kungsbackacarcommunity.app.design.AutomaticThemeSchedule
 import com.kungsbackacarcommunity.app.design.ThemePreferenceStore
 import com.kungsbackacarcommunity.app.design.rememberResolvedDarkTheme
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterController
@@ -117,7 +118,7 @@ class MainActivity : ComponentActivity() {
         FeatureFlagsStore(FirebaseFeatureFlagsRepository.createIfAvailable(applicationContext))
     }
 
-    // The user's Automatic/Light/Dark choice (Settings -> Appearance).
+    // The app-wide Day/Night/Automatic choice from Map layers.
     // Device-local SharedPreferences, so it is available before sign-in and
     // survives process death; collected in setContent so a change re-themes the
     // running app with no restart.
@@ -343,19 +344,25 @@ class MainActivity : ComponentActivity() {
             // SYSTEM alone follows Android. AUTOMATIC observes the live local
             // clock while visible; LIGHT/DARK remain explicit overrides.
             val systemInDark = if (themePreference == ThemePreference.SYSTEM) isSystemInDarkTheme() else false
-            val appDark = rememberResolvedDarkTheme(themePreference, systemInDark, lifecycle)
+            val themeSchedule by themePreferenceStore.schedule.collectAsState()
+            val appDark = rememberResolvedDarkTheme(themePreference, systemInDark, lifecycle, schedule = themeSchedule)
 
-            // Lets the Settings screen read and change the preference without
+            // Lets Map layers read and change the preference and schedule without
             // threading two more parameters through AuthenticatedApp and
             // RouteHost. Re-created when the preference changes so `preference`
             // reports the current value.
             val themeController =
-                remember(themePreference) {
+                remember(themePreference, themeSchedule) {
                     object : ThemeController {
                         override val preference = themePreference
+                        override val schedule = themeSchedule
 
                         override fun setPreference(preference: ThemePreference) {
                             themePreferenceStore.set(preference)
+                        }
+
+                        override fun setSchedule(schedule: AutomaticThemeSchedule) {
+                            themePreferenceStore.setSchedule(schedule)
                         }
                     }
                 }

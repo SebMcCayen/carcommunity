@@ -19,21 +19,17 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CardMembership
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Stars
-import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,8 +60,6 @@ import androidx.core.os.LocaleListCompat
 import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
-import com.kungsbackacarcommunity.app.design.LocalThemeController
-import com.kungsbackacarcommunity.app.design.ThemePreference
 import com.kungsbackacarcommunity.app.language.AppLanguage
 import com.kungsbackacarcommunity.app.navigation.openDefaultMapAppSettings
 
@@ -167,45 +161,6 @@ fun SettingsScreen(
             }
         }
 
-        // Keep the persisted SYSTEM meaning; the clock schedule is a separate choice.
-        SettingsGroup(stringResource(R.string.settingsMenu_appearanceSection)) {
-            val themeController = LocalThemeController.current
-            Column(modifier = Modifier.selectableGroup()) {
-                ThemeOptionRow(
-                    label = stringResource(R.string.settingsMenu_themeSystem),
-                    description = stringResource(R.string.settingsMenu_themeSystemDescription),
-                    icon = Icons.Filled.SettingsBrightness,
-                    selected = themeController.preference == ThemePreference.SYSTEM,
-                    testTag = SETTINGS_THEME_SYSTEM_TAG,
-                    onClick = { themeController.setPreference(ThemePreference.SYSTEM) },
-                )
-                ThemeOptionRow(
-                    label = stringResource(R.string.settingsMenu_themeScheduled),
-                    description = stringResource(R.string.settingsMenu_themeScheduledDescription),
-                    icon = Icons.Filled.BrightnessAuto,
-                    selected = themeController.preference == ThemePreference.AUTOMATIC,
-                    testTag = SETTINGS_THEME_AUTOMATIC_TAG,
-                    onClick = { themeController.setPreference(ThemePreference.AUTOMATIC) },
-                )
-                ThemeOptionRow(
-                    label = stringResource(R.string.settingsMenu_themeLight),
-                    description = stringResource(R.string.settingsMenu_themeLightDescription),
-                    icon = Icons.Filled.LightMode,
-                    selected = themeController.preference == ThemePreference.LIGHT,
-                    testTag = SETTINGS_THEME_LIGHT_TAG,
-                    onClick = { themeController.setPreference(ThemePreference.LIGHT) },
-                )
-                ThemeOptionRow(
-                    label = stringResource(R.string.settingsMenu_themeDark),
-                    description = stringResource(R.string.settingsMenu_themeDarkDescription),
-                    icon = Icons.Filled.DarkMode,
-                    selected = themeController.preference == ThemePreference.DARK,
-                    testTag = SETTINGS_THEME_DARK_TAG,
-                    onClick = { themeController.setPreference(ThemePreference.DARK) },
-                )
-            }
-        }
-
         // Language: Svenska / English. Swedish is the app default (res/values/);
         // English is the res/values-en/ override. The choice goes through the
         // AndroidX per-app language API — AppCompatDelegate.setApplicationLocales
@@ -298,12 +253,6 @@ fun SettingsScreen(
     }
 }
 
-/** Test tags for the four Appearance options, so UI tests can drive them. */
-const val SETTINGS_THEME_SYSTEM_TAG = "settings_theme_system"
-const val SETTINGS_THEME_AUTOMATIC_TAG = "settings_theme_automatic"
-const val SETTINGS_THEME_LIGHT_TAG = "settings_theme_light"
-const val SETTINGS_THEME_DARK_TAG = "settings_theme_dark"
-
 /** Test tags for the two Language options, so UI tests can drive them. */
 const val SETTINGS_LANGUAGE_SWEDISH_TAG = "settings_language_swedish"
 const val SETTINGS_LANGUAGE_ENGLISH_TAG = "settings_language_english"
@@ -331,75 +280,10 @@ private fun applyAppLanguage(language: AppLanguage) {
 }
 
 /**
- * One Appearance choice: icon, label + explanatory line, and a trailing radio showing which is
- * active.
- *
- * Mirrors [HubRow]'s Surface/Row shape so the section sits visually with the rest of Settings, but
- * carries `selectableGroup`-style semantics ([Role.RadioButton] + `selected`) instead of a
- * button's: these four rows are a single-choice set, and TalkBack should announce them as such.
- * The radio is non-clickable — the whole row is the target, so the click is declared once on the
- * Surface and the radio is decoration.
- */
-@Composable
-private fun ThemeOptionRow(
-    label: String,
-    description: String,
-    icon: ImageVector,
-    selected: Boolean,
-    testTag: String,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(testTag).semantics { role = Role.RadioButton },
-        shape = MaterialTheme.shapes.medium,
-        color =
-            if (selected) MaterialTheme.colorScheme.secondaryContainer
-            else MaterialTheme.colorScheme.surface,
-        selected = selected,
-        onClick = onClick,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(KccSpacing.s6),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            RadioButton(
-                selected = selected,
-                // The row owns the click and already announces its selected
-                // state; a separately focusable control here would duplicate
-                // the target for touch and TalkBack.
-                onClick = null,
-            )
-        }
-    }
-}
-
-/**
  * One Language choice: a globe icon, the language's own-language name, and a trailing radio showing
  * which is active.
  *
- * Mirrors [ThemeOptionRow]'s Surface/Row shape and single-choice semantics ([Role.RadioButton] +
- * `selected`, whole row is the target, radio is decoration) so the two settings sections read the
- * same — but carries no explanatory line: "Svenska"/"English" are self-evident and shown
- * untranslated.
+ * The whole row is a single-choice target; the radio is decoration.
  */
 @Composable
 private fun LanguageOptionRow(
