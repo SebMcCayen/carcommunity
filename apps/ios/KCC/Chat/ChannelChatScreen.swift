@@ -287,10 +287,9 @@ struct ChannelChatScreen: View {
 
 /// A bounded editor viewport keeps Send reachable with the keyboard on a
 /// narrow phone. The complete draft stays in the coordinator; extra lines scroll
-/// inside the native input instead of displacing the action offscreen.
+/// inside the native vertical field instead of displacing the action offscreen.
 struct ChannelComposer: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @FocusState private var editorFocused: Bool
     @Binding var draft: String
     let canSend: Bool
     var onQuickEmoji: ((String) -> Void)? = nil
@@ -306,36 +305,16 @@ struct ChannelComposer: View {
         }
     }
 
-    @ViewBuilder private var nativeInput: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            // This viewport already allows one line at accessibility sizes.
-            // Use the native single-line control rather than a vertical field's
-            // measuring editor, which can lose reactivation after dismissal.
-            TextField("chat.inputPlaceholder", text: $draft)
-                .focused($editorFocused)
-        } else {
-            TextField("chat.inputPlaceholder", text: $draft, axis: .vertical)
-                .lineLimit(1...2)
-                .focused($editorFocused)
-        }
-    }
-
     private var editor: some View {
         HStack(spacing: KccSpacing.s2) {
-            nativeInput
+            TextField("chat.inputPlaceholder", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.body)
+                .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 1 : 2))
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s1)
                 .frame(minHeight: 48)
-                .background {
-                    // Native text selection owns the editor; the background
-                    // owns taps in its padding, outside the native input frame.
-                    RoundedRectangle(cornerRadius: KccRadius.lg).fill(KccTheme.subtle)
-                        .contentShape(Rectangle())
-                        .onTapGesture { editorFocused = true }
-                        .accessibilityHidden(true)
-                }
+                .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.lg))
                 .overlay {
                     RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border)
                         .allowsHitTesting(false)
@@ -355,7 +334,7 @@ struct ChannelComposer: View {
             .accessibilityLabel(Text("chat.sendButton"))
             .accessibilityIdentifier("chat.composer.send")
             .disabled(!canSend)
-            ChatKeyboardDismissButton(onDismiss: { editorFocused = false })
+            ChatKeyboardDismissButton()
         }
         .padding(KccSpacing.s2)
     }

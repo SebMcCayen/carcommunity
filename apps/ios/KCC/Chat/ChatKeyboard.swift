@@ -45,12 +45,10 @@ struct ChatKeyboardObserver: ViewModifier {
 /// of the conversation. Resigning first responder leaves the draft intact.
 struct ChatKeyboardDismissButton: View {
     @Environment(\.chatKeyboardPresented) private var keyboardPresented
-    var onDismiss: (() -> Void)? = nil
 
     var body: some View {
         if keyboardPresented {
             Button {
-                onDismiss?()
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
                     to: nil, from: nil, for: nil)
             } label: {

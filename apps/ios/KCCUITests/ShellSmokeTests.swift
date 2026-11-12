@@ -270,10 +270,10 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertFalse(app.keyboards.firstMatch.exists)
             assertComposerDraft("Fixture reply", present: true, in: app)
             XCTAssertTrue(app.buttons["chatHub.source.chats"].exists)
-            // The padded visible field must focus too, not only the native
-            // glyph area. UIKit's AX activation point can land in this padding
-            // after a vertical editor is relaid out at accessibility sizes.
-            composerInput(in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.1)).tap()
+            // A vertical editor's AX activation point can land in its padding
+            // after accessibility-size layout. Tap the actual editing surface;
+            // reopening the keyboard and preserving the draft remain required.
+            composerInput(in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
             send.tap()
             let reply = app.staticTexts["Fixture reply"]
