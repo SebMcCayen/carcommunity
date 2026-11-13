@@ -9419,6 +9419,91 @@
         }
       }
     },
+    "convoy.invitationClosesIn": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rutan stängs om %1$lld s"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closes in %1$lld s"
+          }
+        }
+      }
+    },
+    "convoy.invitationDecline": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neka"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decline"
+          }
+        }
+      }
+    },
+    "convoy.invitationFrom": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bjuder in till konvoj"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invites you to a convoy"
+          }
+        }
+      }
+    },
+    "convoy.invitationInboxHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finns kvar i Notifikationer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stays in Notifications"
+          }
+        }
+      }
+    },
+    "convoy.invitationJoin": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gå med"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join"
+          }
+        }
+      }
+    },
     "convoy.inviteAccepted": {
       "extractionState": "manual",
       "localizations": {

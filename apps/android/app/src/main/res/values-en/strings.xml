@@ -2221,4 +2221,9 @@
     <string name="carCommunityAccess_suspendedTitle">Access is restricted</string>
     <string name="carCommunityAccess_body">Your access to CarCommunity is restricted. Contact the administrators if you have questions.</string>
     <string name="carCommunityAccess_retry">Check again</string>
+    <string name="convoy_invitationFrom">invites you to a convoy</string>
+    <string name="convoy_invitationJoin">Join</string>
+    <string name="convoy_invitationDecline">Decline</string>
+    <string name="convoy_invitationInboxHint">Stays in Notifications</string>
+    <string name="convoy_invitationClosesIn">Closes in %1$d s</string>
 </resources>

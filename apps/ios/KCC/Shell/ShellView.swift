@@ -72,6 +72,11 @@ struct ShellView: View {
     @State private var mapReadingSelection: MapReadingSelection?
     @State private var mapDockHeight: CGFloat = 0
     @State private var mapSessionHeight: CGFloat = 0
+    @State private var invitationFooterHeight: CGFloat = 0
+    @State private var invitationAnswerTask: Task<Void, Never>?
+    @State private var invitationBusyID: String?
+    @State private var invitationErrorID: String?
+    @State private var invitationActionError: ConvoyActionError?
     @State private var clubDeepLinkID: String?
     @State private var clubsCoordinator: ClubsCoordinator?
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
@@ -180,7 +185,9 @@ struct ShellView: View {
         )
     }
 
-    var body: some View {
+    // Bound the modifier chains just like the presentation layers below. This
+    // keeps Swift's type checker within budget as shell lifecycle hooks grow.
+    private var shellWithFeatureTasks: AnyView {
         shellWithNavigation
             .modifier(ChatKeyboardObserver(isPresented: $chatKeyboardPresented))
             .environment(\.chatKeyboardPresented, chatKeyboardPresented)
@@ -197,6 +204,11 @@ struct ShellView: View {
                 guard signedInUid != nil else { return }
                 await appUpdateCoordinator.checkOnce()
             }
+            .eraseToAnyView()
+    }
+
+    private var shellWithSessionLifecycle: AnyView {
+        shellWithFeatureTasks
             .task(id: initialMapPermissionEligible) {
                 guard initialMapPermissionEligible else { return }
                 if locationPermissionCoordinator?.requestInitialMapAccess() == true {
@@ -206,6 +218,9 @@ struct ShellView: View {
             }
             .task(id: savedPlacesLocationSubscriptionKey) {
                 await observeSavedPlacesLocation()
+            }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                notificationsCoordinator?.setInvitationForeground(phase == .active)
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active, signedInUid != nil else { return }
@@ -218,6 +233,11 @@ struct ShellView: View {
                       initial: true) { _, keepAwake in
                 UIApplication.shared.isIdleTimerDisabled = keepAwake
             }
+            .eraseToAnyView()
+    }
+
+    var body: some View {
+        shellWithSessionLifecycle
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
                 if !enabled {
@@ -265,19 +285,23 @@ struct ShellView: View {
             .task(id: convoyFollowMeSubscriptionKey) {
                 syncFollowMe()
             }
-            .onDisappear {
-                UIApplication.shared.isIdleTimerDisabled = false
-                // RootView removes the entire shell on sign-out or when a live
-                // account update becomes restricted. Stop exact-location and
-                // background drive collection synchronously during that swap.
-                liveLocationCoordinator?.standDownForRestrictedAccess()
-                convoyEndSessionCoordinator?.stop()
-                driveRecordingCoordinator?.reset()
-                notificationsCoordinator?.stopObserving()
-                billboardsCoordinator?.stop()
-                clubsCoordinator?.stop()
-                mapSurface.setBillboardMarkers([])
-            }
+            .onDisappear(perform: tearDownShell)
+    }
+
+    private func tearDownShell() {
+        UIApplication.shared.isIdleTimerDisabled = false
+        // RootView removes the entire shell on sign-out or when a live
+        // account update becomes restricted. Stop exact-location and
+        // background drive collection synchronously during that swap.
+        liveLocationCoordinator?.standDownForRestrictedAccess()
+        convoyEndSessionCoordinator?.stop()
+        driveRecordingCoordinator?.reset()
+        invitationAnswerTask?.cancel()
+        invitationAnswerTask = nil
+        notificationsCoordinator?.stopObserving()
+        billboardsCoordinator?.stop()
+        clubsCoordinator?.stop()
+        mapSurface.setBillboardMarkers([])
     }
 
     /// A retained sibling overlay, rather than a modal presentation: covering
@@ -299,44 +323,77 @@ struct ShellView: View {
                     .id(destination)
                     .zIndex(1)
             }
-            if let coordinator = notificationsCoordinator,
-               let invitation = coordinator.convoyInvitation, routes.current != .notifications,
-               scenePhase == .active, navigationDestination == nil {
-                VStack {
-                    HStack(spacing: KccSpacing.s2) {
-                        Button {
-                            let destination = coordinator.destination(for: invitation)
-                            coordinator.dismissInvitation()
-                            if let destination { openNotificationDeepLink(destination) }
-                            Task { await coordinator.markRead(notificationId: invitation.id) }
-                        } label: {
-                            Label {
-                                VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                                    Text(verbatim: invitation.title).font(.headline).lineLimit(2)
-                                    if let preview = invitation.previewText { Text(verbatim: preview).font(.subheadline).lineLimit(2) }
-                                }.frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                            } icon: { Image(systemName: "car.2.fill") }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("convoy.invitation.banner")
-                        Button(action: coordinator.dismissInvitation) {
-                            Image(systemName: "xmark").frame(width: 48, height: 48)
-                        }.accessibilityLabel(Text("convoy.close"))
-                    }
-                    .padding(KccSpacing.s3).foregroundStyle(KccTheme.text)
-                    .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-                    .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.driver) }
-                    .padding(KccSpacing.s4)
-                    Spacer(minLength: 0)
-                }.zIndex(2)
-            }
+            invitationOverlay.zIndex(2)
             if let liveLocationCoordinator, liveLocationCoordinator.wired {
                 StationaryLivePrompt(coordinator: liveLocationCoordinator) { promptID in
                     stopSingleSession(expectedStationaryPromptID: promptID)
                 }
             }
         }
+        .onPreferenceChange(InvitationFooterHeightKey.self) { invitationFooterHeight = $0 }
         .eraseToAnyView()
+    }
+
+    @ViewBuilder private var invitationOverlay: some View {
+        if let notifications = notificationsCoordinator,
+           let invitation = notifications.convoyInvitation,
+           routes.current != .notifications, scenePhase == .active {
+            let footer = routes.current == nil && navigationDestination == nil ? invitationFooterHeight : 0
+            let dock = mapHomeChromeVisible && navigationDestination == nil ? mapSessionHeight : 0
+            VStack {
+                Spacer(minLength: 0)
+                ConvoyInvitationCard(invitation: invitation, deadline: notifications.convoyInvitationDeadline,
+                    busy: invitationBusyID != nil,
+                    error: invitationErrorID == invitation.id
+                        ? invitationActionError.map(ConvoyManagementStrings.errorKey) : nil,
+                    onJoin: { answerInvitation(invitation, join: true) },
+                    onDecline: { answerInvitation(invitation, join: false) })
+            }
+            .padding(.horizontal, KccSpacing.s4)
+            .padding(.bottom, footer + dock + KccSpacing.s2)
+            .task(id: invitation.id) {
+                guard let repository = FirebaseConvoyManagementRepository.createIfAvailable(),
+                      let convoyID = invitation.relatedEntityId else { return }
+                do {
+                    for try await convoy in repository.observeConvoy(convoyId: convoyID) {
+                        guard !Task.isCancelled else { return }
+                        if convoy == nil || convoy?.status == .ended || convoy?.viewer?.inviteStatus != .invited {
+                            notifications.dismissInvitation(expectedID: invitation.id)
+                            return
+                        }
+                    }
+                } catch { /* The response callable still validates a transient listener failure. */ }
+            }
+        }
+    }
+
+    private func answerInvitation(_ invitation: AppNotification, join: Bool) {
+        guard invitationBusyID == nil, let convoyID = invitation.relatedEntityId,
+              let coordinator = convoyManagementCoordinator, let notifications = notificationsCoordinator,
+              notifications.convoyInvitation?.id == invitation.id,
+              ProcessInfo.processInfo.systemUptime < notifications.convoyInvitationDeadline else { return }
+        let identity = signedInUid
+        invitationBusyID = invitation.id
+        invitationErrorID = nil
+        // Shell-owned task survives removal of the timed card.
+        invitationAnswerTask = Task { @MainActor in
+            defer { invitationBusyID = nil }
+            let result = await coordinator.respondToInvitation(convoyId: convoyID, action: join ? .accept : .decline)
+            guard !Task.isCancelled, case .signedIn(let currentUid, _) = session.state, currentUid == identity else { return }
+            if case .updated(let convoy) = result {
+                let joined = join ? convoy : nil
+                notifications.dismissInvitation(expectedID: invitation.id)
+                if let joined {
+                    routes = .empty
+                    completeConvoyJoin(joined)
+                }
+                // Inbox bookkeeping must not keep the next invitation's actions busy.
+                Task { await notifications.markRead(notificationId: invitation.id) }
+            } else if case .failed(let error) = result {
+                invitationErrorID = invitation.id
+                invitationActionError = error
+            }
+        }
     }
 
     // Build 2 exhausted the device main-thread stack while decoding this
@@ -351,6 +408,9 @@ struct ShellView: View {
                 // Keep the footer above the map and its edge-to-edge overlays.
                 primaryNavigation
                     .fixedSize(horizontal: false, vertical: true)
+                    .background { GeometryReader { proxy in
+                        Color.clear.preference(key: InvitationFooterHeightKey.self, value: proxy.size.height)
+                    } }
                     .zIndex(1)
             }
         }
@@ -3205,4 +3265,9 @@ extension ShellTab {
         featureFlags: .contractDefaults,
         diagnostics: IOSDiagnosticsComposition()
     )
+}
+
+private struct InvitationFooterHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

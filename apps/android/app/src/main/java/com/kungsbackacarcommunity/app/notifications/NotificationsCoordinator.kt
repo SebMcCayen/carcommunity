@@ -47,6 +47,10 @@ class NotificationsCoordinator(
     private val repository: NotificationsRepository,
     private val errorReporter: ClientErrorReporter? = null,
 ) {
+    private val viewingInbox = MutableStateFlow(false)
+    val inboxVisible: StateFlow<Boolean> = viewingInbox.asStateFlow()
+    fun setInboxVisible(visible: Boolean) { viewingInbox.value = visible }
+
     private val state = MutableStateFlow<MarkReadStatus>(MarkReadStatus.Idle)
     val status: StateFlow<MarkReadStatus> = state.asStateFlow()
 

@@ -1,4 +1,6 @@
 import XCTest
+import SwiftUI
+import UIKit
 
 @testable import KCC
 
@@ -248,5 +250,105 @@ final class NotificationsModelTests: XCTestCase {
             createdAt: createdAt,
             relatedEntityId: relatedEntityId
         )
+    }
+}
+
+final class ConvoyInvitationPresentationTests: XCTestCase {
+    private let startedAt = Date(timeIntervalSince1970: 1_000)
+    private func invite(_ id: String, created: TimeInterval = 1_000) -> AppNotification {
+        AppNotification(id: id, category: .convoyInvite, title: "Konvoj",
+            createdAt: Date(timeIntervalSince1970: created), relatedEntityId: "convoy-\(id)",
+            inviterDisplayName: "Linnea Andersson")
+    }
+
+    func testExpiresAtThirtySecondsWithoutChangingDurableInvitation() {
+        let item = invite("one")
+        var presentation = ConvoyInvitationPresentation(startedAt: startedAt)
+        presentation.update([item], now: 200)
+        XCTAssertEqual(presentation.currentID, "one")
+        XCTAssertEqual(presentation.deadline, 230)
+        presentation.update([item], now: 229.999)
+        XCTAssertEqual(presentation.currentID, "one")
+        presentation.update([item], now: 230)
+        XCTAssertNil(presentation.currentID)
+        XCTAssertFalse(item.isRead)
+        presentation.update([item], now: 240)
+        XCTAssertNil(presentation.currentID)
+    }
+
+    func testRepeatedSnapshotPreservesDeadlineAndQueuesNextInvitation() {
+        let first = invite("first"), second = invite("second", created: 1_001)
+        var presentation = ConvoyInvitationPresentation(startedAt: startedAt)
+        presentation.update([first], now: 200)
+        presentation.update([first, second], now: 210)
+        XCTAssertEqual(presentation.currentID, "first")
+        XCTAssertEqual(presentation.deadline, 230)
+        presentation.update([first, second], now: 230)
+        XCTAssertEqual(presentation.currentID, "second")
+        XCTAssertEqual(presentation.deadline, 260)
+        presentation.dismiss("first")
+        XCTAssertEqual(presentation.currentID, "second")
+    }
+
+    func testOldInitialSnapshotIsIgnoredAndArrivalDuringLoadingIsKept() {
+        var presentation = ConvoyInvitationPresentation(startedAt: startedAt)
+        presentation.update([invite("old", created: 999), invite("fresh", created: 1_001)], now: 200)
+        XCTAssertEqual(presentation.currentID, "fresh")
+        XCTAssertTrue(presentation.seenIDs.contains("old"))
+    }
+
+    func testReadRemovedAndInboxVisibleRetirePresentation() {
+        var presentation = ConvoyInvitationPresentation(startedAt: startedAt)
+        presentation.update([invite("one")], now: 200)
+        presentation.update([], now: 210)
+        XCTAssertNil(presentation.currentID)
+        presentation.update([invite("two")], now: 220, available: false)
+        presentation.update([invite("two")], now: 225)
+        XCTAssertNil(presentation.currentID)
+    }
+
+    func testDecodesStructuredInviterWithoutInferringConvoyOwner() {
+        let decoded = AppNotification.decode(id: "invite", fields: [
+            "title": "Konvoj", "category": "convoy_invite", "relatedEntityId": "convoy-1",
+            "convoyInvitation": ["inviterUid": "member-not-owner", "inviterDisplayName": "Linnea Andersson",
+                                 "inviterAvatarPath": "profileImages/member/avatar"]
+        ])
+        XCTAssertEqual(decoded?.inviterDisplayName, "Linnea Andersson")
+        XCTAssertEqual(decoded?.inviterAvatarPath, "profileImages/member/avatar")
+    }
+}
+
+
+extension ConvoyInvitationPresentationTests {
+    @MainActor
+    func testNativeCardSnapshotsInLightDarkAndLargeText() {
+        for (name, style, size) in [
+            ("light", UIUserInterfaceStyle.light, DynamicTypeSize.large),
+            ("dark", UIUserInterfaceStyle.dark, DynamicTypeSize.large),
+            ("large-text", UIUserInterfaceStyle.light, DynamicTypeSize.accessibility3)
+        ] {
+            let card = ConvoyInvitationCard(invitation: invite("snapshot"),
+                deadline: ProcessInfo.processInfo.systemUptime + 30, busy: false, error: nil,
+                onJoin: {}, onDecline: {})
+            let controller = UIHostingController(rootView:
+                VStack { Spacer(minLength: 0); card.padding(KccSpacing.s4) }
+                    .background(KccTheme.page).environment(\.dynamicTypeSize, size))
+            controller.overrideUserInterfaceStyle = style
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            window.rootViewController = controller
+            window.makeKeyAndVisible()
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            XCTAssertEqual(image.size.width, 390)
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "convoy-invitation-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            window.isHidden = true
+        }
     }
 }

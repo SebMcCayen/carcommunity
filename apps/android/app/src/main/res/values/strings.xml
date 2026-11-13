@@ -2221,4 +2221,9 @@
     <string name="carCommunityAccess_suspendedTitle">Åtkomsten är begränsad</string>
     <string name="carCommunityAccess_body">Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.</string>
     <string name="carCommunityAccess_retry">Kontrollera igen</string>
+    <string name="convoy_invitationFrom">bjuder in till konvoj</string>
+    <string name="convoy_invitationJoin">Gå med</string>
+    <string name="convoy_invitationDecline">Neka</string>
+    <string name="convoy_invitationInboxHint">Finns kvar i Notifikationer</string>
+    <string name="convoy_invitationClosesIn">Rutan stängs om %1$d s</string>
 </resources>
