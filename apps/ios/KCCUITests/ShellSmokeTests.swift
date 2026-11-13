@@ -209,6 +209,133 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(ChatViewportEvidence(window: window, elements: []).isSelected("chatHub.channel.3"))
     }
 
+    func testCrownReactionEvidenceRequiresTheActualReadableMessageAndWritingState() {
+        typealias Node = ChatViewportEvidence.Element
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        // Actual maximum-text crown failure: acquisition timed out, but the
+        // fresh diagnostic tree already proved the complete accepted UI state.
+        let writing: [Node] = [
+            Node(identifier: "chat.thread.messages", type: .scrollView, frame: CGRect(x: 0, y: 63, width: 402, height: 811)),
+            Node(identifier: "chat.quickEmojiRow", type: .scrollView, frame: CGRect(x: 0, y: 403.7, width: 402, height: 48)),
+            Node(identifier: "chat.composer.input", type: .textField,
+                frame: CGRect(x: 20, y: 463.7, width: 210, height: 63.3), value: "Fixture reply"),
+            Node(identifier: "chat.composer.send", type: .button, frame: CGRect(x: 250, y: 464.3, width: 92, height: 62)),
+            Node(identifier: "chat.keyboard.dismiss", type: .button, frame: CGRect(x: 350, y: 471.3, width: 44, height: 48)),
+            Node(identifier: "", type: .keyboard, frame: CGRect(x: 0, y: 583, width: 402, height: 233)),
+        ]
+        let crown = Node(identifier: "chat.message.text.sent-crown", label: "👑", type: .staticText,
+            frame: CGRect(x: 321, y: 254.7, width: 57, height: 63.3), inMessageThread: true)
+        let beforeSend = ChatViewportEvidence(window: window, elements: writing)
+        let afterSend = ChatViewportEvidence(window: window, elements: writing + [crown])
+        let accepted: (ChatViewportEvidence) -> Bool = { $0.keyboardPresented && $0.fullyReadable(label: "👑") }
+        XCTAssertFalse(accepted(beforeSend), "A stale pre-send snapshot cannot prove that the crown was delivered")
+        XCTAssertTrue(accepted(afterSend))
+        let clipped = Node(identifier: crown.identifier, label: crown.label, type: .staticText,
+            frame: CGRect(x: 321, y: 390, width: 57, height: 63.3), inMessageThread: true)
+        XCTAssertFalse(accepted(ChatViewportEvidence(window: window, elements: writing + [clipped])))
+        let navigation = Node(identifier: "shell.tab.chat", type: .button,
+            frame: CGRect(x: 85.3, y: 776, width: 77, height: 56), selected: true)
+        XCTAssertFalse(accepted(ChatViewportEvidence(window: window, elements: writing + [crown, navigation])),
+            "A readable crown alone cannot substitute for navigation remaining hidden while writing")
+        XCTAssertFalse(accepted(ChatViewportEvidence(window: window,
+            elements: writing.filter { $0.type != .keyboard } + [crown])), "The real keyboard is still required")
+    }
+
+    func testComposerDraftEvidenceUsesActualEditableValueAndNativeEmptyState() {
+        typealias Node = ChatViewportEvidence.Element
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        // Actual maximum-text CI tree: the native field was focused, fully
+        // visible above the keyboard and already contained the complete draft.
+        let frame = CGRect(x: 20, y: 463.7, width: 210, height: 63.3)
+        let keyboard = Node(identifier: "", type: .keyboard, frame: CGRect(x: 0, y: 583, width: 402, height: 233))
+        let draft = "Fixture reply"
+        for type in [XCUIElement.ElementType.textField, .textView] {
+            let editor = Node(identifier: "chat.composer.input", type: type, frame: frame,
+                value: draft, placeholder: "Skriv ett meddelande")
+            let typed = ChatViewportEvidence(window: window, elements: [editor, keyboard])
+            XCTAssertTrue(typed.composerDraft(draft, present: true))
+            XCTAssertFalse(typed.composerDraft(draft, present: false))
+            let retired = Node(identifier: "chat.composer.input", type: type,
+                frame: CGRect(x: 0, y: 900, width: 402, height: 300), value: "Old draft")
+            XCTAssertTrue(ChatViewportEvidence(window: window, elements: [retired, editor, keyboard])
+                .composerDraft(draft, present: true), "A fully offscreen retired editor is not the visible field")
+            for value in ["Fixture", "Different draft", draft + " extra"] {
+                var incomplete = editor
+                incomplete.value = value
+                let evidence = ChatViewportEvidence(window: window, elements: [incomplete, keyboard])
+                XCTAssertFalse(evidence.composerDraft(draft, present: true))
+                XCTAssertFalse(evidence.composerDraft(draft, present: false), "A different or partial draft is not a cleared editor")
+            }
+            // Empty native fields can expose nil value plus placeholderValue,
+            // or represent their empty value as an empty/placeholder string.
+            for value in [nil, "", "Skriv ett meddelande"] as [String?] {
+                var empty = editor
+                empty.value = value
+                let evidence = ChatViewportEvidence(window: window, elements: [empty, keyboard])
+                XCTAssertFalse(evidence.composerDraft(draft, present: true))
+                XCTAssertTrue(evidence.composerDraft(draft, present: false))
+            }
+            var placeholderOnly = editor
+            placeholderOnly.value = nil
+            placeholderOnly.placeholder = draft
+            XCTAssertFalse(ChatViewportEvidence(window: window, elements: [placeholderOnly])
+                .composerDraft(draft, present: true), "Placeholder text is not an entered draft")
+            for placeholder in [nil, ""] as [String?] {
+                var unknown = editor
+                unknown.value = nil
+                unknown.placeholder = placeholder
+                XCTAssertFalse(ChatViewportEvidence(window: window, elements: [unknown])
+                    .composerDraft(draft, present: false), "Incomplete value evidence cannot prove clearing")
+            }
+            var nonString = editor
+            nonString.value = nil
+            nonString.nonStringValue = true
+            for present in [false, true] {
+                XCTAssertFalse(ChatViewportEvidence(window: window, elements: [nonString])
+                    .composerDraft(draft, present: present), "Unsupported raw values are unknown, not empty")
+            }
+            // A smaller matching measuring widget must not overrule the live
+            // editor, including when its draft was cleared after Send.
+            let measuring = Node(identifier: "chat.composer.input", type: type,
+                frame: CGRect(x: 20, y: 463.7, width: 10, height: 10), value: draft)
+            var empty = editor
+            empty.value = nil
+            let cleared = ChatViewportEvidence(window: window, elements: [measuring, empty, keyboard])
+            XCTAssertFalse(cleared.composerDraft(draft, present: true))
+            XCTAssertTrue(cleared.composerDraft(draft, present: false))
+            let unrelated = Node(identifier: "search.input", type: type, frame: frame, value: draft)
+            XCTAssertFalse(ChatViewportEvidence(window: window, elements: [unrelated]).composerDraft(draft, present: true))
+            XCTAssertFalse(ChatViewportEvidence(window: window, elements: [unrelated]).composerDraft(draft, present: false))
+        }
+    }
+
+    func testComposerDraftEvidenceRejectsMissingClippedOrCoveredEditors() {
+        typealias Node = ChatViewportEvidence.Element
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let draft = "Fixture reply"
+        for frame in [CGRect.zero, .null, .infinite, CGRect(x: CGFloat.nan, y: 463.7, width: 210, height: 63.3),
+                      CGRect(x: 20, y: 900, width: 210, height: 63.3), CGRect(x: 390, y: 463.7, width: 210, height: 63.3)] {
+            for value in [nil, draft] as [String?] {
+                let editor = Node(identifier: "chat.composer.input", type: .textField, frame: frame,
+                    value: value, placeholder: "Skriv ett meddelande")
+                for present in [false, true] {
+                    XCTAssertFalse(ChatViewportEvidence(window: window, elements: [editor]).composerDraft(draft, present: present))
+                }
+            }
+        }
+        let editor = Node(identifier: "chat.composer.input", type: .textField,
+            frame: CGRect(x: 20, y: 463.7, width: 210, height: 63.3), value: draft, placeholder: "Skriv ett meddelande")
+        for type in [XCUIElement.ElementType.alert, .sheet, .keyboard] {
+            let overlay = Node(identifier: "", type: type, frame: CGRect(x: 0, y: 450, width: 402, height: 424))
+            XCTAssertFalse(ChatViewportEvidence(window: window, elements: [editor, overlay]).composerDraft(draft, present: true))
+        }
+        let nonEditable = Node(identifier: "chat.composer.input", type: .staticText, frame: editor.frame, value: draft)
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: [nonEditable]).composerDraft(draft, present: true))
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: [nonEditable]).composerDraft(draft, present: false))
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: []).composerDraft(draft, present: false))
+        XCTAssertFalse(ChatViewportEvidence(window: .null, elements: [editor]).composerDraft(draft, present: true))
+    }
+
     func testChatViewportEvidenceRequiresFullReadableMessageAndNoOccludingModal() {
         typealias Node = ChatViewportEvidence.Element
         // Derived from the maximum-text CI failure's message/footer geometry:
@@ -1387,6 +1514,18 @@ final class ShellSmokeTests: XCTestCase {
     private func requireChatEvidence(in app: XCUIApplication, name: String, timeout: TimeInterval = 15, message: String,
                                      condition: @escaping (ChatViewportEvidence) -> Bool,
                                      file: StaticString = #filePath, line: UInt = #line) throws -> ChatViewportEvidence {
+        let evidence = waitForChatEvidence(in: app, timeout: timeout, condition: condition)
+        if evidence == nil { chatProof(app, name: name, tree: true) }
+        return try XCTUnwrap(evidence, message, file: file, line: line)
+    }
+
+    /// Acquire the first fresh tree before starting the state-convergence budget.
+    /// A remote XCTest snapshot can itself exceed that budget even when the UI
+    /// is already correct. These are state assertions, not latency guarantees.
+    /// Wrong/unavailable initial evidence still requires fresh, bounded sampling.
+    private func waitForChatEvidence(in app: XCUIApplication, timeout: TimeInterval,
+                                     condition: @escaping (ChatViewportEvidence) -> Bool) -> ChatViewportEvidence? {
+        if let initial = try? ChatViewportEvidence(capturing: app), condition(initial) { return initial }
         var accepted: ChatViewportEvidence?
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard let snapshot = try? ChatViewportEvidence(capturing: app), condition(snapshot) else { return false }
@@ -1394,8 +1533,7 @@ final class ShellSmokeTests: XCTestCase {
             return true
         }, object: nil)
         let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
-        if result != .completed { chatProof(app, name: name, tree: true) }
-        return try XCTUnwrap(result == .completed ? accepted : nil, message, file: file, line: line)
+        return result == .completed ? accepted : nil
     }
 
     /// SwiftUI's vertical field can replace its measuring UITextField with a
@@ -1431,17 +1569,12 @@ final class ShellSmokeTests: XCTestCase {
 
     private func assertComposerDraft(_ text: String, present: Bool, in app: XCUIApplication,
                                      file: StaticString = #filePath, line: UInt = #line) {
-        // Read the live editor value so a replaced widget or a slow XCTest
-        // element description cannot hold up the draft check.
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let editor = self.visibleComposerInput(in: app) else { return false }
-            let value = editor.value as? String ?? ""
-            return value.contains(text) == present
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 30)
-        if result != .completed { chatProof(app, name: "chat-draft-value-failure", tree: true) }
+        // Read identity, geometry and value from one fresh tree. Separate typed
+        // queries/hit-tests can consume this deadline before reading the value.
+        let evidence = waitForChatEvidence(in: app, timeout: 30) { $0.composerDraft(text, present: present) }
+        if evidence == nil { chatProof(app, name: "chat-draft-value-failure", tree: true) }
         let message = present ? "Visible editor must preserve the draft until Send" : "Send must clear the visible draft"
-        XCTAssertEqual(result, .completed, message, file: file, line: line)
+        XCTAssertNotNil(evidence, message, file: file, line: line)
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
@@ -1554,16 +1687,12 @@ final class ShellSmokeTests: XCTestCase {
         // tree, rather than separate exists/isSelected requests to retired nodes.
         let identifier = tab.identifier
         let app = XCUIApplication()
-        let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let snapshot = try? ChatViewportEvidence(capturing: app) else { return false }
-            return snapshot.isSelected(identifier)
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [selected], timeout: 15)
-        if result != .completed {
+        let evidence = waitForChatEvidence(in: app, timeout: 15) { $0.isSelected(identifier) }
+        if evidence == nil {
             chatProof(app, name: "\(identifier)-selection-failure", tree: true)
             diagnosePrimaryControls(app)
         }
-        XCTAssertEqual(result, .completed, "Selection did not settle for \(identifier)", file: file, line: line)
+        XCTAssertNotNil(evidence, "Selection did not settle for \(identifier)", file: file, line: line)
     }
 
     private func reveal(_ target: XCUIElement, in scroll: XCUIElement, minimumHeight: CGFloat) {
@@ -1619,6 +1748,9 @@ private struct ChatViewportEvidence {
         let frame: CGRect
         var inMessageThread = false
         var selected = false
+        var value: String? = nil
+        var placeholder: String? = nil
+        var nonStringValue = false
     }
 
     let window: CGRect
@@ -1634,10 +1766,16 @@ private struct ChatViewportEvidence {
             // Boolean autoclosures must never capture the snapshot object.
             let identifier = snapshot.identifier
             let selected = snapshot.isSelected
+            let rawValue = snapshot.value
+            let value = rawValue as? String
+            let hasValue = rawValue != nil
+            let nonStringValue = hasValue && value == nil
+            let placeholder = snapshot.placeholderValue
             var withinThread = inThread
             if identifier == "chat.thread.messages" { withinThread = true }
             captured.append(Element(identifier: identifier, label: snapshot.label,
-                type: snapshot.elementType, frame: snapshot.frame, inMessageThread: withinThread, selected: selected))
+                type: snapshot.elementType, frame: snapshot.frame, inMessageThread: withinThread, selected: selected,
+                value: value, placeholder: placeholder, nonStringValue: nonStringValue))
             for child in snapshot.children { visit(child, inThread: withinThread) }
         }
         visit(root, inThread: false)
@@ -1703,6 +1841,32 @@ private struct ChatViewportEvidence {
             $0.identifier == "chat.composer.input" && ($0.type == .textField || $0.type == .textView) &&
                 intersectsWindow($0.frame)
         }.map(\.frame).max { $0.width * $0.height < $1.width * $1.height }
+    }
+
+    func composerDraft(_ text: String, present: Bool) -> Bool {
+        // SwiftUI may retain a smaller measuring editor. Choose the largest
+        // actual editable geometry before inspecting its value, so a matching
+        // measuring copy cannot override a missing/mismatched live value.
+        guard !text.isEmpty, usable(window), keyboardGeometryKnown,
+              let editor = elements.filter({
+                  $0.identifier == "chat.composer.input" && ($0.type == .textField || $0.type == .textView) &&
+                      intersectsWindow($0.frame)
+              }).max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }),
+              window.contains(editor.frame), !editor.nonStringValue,
+              keyboardFrames.allSatisfy({ editor.frame.maxY <= $0.minY + 1 }),
+              !elements.contains(where: {
+                  ($0.type == .alert || $0.type == .sheet) && intersectsWindow($0.frame) &&
+                      !$0.frame.intersection(editor.frame).isNull && !$0.frame.intersection(editor.frame).isEmpty
+              }) else { return false }
+        if let value = editor.value {
+            if present { return value != editor.placeholder && value == text }
+            return value.isEmpty || value == editor.placeholder
+        }
+        // UIKit can expose an empty field with only placeholderValue and no
+        // raw value. A known nonempty placeholder proves that native empty
+        // state; missing editor/value evidence alone never proves clearing.
+        guard let placeholder = editor.placeholder, !placeholder.isEmpty else { return false }
+        return !present
     }
 
     var readableViewport: CGRect? {
