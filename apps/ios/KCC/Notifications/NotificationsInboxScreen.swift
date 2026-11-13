@@ -254,9 +254,9 @@ struct ConvoyInvitationCard: View {
                     }
                 }.frame(width: 48, height: 48).clipShape(Circle()).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                    Text(verbatim: invitation.inviterDisplayName?.trimmedNonBlank ?? String(localized: "notifications.categoryConvoyInvite"))
+                    Text(verbatim: invitation.inviterDisplayName.trimmedNonBlank ?? String(localized: "notifications.categoryConvoyInvite"))
                         .font(.headline)
-                    if invitation.inviterDisplayName?.trimmedNonBlank != nil {
+                    if invitation.inviterDisplayName.trimmedNonBlank != nil {
                         Text("convoy.invitationFrom").font(.subheadline).foregroundStyle(KccTheme.secondary)
                     } else {
                         Text(verbatim: invitation.previewText ?? invitation.title)
