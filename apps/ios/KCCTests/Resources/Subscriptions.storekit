@@ -1,5 +1,5 @@
 {
-  "identifier": "CarCommunitySubscriptions",
+  "identifier": "CACC1378",
   "nonRenewingSubscriptions": [],
   "products": [],
   "settings": {
@@ -10,7 +10,7 @@
   },
   "subscriptionGroups": [
     {
-      "id": "carcommunity_membership",
+      "id": "CACC0001",
       "localizations": [
         {
           "description": "Medlemskap",
@@ -31,7 +31,7 @@
           "displayPrice": "39.0",
           "familyShareable": false,
           "groupNumber": 2,
-          "internalID": "plus_monthly_test",
+          "internalID": "CACC0002",
           "introductoryOffer": null,
           "localizations": [
             {
@@ -48,7 +48,7 @@
           "productID": "plus_monthly",
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Plus Monthly (Local Test)",
-          "subscriptionGroupID": "carcommunity_membership",
+          "subscriptionGroupID": "CACC0001",
           "type": "RecurringSubscription"
         },
         {
@@ -57,7 +57,7 @@
           "displayPrice": "119.0",
           "familyShareable": false,
           "groupNumber": 1,
-          "internalID": "supporter_monthly_test",
+          "internalID": "CACC0003",
           "introductoryOffer": null,
           "localizations": [
             {
@@ -74,7 +74,7 @@
           "productID": "supporter_monthly",
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Supporter Monthly (Local Test)",
-          "subscriptionGroupID": "carcommunity_membership",
+          "subscriptionGroupID": "CACC0001",
           "type": "RecurringSubscription"
         }
       ]
