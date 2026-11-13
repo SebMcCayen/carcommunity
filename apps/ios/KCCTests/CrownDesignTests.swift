@@ -106,6 +106,47 @@ final class CrownDesignTests: XCTestCase {
         XCTAssertTrue(coordinator.spawns.isEmpty)
     }
 
+    func testSelectedProximityTracksBothTargetRadiiAndDiscardsStalePosition() async throws {
+        let now = Date(timeIntervalSince1970: 2000)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(Repository(now: now), provider)
+        coordinator.start()
+        defer { coordinator.stop() }
+
+        let point = CrownMapPoint(id: "point", title: "Point", detail: nil, rewardPoints: 10,
+            latitude: 57, longitude: 12, geofenceRadiusMeters: 30)
+        let spawn = CrownSpawn(id: "spawn", latitude: 57, longitude: 12, rarity: .rare,
+            rewardPoints: 10, collectRadiusMeters: 150, expiresAt: now.addingTimeInterval(3600))
+        coordinator.selectedTarget = .point(point)
+        XCTAssertNil(coordinator.selectedProximity(now: now))
+
+        let far = LocationFix.of(latitude: 57.01, longitude: 12, timestamp: now, accuracyMeters: 3, speedMetersPerSecond: 0)!
+        provider.emitFix(far)
+        try await waitForFix(coordinator, timestamp: now)
+        for target in [CrownMapTarget.point(point), .spawn(spawn)] {
+            coordinator.selectedTarget = target
+            let proximity = try XCTUnwrap(coordinator.selectedProximity(now: now))
+            XCTAssertEqual(proximity.collectRadiusMeters, target.collectRadiusMeters)
+            guard case .tooFar(let distance) = coordinator.collectState(now: now) else {
+                return XCTFail("Distant target must be out of range")
+            }
+            XCTAssertEqual(proximity.distanceMeters, distance, accuracy: 0.001)
+            XCTAssertEqual(proximity.remainingToRingMeters, distance - target.collectRadiusMeters, accuracy: 0.001)
+            XCTAssertNil(coordinator.selectedProximity(now: now.addingTimeInterval(61)))
+            XCTAssertEqual(coordinator.collectState(now: now.addingTimeInterval(61)), .noPosition)
+        }
+
+        provider.emitFix(fix(now.addingTimeInterval(1)))
+        try await waitForFix(coordinator, timestamp: now.addingTimeInterval(1))
+        let near = try XCTUnwrap(coordinator.selectedProximity(now: now.addingTimeInterval(1)))
+        XCTAssertEqual(near.remainingToRingMeters, 0)
+        XCTAssertEqual(near.fraction, 1)
+        XCTAssertEqual(coordinator.collectState(now: now.addingTimeInterval(1)), .confirming,
+                       "Being in range does not bypass the stillness proof")
+        coordinator.dismissSelection()
+        XCTAssertNil(coordinator.selectedProximity(now: now.addingTimeInterval(1)))
+    }
+
     func testOlderRefreshCannotResurrectAConfirmedCollection() async throws {
         let now = Date(timeIntervalSince1970: 2000)
         let repository = Repository(now: now)
@@ -192,6 +233,18 @@ final class CrownDesignTests: XCTestCase {
             let result = measure(view, width: 288, size: .accessibility5, language: "sv", dark: true)
             XCTAssertLessThanOrEqual(result.width, 289)
             XCTAssertGreaterThan(result.height, 0)
+        }
+    }
+
+    func testProximityFeedbackWrapsAtLargeTextInBothLanguages() throws {
+        for distance in [76.0, 325, 5_000] {
+            let proximity = try XCTUnwrap(CrownProximity(distanceMeters: distance, collectRadiusMeters: 75))
+            assertWrapping(CrownCollectFeedback(state: .tooFar(distance), status: .idle,
+                showLiveShareTip: true, proximity: proximity))
+        }
+        let inRange = try XCTUnwrap(CrownProximity(distanceMeters: 20, collectRadiusMeters: 75))
+        for state in [CrownCollectState.ready, .confirming, .waitingForSignal, .moving] {
+            assertWrapping(CrownCollectFeedback(state: state, status: .idle, proximity: inRange))
         }
     }
 

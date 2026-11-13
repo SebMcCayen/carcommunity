@@ -1386,6 +1386,7 @@
     "spawnClose": "Stäng",
     "spawnMoveCloser": "Kör närmare",
     "spawnMoveCloserDetail": "Du behöver vara inom %1$d m från kronan.",
+    "spawnReadyToCollect": "Inom räckhåll – du kan hämta kronan.",
     "spawnProximityLabel": "Kom närmare",
     "spawnProximityRemaining": "%1$s kvar",
     "spawnStopFirst": "Stanna bilen först",
