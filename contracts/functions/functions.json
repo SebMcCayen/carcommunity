@@ -885,7 +885,7 @@
     {
       "name": "feedback.reportIssue",
       "domain": "feedback",
-      "description": "Android and iOS \"Report a problem\" flow. AUTHENTICATED (non-suspended, non-deleted): unauthenticated callers are rejected with unauthenticated. Input includes an allowlisted platform ('android'|'ios', default android for older clients). Rate-limited to 5 reports/hour/user (resource-exhausted when exceeded). Persists the PRIVATE record of record to feedbackReports/{reportId} (admin-only read; carries the uid + platform + client context + timestamp) FIRST so a report is never lost, then files a PUBLIC GitHub issue labelled android-issue or ios-issue on SebMcCayen/carcommunity via REST using the GITHUB_ISSUE_TOKEN secret. PUBLIC-REPO SAFETY: the issue body carries the user-entered description (public — the in-app UI warns users not to include personal info, and the backend does not scrub free text) plus only non-identifying context: appVersion/osVersion/deviceModel, the server report id and the submitted-at timestamp. The backend never attaches the caller's uid or any other server-side account identifier to the public issue. GitHub failures mark the doc githubIssueStatus:'failed' but still return success (never surfacing a raw GitHub error). Deployed via grouped export as feedback-reportIssue (functions/src/feedback/reportIssue.ts).",
+      "description": "Android and iOS \"Report a problem\" flow. AUTHENTICATED (non-suspended, non-deleted): unauthenticated callers are rejected with unauthenticated. An optional explicit rideId is checked against caller ownership in the report transaction (missing and foreign rides both return not-found); only closed coordinate-free diagnostics are copied privately and an allowlisted count/status summary is published, never the rideId, endpoints, times or route. Input includes an allowlisted platform ('android'|'ios', default android for older clients). Rate-limited to 5 reports/hour/user (resource-exhausted when exceeded). Persists the PRIVATE record of record to feedbackReports/{reportId} (admin-only read; carries the uid + platform + client context + timestamp) FIRST so a report is never lost, then files a PUBLIC GitHub issue labelled android-issue or ios-issue on SebMcCayen/carcommunity via REST using the GITHUB_ISSUE_TOKEN secret. PUBLIC-REPO SAFETY: the issue body carries the user-entered description (public — the in-app UI warns users not to include personal info, and the backend does not scrub free text) plus only non-identifying context: appVersion/osVersion/deviceModel, the server report id and the submitted-at timestamp. The backend never attaches the caller's uid or any other server-side account identifier to the public issue. GitHub failures mark the doc githubIssueStatus:'failed' but still return success (never surfacing a raw GitHub error). Deployed via grouped export as feedback-reportIssue (functions/src/feedback/reportIssue.ts).",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
@@ -1576,6 +1576,24 @@
       "source": "docs/admin-public-moderation.md"
     },
     {
+      "name": "admin.getChatModerationContext",
+      "domain": "admin",
+      "description": "Returns an actor-bound version and remove/warn/pause capabilities for exactly one Community or event message. Transactional active admin/owner and CarCommunity-access authorization; no PM, convoy or shared-club access. Used by Android long-press moderation.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/android-chat-moderation.md"
+    },
+    {
+      "name": "admin.moderateChatMessage",
+      "domain": "admin",
+      "description": "Atomically removes one public message and/or pauses its author, with optional warning, private audit and durable idempotency receipt. Mandatory reason, actor binding and reviewed version; commit-time role, access, message and target checks. Pause is 1–43200 minutes or 1–30 days (24-hour days), enforced only for Community/event writes. PM, convoys and Driver/shared clubs are unaffected. Removal preserves event tombstone/community retry tombstone and resumable quote cleanup.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/android-chat-moderation.md"
+    },
+    {
       "name": "admin.decidePublicModeration",
       "domain": "admin",
       "description": "Mandatory reason, reviewed version, actor binding and durable receipt. Commit-time authority, transactional message/report/audit decision; bounded resumable public quote redaction.",
@@ -1583,6 +1601,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/admin-public-moderation.md"
+    },
+    {
+      "name": "moderation.getMyChatWriteStatus",
+      "domain": "moderation",
+      "description": "Active signed-in own-account public-writing status with serverNowMillis, pauseUntilMillis and own reason. Strict empty payload; no target UID, no moderation history. A public-chat pause never blocks this status read. Used with the owner-only restriction change signal for a monotonic client countdown independent of the device wall clock.",
+      "access": "signedIn",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/android-chat-moderation.md"
     },
     {
       "name": "moderation.reportPublicContent",
@@ -1601,6 +1628,24 @@
       "appCheck": true,
       "status": "implemented",
       "source": "functions/src/clubCalendar/README.md"
+    },
+    {
+      "name": "roadCameras.catalog",
+      "domain": "roadCameras",
+      "description": "Bounded national Trafikverket camera catalog; daily device cache. Backend externalDataSources flag, active account, App Check; 3/hour and 10/day per UID, 100/day globally. Images and image URLs are excluded.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "contracts/schemas/road-cameras.schema.json"
+    },
+    {
+      "name": "roadCameras.photo",
+      "domain": "roadCameras",
+      "description": "On-demand bounded JPEG/PNG camera image by opaque cameraId. Active account and App Check; 6/minute, 30/hour, 100/day per UID; shared 128 MiB/day encoded-response reservation budget. Max 128 KiB decoded image; cached locally 5 minutes; no automatic refresh.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "contracts/schemas/road-cameras.schema.json"
     }
   ]
 }

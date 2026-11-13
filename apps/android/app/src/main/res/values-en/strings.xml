@@ -3,6 +3,35 @@
      Source: contracts/localization/en.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="chatAdmin_expectedUntil">Estimated end: %1$s.</string>
+    <string name="chatAdmin_keepLongerPause">An existing longer pause will not be shortened.</string>
+    <string name="chatAdmin_section">Administrator</string>
+    <string name="chatAdmin_remove">Delete message</string>
+    <string name="chatAdmin_pause">Pause writing…</string>
+    <string name="chatAdmin_reason">Reason (shown to the user)</string>
+    <string name="chatAdmin_warnAlso">Also warn the user?</string>
+    <string name="chatAdmin_pauseAlso">Also pause writing?</string>
+    <string name="chatAdmin_amount">Amount</string>
+    <string name="chatAdmin_minutes">Minutes</string>
+    <string name="chatAdmin_days">Days</string>
+    <string name="chatAdmin_yes">Yes</string>
+    <string name="chatAdmin_no">No</string>
+    <string name="chatAdmin_scope">Applies only to Community and event chats. DMs, convoys and club chat are unaffected.</string>
+    <string name="chatAdmin_maxDuration">Enter a whole number. Maximum %1$d days or the equivalent in minutes.</string>
+    <string name="chatAdmin_review">Review actions</string>
+    <string name="chatAdmin_reviewTitle">Review the decision</string>
+    <string name="chatAdmin_willRemove">The message will be deleted.</string>
+    <string name="chatAdmin_willPause">The user’s writing will be paused. The message will remain.</string>
+    <string name="chatAdmin_warningYes">A warning will also be sent.</string>
+    <string name="chatAdmin_warningNo">No warning will be sent.</string>
+    <string name="chatAdmin_durationSummary">Writing pause: %1$s %2$s. The duration starts when the decision is saved.</string>
+    <string name="chatAdmin_confirm">Confirm decision</string>
+    <string name="chatAdmin_saving">Saving…</string>
+    <string name="chatAdmin_edit">Edit choices</string>
+    <string name="chatAdmin_cancel">Cancel</string>
+    <string name="chatAdmin_failed">The decision could not be confirmed. Your choices are kept. Try again.</string>
+    <string name="chatAdmin_stale">The evidence has changed. Check your choices and review the decision again.</string>
+    <string name="chatAdmin_pausedUntil">Your writing in public chats is paused until %1$s.</string>
     <string name="clubBadge_accessibility">Club: %1$s</string>
     <string name="supporterBadge_accessibility">Supporter crown</string>
     <string name="supporterBadge_settingTitle">Show Supporter crown</string>
@@ -104,6 +133,7 @@
     <string name="liveLocation_duration4h">4 hours</string>
     <string name="liveLocation_start">Share my location</string>
     <string name="liveLocation_stop">Stop sharing</string>
+    <string name="liveLocation_stopSavesToHistory">When you stop sharing, your drive is automatically saved to your history.</string>
     <string name="liveLocation_hideNow">Hide me now</string>
     <string name="liveLocation_lastUpdated">Last updated</string>
     <string name="liveLocation_whoCanSeeTitle">Who can see me?</string>
@@ -1019,6 +1049,7 @@
     <string name="savedDrives_loadMore">Show more</string>
     <string name="savedDrives_loadingMore">Loading more...</string>
     <string name="savedDrives_loadMoreError">Couldn\'t load more drives. Try again.</string>
+    <string name="savedDrives_reportProblem">Report a problem with this drive</string>
     <string name="imageEditor_title">Edit photo</string>
     <string name="imageEditor_hint">Drag to move, pinch to zoom, and twist with two fingers to rotate. The area inside the frame is what others will see.</string>
     <string name="imageEditor_frameDescription">Drag the corners to reshape the crop area.</string>
@@ -1282,6 +1313,7 @@
     <string name="crownHunt_spawnCollecting">Collecting...</string>
     <string name="crownHunt_spawnMoveCloser">Move closer</string>
     <string name="crownHunt_spawnMoveCloserDetail">You need to be within %1$d m of the crown.</string>
+    <string name="crownHunt_spawnReadyToCollect">Within reach – you can collect this crown.</string>
     <string name="crownHunt_spawnProximityLabel">Get closer</string>
     <string name="crownHunt_spawnProximityRemaining">%1$s to go</string>
     <string name="crownHunt_spawnStopFirst">Stop the car first</string>
@@ -1642,6 +1674,7 @@
     <string name="feedback_thankYouIssue">An issue was created on GitHub where you can follow the problem.</string>
     <string name="feedback_issueNumber">Issue #%1$d</string>
     <string name="feedback_openTicketsButton">View open tickets</string>
+    <string name="feedback_driveContext">This report is linked to this drive. The issue will not include your route or location data.</string>
     <string name="openTickets_title">Open tickets</string>
     <string name="openTickets_intro">Known problems others have reported. Have the same problem? Give it a thumbs up or add a comment.</string>
     <string name="openTickets_loading">Loading tickets…</string>
@@ -2220,4 +2253,19 @@
     <string name="carCommunityAccess_suspendedTitle">Access is restricted</string>
     <string name="carCommunityAccess_body">Your access to CarCommunity is restricted. Contact the administrators if you have questions.</string>
     <string name="carCommunityAccess_retry">Check again</string>
+    <string name="roadCameras_speedLayer">Fixed speed cameras</string>
+    <string name="roadCameras_trafficLayer">Traffic cameras</string>
+    <string name="roadCameras_roadConditionLayer">Road condition cameras</string>
+    <string name="roadCameras_layerHelp">Show cameras on the map</string>
+    <string name="roadCameras_loading">Loading camera image…</string>
+    <string name="roadCameras_unavailable">The camera image could not be loaded.</string>
+    <string name="roadCameras_rateLimited">Camera image limit reached. Try again later.</string>
+    <string name="roadCameras_photoTime">Image updated %1$s</string>
+    <string name="roadCameras_retry">Try again</string>
+    <string name="roadCameras_catalogUnavailable">Cameras could not be updated. Saved cameras are shown when available.</string>
+    <string name="convoy_invitationFrom">invites you to a convoy</string>
+    <string name="convoy_invitationJoin">Join</string>
+    <string name="convoy_invitationDecline">Decline</string>
+    <string name="convoy_invitationInboxHint">Stays in Notifications</string>
+    <string name="convoy_invitationClosesIn">Closes in %1$d s</string>
 </resources>

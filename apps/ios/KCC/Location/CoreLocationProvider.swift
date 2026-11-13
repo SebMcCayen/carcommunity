@@ -38,6 +38,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
 
     private var authContinuations: [UUID: AsyncStream<LocationAuthorization>.Continuation] = [:]
     private var fixContinuations: [UUID: AsyncStream<LocationFix>.Continuation] = [:]
+    private var recordingContinuations: [UUID: AsyncStream<RecordingLocationEvent>.Continuation] = [:]
 
     /// `backgroundEnabled` is reserved for providers owned by an explicit,
     /// time-bounded drive/live session. It uses Apple's visible blue
@@ -102,6 +103,20 @@ final class CoreLocationProvider: NSObject, LocationProvider {
         }
     }
 
+    func recordingEvents() -> AsyncStream<RecordingLocationEvent> {
+        AsyncStream { continuation in
+            let id = UUID()
+            recordingContinuations[id] = continuation
+            reconcileUpdates()
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in
+                    self?.recordingContinuations[id] = nil
+                    self?.reconcileUpdates()
+                }
+            }
+        }
+    }
+
     private func dropFixStream(_ id: UUID) {
         guard fixContinuations.removeValue(forKey: id) != nil else { return }
         reconcileUpdates()
@@ -127,7 +142,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     /// "stop sharing when a drive ends" structural: the feature's stream
     /// teardown IS the GPS stop.
     private func reconcileUpdates() {
-        let shouldRun = !fixContinuations.isEmpty && authorization.isAuthorized
+        let shouldRun = (!fixContinuations.isEmpty || !recordingContinuations.isEmpty) && authorization.isAuthorized
         guard shouldRun != updatesRunning else { return }
         updatesRunning = shouldRun
         motionFilter = SessionLocationFilter()
@@ -186,22 +201,23 @@ final class CoreLocationProvider: NSObject, LocationProvider {
         }
     }
 
-    private func deliver(_ fixes: [LocationFix]) {
-        // A revocation and an in-flight didUpdateLocations callback can
-        // race: stopUpdatingLocation() is issued on the authorization change,
-        // but a callback already queued behind the hop still lands here.
-        // The protocol promises an unauthorized stream yields NOTHING, so
-        // the gate is re-checked at delivery — same rule the stub enforces
-        // in emitFix.
-        guard authorization.isAuthorized, !fixContinuations.isEmpty else { return }
+    private func deliver(_ fixes: [LocationFix?]) {
+        // Re-check authorization after the delegate's hop to the main actor.
+        guard authorization.isAuthorized,
+              !fixContinuations.isEmpty || !recordingContinuations.isEmpty else { return }
         for raw in fixes {
-            let fix: LocationFix
-            if filtersSessionMotion {
-                guard let filtered = motionFilter.process(raw, now: Date()) else { continue }
-                fix = filtered
-            } else { fix = raw }
-            for sink in fixContinuations.values {
-                sink.yield(fix)
+            let decision: RecordingLocationDecision
+            if let raw {
+                decision = filtersSessionMotion
+                    ? motionFilter.processDecision(raw, now: Date()) : .accepted(raw)
+            } else { decision = .rejected(.invalid) }
+            let event = RecordingLocationEvent(
+                decision: decision,
+                receivedUptime: RecordingLocationEvent.receiptUptime
+            )
+            for sink in recordingContinuations.values { sink.yield(event) }
+            if let fix = decision.fix {
+                for sink in fixContinuations.values { sink.yield(fix) }
             }
         }
     }
@@ -220,7 +236,7 @@ extension CoreLocationProvider: CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didUpdateLocations locations: [CLLocation]
     ) {
-        let fixes = locations.compactMap(Self.fix(from:))
+        let fixes = locations.map(Self.fix(from:))
         guard !fixes.isEmpty else { return }
         Task { @MainActor in self.deliver(fixes) }
     }

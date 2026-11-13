@@ -128,7 +128,11 @@ fun EventChatScreen(
     eventTitle: String? = null,
     cooldownSeconds: Int = 0,
     onSendConfirmed: (suspend (String, String) -> Boolean)? = null,
+    publicModeration: com.kungsbackacarcommunity.app.moderation.PublicChatModerationSession? = null,
+    eventId: String? = null,
 ) {
+    val publicSession = publicModeration?.takeIf { !eventId.isNullOrBlank() && it.uid == currentUid }
+    val writingPaused = com.kungsbackacarcommunity.app.moderation.rememberPublicChatWritingPaused(publicSession)
     val dates = rememberChatDateContext()
     var draft by rememberSaveable { mutableStateOf("") }
     var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
@@ -157,7 +161,7 @@ fun EventChatScreen(
         deliveredIds.forEach(draftAttempt::acknowledge)
     }
     fun submit(text: String, clearDraft: Boolean, retryId: String? = null) {
-        if (submitting || cooldownSeconds > 0 || sendStatus == ChatSendStatus.Sending || !EventChat.isSendable(text)) return
+        if (writingPaused || submitting || cooldownSeconds > 0 || sendStatus == ChatSendStatus.Sending || !EventChat.isSendable(text)) return
         val snapshot = draft
         if (clearDraft) { draft = ""; draftRevision++ }
         val revision = draftRevision
@@ -335,8 +339,8 @@ fun EventChatScreen(
                                         onViewProfile
                                             ?.takeIf { !isOwn && message.authorUserId.isNotBlank() }
                                             ?.let { { it(message.authorUserId) } },
-                                    // Long-press → the moderation sheet. Never on
-                                    // your own message, nor on one with no
+                                    // Long-press → shared actions. Own messages only
+                                    // gain admin removal after server authorization. No
                                     // resolvable author. A REMOVED message carries
                                     // no body to report and already shows a neutral
                                     // placeholder, so it stays inert too — as does an
@@ -344,7 +348,7 @@ fun EventChatScreen(
                                     onLongPress =
                                         if (!message.isRemoved &&
                                             !message.isAutoHidden &&
-                                            MessageModeration.canActOn(message.authorUserId, currentUid) &&
+                                            (publicSession?.adminCandidate == true || MessageModeration.canActOn(message.authorUserId, currentUid)) &&
                                             MessageModeration.hasActions(
                                                 canBlock = canBlock,
                                                 reportAvailability =
@@ -417,10 +421,11 @@ fun EventChatScreen(
             }
 
             // Quick emoji is a separate message; it never consumes the typed draft.
+            com.kungsbackacarcommunity.app.moderation.PublicChatPauseNotice(publicSession?.pause, writingPaused)
             ChatCooldownNotice(cooldownSeconds)
             ChatQuickEmojiRow(
                 onEmojiSelected = { submit(it, clearDraft = false) },
-                enabled = sendStatus != ChatSendStatus.Sending && cooldownSeconds == 0 && !submitting,
+                enabled = sendStatus != ChatSendStatus.Sending && cooldownSeconds == 0 && !submitting && !writingPaused,
             )
 
             Row(
@@ -445,7 +450,7 @@ fun EventChatScreen(
                 )
                 Button(
                     onClick = { submit(draft, clearDraft = true) },
-                    enabled = sendStatus != ChatSendStatus.Sending && EventChat.isSendable(draft) && cooldownSeconds == 0 && !submitting,
+                    enabled = sendStatus != ChatSendStatus.Sending && EventChat.isSendable(draft) && cooldownSeconds == 0 && !submitting && !writingPaused,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -465,7 +470,7 @@ fun EventChatScreen(
                 // Recheck the same eligibility as long-press: live moderation or access
                 // changes must not expose a now-hidden body through the quoted preview.
                 canParticipate && !it.isRemoved && !it.isAutoHidden &&
-                    MessageModeration.canActOn(it.authorUserId, currentUid) &&
+                    (publicSession?.adminCandidate == true || MessageModeration.canActOn(it.authorUserId, currentUid)) &&
                     MessageModeration.hasActions(canBlock, MessageModeration.reportAvailability(ChatSurface.EventChat))
             }
     LaunchedEffect(actionsMessageId, actionsMessage == null) {
@@ -473,14 +478,15 @@ fun EventChatScreen(
     }
     if (actionsMessage != null) {
         MessageActionsSheet(
+            publicModeration = publicSession,
+            publicTarget = publicSession?.let { com.kungsbackacarcommunity.app.moderation.PublicChatTarget("event", actionsMessage.id, eventId, actionsMessage.authorUserId) },
             memberName = actionsMessage.authorDisplayName,
             preview = MessageActionsPreview(actionsMessage.authorDisplayName, actionsMessage.message),
-            // Directional; never on own messages (already excluded from the
-            // long-press) and only when blocking is wired.
+            // Blocking/reporting remain directional; admin own-message removal is separate.
             canBlock = canBlock && EventChat.canBlock(actionsMessage, currentUid),
             // Event chat is the ONE surface with a report callable, so the report
             // row is enabled here and opens the real reason picker.
-            reportAvailability = MessageModeration.reportAvailability(ChatSurface.EventChat),
+            reportAvailability = if (actionsMessage.authorUserId != currentUid) MessageModeration.reportAvailability(ChatSurface.EventChat) else com.kungsbackacarcommunity.app.moderation.ReportAvailability.BackendMissing,
             onBlock = {
                 actionsMessageId = null
                 blockingUserId = actionsMessage.authorUserId

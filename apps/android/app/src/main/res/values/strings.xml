@@ -3,6 +3,35 @@
      Source: contracts/localization/sv.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="chatAdmin_expectedUntil">Beräknad sluttid: %1$s.</string>
+    <string name="chatAdmin_keepLongerPause">En längre befintlig paus förkortas inte.</string>
+    <string name="chatAdmin_section">Administratör</string>
+    <string name="chatAdmin_remove">Radera meddelande</string>
+    <string name="chatAdmin_pause">Pausa skrivande…</string>
+    <string name="chatAdmin_reason">Orsak (visas för användaren)</string>
+    <string name="chatAdmin_warnAlso">Vill du även varna användaren?</string>
+    <string name="chatAdmin_pauseAlso">Vill du även pausa skrivandet?</string>
+    <string name="chatAdmin_amount">Antal</string>
+    <string name="chatAdmin_minutes">Minuter</string>
+    <string name="chatAdmin_days">Dagar</string>
+    <string name="chatAdmin_yes">Ja</string>
+    <string name="chatAdmin_no">Nej</string>
+    <string name="chatAdmin_scope">Gäller endast Community- och eventchattar. PM, konvojer och klubbchatten påverkas inte.</string>
+    <string name="chatAdmin_maxDuration">Ange ett heltal. Högst %1$d dagar eller motsvarande antal minuter.</string>
+    <string name="chatAdmin_review">Granska åtgärder</string>
+    <string name="chatAdmin_reviewTitle">Kontrollera beslutet</string>
+    <string name="chatAdmin_willRemove">Meddelandet raderas.</string>
+    <string name="chatAdmin_willPause">Användarens skrivande pausas. Meddelandet behålls.</string>
+    <string name="chatAdmin_warningYes">En varning skickas också.</string>
+    <string name="chatAdmin_warningNo">Ingen varning skickas.</string>
+    <string name="chatAdmin_durationSummary">Skrivpaus: %1$s %2$s. Tiden börjar när beslutet sparas.</string>
+    <string name="chatAdmin_confirm">Bekräfta beslut</string>
+    <string name="chatAdmin_saving">Sparar…</string>
+    <string name="chatAdmin_edit">Ändra val</string>
+    <string name="chatAdmin_cancel">Avbryt</string>
+    <string name="chatAdmin_failed">Beslutet kunde inte bekräftas. Dina val finns kvar. Försök igen.</string>
+    <string name="chatAdmin_stale">Underlaget har ändrats. Kontrollera dina val och granska beslutet igen.</string>
+    <string name="chatAdmin_pausedUntil">Ditt skrivande i publika chattar är pausat till %1$s.</string>
     <string name="clubBadge_accessibility">Klubb: %1$s</string>
     <string name="supporterBadge_accessibility">Supporter-krona</string>
     <string name="supporterBadge_settingTitle">Visa Supporter-krona</string>
@@ -104,6 +133,7 @@
     <string name="liveLocation_duration4h">4 timmar</string>
     <string name="liveLocation_start">Dela min position</string>
     <string name="liveLocation_stop">Stoppa delning</string>
+    <string name="liveLocation_stopSavesToHistory">När du stoppar delningen sparas körningen automatiskt i din historik.</string>
     <string name="liveLocation_hideNow">Dölj mig nu</string>
     <string name="liveLocation_lastUpdated">Senast uppdaterad</string>
     <string name="liveLocation_whoCanSeeTitle">Vem kan se mig?</string>
@@ -1019,6 +1049,7 @@
     <string name="savedDrives_loadMore">Visa fler</string>
     <string name="savedDrives_loadingMore">Laddar fler...</string>
     <string name="savedDrives_loadMoreError">Kunde inte ladda fler körningar. Försök igen.</string>
+    <string name="savedDrives_reportProblem">Rapportera problem med körningen</string>
     <string name="imageEditor_title">Redigera bild</string>
     <string name="imageEditor_hint">Dra för att flytta, nyp för att zooma och vrid med två fingrar för att rotera. Det som syns i rutan är det andra ser.</string>
     <string name="imageEditor_frameDescription">Dra i hörnen för att ändra beskärningens form.</string>
@@ -1282,6 +1313,7 @@
     <string name="crownHunt_spawnClose">Stäng</string>
     <string name="crownHunt_spawnMoveCloser">Kör närmare</string>
     <string name="crownHunt_spawnMoveCloserDetail">Du behöver vara inom %1$d m från kronan.</string>
+    <string name="crownHunt_spawnReadyToCollect">Inom räckhåll – du kan hämta kronan.</string>
     <string name="crownHunt_spawnProximityLabel">Kom närmare</string>
     <string name="crownHunt_spawnProximityRemaining">%1$s kvar</string>
     <string name="crownHunt_spawnStopFirst">Stanna bilen först</string>
@@ -1642,6 +1674,7 @@
     <string name="feedback_thankYouIssue">Ett ärende har skapats på GitHub där du kan följa problemet.</string>
     <string name="feedback_issueNumber">Ärende #%1$d</string>
     <string name="feedback_openTicketsButton">Visa öppna ärenden</string>
+    <string name="feedback_driveContext">Rapporten kopplas till den här körningen. Körspår och platsuppgifter delas inte i ärendet.</string>
     <string name="openTickets_title">Öppna ärenden</string>
     <string name="openTickets_intro">Kända problem som andra har rapporterat. Har du samma problem? Ge det en tumme upp eller lägg till en kommentar.</string>
     <string name="openTickets_loading">Hämtar ärenden…</string>
@@ -2220,4 +2253,19 @@
     <string name="carCommunityAccess_suspendedTitle">Åtkomsten är begränsad</string>
     <string name="carCommunityAccess_body">Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.</string>
     <string name="carCommunityAccess_retry">Kontrollera igen</string>
+    <string name="roadCameras_speedLayer">Fasta fartkameror</string>
+    <string name="roadCameras_trafficLayer">Trafikkameror</string>
+    <string name="roadCameras_roadConditionLayer">Väglagskameror</string>
+    <string name="roadCameras_layerHelp">Visa kameror på kartan</string>
+    <string name="roadCameras_loading">Hämtar kamerabild…</string>
+    <string name="roadCameras_unavailable">Kamerabilden kunde inte hämtas.</string>
+    <string name="roadCameras_rateLimited">Gränsen för kamerabilder är nådd. Försök igen senare.</string>
+    <string name="roadCameras_photoTime">Bild uppdaterad %1$s</string>
+    <string name="roadCameras_retry">Försök igen</string>
+    <string name="roadCameras_catalogUnavailable">Kameror kunde inte uppdateras. Sparade kameror visas om de finns.</string>
+    <string name="convoy_invitationFrom">bjuder in till konvoj</string>
+    <string name="convoy_invitationJoin">Gå med</string>
+    <string name="convoy_invitationDecline">Neka</string>
+    <string name="convoy_invitationInboxHint">Finns kvar i Notifikationer</string>
+    <string name="convoy_invitationClosesIn">Rutan stängs om %1$d s</string>
 </resources>

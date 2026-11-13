@@ -74,13 +74,40 @@ struct MapReadingPanel<Content: View>: View {
 }
 
 enum MapReadingSelection: Hashable {
+    case stopLive
     case savedPlaces
     case place(PlaceSuggestion)
     case crown(String)
     case incident(String)
     case police(String)
+    case camera(String)
     case nearby(String)
     case convoyMember(String)
+}
+
+/// Matches Android's docked Stop panel. The existing session lifecycle owns
+/// stopping and automatic drive saving; closing the panel leaves sharing active.
+struct LiveSessionStopContent: View {
+    let busy: Bool
+    let onStop: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s4) {
+            Text("liveLocation.statusSharing")
+                .font(.body)
+                .foregroundStyle(KccTheme.secondary)
+
+            Button(role: .destructive, action: onStop) {
+                Label("liveLocation.stop", systemImage: "stop.fill")
+                    .foregroundStyle(KccPalette.warmIvory)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(KccPalette.errorRed)
+            .disabled(busy)
+            .accessibilityIdentifier("map.session.stop")
+        }
+    }
 }
 
 /// Compact map chrome; commands are supplied by the existing shell/coordinator.

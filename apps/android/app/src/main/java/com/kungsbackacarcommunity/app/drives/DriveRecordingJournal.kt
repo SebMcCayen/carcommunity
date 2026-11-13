@@ -12,6 +12,7 @@ import java.io.RandomAccessFile
 data class JournalSnapshot(
     val startedAtMillis: Long,
     val points: List<RecordedPoint>,
+    val diagnostics: DriveRecordingDiagnostics? = null,
 )
 
 /**
@@ -71,6 +72,7 @@ class DriveRecordingJournal(private val directory: File) {
         val target = fileFor(sourceSessionId)
         pruneOthers(keep = target)
         runCatching {
+            diagnosticsFileFor(sourceSessionId).delete()
             target.writeText("$HEADER_PREFIX$startedAtMillis\n")
         }
     }
@@ -131,7 +133,7 @@ class DriveRecordingJournal(private val directory: File) {
                     val line = reader.readLine() ?: break
                     parsePoint(line)?.let { points.add(it) }
                 }
-                JournalSnapshot(startedAtMillis = startedAt, points = points)
+                JournalSnapshot(startedAtMillis = startedAt, points = points, diagnostics = loadDiagnostics(sourceSessionId))
             }
         }.getOrNull()
     }
@@ -139,7 +141,33 @@ class DriveRecordingJournal(private val directory: File) {
     /** Removes the journal for [sourceSessionId] (called on save / delete / discard). */
     fun clear(sourceSessionId: String) {
         runCatching { fileFor(sourceSessionId).delete() }
+        runCatching { diagnosticsFileFor(sourceSessionId).delete() }
+        runCatching { File(diagnosticsFileFor(sourceSessionId).path + ".tmp").delete() }
     }
+
+    private fun diagnosticsFileFor(sourceSessionId: String): File = File(fileFor(sourceSessionId).path + ".diagnostics")
+
+    /** One small atomic sidecar, never an unbounded per-fix log. */
+    fun writeDiagnostics(sourceSessionId: String, diagnostics: DriveRecordingDiagnostics) {
+        if (!fileFor(sourceSessionId).exists()) return
+        val target = diagnosticsFileFor(sourceSessionId)
+        val temporary = File(target.path + ".tmp")
+        runCatching {
+            temporary.writeText(diagnostics.journalLine())
+            temporary.renameTo(target)
+        }
+    }
+
+    private fun loadDiagnostics(sourceSessionId: String): DriveRecordingDiagnostics? = runCatching {
+        val target = diagnosticsFileFor(sourceSessionId)
+        if (!target.exists()) return@runCatching null
+        // A corrupt optional trailer must not erase the bounded valid counters.
+        // Read only a fixed prefix, never allocate the whole damaged sidecar.
+        val prefix = CharArray(DriveRecordingDiagnostics.MAX_CHECKPOINT_CHARACTERS)
+        val read = target.bufferedReader().use { it.read(prefix) }
+        if (read <= 0) return@runCatching null
+        DriveRecordingDiagnostics.fromJournalLine(String(prefix, 0, read))
+    }.getOrNull()
 
     /**
      * Whether [file] already ends with a newline. Reads only the LAST byte (via a
@@ -169,7 +197,10 @@ class DriveRecordingJournal(private val directory: File) {
     private fun pruneOthers(keep: File) {
         val files = directory.listFiles() ?: return
         for (file in files) {
-            if (file.name.endsWith(FILE_SUFFIX) && file != keep) {
+            if ((file.name.endsWith(FILE_SUFFIX) || file.name.endsWith("$FILE_SUFFIX.diagnostics") ||
+                    file.name.endsWith("$FILE_SUFFIX.diagnostics.tmp")) &&
+                file != keep && file.path != keep.path + ".diagnostics"
+            ) {
                 runCatching { file.delete() }
             }
         }

@@ -424,27 +424,46 @@ class ConvoyCoordinator(
         }
     }
 
-    suspend fun accept(convoyId: String) {
+    suspend fun accept(convoyId: String): Boolean {
         // ITEM 1 client guard: accepting JOINS a second convoy, refused while the
         // caller is already an active participant of another (ConvoyBar.activeConvoy
         // only ever returns a convoy the caller has ACCEPTED, never this pending
         // invite). Declining stays available. Backend re-checks authoritatively.
         if (ConvoyBar.activeConvoy(statusState.value) != null) {
             rowError.value = ConvoyActionError.AlreadyInConvoy
-            return
+            return false
         }
         if ((statusState.value as? ConvoyListStatus.Loaded)?.isExhaustive != true) {
             rowError.value = ConvoyActionError.MembershipUncertain
-            return
+            return false
         }
-        respond(convoyId, accept = true)
+        return respond(convoyId, accept = true)
     }
 
     suspend fun decline(convoyId: String) = respond(convoyId, accept = false)
 
-    private suspend fun respond(convoyId: String, accept: Boolean) {
+    /** The exact invitation may be absent from the capped history list. The
+     * response transaction validates membership and competing active convoys. */
+    suspend fun respondToInvitation(convoyId: String, accept: Boolean): Boolean =
+        runRowAction(convoyId) {
+            when (val result = repository.respond(convoyId, accept)) {
+                is ConvoyMutationResult.Failed -> result.error
+                is ConvoyMutationResult.Updated -> {
+                    // Retain a confirmed join even if history refresh is capped or fails.
+                    val previous = statusState.value as? ConvoyListStatus.Loaded
+                    statusState.value = ConvoyListStatus.Loaded(
+                        convoys = listOf(result.convoy) + (previous?.convoys ?: emptyList()).filterNot { it.convoyId == convoyId },
+                        pendingInvites = (previous?.pendingInvites ?: emptyList()).filterNot { it.convoyId == convoyId },
+                        isExhaustive = previous?.isExhaustive ?: false,
+                    )
+                    null
+                }
+            }
+        }
+
+
+    private suspend fun respond(convoyId: String, accept: Boolean): Boolean =
         runRowAction(convoyId) { repository.respond(convoyId, accept).errorOrNull() }
-    }
 
     suspend fun start(convoyId: String) {
         runRowAction(convoyId) { repository.start(convoyId).errorOrNull() }
@@ -591,8 +610,8 @@ class ConvoyCoordinator(
      * stale row disappears). [action] returns the mapped error on failure, or
      * null on success.
      */
-    private suspend fun runRowAction(convoyId: String, action: suspend () -> ConvoyActionError?) {
-        if (convoyId in inFlight.value) return
+    private suspend fun runRowAction(convoyId: String, action: suspend () -> ConvoyActionError?): Boolean {
+        if (convoyId in inFlight.value) return false
         inFlight.update { it + convoyId }
         rowError.value = null
         // Prevent an older foreground/pull refresh from publishing after this
@@ -604,6 +623,7 @@ class ConvoyCoordinator(
             // Resync regardless of outcome: on success the list reflects the new
             // state; on failure a stale/handled row is reconciled.
             load()
+            return error == null
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
@@ -612,6 +632,7 @@ class ConvoyCoordinator(
             // snapshot stays consistent after an unexpected failure. load() has
             // its own guard and never rethrows, so it can't mask this rowError.
             load()
+            return false
         } finally {
             inFlight.update { it - convoyId }
         }

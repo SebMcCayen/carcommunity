@@ -38,7 +38,7 @@ class ThemePreferenceUiTest {
      */
     @Before
     fun resetPreference() {
-        ThemePreferenceStore(context).set(ThemePreference.SYSTEM)
+        ThemePreferenceStore(context).set(ThemePreference.LIGHT)
     }
 
     /**
@@ -74,8 +74,8 @@ class ThemePreferenceUiTest {
     }
 
     @Test
-    fun allFourSavedChoicesSurviveReopeningTheStore() {
-        ThemePreference.entries.forEach { preference ->
+    fun allThreeSavedChoicesSurviveReopeningTheStore() {
+        listOf(ThemePreference.AUTOMATIC, ThemePreference.LIGHT, ThemePreference.DARK).forEach { preference ->
             ThemePreferenceStore(context).set(preference)
             assertEquals(preference, ThemePreferenceStore(context).preference.value)
         }

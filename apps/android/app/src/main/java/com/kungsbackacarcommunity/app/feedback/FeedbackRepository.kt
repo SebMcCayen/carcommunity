@@ -136,6 +136,7 @@ class FirebaseFeedbackRepository private constructor(
                 input.appVersion?.let { put("appVersion", it) }
                 input.osVersion?.let { put("osVersion", it) }
                 input.deviceModel?.let { put("deviceModel", it) }
+                input.rideId?.let { put("rideId", it) }
             }
         return suspendCancellableCoroutine { continuation ->
             functions

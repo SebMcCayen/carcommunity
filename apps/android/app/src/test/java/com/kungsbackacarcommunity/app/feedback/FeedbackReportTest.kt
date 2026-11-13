@@ -10,6 +10,15 @@ class FeedbackReportTest {
     private val context = FeedbackClientContext("1.2.3", "Android 14", "Google Pixel 8")
 
     @Test
+    fun `a drive report carries only the explicitly selected ride and generic reports do not inherit it`() {
+        val form = FeedbackReportForm(description = "Distance is too short")
+        val scoped = FeedbackReports.toInput(form, context, rideId = "owned-drive")!!
+        assertEquals("owned-drive", scoped.rideId)
+        assertEquals(form.description, scoped.description)
+        assertNull(FeedbackReports.toInput(form, context)!!.rideId)
+    }
+
+    @Test
     fun `description is required`() {
         assertEquals(
             FeedbackReportError.DESCRIPTION_REQUIRED,

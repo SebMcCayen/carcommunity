@@ -621,6 +621,50 @@ final class ConvoyManagementCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .loaded(snapshot(convoys: [ended])))
     }
 
+    @MainActor
+    func testDirectInvitationCanJoinOutsideCappedHistoryAndRetainsConfirmedConvoy() async {
+        let capped = ConvoyManagementSnapshot(
+            convoys: (0..<200).map { item(id: "newer-\($0)", status: .ended, viewer: .accepted) },
+            pendingInvites: [], isExhaustive: false
+        )
+        let joined = item(id: "older-convoy", viewer: .accepted)
+        let repository = FakeRepository(listResults: [.loaded(capped), .loaded(capped)],
+                                        respondResult: .updated(joined))
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+        let result = await coordinator.respondToInvitation(convoyId: joined.convoyId, action: .accept)
+        XCTAssertEqual(result, .updated(joined))
+        XCTAssertEqual(repository.respondCalls.count, 1)
+        XCTAssertEqual(repository.respondCalls.first?.0, joined.convoyId)
+        XCTAssertEqual(repository.respondCalls.first?.1, .accept)
+        XCTAssertEqual(coordinator.activeConvoy, joined)
+        XCTAssertNil(coordinator.actionError)
+    }
+
+    @MainActor
+    func testDirectInvitationReportsSuccessfulDeclineOutsideHistoryExplicitly() async {
+        let capped = ConvoyManagementSnapshot(convoys: [], pendingInvites: [], isExhaustive: false)
+        let declined = item(id: "older-convoy", viewer: .declined)
+        let repository = FakeRepository(listResults: [.loaded(capped), .loaded(capped)],
+                                        respondResult: .updated(declined))
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        await coordinator.load()
+        let result = await coordinator.respondToInvitation(convoyId: declined.convoyId, action: .decline)
+        XCTAssertEqual(result, .updated(declined))
+        XCTAssertEqual(repository.respondCalls.count, 1)
+        XCTAssertEqual(repository.respondCalls.first?.1, .decline)
+    }
+
+    @MainActor
+    func testDirectInvitationWithoutHistoryStillSurfacesServerMembershipRejection() async {
+        let repository = FakeRepository(listResults: [], respondResult: .failed(.alreadyInConvoy))
+        let coordinator = ConvoyManagementCoordinator(repository: repository)
+        let result = await coordinator.respondToInvitation(convoyId: "older-convoy", action: .accept)
+        XCTAssertEqual(result, .failed(.alreadyInConvoy))
+        XCTAssertEqual(repository.respondCalls.count, 1)
+        XCTAssertEqual(coordinator.actionError, .alreadyInConvoy)
+    }
+
     private func snapshot(
         convoys: [ConvoyItem] = [],
         pending: [ConvoyItem] = []

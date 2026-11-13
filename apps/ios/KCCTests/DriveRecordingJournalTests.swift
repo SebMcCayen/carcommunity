@@ -74,6 +74,54 @@ final class DriveRecordingJournalTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
+    func testDiagnosticsCheckpointRestoresPrivatelyAndLegacyJournalStillLoads() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("active.routejournal")
+        let journal = FileDriveRecordingJournal(fileURL: url)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        journal.begin(context: context("session"), startedAt: start)
+        journal.append(RecordedDrivePoint(latitude: 57, longitude: 12,
+            timestampMilliseconds: 1_700_000_000_000))
+        // No sidecar is the exact legacy format; the accepted route survives.
+        XCTAssertNil(journal.restore(sessionId: "session")?.recordingDiagnostics)
+        var diagnostics = DriveRecordingDiagnostics()
+        diagnostics.receivedPoints = 3
+        diagnostics.acceptedPoints = 1
+        diagnostics.rejectedAccuracy = 2
+        diagnostics.maxGapMs = 20_000
+        diagnostics.gapCount = 1
+        journal.updateDiagnostics(diagnostics, sessionId: "session")
+        let recreated = FileDriveRecordingJournal(fileURL: url)
+        XCTAssertEqual(recreated.restore(sessionId: "session")?.recordingDiagnostics, diagnostics)
+        let sidecar = url.appendingPathExtension("diagnostics")
+        let json = try String(contentsOf: sidecar, encoding: .utf8)
+        XCTAssertFalse(json.contains("latitude"))
+        XCTAssertFalse(json.contains("longitude"))
+        journal.updateDiagnostics(diagnostics, sessionId: "different-session")
+        XCTAssertNil(recreated.restore(sessionId: "session")?.recordingDiagnostics)
+        XCTAssertEqual(recreated.restore(sessionId: "session")?.points.count, 1)
+        journal.clear()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sidecar.path))
+    }
+
+    func testCorruptDiagnosticsCannotDiscardAnOtherwiseValidJournal() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("active.routejournal")
+        let journal = FileDriveRecordingJournal(fileURL: url)
+        journal.begin(context: context("session"), startedAt: Date())
+        try Data("{broken".utf8).write(to: url.appendingPathExtension("diagnostics"))
+        XCTAssertNotNil(journal.restore(sessionId: "session"))
+        XCTAssertNil(journal.restore(sessionId: "session")?.recordingDiagnostics)
+        journal.begin(context: context("next"), startedAt: Date())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.appendingPathExtension("diagnostics").path))
+    }
+
     private func context(_ sessionId: String) -> DriveRecordingContext {
         DriveRecordingContext(
             sourceSessionId: sessionId,

@@ -5271,6 +5271,499 @@
         }
       }
     },
+    "chatAdmin.amount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antal"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amount"
+          }
+        }
+      }
+    },
+    "chatAdmin.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avbryt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "chatAdmin.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekräfta beslut"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm decision"
+          }
+        }
+      }
+    },
+    "chatAdmin.days": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dagar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Days"
+          }
+        }
+      }
+    },
+    "chatAdmin.durationSummary": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skrivpaus: %1$@ %2$@. Tiden börjar när beslutet sparas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writing pause: %1$@ %2$@. The duration starts when the decision is saved."
+          }
+        }
+      }
+    },
+    "chatAdmin.edit": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändra val"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit choices"
+          }
+        }
+      }
+    },
+    "chatAdmin.expectedUntil": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beräknad sluttid: %1$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated end: %1$@."
+          }
+        }
+      }
+    },
+    "chatAdmin.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beslutet kunde inte bekräftas. Dina val finns kvar. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The decision could not be confirmed. Your choices are kept. Try again."
+          }
+        }
+      }
+    },
+    "chatAdmin.keepLongerPause": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En längre befintlig paus förkortas inte."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An existing longer pause will not be shortened."
+          }
+        }
+      }
+    },
+    "chatAdmin.maxDuration": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ange ett heltal. Högst %1$lld dagar eller motsvarande antal minuter."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a whole number. Maximum %1$lld days or the equivalent in minutes."
+          }
+        }
+      }
+    },
+    "chatAdmin.minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minuter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minutes"
+          }
+        }
+      }
+    },
+    "chatAdmin.no": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nej"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No"
+          }
+        }
+      }
+    },
+    "chatAdmin.pause": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausa skrivande…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause writing…"
+          }
+        }
+      }
+    },
+    "chatAdmin.pauseAlso": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vill du även pausa skrivandet?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also pause writing?"
+          }
+        }
+      }
+    },
+    "chatAdmin.pausedUntil": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ditt skrivande i publika chattar är pausat till %1$@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your writing in public chats is paused until %1$@."
+          }
+        }
+      }
+    },
+    "chatAdmin.reason": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orsak (visas för användaren)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reason (shown to the user)"
+          }
+        }
+      }
+    },
+    "chatAdmin.remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radera meddelande"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete message"
+          }
+        }
+      }
+    },
+    "chatAdmin.review": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Granska åtgärder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review actions"
+          }
+        }
+      }
+    },
+    "chatAdmin.reviewTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrollera beslutet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review the decision"
+          }
+        }
+      }
+    },
+    "chatAdmin.saving": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sparar…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saving…"
+          }
+        }
+      }
+    },
+    "chatAdmin.scope": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gäller endast Community- och eventchattar. PM, konvojer och klubbchatten påverkas inte."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies only to Community and event chats. DMs, convoys and club chat are unaffected."
+          }
+        }
+      }
+    },
+    "chatAdmin.section": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Administratör"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Administrator"
+          }
+        }
+      }
+    },
+    "chatAdmin.stale": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Underlaget har ändrats. Kontrollera dina val och granska beslutet igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The evidence has changed. Check your choices and review the decision again."
+          }
+        }
+      }
+    },
+    "chatAdmin.warnAlso": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vill du även varna användaren?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also warn the user?"
+          }
+        }
+      }
+    },
+    "chatAdmin.warningNo": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen varning skickas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No warning will be sent."
+          }
+        }
+      }
+    },
+    "chatAdmin.warningYes": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En varning skickas också."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A warning will also be sent."
+          }
+        }
+      }
+    },
+    "chatAdmin.willPause": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Användarens skrivande pausas. Meddelandet behålls."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The user’s writing will be paused. The message will remain."
+          }
+        }
+      }
+    },
+    "chatAdmin.willRemove": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meddelandet raderas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The message will be deleted."
+          }
+        }
+      }
+    },
+    "chatAdmin.yes": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ja"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes"
+          }
+        }
+      }
+    },
     "chatHub.back": {
       "extractionState": "manual",
       "localizations": {
@@ -9415,6 +9908,91 @@
           "stringUnit": {
             "state": "translated",
             "value": "Try again"
+          }
+        }
+      }
+    },
+    "convoy.invitationClosesIn": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rutan stängs om %1$lld s"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closes in %1$lld s"
+          }
+        }
+      }
+    },
+    "convoy.invitationDecline": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neka"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decline"
+          }
+        }
+      }
+    },
+    "convoy.invitationFrom": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bjuder in till konvoj"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invites you to a convoy"
+          }
+        }
+      }
+    },
+    "convoy.invitationInboxHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finns kvar i Notifikationer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stays in Notifications"
+          }
+        }
+      }
+    },
+    "convoy.invitationJoin": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gå med"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join"
           }
         }
       }
@@ -13584,6 +14162,23 @@
         }
       }
     },
+    "crownHunt.spawnReadyToCollect": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inom räckhåll – du kan hämta kronan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Within reach – you can collect this crown."
+          }
+        }
+      }
+    },
     "crownHunt.spawnResultAlreadyCollected": {
       "extractionState": "manual",
       "localizations": {
@@ -17609,6 +18204,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Description cannot be empty."
+          }
+        }
+      }
+    },
+    "feedback.driveContext": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rapporten kopplas till den här körningen. Körspår och platsuppgifter delas inte i ärendet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This report is linked to this drive. The issue will not include your route or location data."
           }
         }
       }
@@ -22913,6 +23525,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop sharing"
+          }
+        }
+      }
+    },
+    "liveLocation.stopSavesToHistory": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "När du stoppar delningen sparas körningen automatiskt i din historik."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you stop sharing, your drive is automatically saved to your history."
           }
         }
       }
@@ -28952,6 +29581,176 @@
         }
       }
     },
+    "roadCameras.catalogUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameror kunde inte uppdateras. Sparade kameror visas om de finns."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cameras could not be updated. Saved cameras are shown when available."
+          }
+        }
+      }
+    },
+    "roadCameras.layerHelp": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa kameror på kartan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show cameras on the map"
+          }
+        }
+      }
+    },
+    "roadCameras.loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hämtar kamerabild…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading camera image…"
+          }
+        }
+      }
+    },
+    "roadCameras.photoTime": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild uppdaterad %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image updated %1$@"
+          }
+        }
+      }
+    },
+    "roadCameras.rateLimited": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gränsen för kamerabilder är nådd. Försök igen senare."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera image limit reached. Try again later."
+          }
+        }
+      }
+    },
+    "roadCameras.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Försök igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "roadCameras.roadConditionLayer": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Väglagskameror"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Road condition cameras"
+          }
+        }
+      }
+    },
+    "roadCameras.speedLayer": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fasta fartkameror"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fixed speed cameras"
+          }
+        }
+      }
+    },
+    "roadCameras.trafficLayer": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trafikkameror"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traffic cameras"
+          }
+        }
+      }
+    },
+    "roadCameras.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerabilden kunde inte hämtas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camera image could not be loaded."
+          }
+        }
+      }
+    },
     "savedDrives.autoSavedBody": {
       "extractionState": "manual",
       "localizations": {
@@ -30410,6 +31209,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Title (optional)"
+          }
+        }
+      }
+    },
+    "savedDrives.reportProblem": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rapportera problem med körningen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report a problem with this drive"
           }
         }
       }

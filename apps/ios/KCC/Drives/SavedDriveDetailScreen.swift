@@ -8,6 +8,10 @@ struct SavedDriveDetailScreen: View {
     let drive: SavedDrive
     let sharingEnabled: Bool
     let onDelete: () -> Void
+    @State private var feedbackCoordinator = FeedbackCoordinator(
+        repository: FirebaseFeedbackRepository.createIfAvailable()
+    )
+    @State private var showingReport = false
 
     var body: some View {
         NavigationStack {
@@ -20,6 +24,15 @@ struct SavedDriveDetailScreen: View {
                             Label("savedDrives.shareAction", systemImage: "square.and.arrow.up")
                                 .frame(maxWidth: .infinity, minHeight: 48)
                         }.kccPrimaryAction()
+                    }
+                    if feedbackCoordinator.isAvailable {
+                        Button {
+                            feedbackCoordinator.reset()
+                            showingReport = true
+                        } label: {
+                            Label("savedDrives.reportProblem", systemImage: "exclamationmark.bubble")
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                        }.buttonStyle(.bordered)
                     }
                     Text("savedDrives.promptPrivacyNote")
                         .font(.footnote).foregroundStyle(KccTheme.secondary)
@@ -39,6 +52,18 @@ struct SavedDriveDetailScreen: View {
 
         }
         .kccDismissibleSheet()
+        .sheet(isPresented: $showingReport) {
+            NavigationStack {
+                FeedbackScreen(
+                    coordinator: feedbackCoordinator,
+                    openTicketsEnabled: false,
+                    onOpenTickets: {},
+                    onClose: { showingReport = false },
+                    rideId: drive.id
+                )
+            }
+            .kccDismissibleSheet()
+        }
         .task(id: drive.id) { await coordinator.loadRoute(for: drive) }
         .onDisappear { coordinator.clearRoute() }
     }

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -24,16 +25,17 @@ internal class AutomaticThemeClock(
 ) {
     private val appContext = context.applicationContext
 
-    fun isDarkNow(): Boolean = AutomaticThemeSchedule.isDark(now().toLocalTime())
+    fun isDarkNow(schedule: AutomaticThemeSchedule = AutomaticThemeSchedule.DEFAULT): Boolean =
+        schedule.isDark(now().toLocalTime())
 
-    fun updates(): Flow<Boolean> = callbackFlow {
+    fun updates(schedule: AutomaticThemeSchedule = AutomaticThemeSchedule.DEFAULT): Flow<Boolean> = callbackFlow {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                trySend(isDarkNow())
+                trySend(isDarkNow(schedule))
             }
         }
         // These three protected broadcasts can only originate from the system.
-        // TIME_TICK covers the 07:00/19:00 boundaries without polling or alarms.
+        // TIME_TICK covers the chosen minute boundaries without polling or alarms.
         ContextCompat.registerReceiver(
             appContext,
             receiver,
@@ -44,7 +46,7 @@ internal class AutomaticThemeClock(
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
-        trySend(isDarkNow())
+        trySend(isDarkNow(schedule))
         awaitClose { appContext.unregisterReceiver(receiver) }
     }
 }
@@ -56,16 +58,20 @@ internal fun rememberResolvedDarkTheme(
     systemInDark: Boolean,
     lifecycle: Lifecycle,
     clock: AutomaticThemeClock? = null,
+    schedule: AutomaticThemeSchedule = AutomaticThemeSchedule.DEFAULT,
 ): Boolean {
     if (preference != ThemePreference.AUTOMATIC) return preference.resolveDark(systemInDark)
 
     val context = LocalContext.current
     val liveClock = remember(context, clock) { clock ?: AutomaticThemeClock(context) }
-    val dark by produceState(liveClock.isDarkNow(), liveClock, lifecycle) {
-        // Cancels/unregisters in the background and samples immediately on foreground entry.
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            liveClock.updates().collect { value = it }
+    // key() also replaces the initial value, so an edited schedule applies in this frame.
+    return key(liveClock, lifecycle, schedule) {
+        val dark by produceState(liveClock.isDarkNow(schedule), liveClock, lifecycle, schedule) {
+            // Cancels/unregisters in the background and samples immediately on foreground entry.
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                liveClock.updates(schedule).collect { value = it }
+            }
         }
+        dark
     }
-    return dark
 }

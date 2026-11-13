@@ -24,6 +24,7 @@ fun FeedbackReportRoute(
     openTicketsEnabled: Boolean,
     onOpenTickets: () -> Unit,
     onBack: () -> Unit,
+    rideId: String? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -34,6 +35,7 @@ fun FeedbackReportRoute(
 
     FeedbackReportScreen(
         status = status,
+        rideId = rideId,
         clientContext = clientContext,
         openTicketsEnabled = openTicketsEnabled,
         onOpenTickets = onOpenTickets,

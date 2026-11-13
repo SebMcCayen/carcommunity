@@ -501,6 +501,12 @@ service cloud.firestore {
       allow get: if isOwner(userId);
     }
 
+    // Minimal own public-writing status. Never grants private moderation data,
+    // list access, or any client write path (including to an administrator).
+    match /carCommunityChatRestrictions/{userId} {
+      allow get: if isOwner(userId);
+    }
+
     match /users/{userId} {
       // Any authenticated user may read the public profile.
       allow read: if isAuthenticated();

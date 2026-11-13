@@ -124,6 +124,50 @@ afterAll(async () => {
 });
 
 describe('feedback-reportIssue', () => {
+  it('links only explicitly selected owned rides and copies no route or account data', async () => {
+    const user = await createProvisionedUser('feedback-drive');
+    const rideId = `feedback-${user.uid}`;
+    const calculationDiagnostics = {
+      algorithmVersion: 'haversine-segment-v1',
+      totalSegments: 4,
+      rejectedTimeSegments: 0,
+      rejectedSpeedSegments: 2,
+      maxAcceptedGapMs: 5_000,
+      gapCount: 0,
+      endpointDistanceMeters: 50_000,
+      distanceBelowEndpoint: true,
+    };
+    await adminDb.collection('rides').doc(rideId).set({
+      userId: user.uid,
+      routeThumbnail: 'private-polyline',
+      sourceSessionId: 'private-session',
+      calculationDiagnostics,
+    });
+    const result = (await call('feedback-reportIssue', { ...validReport, rideId })).data as {
+      reportId: string;
+    };
+    const report = (await adminDb.collection('feedbackReports').doc(result.reportId).get()).data()!;
+    expect(report.rideId).toBe(rideId);
+    expect(report.driveDiagnostics).toEqual({ calculationDiagnostics });
+    expect(JSON.stringify(report.driveDiagnostics)).not.toContain('private-polyline');
+    expect(JSON.stringify(report.driveDiagnostics)).not.toContain('private-session');
+
+    await signInAs(reporter);
+    for (const forbidden of [rideId, 'missing-drive']) {
+      expect(
+        await callableErrorCode(
+          call('feedback-reportIssue', { ...validReport, rideId: forbidden }),
+        ),
+      ).toBe('functions/not-found');
+    }
+    const otherReports = await adminDb
+      .collection('feedbackReports')
+      .where('uid', '==', reporter.uid)
+      .where('rideId', '==', rideId)
+      .get();
+    expect(otherReports.empty).toBe(true);
+  });
+
   it('rejects unauthenticated callers', async () => {
     await auth.signOut();
     expect(await callableErrorCode(call('feedback-reportIssue', validReport))).toBe(

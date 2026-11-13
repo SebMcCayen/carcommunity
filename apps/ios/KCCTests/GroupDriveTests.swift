@@ -87,14 +87,19 @@ final class GroupDriveTests: XCTestCase {
 
     @MainActor
     private func waitFor(
-        timeout: TimeInterval = 1,
+        timeout: Duration = .seconds(5),
+        file: StaticString = #filePath,
+        line: UInt = #line,
         _ condition: @escaping @MainActor () -> Bool
     ) async {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition(), Date() < deadline {
-            await Task.yield()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while !condition(), clock.now < deadline {
+            // Suspend between probes so pending repository tasks can finish
+            // even when the simulator's executors are under load.
+            try? await clock.sleep(for: .milliseconds(10))
         }
-        XCTAssertTrue(condition())
+        XCTAssertTrue(condition(), "Timed out waiting for coordinator state", file: file, line: line)
     }
 }
 

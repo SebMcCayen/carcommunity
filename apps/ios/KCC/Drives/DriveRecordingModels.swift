@@ -8,12 +8,14 @@ struct RecordedDrivePoint: Equatable, Sendable {
     let timestampMilliseconds: Int64
 
     init?(fix: LocationFix) {
+        let timestampMs = (fix.timestamp.timeIntervalSince1970 * 1_000).rounded()
         guard fix.latitude.isFinite, (-90...90).contains(fix.latitude),
-              fix.longitude.isFinite, (-180...180).contains(fix.longitude)
+              fix.longitude.isFinite, (-180...180).contains(fix.longitude),
+              timestampMs.isFinite, timestampMs > 0, timestampMs < Double(Int64.max)
         else { return nil }
         latitude = fix.latitude
         longitude = fix.longitude
-        timestampMilliseconds = Int64((fix.timestamp.timeIntervalSince1970 * 1_000).rounded())
+        timestampMilliseconds = Int64(timestampMs)
     }
 
     init(latitude: Double, longitude: Double, timestampMilliseconds: Int64) {
@@ -61,6 +63,140 @@ struct DriveRecordingContext: Equatable, Sendable {
     }
 }
 
+/// Bounded, coordinate-free evidence from the recording stream. The typed
+/// save request carries only totals; rejected locations and uptime never leave
+/// the provider/recorder seam. Kept out of public error-report messages.
+struct DriveRecordingDiagnostics: Equatable, Codable, Sendable {
+    static let maximumCount = 10_000_000
+    static let maximumGapMs = 604_800_000
+    var version = 1
+    var algorithmVersion = "recording-quality-v1"
+    var receivedPoints = 0
+    var acceptedPoints = 0
+    var rejectedInvalid = 0
+    var rejectedAccuracy = 0
+    var rejectedStale = 0
+    var rejectedTime = 0
+    var rejectedSpeed = 0
+    var droppedCapacity = 0
+    var droppedStationary = 0
+    var droppedThrottled = 0
+    var maxGapMs = 0
+    var gapCount = 0
+    var resumedCount = 0
+    /// Recording source, independent of the device later filing feedback.
+    var platform: String? = nil
+    var appVersion: String? = nil
+
+    static func normalizedPlatform(_ value: String?) -> String? {
+        value == "ios" || value == "android" ? value : nil
+    }
+
+    static func normalizedAppVersion(_ value: String?) -> String? {
+        guard let value, !value.isEmpty, value.utf16.count <= 50,
+              value.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }),
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return value
+    }
+
+    var isValid: Bool {
+        version == 1 && algorithmVersion == "recording-quality-v1" &&
+            maxGapMs >= 0 && maxGapMs <= Self.maximumGapMs &&
+            [receivedPoints, acceptedPoints, rejectedInvalid, rejectedAccuracy,
+             rejectedStale, rejectedTime, rejectedSpeed, droppedCapacity,
+             droppedStationary, droppedThrottled, gapCount, resumedCount]
+                .allSatisfy { $0 >= 0 && $0 <= Self.maximumCount }
+    }
+
+    var wireValue: [String: Any] {
+        var result: [String: Any] = ["version": version, "algorithmVersion": algorithmVersion,
+         "receivedPoints": receivedPoints, "acceptedPoints": acceptedPoints,
+         "rejectedInvalid": rejectedInvalid, "rejectedAccuracy": rejectedAccuracy,
+         "rejectedStale": rejectedStale, "rejectedTime": rejectedTime,
+         "rejectedSpeed": rejectedSpeed, "droppedCapacity": droppedCapacity,
+         "droppedStationary": droppedStationary, "droppedThrottled": droppedThrottled,
+         "maxGapMs": maxGapMs, "gapCount": gapCount, "resumedCount": resumedCount]
+        if let platform = Self.normalizedPlatform(platform) { result["platform"] = platform }
+        if let appVersion = Self.normalizedAppVersion(appVersion) { result["appVersion"] = appVersion }
+        return result
+    }
+
+    static func increment(_ count: inout Int) { count = min(maximumCount, count + 1) }
+
+    mutating func reject(_ reason: RecordingLocationRejection) {
+        switch reason {
+        case .invalid: Self.increment(&rejectedInvalid)
+        case .accuracy: Self.increment(&rejectedAccuracy)
+        case .stale: Self.increment(&rejectedStale)
+        case .time: Self.increment(&rejectedTime)
+        case .speed: Self.increment(&rejectedSpeed)
+        }
+    }
+
+    mutating func reconcile(acceptedCount: Int) {
+        acceptedPoints = min(Self.maximumCount, acceptedCount)
+        // Route append and summary checkpoint are independently crash-safe. A
+        // newer complete route line may survive a kill before its checkpoint.
+        let accounted = acceptedPoints + rejectedInvalid + rejectedAccuracy + rejectedStale +
+            rejectedTime + rejectedSpeed + droppedCapacity + droppedStationary + droppedThrottled
+        receivedPoints = min(Self.maximumCount, max(receivedPoints, accounted))
+    }
+}
+
+// Optional source context is deliberately decoded separately from the required
+// counter contract. Bad or absent context must not discard valid evidence.
+extension DriveRecordingDiagnostics {
+    private enum CodingKeys: String, CodingKey {
+        case version, algorithmVersion, receivedPoints, acceptedPoints
+        case rejectedInvalid, rejectedAccuracy, rejectedStale, rejectedTime, rejectedSpeed
+        case droppedCapacity, droppedStationary, droppedThrottled, maxGapMs, gapCount, resumedCount
+        case platform, appVersion
+    }
+
+    init(from decoder: Decoder) throws {
+        self.init()
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        algorithmVersion = try values.decode(String.self, forKey: .algorithmVersion)
+        receivedPoints = try values.decode(Int.self, forKey: .receivedPoints)
+        acceptedPoints = try values.decode(Int.self, forKey: .acceptedPoints)
+        rejectedInvalid = try values.decode(Int.self, forKey: .rejectedInvalid)
+        rejectedAccuracy = try values.decode(Int.self, forKey: .rejectedAccuracy)
+        rejectedStale = try values.decode(Int.self, forKey: .rejectedStale)
+        rejectedTime = try values.decode(Int.self, forKey: .rejectedTime)
+        rejectedSpeed = try values.decode(Int.self, forKey: .rejectedSpeed)
+        droppedCapacity = try values.decode(Int.self, forKey: .droppedCapacity)
+        droppedStationary = try values.decode(Int.self, forKey: .droppedStationary)
+        droppedThrottled = try values.decode(Int.self, forKey: .droppedThrottled)
+        maxGapMs = try values.decode(Int.self, forKey: .maxGapMs)
+        gapCount = try values.decode(Int.self, forKey: .gapCount)
+        resumedCount = try values.decode(Int.self, forKey: .resumedCount)
+        platform = Self.normalizedPlatform(try? values.decode(String.self, forKey: .platform))
+        appVersion = Self.normalizedAppVersion(try? values.decode(String.self, forKey: .appVersion))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(version, forKey: .version)
+        try values.encode(algorithmVersion, forKey: .algorithmVersion)
+        try values.encode(receivedPoints, forKey: .receivedPoints)
+        try values.encode(acceptedPoints, forKey: .acceptedPoints)
+        try values.encode(rejectedInvalid, forKey: .rejectedInvalid)
+        try values.encode(rejectedAccuracy, forKey: .rejectedAccuracy)
+        try values.encode(rejectedStale, forKey: .rejectedStale)
+        try values.encode(rejectedTime, forKey: .rejectedTime)
+        try values.encode(rejectedSpeed, forKey: .rejectedSpeed)
+        try values.encode(droppedCapacity, forKey: .droppedCapacity)
+        try values.encode(droppedStationary, forKey: .droppedStationary)
+        try values.encode(droppedThrottled, forKey: .droppedThrottled)
+        try values.encode(maxGapMs, forKey: .maxGapMs)
+        try values.encode(gapCount, forKey: .gapCount)
+        try values.encode(resumedCount, forKey: .resumedCount)
+        try values.encodeIfPresent(Self.normalizedPlatform(platform), forKey: .platform)
+        try values.encodeIfPresent(Self.normalizedAppVersion(appVersion), forKey: .appVersion)
+    }
+}
+
 struct DriveSaveRequest: Equatable, Sendable {
     static let maximumTitleLength = 200
 
@@ -69,6 +205,7 @@ struct DriveSaveRequest: Equatable, Sendable {
     let points: [RecordedDrivePoint]
     let context: DriveRecordingContext
     let title: String?
+    var recordingDiagnostics: DriveRecordingDiagnostics? = nil
 
     var payload: [String: Any] {
         var result: [String: Any] = [
@@ -77,6 +214,7 @@ struct DriveSaveRequest: Equatable, Sendable {
             "sourceSessionId": context.sourceSessionId,
         ]
         if !points.isEmpty { result["routePoints"] = points.map(\.wireValue) }
+        if let recordingDiagnostics { result["recordingDiagnostics"] = recordingDiagnostics.wireValue }
         if let title = Self.normalizedTitle(title) { result["title"] = title }
         if let vehicleId = Self.nonBlank(context.vehicleId) { result["vehicleId"] = vehicleId }
         if let carImagePath = Self.nonBlank(context.carImagePath) {
@@ -142,18 +280,33 @@ struct DriveRecorder: Sendable {
     private(set) var context: DriveRecordingContext
     private(set) var points: [RecordedDrivePoint] = []
     private var acceptedDistanceMeters: Double = 0
+    private(set) var recordingDiagnostics = DriveRecordingDiagnostics()
+    private var lastReceiptUptime: TimeInterval?
 
-    init(startedAt: Date, context: DriveRecordingContext) {
+    init(startedAt: Date, context: DriveRecordingContext, appVersion: String? = nil) {
         self.startedAt = startedAt
         self.context = context
+        recordingDiagnostics.platform = "ios"
+        recordingDiagnostics.appVersion = DriveRecordingDiagnostics.normalizedAppVersion(appVersion)
         points.reserveCapacity(1_024)
     }
 
-    init(startedAt: Date, context: DriveRecordingContext, restoring restored: [RecordedDrivePoint]) {
+    init(startedAt: Date, context: DriveRecordingContext, restoring restored: [RecordedDrivePoint],
+         diagnostics: DriveRecordingDiagnostics? = nil) {
         self.init(startedAt: startedAt, context: context)
         for point in restored.prefix(Self.maximumRoutePoints) {
             _ = add(point)
         }
+        recordingDiagnostics = diagnostics.flatMap { $0.isValid ? $0 : nil }
+            ?? DriveRecordingDiagnostics()
+        // The local platform is known for a legacy iOS journal. Its original
+        // app version is unknown, so never substitute the version restoring it.
+        recordingDiagnostics.platform = DriveRecordingDiagnostics.normalizedPlatform(recordingDiagnostics.platform) ?? "ios"
+        recordingDiagnostics.appVersion = DriveRecordingDiagnostics.normalizedAppVersion(recordingDiagnostics.appVersion)
+        recordingDiagnostics.reconcile(acceptedCount: points.count)
+        DriveRecordingDiagnostics.increment(&recordingDiagnostics.resumedCount)
+        // A monotonic clock belongs to one process/boot epoch; never restore it.
+        lastReceiptUptime = nil
     }
 
     mutating func enrichContext(_ update: DriveRecordingContext) {
@@ -170,13 +323,55 @@ struct DriveRecorder: Sendable {
 
     @discardableResult
     mutating func add(_ fix: LocationFix) -> Bool {
-        guard points.count < Self.maximumRoutePoints,
-              let point = RecordedDrivePoint(fix: fix) else { return false }
-        // A parked fix still refreshes live sharing's heartbeat, but must not
-        // advance the route timestamp. Otherwise releasing a movement deadband
-        // turns several seconds of real movement into one false speed spike.
-        if let last = points.last, last.latitude == point.latitude, last.longitude == point.longitude { return false }
-        return add(point)
+        add(RecordingLocationEvent(decision: .accepted(fix),
+            receivedUptime: RecordingLocationEvent.receiptUptime))
+    }
+
+    @discardableResult
+    mutating func add(_ event: RecordingLocationEvent) -> Bool {
+        DriveRecordingDiagnostics.increment(&recordingDiagnostics.receivedPoints)
+        if event.receivedUptime.isFinite, event.receivedUptime >= 0 {
+            if let previous = lastReceiptUptime, event.receivedUptime > previous {
+                let gap = min(Double(DriveRecordingDiagnostics.maximumGapMs),
+                    (event.receivedUptime - previous) * 1_000)
+                let gapMs = Int(gap.rounded(.down))
+                recordingDiagnostics.maxGapMs = max(recordingDiagnostics.maxGapMs, gapMs)
+                if gapMs > 15_000 { DriveRecordingDiagnostics.increment(&recordingDiagnostics.gapCount) }
+            }
+            lastReceiptUptime = event.receivedUptime
+        }
+        guard case .accepted(let fix) = event.decision else {
+            if case .rejected(let reason) = event.decision { recordingDiagnostics.reject(reason) }
+            return false
+        }
+        guard let point = RecordedDrivePoint(fix: fix) else {
+            recordingDiagnostics.reject(.invalid)
+            return false
+        }
+        guard points.count < Self.maximumRoutePoints else {
+            DriveRecordingDiagnostics.increment(&recordingDiagnostics.droppedCapacity)
+            return false
+        }
+        // Held parked fixes remain useful to live sharing but never advance
+        // the route timestamp or create fictitious driving distance.
+        if let last = points.last, last.latitude == point.latitude, last.longitude == point.longitude {
+            DriveRecordingDiagnostics.increment(&recordingDiagnostics.droppedStationary)
+            return false
+        }
+        if let last = points.last {
+            let delta = Double(point.timestampMilliseconds - last.timestampMilliseconds) / 1_000
+            if delta <= 0 {
+                recordingDiagnostics.reject(.time)
+                return false
+            }
+            if delta < Self.minimumSampleInterval {
+                DriveRecordingDiagnostics.increment(&recordingDiagnostics.droppedThrottled)
+                return false
+            }
+        }
+        guard add(point) else { return false }
+        DriveRecordingDiagnostics.increment(&recordingDiagnostics.acceptedPoints)
+        return true
     }
 
     @discardableResult
@@ -214,7 +409,8 @@ struct DriveRecorder: Sendable {
             endedAt: effectiveEnd,
             points: points,
             context: context,
-            title: title
+            title: title,
+            recordingDiagnostics: recordingDiagnostics
         )
     }
 

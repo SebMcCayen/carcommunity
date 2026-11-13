@@ -208,6 +208,17 @@ final class CrownHuntMapCoordinator {
         claimStatus = .idle
     }
 
+    func selectedProximity(now: Date = Date()) -> CrownProximity? {
+        guard let selectedTarget, let fix = tracker.latest(now: now) else { return nil }
+        return CrownProximity(
+            distanceMeters: CrownGeo.distanceMeters(
+                latitude: fix.latitude, longitude: fix.longitude,
+                toLatitude: selectedTarget.latitude, toLongitude: selectedTarget.longitude
+            ),
+            collectRadiusMeters: selectedTarget.collectRadiusMeters
+        )
+    }
+
     func collectState(now: Date = Date()) -> CrownCollectState {
         guard let selectedTarget else { return .noPosition }
         switch selectedTarget {

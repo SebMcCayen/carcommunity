@@ -466,6 +466,10 @@
 		FF5DAD303A0C20F13A16B67D /* changelog.json in Resources */ = {isa = PBXBuildFile; fileRef = 18ACC38A3554DF9334B4815F /* changelog.json */; };
 		FFAF1EAA160AFCF84E155B6C /* EventAttendeesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B00397E45AB94249025E8C0 /* EventAttendeesSheet.swift */; };
 		FFC620D8B53E1BB6BFEBB181 /* EventChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B12FAC506B254D502CA6177 /* EventChatRepository.swift */; };
+		0A0C391B05A652E757C86653 /* RoadCameraModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D5D5A988139AB7F72BA43D6 /* RoadCameraModels.swift */; };
+		0C0B70A94F922ECEF2D3BFC2 /* RoadCameraRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68867B1F8371B73CDAC53371 /* RoadCameraRepository.swift */; };
+		0DBC0CD129EF3650A023A8AC /* RoadCameraMapViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D775E72CE51AF1ECDF1B9A3 /* RoadCameraMapViews.swift */; };
+		80F78BD5E87FE23683BD6879 /* RoadCameraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0EE700B8A20D10EA08CDD5F /* RoadCameraTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -939,6 +943,10 @@
 		FEA57282CD5C314FBB90F9E5 /* PointsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsModels.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
 		FFB6A2C05BDF69FB106D0F24 /* SubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
+		3D5D5A988139AB7F72BA43D6 /* RoadCameraModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraModels.swift; sourceTree = "<group>"; };
+		68867B1F8371B73CDAC53371 /* RoadCameraRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraRepository.swift; sourceTree = "<group>"; };
+		3D775E72CE51AF1ECDF1B9A3 /* RoadCameraMapViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraMapViews.swift; sourceTree = "<group>"; };
+		A0EE700B8A20D10EA08CDD5F /* RoadCameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1418,6 +1426,9 @@
 		711475B94ECFF2E22A12ACAA /* Incidents */ = {
 			isa = PBXGroup;
 			children = (
+				3D775E72CE51AF1ECDF1B9A3 /* RoadCameraMapViews.swift */,
+				68867B1F8371B73CDAC53371 /* RoadCameraRepository.swift */,
+				3D5D5A988139AB7F72BA43D6 /* RoadCameraModels.swift */,
 				CDEB2AB98D1A071F70D7F572 /* ConfiglessMapMarkerFixture.swift */,
 				387F13C825FDF70BA38790DC /* IncidentMapCoordinator.swift */,
 				AC6C2165A841972B460CD850 /* IncidentMapViews.swift */,
@@ -1682,6 +1693,7 @@
 		F609A800CAF387D91FC4893D /* KCCTests */ = {
 			isa = PBXGroup;
 			children = (
+				A0EE700B8A20D10EA08CDD5F /* RoadCameraTests.swift */,
 				C28CE13BEF75D9EF55AF614C /* AccountAccessTests.swift */,
 				D763F1BD23666E2332D73FB3 /* AccountDeletionTests.swift */,
 				A96B2F50FBACFA6329286FC2 /* AppleSignInProviderTests.swift */,
@@ -2021,6 +2033,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0DBC0CD129EF3650A023A8AC /* RoadCameraMapViews.swift in Sources */,
+				0C0B70A94F922ECEF2D3BFC2 /* RoadCameraRepository.swift in Sources */,
+				0A0C391B05A652E757C86653 /* RoadCameraModels.swift in Sources */,
 				CC7614CE72EA5A6B00F14FF4 /* AccountAccess.swift in Sources */,
 				91F36640DE0946C3FFE135EC /* AccountAccessRepository.swift in Sources */,
 				D1B7BD57517D10D95E1B826E /* AccountDeletionCoordinator.swift in Sources */,
@@ -2352,6 +2367,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				80F78BD5E87FE23683BD6879 /* RoadCameraTests.swift in Sources */,
 				9B07DF2A2216686205CE0EE5 /* AccountAccessTests.swift in Sources */,
 				1FF6ACAA1D6E4A22FC0044C5 /* AccountDeletionTests.swift in Sources */,
 				5FA58398E128DF16EFBBCEBF /* AppStoreCatalogTests.swift in Sources */,

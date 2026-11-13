@@ -47,6 +47,11 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         private var started: [String] = []
         private var finished: [String] = []
         private var cancelled: [String] = []
+        private let onReady: @Sendable (GatedUploadRepository, String) -> Void
+
+        init(onReady: @escaping @Sendable (GatedUploadRepository, String) -> Void = { _, _ in }) {
+            self.onReady = onReady
+        }
 
         func save(_ request: DriveSaveRequest) async throws -> DriveSaveResult {
             let sessionId = request.context.sourceSessionId
@@ -58,15 +63,20 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         }
 
         func uploadRoute(_ points: [RecordedDrivePoint], to path: String) async throws {
-            lock.withLock { started.append(path) }
             do {
                 try await withTaskCancellationHandler {
                     try await withCheckedThrowingContinuation { continuation in
                         let cancelImmediately = lock.withLock {
+                            // Publish readiness atomically with the gate. A test
+                            // observing startedPaths may immediately release it.
+                            // Publishing first used to lose that release when
+                            // this worker was descheduled before installation.
+                            started.append(path)
                             if cancellationRequested.contains(path) { return true }
                             continuations[path] = continuation
                             return false
                         }
+                        onReady(self, path)
                         if cancelImmediately {
                             continuation.resume(throwing: CancellationError())
                         }
@@ -480,6 +490,21 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         XCTAssertEqual(provider.activeFixStreamCount, 0)
     }
 
+    func testUploadReadinessCanBeReleasedBeforeTheUploaderSuspends() async {
+        // Synchronously release the moment readiness is published. This covers
+        // the scheduling window behind the consecutive-upload CI failure without
+        // depending on a lucky worker preemption or an arbitrary delay.
+        let repository = GatedUploadRepository(onReady: { repository, path in repository.release(path) })
+        let path = "rideRoutes/u/ready-gate/route.bin"
+        let upload = Task {
+            try await repository.uploadRoute([point(Date(timeIntervalSince1970: 1_700_000_000), offset: 0)], to: path)
+        }
+        defer { upload.cancel() }
+        await waitUntil { repository.finishedPaths() == [path] }
+        XCTAssertEqual(repository.startedPaths(), [path])
+        XCTAssertEqual(repository.cancelledPaths(), [])
+    }
+
     func testConsecutiveDriveUploadsBothFinishWithoutCancellingEarlierUpload() async {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let provider = StubLocationProvider(authorization: .whileInUse)
@@ -673,6 +698,64 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         resumed.reset()
     }
 
+    func testRejectedRecordingEventsReachSaveAndRetriesKeepTheSameDiagnostics() async throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clock = Clock(start)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let repository = FakeRepository()
+        repository.failures = [KccFunctionsError(code: .unavailable)]
+        let coordinator = makeCoordinator(repository, provider, clock)
+        coordinator.start(context: context())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitRecordingEvent(RecordingLocationEvent(decision: .accepted(fix(start, offset: 0)),
+            receivedUptime: 100))
+        provider.emitRecordingEvent(RecordingLocationEvent(decision: .rejected(.accuracy), receivedUptime: 120))
+        provider.emitRecordingEvent(RecordingLocationEvent(decision: .accepted(
+            fix(start, offset: 30, latitude: 57.0001)), receivedUptime: 130))
+        await waitUntil { coordinator.state.summary?.pointCount == 2 }
+        clock.value = start.addingTimeInterval(40)
+        coordinator.endSession(context: context())
+        await waitUntil { repository.requests.count == 2 }
+        let first = try XCTUnwrap(repository.requests.first)
+        XCTAssertEqual(first, repository.requests[1])
+        XCTAssertEqual(first.recordingDiagnostics?.receivedPoints, 3)
+        XCTAssertEqual(first.recordingDiagnostics?.acceptedPoints, 2)
+        XCTAssertEqual(first.recordingDiagnostics?.rejectedAccuracy, 1)
+        XCTAssertEqual(first.recordingDiagnostics?.gapCount, 1)
+        XCTAssertEqual(first.points.count, 2)
+        coordinator.reset()
+    }
+
+    func testRecordingVersionIsCheckpointedBeforeFirstFixAndPreservedAfterAppUpgrade() async throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let journal = FileDriveRecordingJournal(fileURL: directory.appendingPathComponent("active.routejournal"))
+        let repository = FakeRepository()
+        let original = DriveRecordingCoordinator(repository: repository,
+            provider: StubLocationProvider(authorization: .whileInUse), journal: journal,
+            recordingAppVersion: "1.2.3", now: { start })
+        original.start(context: context())
+        let checkpoint = try XCTUnwrap(journal.restore(sessionId: context().sourceSessionId))
+        XCTAssertEqual(checkpoint.recordingDiagnostics?.platform, "ios")
+        XCTAssertEqual(checkpoint.recordingDiagnostics?.appVersion, "1.2.3")
+        XCTAssertEqual(checkpoint.points.count, 0)
+
+        // A new process reads the persisted file after the installed app changed.
+        let resumed = DriveRecordingCoordinator(repository: repository,
+            provider: StubLocationProvider(authorization: .whileInUse), journal: journal,
+            recordingAppVersion: "2.0.0", now: { start.addingTimeInterval(60) })
+        resumed.start(context: context())
+        resumed.endSession(context: context())
+        await waitUntil { repository.requests.count == 1 }
+        XCTAssertEqual(repository.requests.first?.recordingDiagnostics?.platform, "ios")
+        XCTAssertEqual(repository.requests.first?.recordingDiagnostics?.appVersion, "1.2.3")
+        XCTAssertEqual(repository.requests.first?.recordingDiagnostics?.resumedCount, 1)
+        original.reset()
+        resumed.reset()
+    }
+
     private func makeCoordinator(
         _ repository: FakeRepository,
         _ provider: StubLocationProvider,
@@ -723,13 +806,15 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
 
     private func waitUntil(
         _ predicate: @escaping @MainActor () -> Bool,
-        attempts: Int = 2_000
+        attempts: Int = 2_000,
+        file: StaticString = #filePath,
+        line: UInt = #line
     ) async {
         for _ in 0..<attempts {
             if predicate() { return }
             await Task.yield()
         }
-        XCTFail("condition not reached")
+        XCTFail("condition not reached", file: file, line: line)
     }
 
     private final class Clock: @unchecked Sendable {

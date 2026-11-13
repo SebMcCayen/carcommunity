@@ -67,6 +67,10 @@ fun NotificationsRoute(
     // the chat hub no longer embeds the inbox.
     showTitle: Boolean = true,
 ) {
+    androidx.compose.runtime.DisposableEffect(coordinator) {
+        coordinator?.setInboxVisible(true)
+        onDispose { coordinator?.setInboxVisible(false) }
+    }
     val scope = rememberCoroutineScope()
     val serverState by
         remember(repository, uid) { repository.observeNotifications(uid) }

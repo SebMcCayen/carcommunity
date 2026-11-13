@@ -15,10 +15,8 @@
  *  - Prices are captured from the public pricing pages; GCP bills in USD, so
  *    the USD→SEK rate is a single dated constant (see FX below) that the whole
  *    model runs through. Update the rate here and the entire board re-prices.
- *  - Where a regional SKU (europe-west1) may differ from the figure captured,
- *    that is flagged in the comment. When in doubt the model rounds toward the
- *    published us-central1 / standard number and says so — never invents a
- *    lower one to make the board look cheaper.
+ *  - Google Cloud rates match the deployed europe-west1 configuration and its
+ *    actual billing SKUs. Free quota scope and reset period are explicit.
  *
  * HOW TO MAINTAIN
  * ---------------
@@ -36,11 +34,13 @@ export type CaptureDate = string;
  * board converts through. Labelled "as of" on the page so it is obvious it is
  * a snapshot the reader may need to refresh.
  *
- * Source: US Federal Reserve H.10 / xe.com spot, USD→SEK.
- * Captured 2026-07-30: 1 USD ≈ 9.71 SEK (July 2026 ranged ~9.65–9.76).
+ * Source: Google Cloud Billing Catalog, Standard Storage Belgium SKU
+ * A703-5CB6-E0BF, currencyCode=SEK, effective 2026-11-12T08:00:00Z.
+ * currencyConversionRate = 9.93094999997794. This is the catalog conversion
+ * used for the Google Cloud estimate, not a live bank/card exchange quote.
  */
-export const USD_TO_SEK = 9.71;
-export const USD_TO_SEK_CAPTURED_ON: CaptureDate = '2026-07-30';
+export const USD_TO_SEK = 9.93095;
+export const USD_TO_SEK_CAPTURED_ON: CaptureDate = '2026-11-12';
 
 /**
  * Average days per month (365.25 / 12). Firestore free tiers are DAILY, so the
@@ -55,20 +55,19 @@ export const BYTES_PER_GIB = 1024 ** 3;
 
 // ---------------------------------------------------------------------------
 // Cloud Firestore — Standard edition.
-// Prices below are the published Standard-edition figures (us-central1 baseline
-// as shown on cloud.google.com/firestore/pricing, captured 2026-07-31).
-// europe-west1 regional SKUs may differ slightly; verify before treating any
-// figure as exact. Free tiers are DAILY and shared across ALL Firestore usage.
+// Standard edition, default database in europe-west1. Free tiers are DAILY
+// and shared across all database usage. Automatic TTL deletes have no free tier.
 // ---------------------------------------------------------------------------
 export const FIRESTORE = {
-  capturedOn: '2026-07-31' as CaptureDate,
-  source: 'cloud.google.com/firestore/pricing (Standard edition, us-central1)',
+  capturedOn: '2026-11-12' as CaptureDate,
+  source: 'https://cloud.google.com/firestore/pricing (Standard, europe-west1)',
   /** USD per document read. $0.03 / 100,000. */
   readUsd: 0.03 / 100_000,
   /** USD per document write. $0.09 / 100,000. */
   writeUsd: 0.09 / 100_000,
   /** USD per document delete. $0.01 / 100,000. */
   deleteUsd: 0.01 / 100_000,
+  ttlDeleteUsd: 0.01 / 100_000,
   /** USD per GiB stored per month. */
   storageGiBMonthUsd: 0.15,
   /** Free tier — per DAY (shared across all Firestore usage). */
@@ -82,76 +81,87 @@ export const FIRESTORE = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Cloud Functions (2nd gen). Free tier is MONTHLY.
-// Source: firebase.google.com/pricing (Blaze), captured 2026-07-31.
+// Cloud Functions gen2 / Cloud Run request-based billing in europe-west1.
+// Source: https://cloud.google.com/run/pricing, captured 2026-11-12.
+// Free allowances are shared per billing account; do not apply them per job.
 // ---------------------------------------------------------------------------
 export const FUNCTIONS = {
-  capturedOn: '2026-07-31' as CaptureDate,
-  source: 'firebase.google.com/pricing (Cloud Functions, Blaze)',
+  capturedOn: '2026-11-12' as CaptureDate,
+  source: 'https://cloud.google.com/run/pricing (request-based, europe-west1)',
   /** USD per invocation. $0.40 / 1,000,000. */
   invocationUsd: 0.4 / 1_000_000,
-  /** USD per GB-second of memory time. */
-  gbSecondUsd: 0.0000025,
-  /** USD per GHz-second (vCPU) of compute time. */
-  ghzSecondUsd: 0.00001,
-  /** USD per GB outbound networking (egress). */
-  egressGbUsd: 0.12,
+  /** USD per GiB-second of memory time. */
+  gibSecondUsd: 0.0000025,
+  /** USD per allocated vCPU-second, not GHz-second. */
+  vcpuSecondUsd: 0.000024,
+  /** Europe-to-Europe internet egress, USD/GiB. */
+  egressGiBUsd: 0.12,
   /** Free tier — per MONTH. */
   free: {
     invocationsPerMonth: 2_000_000,
-    gbSecondsPerMonth: 400_000,
-    ghzSecondsPerMonth: 200_000,
-    egressGbPerMonth: 5,
+    gibSecondsPerMonth: 360_000,
+    vcpuSecondsPerMonth: 180_000,
+    // The North America internet transfer allowance does not cover Belgium.
+    egressGiBPerMonth: 0,
   },
 } as const;
 
 // ---------------------------------------------------------------------------
-// Realtime Database (live location). Free tier: 1 GB stored, 10 GB/mo download.
-// Source: firebase.google.com/pricing (Realtime Database, Blaze).
+// Realtime Database Blaze. Catalog service 1C58-CF90-9614, SKUs
+// 04F2-6383-80BD (download) / 6BC9-D757-743E (storage), 2026-11-12.
+// Downloads are billed in GiB with a DAILY 360 MiB allowance, not a monthly pool.
 // ---------------------------------------------------------------------------
 export const RTDB = {
-  capturedOn: '2026-07-31' as CaptureDate,
-  source: 'firebase.google.com/pricing (Realtime Database, Blaze)',
-  /** USD per GB stored per month. */
-  storageGbMonthUsd: 5,
-  /** USD per GB downloaded. */
-  downloadGbUsd: 1,
+  capturedOn: '2026-11-12' as CaptureDate,
+  source: 'https://firebase.google.com/pricing (Realtime Database Blaze; Cloud Billing catalog)',
+  storageGiBMonthUsd: 5,
+  downloadGiBUsd: 1,
   free: {
-    storageGb: 1,
-    /** ~360 MB/day ≈ 10 GB/month. */
-    downloadGbPerMonth: 10,
+    storageGiB: 1,
+    downloadGiBPerDay: 360 / 1024,
   },
 } as const;
 
 // ---------------------------------------------------------------------------
 // Cloud Storage for Firebase (member images). Default *.firebasestorage.app
-// bucket bills on Cloud Storage pricing (Standard class, US).
-// Source: firebase.google.com/pricing + cloud.google.com/storage/pricing.
+// bucket: europe-west1, legacy REGIONAL class. Verified against the actual
+// billed SKUs in Cloud Billing Catalog service 95FF-2EF5-5EA1, 2026-11-12.
+// A703-5CB6-E0BF: Belgium storage $0.02/GiB-month, NO storage allowance.
+// 22EB-AAE8-FBCD: download has a 100 GiB/month zero-price tier.
+// 4DBF-185F-A415 / 7870-010B-2763: first 5k class A / 50k class B free.
+// These legacy REGIONAL SKU tiers must not be confused with the Standard
+// bucket Always Free program, whose eligibility is limited to US regions.
 // ---------------------------------------------------------------------------
 export const STORAGE = {
-  capturedOn: '2026-07-31' as CaptureDate,
-  source: 'firebase.google.com/pricing (Cloud Storage for Firebase, Blaze)',
-  /** USD per GB stored per month (Standard class). */
-  storageGbMonthUsd: 0.026,
-  /** USD per GB downloaded (egress). */
-  downloadGbUsd: 0.12,
+  capturedOn: '2026-11-12' as CaptureDate,
+  source: 'https://cloud.google.com/storage/pricing; Cloud Billing catalog 95FF-2EF5-5EA1',
+  storageGiBMonthUsd: 0.02,
+  downloadTiers: [
+    { upTo: 100, usdPerUnit: 0 },
+    { upTo: 1024, usdPerUnit: 0.12 },
+    { upTo: 10240, usdPerUnit: 0.11 },
+    { upTo: Infinity, usdPerUnit: 0.08 },
+  ],
+  uploadUsd: 0.005 / 1_000,
+  downloadOperationUsd: 0.0004 / 1_000,
   free: {
-    storageGb: 5,
-    downloadGbPerMonth: 100,
+    storageGiB: 0,
+    downloadGiBPerMonth: 100,
     uploadsPerMonth: 5_000,
     downloadOpsPerMonth: 50_000,
   },
 } as const;
 
 // ---------------------------------------------------------------------------
-// Cloud Scheduler. Billed per JOB, not per execution: $0.10 / job / month.
-// 3 jobs free PER BILLING ACCOUNT. Source: cloud.google.com/scheduler/pricing.
+// Cloud Scheduler: $0.10 per 31 job-days; first 93 job-days/month free per
+// billing account (3 jobs x 31 days). Paused jobs are still charged.
+// Source: https://cloud.google.com/scheduler/pricing, 2026-11-12.
 // ---------------------------------------------------------------------------
 export const SCHEDULER = {
-  capturedOn: '2026-07-31' as CaptureDate,
-  source: 'cloud.google.com/scheduler/pricing',
-  usdPerJobPerMonth: 0.1,
-  freeJobs: 3,
+  capturedOn: '2026-11-12' as CaptureDate,
+  source: 'https://cloud.google.com/scheduler/pricing',
+  usdPerJobDay: 0.1 / 31,
+  freeJobDaysPerMonth: 93,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -160,7 +170,7 @@ export const SCHEDULER = {
 // secret-manager/pricing.
 // ---------------------------------------------------------------------------
 export const SECRET_MANAGER = {
-  capturedOn: '2026-07-31' as CaptureDate,
+  capturedOn: '2026-11-12' as CaptureDate,
   source: 'cloud.google.com/secret-manager/pricing',
   usdPerActiveVersionPerMonth: 0.06,
   usdPerAccessOp: 0.03 / 10_000,

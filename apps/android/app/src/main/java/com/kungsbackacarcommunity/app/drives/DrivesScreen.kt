@@ -1013,6 +1013,7 @@ fun SavedDriveDetailScreen(
     // Owner uid, checked against current auth before the authorized callable read.
     uid: String? = null,
     routeMapRenderer: DriveRouteMapRenderer = MapboxDriveRouteMapRenderer,
+    onReportProblem: (() -> Unit)? = null,
 ) {
     var showConfirm by remember(drive.rideId, uid) { mutableStateOf(false) }
     // Whether the full-screen, zoomable route popup is open. Reset per drive so a
@@ -1178,6 +1179,12 @@ fun SavedDriveDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(text = stringResource(R.string.savedDrives_shareAction))
+            }
+
+            if (onReportProblem != null) {
+                OutlinedButton(onClick = onReportProblem, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.savedDrives_reportProblem))
+                }
             }
 
             Button(

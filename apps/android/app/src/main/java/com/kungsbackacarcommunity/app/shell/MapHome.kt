@@ -40,10 +40,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Satellite
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Place
@@ -52,7 +50,6 @@ import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Stop
@@ -281,23 +278,11 @@ fun MapHome(
     // not wire incidents show no credit.
     trafikverketDataShown: Boolean = false,
     /**
-     * The shell-owned holder for the manual day/night override (null inside it =
-     * follow the app theme).
-     *
-     * Supplied by the shell so the user's choice outlives this composable, which
-     * is disposed whenever a full-screen route opens — see the detailed note at
-     * the usage site. Passed as the state holder rather than a value + callback
-     * so callers that don't hoist keep working with local state instead of
-     * getting an inert toggle.
-     */
-    nightModeOverrideState: MutableState<MapMode?>? = null,
-    /**
      * The shell-owned holder for the compass orientation (north-up vs course-up).
      *
      * Supplied by the shell — seeded from [CompassModePreferenceStore] and
-     * written back on every change — for the SAME reason [nightModeOverrideState]
-     * is hoisted: opening a full-screen route disposes MapHome, so a choice held
-     * only in a local `rememberSaveable` here would be dropped on the way back
+     * written back on every change: opening a full-screen route disposes MapHome,
+     * so a choice held only in a local `rememberSaveable` here would be dropped on the way back
      * (and, without a store, would not survive a cold restart at all). Hoisting it
      * to the shell (which outlives the route switch) and backing it with the store
      * makes the pick stick across navigation AND process death.
@@ -309,6 +294,7 @@ fun MapHome(
     compassModeState: MutableState<MapCompassMode>? = null,
     // Session chrome docks above the persistent footer (catalogue S16).
     liveSessionBar: (@Composable () -> Unit)? = null,
+    onSessionDockHeightChanged: (Int) -> Unit = {},
     // Full-width convoy controls join the bottom session dock only while active.
     convoyBar: (@Composable () -> Unit)? = null,
     // Optional convoy awareness layer (member markers + off-screen direction
@@ -414,74 +400,10 @@ fun MapHome(
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
     }
 
-    // Day/night follows the APP theme by default: on open the map matches the
-    // theme the app is rendering, and it live-updates if that theme changes while
-    // the app is open — either because the user picked a different Appearance
-    // setting, or, on the Automatic setting, because the system flipped (e.g.
-    // Android's scheduled sunset->sunrise dark theme). Once the user flips
-    // day/night manually in the layers popup, [desiredMapMode] holds their
-    // explicit choice (non-null) and this effect applies it instead of the theme
-    // default for the rest of the session. While [desiredMapMode] is null the map
-    // follows [systemDefaultMode] — named for the pre-preference behaviour it
-    // originally had, but now derived from the resolved app theme.
-    // Keyed on mapSurface too (mirrors the setUserMarker effect above) so the
-    // *effective* mode is re-applied if the surface instance is swapped (e.g.
-    // StubMapSurface -> a real Mapbox-backed surface); a fresh surface starts at
-    // its default MapMode, so without this key it would keep that default —
-    // dropping the user's manual override — until the theme changed or the user
-    // toggled manually again. Applying the effective mode here means the manual
-    // choice survives a surface swap.
-    //
-    // The user's manual day/night override, or null while the map follows the
-    // app theme.
-    //
-    // HOISTED when [nightModeOverrideState] is supplied, and that hoisting is a
-    // BUG FIX, not a refactor. Holding this state inside MapHome made the
-    // override survive rotation (rememberSaveable) but NOT navigation: the
-    // shell composes MapHome in the `else` branch of its route switch, so
-    // opening any full-screen route (Settings, Garage, Events, a chat...)
-    // removes MapHome from the composition entirely. rememberSaveable only
-    // survives recreation of the SAME composition slot — it is discarded on
-    // disposal, with no SaveableStateHolder here to retain it — so coming back
-    // from a route reset the override to null and the effect below immediately
-    // snapped the map to [systemDefaultMode]. Whenever the resolved theme is dark
-    // — which, before the Appearance setting existed, simply meant the device was
-    // on dark — that read as "the map keeps switching itself back to Night mode as
-    // I navigate around the app", which is exactly the reported bug. Owned by the shell
-    // (which outlives the route switch), the choice now sticks.
-    //
-    // Callers that don't hoist (previews, UI tests) fall back to local state and
-    // behave exactly as before, so the toggle still works in isolation.
-    val desiredMapModeState =
-        nightModeOverrideState
-            // Still rememberSaveable for the un-hoisted case: survives rotation
-            // / activity recreation. MapMode is a simple enum, so a name-based
-            // Saver stores the nullable value.
-            ?: rememberSaveable(
-                stateSaver = Saver(
-                    save = { it?.name },
-                    // SAFE parse: MapMode.valueOf(...) THROWS on an unknown constant name —
-                    // e.g. after an app update that renames/removes an enum value, or
-                    // corrupted saved state — which would crash activity recreation.
-                    // entries.find returns null for an unknown name (falls back to
-                    // "follow the app theme") instead of throwing.
-                    restore = { saved -> (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } } },
-                ),
-            ) { mutableStateOf<MapMode?>(null) }
-    var desiredMapMode by desiredMapModeState
-
-    // Follows the APP theme, not the raw system setting: with an explicit
-    // Light/Dark preference (Settings -> Appearance) the map's default day/night
-    // must match the app the user chose, otherwise picking Light in bright
-    // sunshine would still leave a night-styled map. LocalKccDarkTheme is the
-    // resolved value KccTheme is actually rendering with, which equals
-    // isSystemInDarkTheme() when the preference is Automatic — so the original
-    // "live-follow the system sunset->sunrise flip" behaviour is unchanged on
-    // the default setting.
+    // One app-wide choice drives the palette, system bars and both map surfaces.
     val appInDark = LocalKccDarkTheme.current
-    val systemDefaultMode = if (appInDark) MapMode.Night else MapMode.Day
-    LaunchedEffect(mapSurface, appInDark, desiredMapMode) {
-        mapSurface.setMapMode(desiredMapMode ?: systemDefaultMode)
+    LaunchedEffect(mapSurface, appInDark) {
+        mapSurface.setMapMode(if (appInDark) MapMode.Night else MapMode.Day)
     }
 
     // Compass orientation: course-up (default — the map follows the user's
@@ -509,7 +431,7 @@ fun MapHome(
     var compassMode by compassModeStateResolved
 
     // Keep the surface's follow orientation in sync with the chosen mode (mirrors
-    // the day/night desiredMapMode effect). Keyed on mapSurface too so a surface
+    // the app-theme effect). Keyed on mapSurface too so a surface
     // swap (Stub -> real Mapbox) re-applies the saved mode. setCompassMode is a
     // no-op when the mode is unchanged; a fresh surface starts north-up, so on the
     // course-up default this eases the camera into course-up on open (the intended
@@ -524,8 +446,11 @@ fun MapHome(
     // "Traffic alerts" layer is enabled. When it is off we push an empty set so
     // the surface clears the markers (and the Trafikverket attribution hides),
     // giving the toggle a real on/off effect on the map.
-    LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled) {
-        mapSurface.setIncidentMarkers(if (incidentsLayerEnabled) incidentMarkers else emptyList())
+    val roadCameraLayers = com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current
+    val roadCameraViewport by mapSurface.cameraSnapshot.collectAsState()
+    val roadCameraMarkers = roadCameraLayers?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude).orEmpty()
+    LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled, roadCameraMarkers) {
+        mapSurface.setIncidentMarkers((if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers)
     }
 
     // Push the community event pins onto the surface whenever they change (or the
@@ -593,9 +518,6 @@ fun MapHome(
     // layers sheet is not something a user expects to find waiting on their next
     // visit to the map. So the old behaviour is restored explicitly.
     //
-    // Deliberately NOT reset: `desiredMapMode` (the manual day/night override).
-    // That IS a preference — it is rememberSaveable precisely so it survives
-    // process death, so a tab switch must not drop it.
     LaunchedEffect(covered) {
         if (covered) {
             searchExpanded = false
@@ -767,18 +689,10 @@ fun MapHome(
                             modifier = Modifier.testTag(MAP_HOME_REPORT_TAG),
                         )
 
-                    // Map-layers control — opens the transparent layers popup
-                    // (alerts / traffic / day-night / 3D toggles). Highlighted
-                    // while any of those non-default layers is active, so an
-                    // enabled overlay is still discoverable from the collapsed
-                    // control. Day/night counts as "active" only when the user has
-                    // manually DEVIATED from the system default (desiredMapMode set
-                    // AND different from the theme default) — a system-driven
-                    // default Night (dark theme, untouched) must NOT light it up.
+                    // Highlight when a non-default map layer is active.
                     MapCircleControlKind.Layers -> {
                         val layersActive =
                             trafficOn || basemap == MapBasemap.Satellite ||
-                                (desiredMapMode != null && desiredMapMode != systemDefaultMode) ||
                                 !is3d
                         CircleControl(
                             icon = Icons.Filled.Layers,
@@ -850,9 +764,12 @@ fun MapHome(
         }
 
         if (!searchExpanded && (liveSessionBar != null || convoyBar != null)) {
+            androidx.compose.runtime.DisposableEffect(Unit) {
+                onDispose { onSessionDockHeightChanged(0) }
+            }
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .onSizeChanged { bottomChromeHeightPx = it.height }
+                    .onSizeChanged { bottomChromeHeightPx = it.height; onSessionDockHeightChanged(it.height) }
                     .testTag("map_home_session_dock")
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -945,35 +862,13 @@ fun MapHome(
                 trafficOn = trafficOn,
                 basemap = basemap,
                 onBasemapChange = mapSurface::setBasemap,
-                // Drive the night Switch off the IMMEDIATE user intent (the
-                // effective desired mode) rather than the SURFACE's mapMode, which
-                // only updates after the LaunchedEffect runs and the surface flow
-                // re-emits. onNightModeChange sets [desiredMapMode] synchronously,
-                // so the Switch flips at once instead of snapping back / jittering
-                // while it waits for the surface to catch up.
-                nightMode = (desiredMapMode ?: systemDefaultMode) == MapMode.Night,
                 is3d = is3d,
                 onTrafficChange = { mapSurface.setTrafficEnabled(it) },
-                onNightModeChange = {
-                    // A manual flip records the user's explicit choice in
-                    // [desiredMapMode]; the system-follow effect above then applies
-                    // this mode (instead of the theme default) for the rest of the
-                    // session — and re-applies it if the surface instance is swapped.
-                    val mode = if (it) MapMode.Night else MapMode.Day
-                    desiredMapMode = mode
-                    // Apply immediately so the map restyles on the same frame the
-                    // user toggles, instead of waiting for the system-follow effect
-                    // coroutine to re-run; that effect stays idempotent and simply
-                    // re-applies this same mode when it next runs.
-                    mapSurface.setMapMode(mode)
-                },
                 on3dChange = { mapSurface.set3dEnabled(it) },
                 // Resting-zoom preference: the popup shows the current value and
                 // commits a new one on release, which persists it and applies it to
                 // the map (the LaunchedEffect above pushes it to the surface).
                 browsingZoom = mapZoomController.browsingZoom,
-                followsTheme = desiredMapMode == null,
-                onFollowTheme = { desiredMapMode = null; mapSurface.setMapMode(systemDefaultMode) },
                 onBrowsingZoomChange = { mapZoomController.setBrowsingZoom(it) },
                 // Trafikverket alert max-age filter: the popup shows the current
                 // choice and commits a new one, which persists it and re-filters the
@@ -1028,7 +923,7 @@ const val MAP_HOME_LAYERS_POPUP_TAG = "map_home_layers_popup"
 /** Test tag on the incidents ("Traffic alerts") layer toggle switch. */
 const val MAP_HOME_LAYERS_INCIDENTS_TAG = "map_home_layers_incidents"
 
-/** Stable test tag on the explicitly selected Night appearance chip. */
+/** Stable test tag on the Night theme option. */
 const val MAP_HOME_LAYERS_NIGHT_TAG = "map_home_layers_night"
 
 /** Test tag on the Kronjakt ("Crown Hunt") participation toggle switch. */
@@ -1051,8 +946,7 @@ const val MAP_HOME_LIVE_POPUP_TAG = "map_home_live_popup"
  *   clears the markers as it flips ([onIncidentsChange]).
  * - Traffic — the Mapbox congestion overlay ([MapSurface.setTrafficEnabled]);
  *   a DIFFERENT data source from the Trafikverket alerts above.
- * - Appearance — Day, Night or following the app theme
- *   ([MapSurface.setMapMode]).
+ * - App theme — Day, Night or Automatic with a configurable daily schedule.
  * - 3D buildings — the tilted 3D vs flat 2D camera ([MapSurface.set3dEnabled]).
  *
  * The visible effects (incident markers, congestion lines, light preset, tilt)
@@ -1065,10 +959,8 @@ internal fun MapLayersPopup(
     onIncidentsChange: (Boolean) -> Unit,
     trafikverketDataShown: Boolean,
     trafficOn: Boolean,
-    nightMode: Boolean,
     is3d: Boolean,
     onTrafficChange: (Boolean) -> Unit,
-    onNightModeChange: (Boolean) -> Unit,
     on3dChange: (Boolean) -> Unit,
     browsingZoom: Double,
     onBrowsingZoomChange: (Double) -> Unit,
@@ -1079,8 +971,6 @@ internal fun MapLayersPopup(
     crownHuntUnlocked: Boolean = true,
     onUpgradeCrownHunt: () -> Unit = {},
     onDismiss: () -> Unit,
-    followsTheme: Boolean = false,
-    onFollowTheme: (() -> Unit)? = null,
     basemap: MapBasemap = MapBasemap.Standard,
     onBasemapChange: ((MapBasemap) -> Unit)? = null,
 ) {
@@ -1127,6 +1017,23 @@ internal fun MapLayersPopup(
             onCheckedChange = onIncidentsChange,
             switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
         )
+        com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current?.let { cameras ->
+            com.kungsbackacarcommunity.app.roadcameras.RoadCameraType.entries.forEach { type ->
+                LayerToggleRow(
+                    label = stringResource(com.kungsbackacarcommunity.app.roadcameras.cameraLabel(type)),
+                    supportingText = stringResource(R.string.roadCameras_layerHelp),
+                    leading = { com.kungsbackacarcommunity.app.roadcameras.RoadCameraBadge(type) },
+                    checked = cameras.enabled(type),
+                    onCheckedChange = { cameras.setEnabled(type, it) },
+                    switchTestTag = "map_layers_camera_${type.wire}",
+                )
+            }
+            if (cameras.anyEnabled) {
+                Text(stringResource(R.string.incidents_sourceTrafikverket), style = MaterialTheme.typography.bodySmall)
+                if (cameras.catalogFailed) Text(stringResource(R.string.roadCameras_catalogUnavailable),
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        }
         if (basemap == MapBasemap.Standard) {
             LayerToggleRow(
                 label = stringResource(R.string.shell_layers3d),
@@ -1151,28 +1058,7 @@ internal fun MapLayersPopup(
                 Text(stringResource(R.string.crownHunt_upsellPrompt))
             }
         }
-        Text(stringResource(R.string.shell_layersAppearanceTitle), style = MaterialTheme.typography.titleSmall)
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val columns = if (LocalDensity.current.fontScale > 1.25f) 2 else 3
-        val optionWidth = (maxWidth - KccSpacing.s2 * (columns - 1).toFloat()) / columns.toFloat()
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
-            MapAppearanceChip(
-                label = stringResource(R.string.shell_layersAppearanceDay), icon = Icons.Filled.LightMode,
-                selected = !followsTheme && !nightMode, onClick = { onNightModeChange(false) }, modifier = Modifier.width(optionWidth),
-            )
-            MapAppearanceChip(
-                label = stringResource(R.string.shell_layersAppearanceNight), icon = Icons.Filled.DarkMode,
-                selected = !followsTheme && nightMode, onClick = { onNightModeChange(true) },
-                modifier = Modifier.width(optionWidth).testTag(MAP_HOME_LAYERS_NIGHT_TAG),
-            )
-            if (onFollowTheme != null) {
-                MapAppearanceChip(
-                    label = stringResource(R.string.shell_layersAppearanceSystem), icon = Icons.Filled.Settings,
-                    selected = followsTheme, onClick = onFollowTheme, modifier = Modifier.width(optionWidth),
-                )
-            }
-        }
-        }
+        AppThemeOptions()
         if (incidentsOn) {
             Text(stringResource(R.string.shell_layersAlertAgeTitle), style = MaterialTheme.typography.titleSmall)
             LayerAlertAgeOptions(incidentMaxAge, onIncidentMaxAgeChange)
@@ -1192,7 +1078,7 @@ internal fun MapLayersPopup(
 }
 
 @Composable
-private fun MapAppearanceChip(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+internal fun MapAppearanceChip(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     FilterChip(
         selected = selected, onClick = onClick, modifier = modifier.heightIn(min = 48.dp),
         label = { Text(label) },
@@ -1449,15 +1335,17 @@ internal fun LiveSharePopup(
     )
     if (rows.showStop) {
         // The prominent stop action. Only present when the caller wires
-        // [onStop] — i.e. the shell's centre-control sheet, where this
-        // sheet is now how a running session is ended. Stopping raises
-        // the save/discard summary exactly as the bottom-bar control
-        // used to (the host's stop handler flips isSharing). Error
-        // colours make it the unmistakable primary action.
+        // [onStop] — i.e. the shell's centre-control sheet. The host saves
+        // the drive in the background after the session ends.
+        Text(
+            text = stringResource(R.string.liveLocation_stopSavesToHistory),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Button(
             onClick = {
-                onStop?.invoke()
                 onDismiss()
+                onStop?.invoke()
             },
             modifier = Modifier.fillMaxWidth(),
             colors =

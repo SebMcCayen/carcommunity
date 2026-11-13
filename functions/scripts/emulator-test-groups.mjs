@@ -73,6 +73,7 @@ export const GROUPS = [
       'driver-feed',
       'user-search',
       'chatchannels*',
+      'android-chat-moderation',
       'chat-flood',
       'chat-guard-driver',
       'communityDigest',
@@ -105,6 +106,9 @@ export const GROUPS = [
       'points*',
       'badges',
       'incidents',
+      // Road-camera transport and distributed quota suites live by domain.
+      'callables',
+      'quota',
       'police',
       'phase11',
       'partner*',

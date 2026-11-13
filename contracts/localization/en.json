@@ -1,4 +1,35 @@
 {
+  "chatAdmin": {
+    "expectedUntil": "Estimated end: %1$s.",
+    "keepLongerPause": "An existing longer pause will not be shortened.",
+    "section": "Administrator",
+    "remove": "Delete message",
+    "pause": "Pause writing…",
+    "reason": "Reason (shown to the user)",
+    "warnAlso": "Also warn the user?",
+    "pauseAlso": "Also pause writing?",
+    "amount": "Amount",
+    "minutes": "Minutes",
+    "days": "Days",
+    "yes": "Yes",
+    "no": "No",
+    "scope": "Applies only to Community and event chats. DMs, convoys and club chat are unaffected.",
+    "maxDuration": "Enter a whole number. Maximum %1$d days or the equivalent in minutes.",
+    "review": "Review actions",
+    "reviewTitle": "Review the decision",
+    "willRemove": "The message will be deleted.",
+    "willPause": "The user’s writing will be paused. The message will remain.",
+    "warningYes": "A warning will also be sent.",
+    "warningNo": "No warning will be sent.",
+    "durationSummary": "Writing pause: %1$s %2$s. The duration starts when the decision is saved.",
+    "confirm": "Confirm decision",
+    "saving": "Saving…",
+    "edit": "Edit choices",
+    "cancel": "Cancel",
+    "failed": "The decision could not be confirmed. Your choices are kept. Try again.",
+    "stale": "The evidence has changed. Check your choices and review the decision again.",
+    "pausedUntil": "Your writing in public chats is paused until %1$s."
+  },
   "clubBadge": {
     "accessibility": "Club: %1$s"
   },
@@ -119,6 +150,7 @@
     "duration4h": "4 hours",
     "start": "Share my location",
     "stop": "Stop sharing",
+    "stopSavesToHistory": "When you stop sharing, your drive is automatically saved to your history.",
     "hideNow": "Hide me now",
     "lastUpdated": "Last updated",
     "whoCanSeeTitle": "Who can see me?",
@@ -1099,7 +1131,8 @@
     "tierRestrictedBanner": "%1$d older drives are hidden on your plan. Upgrade to see them.",
     "loadMore": "Show more",
     "loadingMore": "Loading more...",
-    "loadMoreError": "Couldn't load more drives. Try again."
+    "loadMoreError": "Couldn't load more drives. Try again.",
+    "reportProblem": "Report a problem with this drive"
   },
   "imageEditor": {
     "title": "Edit photo",
@@ -1385,6 +1418,7 @@
     "spawnCollecting": "Collecting...",
     "spawnMoveCloser": "Move closer",
     "spawnMoveCloserDetail": "You need to be within %1$d m of the crown.",
+    "spawnReadyToCollect": "Within reach – you can collect this crown.",
     "spawnProximityLabel": "Get closer",
     "spawnProximityRemaining": "%1$s to go",
     "spawnStopFirst": "Stop the car first",
@@ -1756,7 +1790,8 @@
     "thankYouBody": "Your report has been received. Thanks for helping us make the app better.",
     "thankYouIssue": "An issue was created on GitHub where you can follow the problem.",
     "issueNumber": "Issue #%1$d",
-    "openTicketsButton": "View open tickets"
+    "openTicketsButton": "View open tickets",
+    "driveContext": "This report is linked to this drive. The issue will not include your route or location data."
   },
   "openTickets": {
     "title": "Open tickets",
@@ -2381,5 +2416,22 @@
     "suspendedTitle": "Access is restricted",
     "body": "Your access to CarCommunity is restricted. Contact the administrators if you have questions.",
     "retry": "Check again"
-  }
+  },
+  "roadCameras": {
+    "speedLayer": "Fixed speed cameras",
+    "trafficLayer": "Traffic cameras",
+    "roadConditionLayer": "Road condition cameras",
+    "layerHelp": "Show cameras on the map",
+    "loading": "Loading camera image…",
+    "unavailable": "The camera image could not be loaded.",
+    "rateLimited": "Camera image limit reached. Try again later.",
+    "photoTime": "Image updated %1$s",
+    "retry": "Try again",
+    "catalogUnavailable": "Cameras could not be updated. Saved cameras are shown when available."
+  },
+  "convoy.invitationFrom": "invites you to a convoy",
+  "convoy.invitationJoin": "Join",
+  "convoy.invitationDecline": "Decline",
+  "convoy.invitationInboxHint": "Stays in Notifications",
+  "convoy.invitationClosesIn": "Closes in %1$d s"
 }

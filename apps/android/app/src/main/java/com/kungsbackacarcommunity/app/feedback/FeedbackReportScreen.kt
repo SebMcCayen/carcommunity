@@ -45,6 +45,7 @@ fun FeedbackReportScreen(
     onViewIssue: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    rideId: String? = null,
 ) {
     var summary by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
@@ -171,6 +172,13 @@ fun FeedbackReportScreen(
             }
         }
 
+        if (rideId != null) {
+            Text(
+                text = stringResource(R.string.feedback_driveContext),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
         OutlinedCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
@@ -219,7 +227,7 @@ fun FeedbackReportScreen(
 
         Button(
             onClick = {
-                val input = FeedbackReports.toInput(form, clientContext)
+                val input = FeedbackReports.toInput(form, clientContext, rideId)
                 if (input == null) showError = true else onSubmit(input)
             },
             enabled = status != FeedbackStatus.Submitting,

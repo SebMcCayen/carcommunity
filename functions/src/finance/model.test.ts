@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { DAYS_PER_MONTH, FIRESTORE, MAPBOX, SCHEDULER, USD_TO_SEK } from './pricing';
+import { DAYS_PER_MONTH, FIRESTORE, FUNCTIONS, RTDB, STORAGE, MAPBOX, USD_TO_SEK } from './pricing';
 import {
   FALLBACK_MEMBER_COUNT,
   NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
@@ -18,6 +18,7 @@ import {
 } from './assumptions';
 import { SCHEDULED_JOBS, unknownCallables, uncostedCallables } from './inventory';
 import { estimateFinance, resolveMemberCount, type ServiceLine } from './model';
+import { buildTrafikverketRequestBody } from '../incidents/trafikverket-core';
 
 function line(services: ServiceLine[], service: string, driverIncludes: string): ServiceLine {
   const found = services.find((l) => l.service === service && l.driver.includes(driverIncludes));
@@ -85,6 +86,21 @@ describe('estimateFinance — Firestore writes / free tier / Trafikverket', () =
     expect(readsLarge.gross).toBeGreaterThan(reads.gross);
     expect(readsLarge.sekPerMonth).toBeGreaterThan(reads.sekPerMonth);
   });
+
+  it('separates the Situation query cap from imported deviation reads and storage', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 0 });
+    const cap = est.googleCloud.trafikverketSituationsCap;
+    expect(buildTrafikverketRequestBody('test-key')).toContain(`limit="${cap}"`);
+    const deviations = est.googleCloud.trafikverketImportedDeviationsPerRun;
+    expect(deviations).toBeGreaterThan(cap); // multiple deviations per Situation
+
+    const importer = est.googleCloud.committedJobs.find(
+      (job) => job.id === 'incidents-syncTrafikverket',
+    );
+    expect(importer?.readsPerMonth).toBe(deviations * 48 * DAYS_PER_MONTH);
+    const storage = line(est.googleCloud.services, 'Cloud Firestore', 'Stored data');
+    expect(storage.gross).toBeCloseTo((deviations * 2_000) / 1024 ** 3, 12);
+  });
 });
 
 describe('estimateFinance — FX conversion', () => {
@@ -101,17 +117,84 @@ describe('estimateFinance — FX conversion', () => {
 });
 
 describe('estimateFinance — Cloud Scheduler committed line', () => {
-  it('charges only jobs beyond the 3 free', () => {
+  it('charges job-days across both codebases with one billing-account allowance', () => {
     const est = estimateFinance({ ...baseInput, memberCount: 0 });
     const sched = line(est.googleCloud.services, 'Cloud Scheduler', 'Scheduled jobs');
-    const expectedBillable = Math.max(0, SCHEDULED_JOBS.length - SCHEDULER.freeJobs);
-    expect(sched.gross).toBe(SCHEDULED_JOBS.length);
-    expect(sched.freeTier).toBe(SCHEDULER.freeJobs);
+    const expectedBillable = Math.max(0, SCHEDULED_JOBS.length * DAYS_PER_MONTH - 93);
+    expect(sched.gross).toBe(SCHEDULED_JOBS.length * DAYS_PER_MONTH);
+    expect(sched.freeTier).toBe(93);
     expect(sched.billable).toBe(expectedBillable);
-    expect(sched.sekPerMonth).toBeCloseTo(
-      expectedBillable * SCHEDULER.usdPerJobPerMonth * USD_TO_SEK,
-      6,
+    expect(sched.sekPerMonth).toBeCloseTo(expectedBillable * (0.1 / 31) * USD_TO_SEK, 6);
+  });
+});
+
+describe('estimateFinance — regional gen2 and Firebase billing', () => {
+  it('bills allocated CPU for all schedules, not one whole CPU per job', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 0 });
+    const cpu = line(est.googleCloud.services, 'Cloud Functions', 'Compute — vCPU');
+    const seconds = SCHEDULED_JOBS.reduce(
+      (sum, job) => sum + job.runsPerDay * job.avgSeconds * job.cpu * DAYS_PER_MONTH,
+      0,
     );
+    expect(cpu.gross).toBeCloseTo(seconds, 6);
+    expect(cpu.freeTier).toBe(180_000);
+    expect(cpu.sekPerMonth).toBeCloseTo(Math.max(0, seconds - 180_000) * 0.000024 * USD_TO_SEK, 6);
+    const memory = line(est.googleCloud.services, 'Cloud Functions', 'Compute — memory');
+    expect(memory.freeTier).toBe(360_000);
+    expect(FUNCTIONS.gibSecondUsd).toBe(0.0000025);
+  });
+
+  it('uses the daily 360 MiB RTDB allowance and binary GiB units', () => {
+    // 72 members x 5 MiB/day exactly exhausts the daily allowance.
+    const below = estimateFinance({ ...baseInput, memberCount: 72 });
+    const atQuota = line(below.googleCloud.services, 'Realtime Database', 'Downloaded bytes');
+    expect(atQuota.gross).toBeCloseTo((360 / 1024) * DAYS_PER_MONTH, 8);
+    expect(atQuota.billable).toBe(0);
+    const above = estimateFinance({ ...baseInput, memberCount: 73 });
+    const downloads = line(above.googleCloud.services, 'Realtime Database', 'Downloaded bytes');
+    expect(downloads.billable).toBeCloseTo((5 / 1024) * DAYS_PER_MONTH, 8);
+    expect(downloads.sekPerMonth).toBeCloseTo((5 / 1024) * DAYS_PER_MONTH * USD_TO_SEK, 8);
+    expect(RTDB.free.downloadGiBPerDay).toBe(360 / 1024);
+  });
+
+  it('charges Belgium storage from the first byte while keeping the actual legacy download tiers', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 65 });
+    const stored = line(est.googleCloud.services, 'Cloud Storage', 'Stored images');
+    expect(stored.freeTier).toBe(0);
+    expect(stored.billable).toBeCloseTo((65 * 15) / 1024, 8);
+    expect(stored.sekPerMonth).toBeCloseTo(stored.gross * 0.02 * USD_TO_SEK, 8);
+    const small = line(est.googleCloud.services, 'Cloud Storage', 'Downloaded images');
+    expect(small.freeTier).toBe(100);
+    expect(small.sekPerMonth).toBe(0);
+    const big = estimateFinance({ ...baseInput, memberCount: 5000 });
+    const download = line(big.googleCloud.services, 'Cloud Storage', 'Downloaded images');
+    expect(download.gross).toBeGreaterThan(1024);
+    expect(download.sekPerMonth).toBeCloseTo(
+      ((1024 - 100) * 0.12 + (download.gross - 1024) * 0.11) * USD_TO_SEK,
+      8,
+    );
+    expect(STORAGE.free.storageGiB).toBe(0);
+  });
+
+  it('keeps TTL deletes outside the ordinary daily delete allowance', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 0 });
+    const normal = line(est.googleCloud.services, 'Cloud Firestore', 'Document deletes');
+    const ttl = line(est.googleCloud.services, 'Cloud Firestore', 'Automatic TTL');
+    expect(normal.billable).toBe(0);
+    expect(ttl.freeTier).toBe(0);
+    expect(ttl.billable).toBe(ttl.gross);
+    expect(ttl.sekPerMonth).toBeGreaterThan(0);
+  });
+
+  it('bills disabled secret versions as active and charges European function egress', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 0 });
+    const secrets = line(est.googleCloud.services, 'Secret Manager', 'Active secret versions');
+    expect(secrets.gross).toBe(10); // 9 enabled + 1 disabled, all one replica
+    expect(secrets.billable).toBe(4);
+    expect(secrets.sekPerMonth).toBeCloseTo(4 * 0.06 * USD_TO_SEK, 8);
+    const egress = line(est.googleCloud.services, 'Cloud Functions', 'Internet data transfer');
+    expect(egress.freeTier).toBe(0);
+    expect(egress.sekPerMonth).toBeGreaterThan(0);
   });
 });
 
@@ -388,13 +471,18 @@ describe('resolveMemberCount', () => {
 
 describe('uncosted / unknown function surfacing', () => {
   // These are intentionally visible gaps: existing per-member assumptions
-  // have no Driver page-frequency input. Keep the exact list guarded so any
+  // have no Driver page-frequency input. Camera catalog opens and photo views
+  // also need telemetry-based variable estimates; server quotas bound their
+  // exposure, but must not disguise missing usage estimates as zero cost.
+  // Keep the exact list guarded so any
   // further uncosted addition still requires an explicit decision.
   const pendingDriverEstimates = [
     'account.getAccess',
     'account.listWarnings',
     'driverFeed.detail',
     'driverFeed.list',
+    'roadCameras.catalog',
+    'roadCameras.photo',
   ];
   it('only explicitly reviewed pending estimates remain uncosted', () => {
     expect(uncostedCallables()).toEqual(pendingDriverEstimates);

@@ -63,19 +63,32 @@ final class ConvoyManagementCoordinator {
 
     @discardableResult
     func respond(convoyId: String, action: ConvoyAction) async -> ConvoyItem? {
+        let result = await performResponse(convoyId: convoyId, action: action, validateOnServer: false)
+        if action == .accept, case .updated(let convoy) = result { return convoy }
+        return nil
+    }
+
+    /// A foreground invitation can refer to an older convoy outside the capped
+    /// history page. The response transaction validates that exact invitation and
+    /// accepted membership; absence from the list is not evidence that it is gone.
+    func respondToInvitation(convoyId: String, action: ConvoyAction) async -> ConvoyRespondResult {
+        await performResponse(convoyId: convoyId, action: action, validateOnServer: true)
+    }
+
+    private func performResponse(
+        convoyId: String, action: ConvoyAction, validateOnServer: Bool
+    ) async -> ConvoyRespondResult {
         guard !convoyId.isEmpty,
               !busyConvoyIds.contains(convoyId),
               let repository,
-              case .loaded(let snapshot) = state
-        else { return nil }
+              validateOnServer || snapshot != nil
+        else { return .failed(.generic) }
 
         clearActionError()
-        if action == .accept, !snapshot.canJoinAnotherConvoy {
-            setActionError(
-                snapshot.hasActiveConvoy ? .alreadyInConvoy : .membershipUncertain,
-                convoyId: convoyId
-            )
-            return nil
+        if action == .accept, !validateOnServer, let snapshot, !snapshot.canJoinAnotherConvoy {
+            let error: ConvoyActionError = snapshot.hasActiveConvoy ? .alreadyInConvoy : .membershipUncertain
+            setActionError(error, convoyId: convoyId)
+            return .failed(error)
         }
 
         // The server may emit the NEW auto-session before accept returns.
@@ -86,18 +99,18 @@ final class ConvoyManagementCoordinator {
         defer { busyConvoyIds.remove(convoyId) }
         switch await repository.respond(convoyId: convoyId, action: action) {
         case .updated(let convoy):
-            guard !Task.isCancelled else { return nil }
-            applyUpdatedConvoy(convoy)
+            guard !Task.isCancelled else { return .failed(.generic) }
+            applyUpdatedConvoy(convoy, insertingIfMissing: validateOnServer)
             await refreshAfterMutation(using: repository)
-            return action == .accept ? convoy : nil
+            return .updated(convoy)
         case .failed(.unresolvedPrecondition):
-            guard !Task.isCancelled else { return nil }
+            guard !Task.isCancelled else { return .failed(.generic) }
             await resolvePrecondition(action: action, convoyId: convoyId, using: repository)
-            return nil
+            return .failed(actionError ?? .generic)
         case .failed(let error):
-            guard !Task.isCancelled else { return nil }
+            guard !Task.isCancelled else { return .failed(.generic) }
             setActionError(error, convoyId: convoyId)
-            return nil
+            return .failed(error)
         }
     }
 
@@ -252,19 +265,21 @@ final class ConvoyManagementCoordinator {
         }
     }
 
-    private func applyUpdatedConvoy(_ convoy: ConvoyItem) {
-        guard let snapshot else { return }
-        var convoys = snapshot.convoys
-        guard let index = convoys.firstIndex(where: { $0.convoyId == convoy.convoyId }) else {
-            return
-        }
+    private func applyUpdatedConvoy(_ convoy: ConvoyItem, insertingIfMissing: Bool = false) {
+        let previous = snapshot
+        guard previous != nil || insertingIfMissing else { return }
+        var convoys = previous?.convoys ?? []
+        if let index = convoys.firstIndex(where: { $0.convoyId == convoy.convoyId }) {
+            convoys[index] = convoy
+        } else if insertingIfMissing {
+            convoys.insert(convoy, at: 0)
+        } else { return }
         supersedeListRequests()
-        convoys[index] = convoy
         state = .loaded(
             ConvoyManagementSnapshot(
                 convoys: convoys,
-                pendingInvites: snapshot.pendingInvites.filter { $0.convoyId != convoy.convoyId },
-                isExhaustive: snapshot.isExhaustive
+                pendingInvites: (previous?.pendingInvites ?? []).filter { $0.convoyId != convoy.convoyId },
+                isExhaustive: previous?.isExhaustive ?? false
             )
         )
     }

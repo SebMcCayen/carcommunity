@@ -1,4 +1,35 @@
 {
+  "chatAdmin": {
+    "expectedUntil": "Beräknad sluttid: %1$s.",
+    "keepLongerPause": "En längre befintlig paus förkortas inte.",
+    "section": "Administratör",
+    "remove": "Radera meddelande",
+    "pause": "Pausa skrivande…",
+    "reason": "Orsak (visas för användaren)",
+    "warnAlso": "Vill du även varna användaren?",
+    "pauseAlso": "Vill du även pausa skrivandet?",
+    "amount": "Antal",
+    "minutes": "Minuter",
+    "days": "Dagar",
+    "yes": "Ja",
+    "no": "Nej",
+    "scope": "Gäller endast Community- och eventchattar. PM, konvojer och klubbchatten påverkas inte.",
+    "maxDuration": "Ange ett heltal. Högst %1$d dagar eller motsvarande antal minuter.",
+    "review": "Granska åtgärder",
+    "reviewTitle": "Kontrollera beslutet",
+    "willRemove": "Meddelandet raderas.",
+    "willPause": "Användarens skrivande pausas. Meddelandet behålls.",
+    "warningYes": "En varning skickas också.",
+    "warningNo": "Ingen varning skickas.",
+    "durationSummary": "Skrivpaus: %1$s %2$s. Tiden börjar när beslutet sparas.",
+    "confirm": "Bekräfta beslut",
+    "saving": "Sparar…",
+    "edit": "Ändra val",
+    "cancel": "Avbryt",
+    "failed": "Beslutet kunde inte bekräftas. Dina val finns kvar. Försök igen.",
+    "stale": "Underlaget har ändrats. Kontrollera dina val och granska beslutet igen.",
+    "pausedUntil": "Ditt skrivande i publika chattar är pausat till %1$s."
+  },
   "clubBadge": {
     "accessibility": "Klubb: %1$s"
   },
@@ -119,6 +150,7 @@
     "duration4h": "4 timmar",
     "start": "Dela min position",
     "stop": "Stoppa delning",
+    "stopSavesToHistory": "När du stoppar delningen sparas körningen automatiskt i din historik.",
     "hideNow": "Dölj mig nu",
     "lastUpdated": "Senast uppdaterad",
     "whoCanSeeTitle": "Vem kan se mig?",
@@ -1099,7 +1131,8 @@
     "tierRestrictedBanner": "%1$d äldre körningar är dolda på ditt abonnemang. Uppgradera för att se dem.",
     "loadMore": "Visa fler",
     "loadingMore": "Laddar fler...",
-    "loadMoreError": "Kunde inte ladda fler körningar. Försök igen."
+    "loadMoreError": "Kunde inte ladda fler körningar. Försök igen.",
+    "reportProblem": "Rapportera problem med körningen"
   },
   "imageEditor": {
     "title": "Redigera bild",
@@ -1385,6 +1418,7 @@
     "spawnClose": "Stäng",
     "spawnMoveCloser": "Kör närmare",
     "spawnMoveCloserDetail": "Du behöver vara inom %1$d m från kronan.",
+    "spawnReadyToCollect": "Inom räckhåll – du kan hämta kronan.",
     "spawnProximityLabel": "Kom närmare",
     "spawnProximityRemaining": "%1$s kvar",
     "spawnStopFirst": "Stanna bilen först",
@@ -1756,7 +1790,8 @@
     "thankYouBody": "Din rapport har tagits emot. Tack för att du hjälper oss att göra appen bättre.",
     "thankYouIssue": "Ett ärende har skapats på GitHub där du kan följa problemet.",
     "issueNumber": "Ärende #%1$d",
-    "openTicketsButton": "Visa öppna ärenden"
+    "openTicketsButton": "Visa öppna ärenden",
+    "driveContext": "Rapporten kopplas till den här körningen. Körspår och platsuppgifter delas inte i ärendet."
   },
   "openTickets": {
     "title": "Öppna ärenden",
@@ -2381,5 +2416,22 @@
     "suspendedTitle": "Åtkomsten är begränsad",
     "body": "Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.",
     "retry": "Kontrollera igen"
-  }
+  },
+  "roadCameras": {
+    "speedLayer": "Fasta fartkameror",
+    "trafficLayer": "Trafikkameror",
+    "roadConditionLayer": "Väglagskameror",
+    "layerHelp": "Visa kameror på kartan",
+    "loading": "Hämtar kamerabild…",
+    "unavailable": "Kamerabilden kunde inte hämtas.",
+    "rateLimited": "Gränsen för kamerabilder är nådd. Försök igen senare.",
+    "photoTime": "Bild uppdaterad %1$s",
+    "retry": "Försök igen",
+    "catalogUnavailable": "Kameror kunde inte uppdateras. Sparade kameror visas om de finns."
+  },
+  "convoy.invitationFrom": "bjuder in till konvoj",
+  "convoy.invitationJoin": "Gå med",
+  "convoy.invitationDecline": "Neka",
+  "convoy.invitationInboxHint": "Finns kvar i Notifikationer",
+  "convoy.invitationClosesIn": "Rutan stängs om %1$d s"
 }

@@ -40,8 +40,8 @@ class MapLayersAlertAgeWiringTest {
                 Box(Modifier.requiredSize(320.dp, 800.dp)) {
                     MapLayersPopup(
                         incidentsOn = incidentsOn.value, onIncidentsChange = { incidentsOn.value = it },
-                        trafikverketDataShown = false, trafficOn = false, nightMode = false, is3d = true,
-                        onTrafficChange = {}, onNightModeChange = {}, on3dChange = {},
+                        trafikverketDataShown = false, trafficOn = false, is3d = true,
+                        onTrafficChange = {}, on3dChange = {},
                         browsingZoom = 12.0, onBrowsingZoomChange = {},
                         incidentMaxAge = maxAge, onIncidentMaxAgeChange = store::set,
                         crownHuntParticipating = false, onCrownHuntParticipatingChange = {}, onDismiss = {},
