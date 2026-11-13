@@ -1567,10 +1567,14 @@ private struct ChatViewportEvidence {
         window = root.frame
         var captured: [Element] = []
         @MainActor func visit(_ snapshot: any XCUIElementSnapshot, inThread: Bool) {
-            let inThread = inThread || snapshot.identifier == "chat.thread.messages"
-            captured.append(Element(identifier: snapshot.identifier, label: snapshot.label,
-                type: snapshot.elementType, frame: snapshot.frame, inMessageThread: inThread))
-            for child in snapshot.children { visit(child, inThread: inThread) }
+            // Read the non-Sendable snapshot synchronously on the main actor.
+            // Boolean autoclosures must never capture the snapshot object.
+            let identifier = snapshot.identifier
+            var withinThread = inThread
+            if identifier == "chat.thread.messages" { withinThread = true }
+            captured.append(Element(identifier: identifier, label: snapshot.label,
+                type: snapshot.elementType, frame: snapshot.frame, inMessageThread: withinThread))
+            for child in snapshot.children { visit(child, inThread: withinThread) }
         }
         visit(root, inThread: false)
         elements = captured
