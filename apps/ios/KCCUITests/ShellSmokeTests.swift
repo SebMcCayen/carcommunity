@@ -209,6 +209,38 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(ChatViewportEvidence(window: window, elements: []).isSelected("chatHub.channel.3"))
     }
 
+    func testCrownReactionEvidenceRequiresTheActualReadableMessageAndWritingState() {
+        typealias Node = ChatViewportEvidence.Element
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        // Actual maximum-text crown failure: acquisition timed out, but the
+        // fresh diagnostic tree already proved the complete accepted UI state.
+        let writing: [Node] = [
+            Node(identifier: "chat.thread.messages", type: .scrollView, frame: CGRect(x: 0, y: 63, width: 402, height: 811)),
+            Node(identifier: "chat.quickEmojiRow", type: .scrollView, frame: CGRect(x: 0, y: 403.7, width: 402, height: 48)),
+            Node(identifier: "chat.composer.input", type: .textField,
+                frame: CGRect(x: 20, y: 463.7, width: 210, height: 63.3), value: "Fixture reply"),
+            Node(identifier: "chat.composer.send", type: .button, frame: CGRect(x: 250, y: 464.3, width: 92, height: 62)),
+            Node(identifier: "chat.keyboard.dismiss", type: .button, frame: CGRect(x: 350, y: 471.3, width: 44, height: 48)),
+            Node(identifier: "", type: .keyboard, frame: CGRect(x: 0, y: 583, width: 402, height: 233)),
+        ]
+        let crown = Node(identifier: "chat.message.text.sent-crown", label: "👑", type: .staticText,
+            frame: CGRect(x: 321, y: 254.7, width: 57, height: 63.3), inMessageThread: true)
+        let beforeSend = ChatViewportEvidence(window: window, elements: writing)
+        let afterSend = ChatViewportEvidence(window: window, elements: writing + [crown])
+        let accepted: (ChatViewportEvidence) -> Bool = { $0.keyboardPresented && $0.fullyReadable(label: "👑") }
+        XCTAssertFalse(accepted(beforeSend), "A stale pre-send snapshot cannot prove that the crown was delivered")
+        XCTAssertTrue(accepted(afterSend))
+        let clipped = Node(identifier: crown.identifier, label: crown.label, type: .staticText,
+            frame: CGRect(x: 321, y: 390, width: 57, height: 63.3), inMessageThread: true)
+        XCTAssertFalse(accepted(ChatViewportEvidence(window: window, elements: writing + [clipped])))
+        let navigation = Node(identifier: "shell.tab.chat", type: .button,
+            frame: CGRect(x: 85.3, y: 776, width: 77, height: 56), selected: true)
+        XCTAssertFalse(accepted(ChatViewportEvidence(window: window, elements: writing + [crown, navigation])),
+            "A readable crown alone cannot substitute for navigation remaining hidden while writing")
+        XCTAssertFalse(accepted(ChatViewportEvidence(window: window,
+            elements: writing.filter { $0.type != .keyboard } + [crown])), "The real keyboard is still required")
+    }
+
     func testComposerDraftEvidenceUsesActualEditableValueAndNativeEmptyState() {
         typealias Node = ChatViewportEvidence.Element
         let window = CGRect(x: 0, y: 0, width: 402, height: 874)
@@ -1482,6 +1514,18 @@ final class ShellSmokeTests: XCTestCase {
     private func requireChatEvidence(in app: XCUIApplication, name: String, timeout: TimeInterval = 15, message: String,
                                      condition: @escaping (ChatViewportEvidence) -> Bool,
                                      file: StaticString = #filePath, line: UInt = #line) throws -> ChatViewportEvidence {
+        let evidence = waitForChatEvidence(in: app, timeout: timeout, condition: condition)
+        if evidence == nil { chatProof(app, name: name, tree: true) }
+        return try XCTUnwrap(evidence, message, file: file, line: line)
+    }
+
+    /// Acquire the first fresh tree before starting the state-convergence budget.
+    /// A remote XCTest snapshot can itself exceed that budget even when the UI
+    /// is already correct. These are state assertions, not latency guarantees.
+    /// Wrong/unavailable initial evidence still requires fresh, bounded sampling.
+    private func waitForChatEvidence(in app: XCUIApplication, timeout: TimeInterval,
+                                     condition: @escaping (ChatViewportEvidence) -> Bool) -> ChatViewportEvidence? {
+        if let initial = try? ChatViewportEvidence(capturing: app), condition(initial) { return initial }
         var accepted: ChatViewportEvidence?
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard let snapshot = try? ChatViewportEvidence(capturing: app), condition(snapshot) else { return false }
@@ -1489,8 +1533,7 @@ final class ShellSmokeTests: XCTestCase {
             return true
         }, object: nil)
         let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
-        if result != .completed { chatProof(app, name: name, tree: true) }
-        return try XCTUnwrap(result == .completed ? accepted : nil, message, file: file, line: line)
+        return result == .completed ? accepted : nil
     }
 
     /// SwiftUI's vertical field can replace its measuring UITextField with a
@@ -1528,14 +1571,10 @@ final class ShellSmokeTests: XCTestCase {
                                      file: StaticString = #filePath, line: UInt = #line) {
         // Read identity, geometry and value from one fresh tree. Separate typed
         // queries/hit-tests can consume this deadline before reading the value.
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let snapshot = try? ChatViewportEvidence(capturing: app) else { return false }
-            return snapshot.composerDraft(text, present: present)
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 30)
-        if result != .completed { chatProof(app, name: "chat-draft-value-failure", tree: true) }
+        let evidence = waitForChatEvidence(in: app, timeout: 30) { $0.composerDraft(text, present: present) }
+        if evidence == nil { chatProof(app, name: "chat-draft-value-failure", tree: true) }
         let message = present ? "Visible editor must preserve the draft until Send" : "Send must clear the visible draft"
-        XCTAssertEqual(result, .completed, message, file: file, line: line)
+        XCTAssertNotNil(evidence, message, file: file, line: line)
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
@@ -1648,16 +1687,12 @@ final class ShellSmokeTests: XCTestCase {
         // tree, rather than separate exists/isSelected requests to retired nodes.
         let identifier = tab.identifier
         let app = XCUIApplication()
-        let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let snapshot = try? ChatViewportEvidence(capturing: app) else { return false }
-            return snapshot.isSelected(identifier)
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [selected], timeout: 15)
-        if result != .completed {
+        let evidence = waitForChatEvidence(in: app, timeout: 15) { $0.isSelected(identifier) }
+        if evidence == nil {
             chatProof(app, name: "\(identifier)-selection-failure", tree: true)
             diagnosePrimaryControls(app)
         }
-        XCTAssertEqual(result, .completed, "Selection did not settle for \(identifier)", file: file, line: line)
+        XCTAssertNotNil(evidence, "Selection did not settle for \(identifier)", file: file, line: line)
     }
 
     private func reveal(_ target: XCUIElement, in scroll: XCUIElement, minimumHeight: CGFloat) {
