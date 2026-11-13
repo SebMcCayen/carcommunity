@@ -1049,6 +1049,7 @@
     <string name="savedDrives_loadMore">Visa fler</string>
     <string name="savedDrives_loadingMore">Laddar fler...</string>
     <string name="savedDrives_loadMoreError">Kunde inte ladda fler körningar. Försök igen.</string>
+    <string name="savedDrives_reportProblem">Rapportera problem med körningen</string>
     <string name="imageEditor_title">Redigera bild</string>
     <string name="imageEditor_hint">Dra för att flytta, nyp för att zooma och vrid med två fingrar för att rotera. Det som syns i rutan är det andra ser.</string>
     <string name="imageEditor_frameDescription">Dra i hörnen för att ändra beskärningens form.</string>
@@ -1673,6 +1674,7 @@
     <string name="feedback_thankYouIssue">Ett ärende har skapats på GitHub där du kan följa problemet.</string>
     <string name="feedback_issueNumber">Ärende #%1$d</string>
     <string name="feedback_openTicketsButton">Visa öppna ärenden</string>
+    <string name="feedback_driveContext">Rapporten kopplas till den här körningen. Körspår och platsuppgifter delas inte i ärendet.</string>
     <string name="openTickets_title">Öppna ärenden</string>
     <string name="openTickets_intro">Kända problem som andra har rapporterat. Har du samma problem? Ge det en tumme upp eller lägg till en kommentar.</string>
     <string name="openTickets_loading">Hämtar ärenden…</string>

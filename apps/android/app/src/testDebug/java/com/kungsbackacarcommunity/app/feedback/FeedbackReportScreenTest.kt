@@ -7,12 +7,14 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +39,28 @@ class FeedbackReportScreenTest {
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+
+    @Test
+    fun selectedDriveContextIsVisibleAndAttachedToSubmittedForm() {
+        var submitted: FeedbackReportInput? = null
+        composeTestRule.setContent {
+            KccTheme {
+                FeedbackReportScreen(
+                    status = FeedbackStatus.Idle, clientContext = context,
+                    openTicketsEnabled = false, onOpenTickets = {},
+                    onSubmit = { submitted = it }, onViewIssue = {}, onBack = {},
+                    rideId = "private-selected-drive",
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.feedback_driveContext)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("private-selected-drive").assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.feedback_descriptionLabel))
+            .performScrollTo().performTextInput("Recorded distance is too short")
+        composeTestRule.onNodeWithText(str(R.string.feedback_submit)).performScrollTo().performClick()
+        assertEquals("private-selected-drive", submitted?.rideId)
+        assertEquals("Recorded distance is too short", submitted?.description)
+    }
 
     @Test
     fun successfulSubmitClearsTheForm_andStaysClearedAcrossRestore() {

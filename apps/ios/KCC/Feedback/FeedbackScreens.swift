@@ -7,6 +7,7 @@ struct FeedbackScreen: View {
     let openTicketsEnabled: Bool
     let onOpenTickets: () -> Void
     let onClose: () -> Void
+    var rideId: String? = nil
 
     @State private var form = FeedbackReportForm()
     @State private var showValidationError = false
@@ -53,6 +54,10 @@ struct FeedbackScreen: View {
                 in: RoundedRectangle(cornerRadius: KccRadius.md)
             )
 
+            if rideId != nil {
+                Text("feedback.driveContext").font(.subheadline)
+            }
+
             EditorTextField(title: "feedback.summaryLabel", text: $form.summary)
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: form.summary) { _, value in
@@ -93,7 +98,7 @@ struct FeedbackScreen: View {
                     showValidationError = true
                     return
                 }
-                Task { await coordinator.submit(form: form, context: context) }
+                Task { await coordinator.submit(form: form, context: context, rideId: rideId) }
             } label: {
                 EditorSubmitLabel(title: "feedback.submit", saving: coordinator.status == .submitting)
             }

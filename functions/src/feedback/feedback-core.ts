@@ -23,6 +23,7 @@
 
 import { z } from 'zod';
 import { neutralizeMentions } from '../shared/githubIssues';
+import type { FeedbackDriveDiagnostics } from '../drives/recording-diagnostics';
 
 // Re-exported for backwards compatibility: neutralizeMentions now lives in the
 // shared GitHub-issue helper (used by both feedback and the sign-in-failure
@@ -123,6 +124,14 @@ const reportIssueInputSchema = z
     osVersion: z.string().max(MAX_OS_VERSION_LENGTH).optional(),
     deviceModel: z.string().max(MAX_DEVICE_MODEL_LENGTH).optional(),
     platform: z.enum(FEEDBACK_PLATFORMS).optional().default('android'),
+    // Only an explicit selection is linked; never infer the most recent drive.
+    rideId: z
+      .string()
+      .min(1)
+      .max(300)
+      .regex(/^[A-Za-z0-9._-]+$/)
+      .refine((id) => id !== '.' && id !== '..')
+      .optional(),
   })
   .strict();
 
@@ -136,6 +145,9 @@ export interface FeedbackReport {
   appVersion: string | null;
   osVersion: string | null;
   deviceModel: string | null;
+  rideId?: string;
+  /** Server-validated snapshot, never accepted from a feedback client. */
+  driveDiagnostics?: FeedbackDriveDiagnostics;
 }
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
@@ -146,7 +158,7 @@ export function parseReportIssueInput(data: unknown): ParseResult<FeedbackReport
     return {
       ok: false,
       message:
-        "Expected { description, summary?, appVersion?, osVersion?, deviceModel?, platform?: 'android'|'ios' }.",
+        "Expected { description, summary?, appVersion?, osVersion?, deviceModel?, platform?: 'android'|'ios', rideId? }.",
     };
   }
 
@@ -166,6 +178,7 @@ export function parseReportIssueInput(data: unknown): ParseResult<FeedbackReport
       appVersion: boundContext(result.data.appVersion, MAX_APP_VERSION_LENGTH),
       osVersion: boundContext(result.data.osVersion, MAX_OS_VERSION_LENGTH),
       deviceModel: boundContext(result.data.deviceModel, MAX_DEVICE_MODEL_LENGTH),
+      ...(result.data.rideId ? { rideId: result.data.rideId } : {}),
     },
   };
 }
@@ -182,6 +195,29 @@ function firstLine(text: string): string {
       .map((s) => s.trim())
       .find((s) => s.length > 0) ?? ''
   );
+}
+
+/** Fixed public allowlist: no route IDs, coordinates, endpoints or measurement trail. */
+function publicDriveDiagnostics(diagnostics: FeedbackDriveDiagnostics | undefined): string[] {
+  if (!diagnostics) return [];
+  const recording = diagnostics.recordingDiagnostics;
+  const calculation = diagnostics.calculationDiagnostics;
+  return [
+    recording || calculation
+      ? '- Drive diagnostics: attached privately'
+      : '- Drive diagnostics: unavailable for this recording',
+    ...(recording
+      ? [
+          `- Recording source platform: ${recording.platform ?? 'unknown'}; recording app version: ${recording.appVersion && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(recording.appVersion) ? recording.appVersion : 'unknown/private'}`,
+          `- Recording quality: ${recording.algorithmVersion}; accepted ${recording.acceptedPoints}/${recording.receivedPoints} points; accuracy rejected ${recording.rejectedAccuracy}; stale rejected ${recording.rejectedStale}; time rejected ${recording.rejectedTime}; speed rejected ${recording.rejectedSpeed}; delivery gaps ${recording.gapCount}`,
+        ]
+      : []),
+    ...(calculation
+      ? [
+          `- Distance calculation: ${calculation.algorithmVersion}; time segments rejected ${calculation.rejectedTimeSegments}; speed segments rejected ${calculation.rejectedSpeedSegments}; accepted gaps ${calculation.gapCount}; endpoint consistency ${calculation.distanceBelowEndpoint ? 'incomplete' : 'no contradiction detected'}`,
+        ]
+      : []),
+  ];
 }
 
 /**
@@ -214,7 +250,8 @@ export function buildGitHubIssueBody(
   // Firestore doc keeps the raw bounded values). reportId/submittedAtIso are
   // server-generated and left as-is.
   const context = [
-    `- App version: ${report.appVersion ? neutralizeMentions(report.appVersion) : 'unknown'}`,
+    ...(report.driveDiagnostics ? [`- Reporter platform: ${report.platform}`] : []),
+    `- ${report.driveDiagnostics ? 'Reporter app version' : 'App version'}: ${report.appVersion ? neutralizeMentions(report.appVersion) : 'unknown'}`,
     `- OS version: ${report.osVersion ? neutralizeMentions(report.osVersion) : 'unknown'}`,
     `- Device model: ${report.deviceModel ? neutralizeMentions(report.deviceModel) : 'unknown'}`,
     `- Report ID: ${reportId}`,
@@ -228,6 +265,7 @@ export function buildGitHubIssueBody(
     '',
     '---',
     context,
+    ...publicDriveDiagnostics(report.driveDiagnostics),
     '',
     '_Filed via the in-app Report a problem flow. Reports are public — they never include account identifiers._',
   ].join('\n');
@@ -277,6 +315,8 @@ export function buildFeedbackReportDocument(
     appVersion: report.appVersion,
     osVersion: report.osVersion,
     deviceModel: report.deviceModel,
+    ...(report.rideId ? { rideId: report.rideId } : {}),
+    ...(report.driveDiagnostics ? { driveDiagnostics: report.driveDiagnostics } : {}),
     githubIssueStatus: 'pending' as GitHubIssueStatus,
     githubIssueNumber: null,
     githubIssueUrl: null,

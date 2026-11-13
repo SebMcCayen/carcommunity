@@ -222,4 +222,30 @@ final class SessionLocationFilterTests: XCTestCase {
             XCTAssertNil(fix(0, at: 0, speed: 4.4, uncertainty: uncertainty).speedAccuracyMetersPerSecond)
         }
     }
+    func testSessionFilterExplainsRejectedSamplesWithoutPoisoningTrustedAnchor() throws {
+        var filter = SessionLocationFilter()
+        let first = fix(0, at: 0, speed: 20, uncertainty: 0.2)
+        XCTAssertNotNil(filter.processDecision(first, now: start).fix)
+        let poor = fix(10, at: 1, accuracy: 500)
+        if case .rejected(.accuracy) = filter.processDecision(poor, now: poor.timestamp) {} else {
+            XCTFail("Expected accuracy rejection")
+        }
+        let jump = fix(5_000, at: 2)
+        if case .rejected(.speed) = filter.processDecision(jump, now: jump.timestamp) {} else {
+            XCTFail("Expected speed rejection")
+        }
+        if case .rejected(.time) = filter.processDecision(first, now: start) {} else {
+            XCTFail("Expected duplicate-time rejection")
+        }
+        let stale = fix(40, at: 4)
+        if case .rejected(.stale) = filter.processDecision(stale, now: start.addingTimeInterval(30)) {} else {
+            XCTFail("Expected stale rejection")
+        }
+        let good = fix(80, at: 4, speed: 20, uncertainty: 0.2)
+        XCTAssertNotNil(filter.processDecision(good, now: good.timestamp).fix)
+        let confirmed = fix(120, at: 6, speed: 20, uncertainty: 0.2)
+        XCTAssertEqual(try XCTUnwrap(filter.processDecision(confirmed, now: confirmed.timestamp).fix).latitude,
+            confirmed.latitude)
+    }
+
 }

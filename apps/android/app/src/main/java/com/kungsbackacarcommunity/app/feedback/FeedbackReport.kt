@@ -30,6 +30,8 @@ data class FeedbackReportInput(
     val appVersion: String?,
     val osVersion: String?,
     val deviceModel: String?,
+    /** Explicitly selected owned drive; never inferred from the latest recording. */
+    val rideId: String? = null,
 )
 
 /** First invalid field, or null when the form is submittable. */
@@ -52,7 +54,7 @@ object FeedbackReports {
      * Builds the callable input from the form + auto-collected context, or null
      * when the form is invalid. Trims and bounds text to the backend caps.
      */
-    fun toInput(form: FeedbackReportForm, context: FeedbackClientContext): FeedbackReportInput? {
+    fun toInput(form: FeedbackReportForm, context: FeedbackClientContext, rideId: String? = null): FeedbackReportInput? {
         if (validate(form) != null) return null
         return FeedbackReportInput(
             summary = form.summary.trim().takeIf { it.isNotEmpty() }?.take(MAX_SUMMARY_LENGTH),
@@ -60,6 +62,7 @@ object FeedbackReports {
             appVersion = context.appVersion?.takeIf { it.isNotBlank() },
             osVersion = context.osVersion?.takeIf { it.isNotBlank() },
             deviceModel = context.deviceModel?.takeIf { it.isNotBlank() },
+            rideId = rideId,
         )
     }
 }

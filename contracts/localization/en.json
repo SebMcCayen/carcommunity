@@ -1131,7 +1131,8 @@
     "tierRestrictedBanner": "%1$d older drives are hidden on your plan. Upgrade to see them.",
     "loadMore": "Show more",
     "loadingMore": "Loading more...",
-    "loadMoreError": "Couldn't load more drives. Try again."
+    "loadMoreError": "Couldn't load more drives. Try again.",
+    "reportProblem": "Report a problem with this drive"
   },
   "imageEditor": {
     "title": "Edit photo",
@@ -1789,7 +1790,8 @@
     "thankYouBody": "Your report has been received. Thanks for helping us make the app better.",
     "thankYouIssue": "An issue was created on GitHub where you can follow the problem.",
     "issueNumber": "Issue #%1$d",
-    "openTicketsButton": "View open tickets"
+    "openTicketsButton": "View open tickets",
+    "driveContext": "This report is linked to this drive. The issue will not include your route or location data."
   },
   "openTickets": {
     "title": "Open tickets",

@@ -490,7 +490,7 @@ class SingleSessionRecordingTest {
 
         // The attached source's fixes reach the recorder — the live distance path.
         source.onFix?.invoke(57.0, 12.0, 1_000L, 10.0)
-        source.onFix?.invoke(57.001, 12.0, 2_000L, 12.0)
+        source.onFix?.invoke(57.001, 12.0, 11_000L, 12.0)
         assertEquals(2, SingleSessionRecording.active.value?.recordedPoints()?.size)
 
         // A same-session re-run must NOT re-consult the factory or re-start the
@@ -550,8 +550,27 @@ class SingleSessionRecordingTest {
         SingleSessionRecording.start(UID, repository, controllerFactory = factory)
         assertEquals(1, working.startCount)
         working.onFix?.invoke(57.0, 12.0, 1_000L, 5.0)
-        working.onFix?.invoke(57.001, 12.0, 2_000L, 6.0)
+        working.onFix?.invoke(57.001, 12.0, 11_000L, 6.0)
         assertEquals(2, SingleSessionRecording.active.value?.recordedPoints()?.size)
+    }
+
+    @Test
+    fun `an asynchronously refused source can be reattached without replacing recording`() {
+        val failed = FakeDriveLocationSource()
+        val working = FakeDriveLocationSource()
+        var factories = 0
+        val factory: () -> DriveLocationSource? = { if (factories++ == 0) failed else working }
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        val original = SingleSessionRecording.active.value
+        val staleCallback = failed.onFix
+        failed.running = false
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        assertSame(original, SingleSessionRecording.active.value)
+        assertEquals(1, working.startCount)
+        staleCallback?.invoke(58.0, 13.0, 1_000L, 5.0)
+        assertEquals(0, original?.recordedPoints()?.size)
+        working.onFix?.invoke(57.0, 12.0, 1_000L, 5.0)
+        assertEquals(1, original?.recordedPoints()?.size)
     }
 
     /**
@@ -566,12 +585,16 @@ class SingleSessionRecordingTest {
         var onFix: ((Double, Double, Long, Double?) -> Unit)? = null
         var startCount = 0
         var stopCount = 0
+        var running = true
+        override val isRunning: Boolean get() = running
 
         override fun start(
-            onFix: (latitude: Double, longitude: Double, timestampMs: Long, speedMps: Double?) -> Unit,
+            onFix: (DriveLocationSample) -> Unit,
         ): Boolean {
             startCount++
-            if (startResult) this.onFix = onFix
+            if (startResult) this.onFix = { latitude, longitude, timestamp, speed ->
+                onFix(DriveLocationSample(latitude, longitude, timestamp, timestamp, timestamp, timestamp, 5.0, speed))
+            }
             return startResult
         }
 

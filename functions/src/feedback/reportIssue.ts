@@ -33,6 +33,7 @@ import {
   parseReportIssueInput,
 } from './feedback-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { feedbackDriveDiagnostics } from '../drives/recording-diagnostics';
 
 /**
  * Fine-grained GitHub token with `issues: write` on SebMcCayen/carcommunity.
@@ -80,7 +81,7 @@ export const reportIssue = onCall(CALLABLE_OPTS, async (request): Promise<Report
   const windowStart = Timestamp.fromMillis(Date.now() - FEEDBACK_RATE_LIMIT_WINDOW_MS);
   const feedbackReports = db.collection('feedbackReports');
   const ref = feedbackReports.doc();
-  await db.runTransaction(async (tx) => {
+  const linkedReport = await db.runTransaction(async (tx) => {
     const countSnap = await tx.get(
       feedbackReports.where('uid', '==', actor.uid).where('createdAt', '>=', windowStart).count(),
     );
@@ -90,16 +91,27 @@ export const reportIssue = onCall(CALLABLE_OPTS, async (request): Promise<Report
         'Too many reports — please wait a while before submitting another.',
       );
     }
+    let driveDiagnostics;
+    if (report.rideId) {
+      const ride = await tx.get(db.collection('rides').doc(report.rideId));
+      // Identical result for missing and foreign rides, so this is not an existence probe.
+      if (!ride.exists || ride.data()?.userId !== actor.uid) {
+        throw new HttpsError('not-found', 'Saved drive not found.');
+      }
+      driveDiagnostics = feedbackDriveDiagnostics(ride.data()!);
+    }
+    const linked = { ...report, ...(driveDiagnostics ? { driveDiagnostics } : {}) };
     tx.set(
       ref,
-      buildFeedbackReportDocument(report, actor.uid, () => FieldValue.serverTimestamp()),
+      buildFeedbackReportDocument(linked, actor.uid, () => FieldValue.serverTimestamp()),
     );
+    return linked;
   });
   const reportId = ref.id;
 
   const submittedAtIso = new Date().toISOString();
   const issue = await createGitHubIssue(
-    buildGitHubIssuePayload(report, reportId, submittedAtIso),
+    buildGitHubIssuePayload(linkedReport, reportId, submittedAtIso),
     GITHUB_ISSUE_TOKEN.value(),
     'carcommunity-feedback-bot',
     { reportId },

@@ -29,6 +29,7 @@ struct FeedbackReportInput: Equatable, Sendable {
     let appVersion: String?
     let osVersion: String?
     let deviceModel: String?
+    var rideId: String? = nil
 }
 
 enum FeedbackFormError: Equatable, Sendable {
@@ -46,7 +47,8 @@ enum FeedbackReports {
 
     static func input(
         from form: FeedbackReportForm,
-        context: FeedbackClientContext
+        context: FeedbackClientContext,
+        rideId: String? = nil
     ) -> FeedbackReportInput? {
         guard validate(form) == nil else { return nil }
         let summary = FeedbackText.boundMultiline(form.summary, limit: maximumSummaryLength)
@@ -58,7 +60,8 @@ enum FeedbackReports {
             ),
             appVersion: context.appVersion,
             osVersion: context.osVersion,
-            deviceModel: context.deviceModel
+            deviceModel: context.deviceModel,
+            rideId: rideId
         )
     }
 }

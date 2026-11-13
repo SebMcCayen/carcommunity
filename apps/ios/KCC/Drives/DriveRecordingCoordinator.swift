@@ -36,6 +36,7 @@ enum DriveRecordingState: Equatable, Sendable {
 final class DriveRecordingCoordinator {
     private let repository: DriveRecordingRepository?
     private let provider: LocationProvider
+    private let recordingAppVersion: String?
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let journal: DriveRecordingJournal?
     @ObservationIgnored private let uploadSpool: DriveRouteUploadSpool?
@@ -46,6 +47,7 @@ final class DriveRecordingCoordinator {
     @ObservationIgnored private var desiredContext: DriveRecordingContext?
     @ObservationIgnored private var recorder: DriveRecorder?
     @ObservationIgnored private var stoppedAt: Date?
+    @ObservationIgnored private var lastDiagnosticsCheckpointUptime: TimeInterval?
     @ObservationIgnored nonisolated(unsafe) private var fixesTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var authorizationTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var expiryTask: Task<Void, Never>?
@@ -58,6 +60,7 @@ final class DriveRecordingCoordinator {
         provider: LocationProvider,
         journal: DriveRecordingJournal? = nil,
         uploadSpool: DriveRouteUploadSpool? = nil,
+        recordingAppVersion: String? = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
         now: @escaping @Sendable () -> Date = { Date() },
         expiryTickWait: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(for: .seconds(1))
@@ -68,6 +71,7 @@ final class DriveRecordingCoordinator {
     ) {
         self.repository = repository
         self.provider = provider
+        self.recordingAppVersion = DriveRecordingDiagnostics.normalizedAppVersion(recordingAppVersion)
         self.journal = journal
         self.uploadSpool = uploadSpool
         self.now = now
@@ -196,7 +200,8 @@ final class DriveRecordingCoordinator {
             var restoredRecorder = DriveRecorder(
                 startedAt: restored.startedAt,
                 context: restored.context,
-                restoring: restored.points
+                restoring: restored.points,
+                diagnostics: restored.recordingDiagnostics
             )
             if let update { restoredRecorder.enrichContext(update) }
             recorder = restoredRecorder
@@ -211,6 +216,7 @@ final class DriveRecordingCoordinator {
         fixesTask = nil
         let endedAt = stoppedAt ?? now()
         stoppedAt = endedAt
+        journal?.updateDiagnostics(recorder.recordingDiagnostics, sessionId: recorder.context.sourceSessionId)
         journal?.markStopped(at: endedAt)
         let summary = recorder.summary(endedAt: endedAt)
         state = .saving(summary)
@@ -291,21 +297,25 @@ final class DriveRecordingCoordinator {
             recorder = DriveRecorder(
                 startedAt: restored.startedAt,
                 context: context,
-                restoring: restored.points
+                restoring: restored.points,
+                diagnostics: restored.recordingDiagnostics
             )
         } else {
             journal?.clear()
-            recorder = DriveRecorder(startedAt: now(), context: context)
+            recorder = DriveRecorder(startedAt: now(), context: context, appVersion: recordingAppVersion)
             journal?.begin(context: context, startedAt: recorder.startedAt)
+            // Persist the source version even before the first position arrives.
+            journal?.updateDiagnostics(recorder.recordingDiagnostics, sessionId: context.sourceSessionId)
         }
         self.recorder = recorder
         stoppedAt = nil
+        lastDiagnosticsCheckpointUptime = nil
         state = .recording(recorder.summary(endedAt: now()))
-        let stream = provider.fixes()
+        let stream = provider.recordingEvents()
         fixesTask = Task { [weak self] in
-            for await fix in stream {
+            for await event in stream {
                 guard !Task.isCancelled, let self else { return }
-                self.accept(fix)
+                self.accept(event)
             }
         }
     }
@@ -446,11 +456,19 @@ final class DriveRecordingCoordinator {
         if clearJournal { journal?.clear() }
     }
 
-    private func accept(_ fix: LocationFix) {
+    private func accept(_ event: RecordingLocationEvent) {
         guard var recorder, case .recording = state else { return }
-        guard recorder.add(fix) else { return }
-        if let point = recorder.points.last { journal?.append(point) }
+        let accepted = recorder.add(event)
+        if accepted, let point = recorder.points.last { journal?.append(point) }
+        if lastDiagnosticsCheckpointUptime == nil ||
+            event.receivedUptime - (lastDiagnosticsCheckpointUptime ?? event.receivedUptime) >= 15 {
+            journal?.updateDiagnostics(recorder.recordingDiagnostics,
+                sessionId: recorder.context.sourceSessionId)
+            lastDiagnosticsCheckpointUptime = event.receivedUptime
+        }
+        // Retain rejection counters too; a rejected sample must not disappear
+        // just because it left the displayed route unchanged.
         self.recorder = recorder
-        state = .recording(recorder.summary(endedAt: now()))
+        if accepted { state = .recording(recorder.summary(endedAt: now())) }
     }
 }

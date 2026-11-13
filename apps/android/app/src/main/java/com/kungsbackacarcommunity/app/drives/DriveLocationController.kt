@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -29,8 +30,11 @@ interface DriveLocationSource {
      * absent, so the caller can drive its permission UI / retry).
      */
     fun start(
-        onFix: (latitude: Double, longitude: Double, timestampMs: Long, speedMps: Double?) -> Unit,
+        onFix: (DriveLocationSample) -> Unit,
     ): Boolean
+
+    /** False after a registration fails; lets a lifecycle retry reattach. */
+    val isRunning: Boolean get() = true
 
     /** Stops updates. Safe to call repeatedly. */
     fun stop()
@@ -71,6 +75,8 @@ class DriveLocationController private constructor(
 ) : DriveLocationSource {
     private var callback: LocationCallback? = null
 
+    override val isRunning: Boolean get() = callback != null
+
     /**
      * Starts fused-location updates, invoking [onFix] on the main looper for
      * each sample. A missing runtime location permission surfaces as a
@@ -88,19 +94,31 @@ class DriveLocationController private constructor(
      * and timestamps and nothing else).
      */
     override fun start(
-        onFix: (latitude: Double, longitude: Double, timestampMs: Long, speedMps: Double?) -> Unit,
+        onFix: (DriveLocationSample) -> Unit,
     ): Boolean {
         if (callback != null) return true
         val cb =
             object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
-                    val fix = result.lastLocation ?: return
-                    onFix(
-                        fix.latitude,
-                        fix.longitude,
-                        fix.time,
-                        if (fix.hasSpeed()) fix.speed.toDouble() else null,
-                    )
+                    if (callback !== this) return
+                    val receiptElapsedMs = SystemClock.elapsedRealtime()
+                    val receiptMillis = System.currentTimeMillis()
+                    // Preserve every delivered fix; quality/order checks happen
+                    // in the recorder, not by silently taking only the last fix.
+                    for (fix in result.locations) {
+                        onFix(
+                            DriveLocationSample(
+                                latitude = fix.latitude,
+                                longitude = fix.longitude,
+                                timestampMs = fix.time,
+                                elapsedRealtimeMs = fix.elapsedRealtimeNanos / 1_000_000,
+                                receivedElapsedRealtimeMs = receiptElapsedMs,
+                                receivedAtMillis = receiptMillis,
+                                accuracyMeters = if (fix.hasAccuracy()) fix.accuracy.toDouble() else null,
+                                speedMps = if (fix.hasSpeed()) fix.speed.toDouble() else null,
+                            ),
+                        )
+                    }
                 }
             }
         val request =
@@ -111,10 +129,19 @@ class DriveLocationController private constructor(
                 .setMinUpdateIntervalMillis(BackgroundLocation.MIN_UPDATE_INTERVAL_MS)
                 .build()
         return try {
-            fusedClient.requestLocationUpdates(request, cb, Looper.getMainLooper())
             callback = cb
+            fusedClient.requestLocationUpdates(request, cb, Looper.getMainLooper())
+                .addOnFailureListener {
+                    // A late error from an older registration cannot detach a
+                    // replacement stream. Never retain a source that delivers nothing.
+                    if (callback === cb) {
+                        callback = null
+                        fusedClient.removeLocationUpdates(cb)
+                    }
+                }
             true
         } catch (_: SecurityException) {
+            if (callback === cb) callback = null
             false
         }
     }

@@ -1131,7 +1131,8 @@
     "tierRestrictedBanner": "%1$d äldre körningar är dolda på ditt abonnemang. Uppgradera för att se dem.",
     "loadMore": "Visa fler",
     "loadingMore": "Laddar fler...",
-    "loadMoreError": "Kunde inte ladda fler körningar. Försök igen."
+    "loadMoreError": "Kunde inte ladda fler körningar. Försök igen.",
+    "reportProblem": "Rapportera problem med körningen"
   },
   "imageEditor": {
     "title": "Redigera bild",
@@ -1789,7 +1790,8 @@
     "thankYouBody": "Din rapport har tagits emot. Tack för att du hjälper oss att göra appen bättre.",
     "thankYouIssue": "Ett ärende har skapats på GitHub där du kan följa problemet.",
     "issueNumber": "Ärende #%1$d",
-    "openTicketsButton": "Visa öppna ärenden"
+    "openTicketsButton": "Visa öppna ärenden",
+    "driveContext": "Rapporten kopplas till den här körningen. Körspår och platsuppgifter delas inte i ärendet."
   },
   "openTickets": {
     "title": "Öppna ärenden",

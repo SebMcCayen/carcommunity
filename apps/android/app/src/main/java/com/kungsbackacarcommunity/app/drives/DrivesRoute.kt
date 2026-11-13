@@ -13,6 +13,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
+import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
+import com.kungsbackacarcommunity.app.feedback.FirebaseFeedbackRepository
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
@@ -62,6 +65,11 @@ fun DrivesRoute(
     initialRideId: String? = null,
     onInitialRideConsumed: () -> Unit = {},
 ) {
+    val context = LocalContext.current
+    val feedbackCoordinator = remember(uid) {
+        FirebaseFeedbackRepository.createIfAvailable(context)?.let { FeedbackCoordinator(it) }
+    }
+    var reportingRideId by rememberSaveable(uid) { mutableStateOf<String?>(null) }
     val historyCoordinator = remember(historyRepository) { DriveHistoryCoordinator(historyRepository) }
     val statsCoordinator = remember(historyRepository) { DriveStatsCoordinator(historyRepository) }
     val state by historyCoordinator.state.collectAsState()
@@ -139,6 +147,22 @@ fun DrivesRoute(
 
     val selected = loaded?.drives?.firstOrNull { it.rideId == selectedRideId }
 
+    // Keep the selected history detail while the explicitly scoped report is open.
+    if (reportingRideId != null && feedbackCoordinator != null) {
+        val closeReport = { feedbackCoordinator.reset(); reportingRideId = null }
+        BackHandler(onBack = closeReport)
+        CompositionLocalProvider(LocalAeroBackAvailable provides true) {
+            FeedbackReportRoute(
+                coordinator = feedbackCoordinator,
+                openTicketsEnabled = false,
+                onOpenTickets = {},
+                onBack = closeReport,
+                rideId = reportingRideId,
+            )
+        }
+        return
+    }
+
     // System/gesture Back unwinds one internal level (detail/stats -> list); at
     // the list root it is disabled so the shell's BackHandler returns to Home.
     BackHandler(enabled = selectedRideId != null || showStats) {
@@ -171,6 +195,9 @@ fun DrivesRoute(
                         },
                         routeRepository = routeRepository,
                         uid = uid,
+                        onReportProblem = feedbackCoordinator?.let { feedback ->
+                            { feedback.reset(); reportingRideId = drive.rideId }
+                        },
                     )
                 }
             }

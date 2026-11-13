@@ -32,6 +32,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { connectFirestoreEmulator, doc, getDoc, getFirestore } from 'firebase/firestore';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -207,6 +208,7 @@ beforeAll(async () => {
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
   functions = getFunctions(app, REGION);
   connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
+  connectFirestoreEmulator(getFirestore(app), EMULATOR_HOST, 8080);
 
   member = await createProvisionedUser('drives-member');
   await adminDb.collection('users').doc(member.uid).set({ activeMember: true }, { merge: true });
@@ -223,6 +225,96 @@ afterAll(async () => {
 });
 
 describe('drives-save', () => {
+  it('persists owner-only diagnostics once and excludes them from history responses', async () => {
+    await signInAs(member);
+    const recordingDiagnostics = {
+      version: 1,
+      algorithmVersion: 'recording-quality-v1',
+      receivedPoints: 5,
+      acceptedPoints: 3,
+      rejectedInvalid: 0,
+      rejectedAccuracy: 1,
+      rejectedStale: 0,
+      rejectedTime: 0,
+      rejectedSpeed: 1,
+      droppedCapacity: 0,
+      droppedStationary: 0,
+      droppedThrottled: 0,
+      maxGapMs: 20_000,
+      gapCount: 1,
+      resumedCount: 1,
+      platform: 'android',
+      appVersion: '1.1.13',
+    };
+    const request = { ...validSave, sourceSessionId: 'diagnostics-once', recordingDiagnostics };
+    const saved = (await call('drives-save', request)).data as {
+      rideId: string;
+      alreadySaved: boolean;
+    };
+    expect(saved.alreadySaved).toBe(false);
+    const first = (await adminDb.collection('rides').doc(saved.rideId).get()).data()!;
+    expect(first.recordingDiagnostics).toEqual(recordingDiagnostics);
+    expect(first.calculationDiagnostics.algorithmVersion).toBe('haversine-segment-v1');
+    expect(first.calculationDiagnostics.rejectedSpeedSegments).toBe(0);
+    const retry = (
+      await call('drives-save', {
+        ...request,
+        recordingDiagnostics: {
+          ...recordingDiagnostics,
+          resumedCount: 99,
+          platform: 'ios',
+          appVersion: '2.4.6',
+        },
+      })
+    ).data as { alreadySaved: boolean };
+    expect(retry.alreadySaved).toBe(true);
+    expect(
+      (await adminDb.collection('rides').doc(saved.rideId).get()).data()?.recordingDiagnostics,
+    ).toEqual(recordingDiagnostics);
+    const malformed = (
+      await call('drives-save', {
+        ...request,
+        sourceSessionId: 'diagnostics-malformed-context',
+        recordingDiagnostics: {
+          ...recordingDiagnostics,
+          platform: 'unsupported',
+          appVersion: null,
+        },
+      })
+    ).data as { rideId: string };
+    const sanitized = (await adminDb.collection('rides').doc(malformed.rideId).get()).data()
+      ?.recordingDiagnostics;
+    expect(sanitized.acceptedPoints).toBe(recordingDiagnostics.acceptedPoints);
+    expect(sanitized).not.toHaveProperty('platform');
+    expect(sanitized).not.toHaveProperty('appVersion');
+    const legacyCounters = Object.fromEntries(
+      Object.entries(recordingDiagnostics).filter(
+        ([key]) => key !== 'platform' && key !== 'appVersion',
+      ),
+    );
+    const legacyRequest = {
+      ...request,
+      sourceSessionId: 'diagnostics-legacy-source',
+      recordingDiagnostics: legacyCounters,
+    };
+    const legacy = (await call('drives-save', legacyRequest)).data as { rideId: string };
+    await call('drives-save', { ...legacyRequest, recordingDiagnostics });
+    const originalLegacy = (await adminDb.collection('rides').doc(legacy.rideId).get()).data()
+      ?.recordingDiagnostics;
+    expect(originalLegacy).toEqual(legacyCounters);
+    expect(originalLegacy).not.toHaveProperty('platform');
+    expect(originalLegacy).not.toHaveProperty('appVersion');
+    const own = await getDoc(doc(getFirestore(app), 'rides', saved.rideId));
+    expect(own.data()?.recordingDiagnostics).toEqual(recordingDiagnostics);
+    const history = JSON.stringify((await call('drives-listHistory', {})).data);
+    expect(history).not.toContain('recordingDiagnostics');
+    expect(history).not.toContain('calculationDiagnostics');
+    await signInAs(freeUser);
+    expect(await callableErrorCode(getDoc(doc(getFirestore(app), 'rides', saved.rideId)))).toBe(
+      'permission-denied',
+    );
+  });
+
   it('rejects a stale token after profile removal without creating a drive', async () => {
     const user = await createProvisionedUser('drives-missing-profile');
     await signInAs(user);

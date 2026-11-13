@@ -15,21 +15,30 @@ struct SessionLocationFilter: Sendable {
     private var reacquiring = false
 
     mutating func process(_ fix: LocationFix, now: Date) -> LocationFix? {
+        processDecision(fix, now: now).fix
+    }
+
+    /// Exposes why a raw session fix was withheld without retaining its location.
+    /// The existing motion policy is shared by live sharing and recording.
+    mutating func processDecision(_ fix: LocationFix, now: Date) -> RecordingLocationDecision {
         let age = now.timeIntervalSince(fix.timestamp)
         guard fix.latitude.isFinite, (-90...90).contains(fix.latitude),
-              fix.longitude.isFinite, (-180...180).contains(fix.longitude),
-              age.isFinite, (-5...15).contains(age),
-              let accuracy = fix.accuracyMeters, accuracy.isFinite,
-              (0...Self.maximumAccuracyMeters).contains(accuracy) else { return nil }
+              fix.longitude.isFinite, (-180...180).contains(fix.longitude)
+        else { return .rejected(.invalid) }
+        guard age.isFinite, (-5...15).contains(age) else { return .rejected(.stale) }
+        guard let accuracy = fix.accuracyMeters, accuracy.isFinite,
+              (0...Self.maximumAccuracyMeters).contains(accuracy)
+        else { return .rejected(.accuracy) }
         if let lastRaw {
             let dt = fix.timestamp.timeIntervalSince(lastRaw.timestamp)
-            guard dt > 0, Self.distance(lastRaw, fix) / dt <= 55.6 else { return nil }
+            guard dt > 0 else { return .rejected(.time) }
+            guard Self.distance(lastRaw, fix) / dt <= 55.6 else { return .rejected(.speed) }
             if dt > 15 { reacquiring = true }
         }
         let speed = Self.trustedSpeed(fix)
         // A positive first reading has no displacement evidence yet. Seed the
         // position without allowing it to bypass parked-motion confirmation.
-        guard let anchor else { return adopt(fix, speed: speed == 0 ? 0 : nil) }
+        guard let anchor else { return .accepted(adopt(fix, speed: speed == 0 ? 0 : nil)) }
         lastRaw = fix
         let distance = Self.distance(anchor, fix)
         let radius = max(10, min(50, (anchor.accuracyMeters ?? 0) + accuracy))
@@ -37,16 +46,16 @@ struct SessionLocationFilter: Sendable {
         // Accurate zero speed is affirmative stationary evidence. Finish the
         // last moving segment once, then hold the parked coordinate.
         if speed == 0 {
-            if moving && !reacquiring { return adopt(fix, speed: 0) }
+            if moving && !reacquiring { return .accepted(adopt(fix, speed: 0)) }
             if !reacquiring || distance <= radius {
                 candidate = nil; reacquiring = false
-                return held(anchor, at: fix, speed: 0)
+                return .accepted(held(anchor, at: fix, speed: 0))
             }
         }
-        if moving, !reacquiring, let speed, speed > 0 { return adopt(fix, speed: speed) }
+        if moving, !reacquiring, let speed, speed > 0 { return .accepted(adopt(fix, speed: speed)) }
         if distance <= radius {
             candidate = nil; reacquiring = false
-            return held(anchor, at: fix, speed: nil)
+            return .accepted(held(anchor, at: fix, speed: nil))
         }
 
         // With uncertain speed, or when first leaving a parked anchor, one
@@ -64,14 +73,14 @@ struct SessionLocationFilter: Sendable {
             let continues = distance > oldDistance &&
                 Self.directionAgreement(anchor, candidate, fix) > 0.8
             if confirmsArea || continues {
-                if fix.timestamp.timeIntervalSince(candidate.timestamp) >= 2 { return adopt(fix, speed: speed) }
+                if fix.timestamp.timeIntervalSince(candidate.timestamp) >= 2 { return .accepted(adopt(fix, speed: speed)) }
                 // CoreLocation commonly delivers at 1 Hz. Preserve the first
                 // corroborated candidate until its evidence window matures.
-                return held(anchor, at: fix, speed: nil)
+                return .accepted(held(anchor, at: fix, speed: nil))
             }
         }
         candidate = fix
-        return held(anchor, at: fix, speed: nil)
+        return .accepted(held(anchor, at: fix, speed: nil))
     }
 
     private mutating func adopt(_ fix: LocationFix, speed: Double?) -> LocationFix {
