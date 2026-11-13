@@ -221,7 +221,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(readable.keyboardPresented)
         XCTAssertTrue(readable.fullyReadable(identifier: id))
         for frame in [CGRect.zero, .null, .infinite,
-                      CGRect(x: .nan, y: 214, width: 280, height: 125.3),
+                      CGRect(x: CGFloat.nan, y: 214, width: 280, height: 125.3),
                       CGRect(x: 68, y: 600, width: 280, height: 125.3),
                       CGRect(x: 68, y: 390, width: 280, height: 125.3),
                       CGRect(x: 68, y: -20, width: 280, height: 125.3),
@@ -300,7 +300,7 @@ final class ShellSmokeTests: XCTestCase {
             "An offscreen stale keyboard node does not cover the conversation")
         let zeroAreaKeyboard = Node(identifier: "", type: .keyboard, frame: .zero)
         XCTAssertTrue(ChatViewportEvidence(window: window, elements: dismissed + [zeroAreaKeyboard]).keyboardDismissed)
-        for unknownFrame in [CGRect.null, .infinite, CGRect(x: .nan, y: 583, width: 402, height: 233)] {
+        for unknownFrame in [CGRect.null, .infinite, CGRect(x: CGFloat.nan, y: 583, width: 402, height: 233)] {
             let unknownKeyboard = Node(identifier: "", type: .keyboard, frame: unknownFrame)
             let evidence = ChatViewportEvidence(window: window, elements: dismissed + [unknownKeyboard])
             XCTAssertFalse(evidence.keyboardDismissed, "Unknown keyboard geometry is not proof of dismissal")
