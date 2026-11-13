@@ -326,26 +326,29 @@ final class ShellSmokeTests: XCTestCase {
             "A missing keyboard alone cannot prove that navigation was restored")
     }
 
-    func testKeyboardEntryEvidenceRequiresTheSelectedFixtureAndItsReadableThread() {
+    func testKeyboardEntryEvidenceRequiresTheNativeHeaderAndReadableFixture() {
         typealias Node = ChatViewportEvidence.Element
         let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        // Captured native entry geometry from CI: this header has Back to Map,
+        // source selection and channels. The retired Events shortcut is absent.
         let nodes: [Node] = [
-            Node(identifier: "chatHub.opaqueScreen", type: .other, frame: CGRect(x: 0, y: 63, width: 402, height: 711)),
-            Node(identifier: "shell.tab.chat", type: .button, frame: CGRect(x: 80, y: 785, width: 60, height: 60), selected: true),
-            Node(identifier: "chatHub.source.chats", type: .button, frame: CGRect(x: 20, y: 80, width: 180, height: 48), selected: true),
-            Node(identifier: "chatHub.source.driver", type: .button, frame: CGRect(x: 210, y: 80, width: 180, height: 48)),
-            Node(identifier: "chatHub.channel.0", type: .button, frame: CGRect(x: 20, y: 140, width: 180, height: 48), selected: true),
-            Node(identifier: "chatHub.events", type: .button, frame: CGRect(x: 280, y: 190, width: 100, height: 44)),
-            Node(identifier: "chat.thread.messages", type: .scrollView, frame: CGRect(x: 0, y: 237, width: 402, height: 550)),
-            Node(identifier: "chat.quickEmojiRow", type: .scrollView, frame: CGRect(x: 0, y: 650, width: 402, height: 48)),
-            Node(identifier: "chat.quickEmoji.happy", type: .button, frame: CGRect(x: 20, y: 650, width: 48, height: 48)),
-            Node(identifier: "chat.composer.input", type: .textField, frame: CGRect(x: 20, y: 710, width: 280, height: 48)),
-            Node(identifier: "chat.composer.send", type: .button, frame: CGRect(x: 310, y: 710, width: 80, height: 48)),
+            Node(identifier: "chatHub.opaqueScreen", type: .other, frame: CGRect(x: 0, y: 0, width: 402, height: 768)),
+            Node(identifier: "shell.tab.chat", type: .button, frame: CGRect(x: 85.3, y: 776, width: 77, height: 56), selected: true),
+            Node(identifier: "chatHub.source.chats", type: .button, frame: CGRect(x: 20, y: 82, width: 181, height: 48), selected: true),
+            Node(identifier: "chatHub.source.driver", type: .button, frame: CGRect(x: 201, y: 82, width: 181, height: 48)),
+            Node(identifier: "chatHub.channel.0", type: .button, frame: CGRect(x: 68, y: 162, width: 105.3, height: 63.3), selected: true),
+            Node(identifier: "chatHub.backToMap", type: .button, frame: CGRect(x: 8, y: 169.7, width: 48, height: 48)),
+            Node(identifier: "chat.thread.messages", type: .scrollView, frame: CGRect(x: 0, y: 237.7, width: 402, height: 530.3)),
+            Node(identifier: "chat.quickEmojiRow", type: .scrollView, frame: CGRect(x: 0, y: 642, width: 402, height: 48)),
+            Node(identifier: "chat.quickEmoji.happy", type: .button, frame: CGRect(x: 8, y: 642, width: 48, height: 48)),
+            Node(identifier: "chat.composer.input", type: .textField, frame: CGRect(x: 20, y: 718, width: 277.7, height: 22)),
+            Node(identifier: "chat.composer.send", type: .button, frame: CGRect(x: 317.7, y: 698, width: 76.3, height: 62)),
             Node(identifier: "chat.message.text.fixture-39", type: .staticText,
-                frame: CGRect(x: 68, y: 500, width: 280, height: 100), inMessageThread: true),
+                frame: CGRect(x: 68, y: 595, width: 150, height: 20.3), inMessageThread: true),
         ]
-        XCTAssertTrue(ChatViewportEvidence(window: window, elements: nodes).keyboardFixtureReady)
-        for missing in ["chatHub.opaqueScreen", "chatHub.source.driver", "chatHub.events",
+        XCTAssertTrue(ChatViewportEvidence(window: window, elements: nodes).keyboardFixtureReady,
+            "The actual native header must be accepted without a retired Events shortcut")
+        for missing in ["chatHub.opaqueScreen", "chatHub.source.driver", "chatHub.backToMap",
                         "chat.thread.messages", "chat.composer.input", "chat.message.text.fixture-39"] {
             XCTAssertFalse(ChatViewportEvidence(window: window,
                 elements: nodes.filter { $0.identifier != missing }).keyboardFixtureReady,
@@ -1673,7 +1676,7 @@ private struct ChatViewportEvidence {
               let viewport = readableViewport, hub.contains(viewport),
               isSelected("shell.tab.chat"), isSelected("chatHub.source.chats"),
               isSelected("chatHub.channel.0"), visible("chatHub.channel.0"),
-              visible("chatHub.source.driver"), visible("chatHub.events"),
+              visible("chatHub.source.driver"), visible("chatHub.backToMap"),
               visible("chat.quickEmoji.happy"), visible("chat.composer.send") else { return false }
         return fullyReadable(identifier: "chat.message.text.fixture-39")
     }
