@@ -144,7 +144,6 @@ struct ShellView: View {
     /// foreground map provider and the time-bounded live-sharing provider.
     @State private var driveLocationProvider = CoreLocationProvider(backgroundEnabled: true)
     @State private var showStartDriving = false
-    @State private var showStopConfirmation = false
     @State private var pendingSingleSessionStart = false
     @State private var pendingStartVehicleId: String?
     @State private var pendingConvoyCreate = false
@@ -604,7 +603,10 @@ struct ShellView: View {
             }
         }
         .onChange(of: liveLocationCoordinator?.isSharing) { _, sharing in
-            if sharing != true { nearbyWaveCoordinator?.sharingEnded() }
+            if sharing != true {
+                nearbyWaveCoordinator?.sharingEnded()
+                if case .stopLive = mapReadingSelection { dismissMapReading() }
+            }
             guard let sharing,
                   let command = pendingSessionCommand,
                   command.isReconciled(isSharing: sharing)
@@ -721,16 +723,6 @@ struct ShellView: View {
         .foregroundStyle(KccTheme.text)
         .tint(KccTheme.driver)
         .background(KccTheme.page, ignoresSafeAreaEdges: .all)
-        .confirmationDialog(
-            "liveLocation.stop",
-            isPresented: $showStopConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("liveLocation.stop", role: .destructive) {
-                stopSingleSession()
-            }
-            Button("shell.liveSharePromptCancel", role: .cancel) {}
-        }
         .alert(Text("map.locationNeededTitle"), isPresented: permissionPromptIsPresented) {
             if locationPermissionCoordinator?.state == .rationale {
                 Button("map.locationDismiss", role: .cancel) {
@@ -855,6 +847,7 @@ struct ShellView: View {
                 ConfiglessNearbyLiveMarker(coordinator: nearbyLive) {
                     selectMapReading(.nearby(ConfiglessLiveSessionFixture.otherUid))
                 }
+                ConfiglessDriveSaveProbe(state: driveRecordingCoordinator?.state)
             }
             #endif
             if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
@@ -1269,7 +1262,12 @@ struct ShellView: View {
                 VStack(spacing: KccSpacing.s2) {
                     if let selection = mapReadingSelection {
                         let available = max(0, geometry.size.height - mapSessionHeight - KccSpacing.s4)
-                        if case .crown = selection {
+                        if case .stopLive = selection {
+                            mapReadingPanel(selection)
+                                .id(selection)
+                                .frame(height: min(available, max(220, min(320, geometry.size.height * 0.45))))
+                                .padding(.horizontal, -KccSpacing.s4)
+                        } else if case .crown = selection {
                             mapReadingPanel(selection)
                                 .id(selection)
                                 .frame(height: min(available, max(240, min(420, geometry.size.height * 0.62))), alignment: .bottom)
@@ -1321,6 +1319,13 @@ struct ShellView: View {
 
     @ViewBuilder private func mapReadingPanel(_ selection: MapReadingSelection) -> some View {
         switch selection {
+        case .stopLive:
+            MapReadingPanel(title: "shell.liveTitle", onClose: dismissMapReading, docksToBottom: true) {
+                LiveSessionStopContent(busy: pendingSessionCommand != nil || liveLocationCoordinator?.actionStatus == .working) {
+                    dismissMapReading()
+                    stopSingleSession()
+                }
+            }
         case .place(let place):
             MapReadingPanel(title: "shell.placeMenuTitle", onClose: dismissMapReading) {
                 PlaceNavigationContent(place: place) { navigateToPlace(place) }
@@ -1402,6 +1407,7 @@ struct ShellView: View {
             mapReadingSelection = .police(pin.id)
         } else { mapReadingSelection = selection }
         if case .savedPlaces = selection { clearIncidentSelection() }
+        if case .stopLive = selection { clearIncidentSelection() }
         if case .nearby = selection { clearIncidentSelection() }
         if case .convoyMember = selection { clearIncidentSelection() }
     }
@@ -2114,7 +2120,8 @@ struct ShellView: View {
             canShareLive: coordinator.canShare
         )
         if coordinator.isSharing {
-            showStopConfirmation = true
+            closeAddressSearch()
+            selectMapReading(.stopLive)
         } else if actions.showChooser {
             startDrivingGarage = GarageCoordinator(
                 repository: FirebaseVehiclesRepository.createIfAvailable(),
@@ -2476,7 +2483,6 @@ struct ShellView: View {
         }
 
         showStartDriving = false
-        showStopConfirmation = false
         cancelPendingCreateAction()
         clearSessionCommand()
         sessionActionError = false

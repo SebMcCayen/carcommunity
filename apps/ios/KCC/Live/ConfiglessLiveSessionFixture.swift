@@ -94,6 +94,22 @@ actor ConfiglessDriveRecordingRepository: DriveRecordingRepository {
     func uploadRoute(_ points: [RecordedDrivePoint], to path: String) async throws {}
 }
 
+/// Lets shell acceptance wait for the real recording coordinator's durable-save
+/// boundary, instead of treating the disappearance of live metrics as proof.
+struct ConfiglessDriveSaveProbe: View {
+    let state: DriveRecordingState?
+
+    var body: some View {
+        if case .kept(let rideId)? = state {
+            Color.clear.frame(width: 1, height: 1)
+                .accessibilityElement()
+                .accessibilityLabel("Saved drive")
+                .accessibilityValue(rideId)
+                .accessibilityIdentifier("map.fixture.savedDrive")
+        }
+    }
+}
+
 struct ConfiglessNearbyLiveMarker: View {
     let coordinator: NearbyLiveCoordinator
     let onSelect: () -> Void
