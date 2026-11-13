@@ -1,4 +1,18 @@
 import SwiftUI
+#if DEBUG
+import FirebaseCore
+
+/// Isolate the keyboard contract from primary-navigation input delivery. Both
+/// flags and a config-less Debug build are required; ordinary launches stay Map.
+enum ConfiglessChatKeyboardFixture {
+    static func initialTab(arguments: [String], firebaseConfigured: Bool) -> ShellTab? {
+        guard !firebaseConfigured,
+              arguments.contains("-KCCUITestChatThread"),
+              arguments.contains("-KCCUITestChatKeyboard") else { return nil }
+        return .chat
+    }
+}
+#endif
 
 /// The auth-state switch — the iOS port of Android's `AppRoot.kt`:
 /// signed out → ``SignInScreen``; signed in → the tab shell; unavailable
@@ -51,8 +65,20 @@ struct RootView: View {
             authenticatedUid: nil,
             access: .unrestrictedCommunity,
             featureFlags: .contractDefaults,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            initialTab: configlessInitialTab
         )
+    }
+
+    private var configlessInitialTab: ShellTab? {
+        #if DEBUG
+        ConfiglessChatKeyboardFixture.initialTab(
+            arguments: ProcessInfo.processInfo.arguments,
+            firebaseConfigured: FirebaseApp.app() != nil
+        )
+        #else
+        nil
+        #endif
     }
 
     @ViewBuilder

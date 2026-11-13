@@ -194,6 +194,21 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
+    func testSnapshotSelectionRequiresTheRequestedSelectedIdentifier() {
+        typealias Node = ChatViewportEvidence.Element
+        let frame = CGRect(x: 20, y: 80, width: 180, height: 48)
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let selected = Node(identifier: "chatHub.channel.3", type: .button, frame: frame, selected: true)
+        let evidence = ChatViewportEvidence(window: window, elements: [selected])
+        XCTAssertTrue(evidence.isSelected("chatHub.channel.3"))
+        XCTAssertFalse(evidence.isSelected("chatHub.channel.0"), "Another selected channel is not proof of the requested selection")
+        XCTAssertFalse(evidence.isSelected(""))
+        var unselected = selected
+        unselected.selected = false
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: [unselected]).isSelected("chatHub.channel.3"))
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: []).isSelected("chatHub.channel.3"))
+    }
+
     func testChatViewportEvidenceRequiresFullReadableMessageAndNoOccludingModal() {
         typealias Node = ChatViewportEvidence.Element
         // Derived from the maximum-text CI failure's message/footer geometry:
@@ -311,12 +326,54 @@ final class ShellSmokeTests: XCTestCase {
             "A missing keyboard alone cannot prove that navigation was restored")
     }
 
+    func testKeyboardEntryEvidenceRequiresTheSelectedFixtureAndItsReadableThread() {
+        typealias Node = ChatViewportEvidence.Element
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let nodes: [Node] = [
+            Node(identifier: "chatHub.opaqueScreen", type: .other, frame: CGRect(x: 0, y: 63, width: 402, height: 711)),
+            Node(identifier: "shell.tab.chat", type: .button, frame: CGRect(x: 80, y: 785, width: 60, height: 60), selected: true),
+            Node(identifier: "chatHub.source.chats", type: .button, frame: CGRect(x: 20, y: 80, width: 180, height: 48), selected: true),
+            Node(identifier: "chatHub.source.driver", type: .button, frame: CGRect(x: 210, y: 80, width: 180, height: 48)),
+            Node(identifier: "chatHub.channel.0", type: .button, frame: CGRect(x: 20, y: 140, width: 180, height: 48), selected: true),
+            Node(identifier: "chatHub.events", type: .button, frame: CGRect(x: 280, y: 190, width: 100, height: 44)),
+            Node(identifier: "chat.thread.messages", type: .scrollView, frame: CGRect(x: 0, y: 237, width: 402, height: 550)),
+            Node(identifier: "chat.quickEmojiRow", type: .scrollView, frame: CGRect(x: 0, y: 650, width: 402, height: 48)),
+            Node(identifier: "chat.quickEmoji.happy", type: .button, frame: CGRect(x: 20, y: 650, width: 48, height: 48)),
+            Node(identifier: "chat.composer.input", type: .textField, frame: CGRect(x: 20, y: 710, width: 280, height: 48)),
+            Node(identifier: "chat.composer.send", type: .button, frame: CGRect(x: 310, y: 710, width: 80, height: 48)),
+            Node(identifier: "chat.message.text.fixture-39", type: .staticText,
+                frame: CGRect(x: 68, y: 500, width: 280, height: 100), inMessageThread: true),
+        ]
+        XCTAssertTrue(ChatViewportEvidence(window: window, elements: nodes).keyboardFixtureReady)
+        for missing in ["chatHub.opaqueScreen", "chatHub.source.driver", "chatHub.events",
+                        "chat.thread.messages", "chat.composer.input", "chat.message.text.fixture-39"] {
+            XCTAssertFalse(ChatViewportEvidence(window: window,
+                elements: nodes.filter { $0.identifier != missing }).keyboardFixtureReady,
+                "Entry needs the actual Chat fixture, not a selected tab or recovery screen alone")
+        }
+        for unselected in ["shell.tab.chat", "chatHub.source.chats", "chatHub.channel.0"] {
+            let wrongSelection = nodes.map { node -> Node in
+                var node = node
+                if node.identifier == unselected { node.selected = false }
+                return node
+            }
+            XCTAssertFalse(ChatViewportEvidence(window: window, elements: wrongSelection).keyboardFixtureReady)
+        }
+        let keyboard = Node(identifier: "", type: .keyboard, frame: CGRect(x: 0, y: 583, width: 402, height: 233))
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: nodes + [keyboard]).keyboardFixtureReady,
+            "The initial fixture must be settled before focusing the composer")
+    }
+
     func testCommunityComposerStaysVisibleWithKeyboard() throws {
         for largeText in [false, true] {
-            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
-            app.buttons["shell.tab.chat"].tap()
-            let composer = app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
-            XCTAssertTrue(composer.waitForExistence(timeout: 15))
+            // Navigation has its own physical Map → Chat acceptance coverage.
+            // This contract starts in an explicitly guarded config-less fixture.
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark",
+                chatFixture: true, chatKeyboardFixture: true)
+            _ = try requireChatEvidence(in: app, name: "chat-keyboard-entry-failure",
+                message: "The keyboard fixture must start in the selected Chat thread with readable content") {
+                $0.keyboardFixtureReady
+            }
             XCTAssertTrue(app.buttons["chat.quickEmoji.happy"].isEnabled,
                 "Quick reactions must work with an empty draft")
             // SwiftUI's vertical TextField may expose a measuring TextField
@@ -1426,7 +1483,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(sheetBar.exists, "Dismissal must remove the sheet before using the screen behind it")
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatKeyboardFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -1434,6 +1491,7 @@ final class ShellSmokeTests: XCTestCase {
         // default can retain/transition the preceding test's category.
         app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
+        if chatKeyboardFixture { app.launchArguments += ["-KCCUITestChatKeyboard"] }
         if chatFloodFixture { app.launchArguments += ["-KCCUITestChatFlood"] }
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
         if rejectMaps { app.launchArguments += ["-KCCUITestNavigationFailure"] }
@@ -1442,6 +1500,9 @@ final class ShellSmokeTests: XCTestCase {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]
         }
         app.launch()
+        // The keyboard contract immediately verifies stronger Chat-specific
+        // readiness from one fresh snapshot, rather than querying Map controls.
+        if chatKeyboardFixture { return app }
         XCTAssertTrue(
             app.buttons["shell.menu"].waitForExistence(timeout: 15),
             "Build without GoogleService-Info.plist to test the config-less shell"
@@ -1485,23 +1546,21 @@ final class ShellSmokeTests: XCTestCase {
         return app
     }
 
-    private func assertSelected(_ tab: XCUIElement) {
-        // A tap returning does not guarantee SwiftUI has published the next
-        // accessibility snapshot. Wait for the actual selection, without retaps.
-        let selected = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in tab.exists && tab.isSelected },
-            object: nil
-        )
-        // Hosted runners can publish selection after the initial five seconds;
-        // failure diagnostics have then already observed selected=true. Keep the
-        // actual-state assertion, with the same bounded wait as launch readiness.
+    private func assertSelected(_ tab: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        // Copy the requested identity once. Each decision then uses one fresh
+        // tree, rather than separate exists/isSelected requests to retired nodes.
+        let identifier = tab.identifier
+        let app = XCUIApplication()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let snapshot = try? ChatViewportEvidence(capturing: app) else { return false }
+            return snapshot.isSelected(identifier)
+        }, object: nil)
         let result = XCTWaiter.wait(for: [selected], timeout: 15)
         if result != .completed {
-            let app = XCUIApplication()
-            chatProof(app, name: "\(tab.identifier)-selection-failure", tree: true)
+            chatProof(app, name: "\(identifier)-selection-failure", tree: true)
             diagnosePrimaryControls(app)
         }
-        XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
+        XCTAssertEqual(result, .completed, "Selection did not settle for \(identifier)", file: file, line: line)
     }
 
     private func reveal(_ target: XCUIElement, in scroll: XCUIElement, minimumHeight: CGFloat) {
@@ -1556,6 +1615,7 @@ private struct ChatViewportEvidence {
         let type: XCUIElement.ElementType
         let frame: CGRect
         var inMessageThread = false
+        var selected = false
     }
 
     let window: CGRect
@@ -1570,10 +1630,11 @@ private struct ChatViewportEvidence {
             // Read the non-Sendable snapshot synchronously on the main actor.
             // Boolean autoclosures must never capture the snapshot object.
             let identifier = snapshot.identifier
+            let selected = snapshot.isSelected
             var withinThread = inThread
             if identifier == "chat.thread.messages" { withinThread = true }
             captured.append(Element(identifier: identifier, label: snapshot.label,
-                type: snapshot.elementType, frame: snapshot.frame, inMessageThread: withinThread))
+                type: snapshot.elementType, frame: snapshot.frame, inMessageThread: withinThread, selected: selected))
             for child in snapshot.children { visit(child, inThread: withinThread) }
         }
         visit(root, inThread: false)
@@ -1601,6 +1662,20 @@ private struct ChatViewportEvidence {
 
     func visible(_ identifier: String) -> Bool {
         elements.contains { $0.identifier == identifier && intersectsWindow($0.frame) }
+    }
+
+    func isSelected(_ identifier: String) -> Bool {
+        !identifier.isEmpty && elements.contains { $0.identifier == identifier && $0.selected }
+    }
+
+    var keyboardFixtureReady: Bool {
+        guard keyboardDismissed, let hub = frame("chatHub.opaqueScreen"),
+              let viewport = readableViewport, hub.contains(viewport),
+              isSelected("shell.tab.chat"), isSelected("chatHub.source.chats"),
+              isSelected("chatHub.channel.0"), visible("chatHub.channel.0"),
+              visible("chatHub.source.driver"), visible("chatHub.events"),
+              visible("chat.quickEmoji.happy"), visible("chat.composer.send") else { return false }
+        return fullyReadable(identifier: "chat.message.text.fixture-39")
     }
 
     private func frame(_ identifier: String) -> CGRect? {

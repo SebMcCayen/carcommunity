@@ -8,6 +8,23 @@ import XCTest
 /// `StubMapSurface` cases live in `MapSurfaceTests.swift`, alongside the
 /// ported seam.
 final class ShellNavTests: XCTestCase {
+    #if DEBUG
+    func testKeyboardFixtureRequiresBothFlagsAndNoFirebaseConfiguration() {
+        let thread = "-KCCUITestChatThread"
+        let keyboard = "-KCCUITestChatKeyboard"
+        XCTAssertEqual(ConfiglessChatKeyboardFixture.initialTab(
+            arguments: [thread, keyboard], firebaseConfigured: false), .chat)
+        for arguments in [[], [thread], [keyboard], ["-KCCUITestChatFlood"], [thread, "-KCCUITestChatKeyboardOther"]] {
+            XCTAssertNil(ConfiglessChatKeyboardFixture.initialTab(
+                arguments: arguments, firebaseConfigured: false))
+        }
+        XCTAssertNil(ConfiglessChatKeyboardFixture.initialTab(
+            arguments: [thread, keyboard], firebaseConfigured: true),
+            "UI-test arguments must never override a Firebase-configured app")
+        XCTAssertEqual(ShellTab.defaultTab, .map)
+    }
+    #endif
+
     func testPrimaryTabsDoNotReuseLegacyHistoryIdentity() {
         XCTAssertEqual(ShellTab.allCases, [.map, .chat, .create, .social, .garage])
         XCTAssertFalse(ShellTab.allCases.contains(.history))
