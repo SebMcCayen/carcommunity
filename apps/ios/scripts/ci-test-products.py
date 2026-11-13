@@ -51,6 +51,10 @@ def cache_fingerprint(current):
 
 
 def destination(runtime=None):
+    # Producers honor the CI runtime pin. Consumers must use the exact runtime
+    # recorded in their artifact, even if the environment pin changes later.
+    if runtime is None:
+        runtime = os.environ.get("IOS_TEST_RUNTIME") or None
     # The first runtime inventory on a hosted image can scan for several minutes.
     devices = json.loads(command("xcrun", "simctl", "list", "devices", "available", "--json", timeout=180))["devices"]
     for key, values in devices.items():

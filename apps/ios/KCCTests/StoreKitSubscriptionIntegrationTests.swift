@@ -13,6 +13,12 @@ final class StoreKitSubscriptionIntegrationTests: XCTestCase {
         session.clearTransactions()
         session.disableDialogs = true
         session.storefront = "SWE"
+        guard session.disableDialogs, session.storefront == "SWE" else {
+            throw NSError(domain: "StoreKitIntegrationEnvironment", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "StoreKit test service did not accept its configuration. " +
+                    "Use iOS 26.2 or a runtime with Apple's FB22500243 fix (iOS 26.6)."
+            ])
+        }
         return session
     }
 

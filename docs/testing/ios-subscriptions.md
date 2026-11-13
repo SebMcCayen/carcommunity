@@ -16,9 +16,21 @@ The integration tests create a real `SKTestSession` from the test-bundle resourc
 product loading, purchase/account binding, restore, unfinished transactions,
 renewal, refund and pending purchase/approval. They never call Firebase.
 
+CI pins `IOS_TEST_RUNTIME` to the installed iOS 26.2 runtime and executes the
+entire unfiltered unit/UI suite there. iOS 26.4/26.5 emit
+`SKInternalErrorDomain Code=3` while saving the StoreKit test configuration;
+product requests then fail with `productUnavailable`. Apple documents the test
+environment connection fix as FB22500243 in the
+[iOS 26.6 release notes](https://developer.apple.com/documentation/ios-ipados-release-notes/ios-ipados-26_6-release-notes).
+The hosted image currently has 26.2, 26.4 and 26.5, so changing Xcode alone does
+not select the fixed runtime. Move the pin to 26.6 or later after it is installed
+on both CI architectures and the full suite passes. Local runs should also use
+26.2 or a runtime containing that fix; test setup rejects an unresponsive test
+service before attempting a purchase.
+
 ```sh
 xcodebuild -project apps/ios/KCC.xcodeproj -scheme KCC \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' \
   -only-testing:KCCTests/StoreKitSubscriptionIntegrationTests \
   -only-testing:KCCTests/SubscriptionCoordinatorTests test
 ```
