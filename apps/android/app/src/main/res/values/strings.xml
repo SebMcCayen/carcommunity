@@ -2251,6 +2251,16 @@
     <string name="carCommunityAccess_suspendedTitle">Åtkomsten är begränsad</string>
     <string name="carCommunityAccess_body">Din åtkomst till CarCommunity är begränsad. Kontakta administratörerna om du har frågor.</string>
     <string name="carCommunityAccess_retry">Kontrollera igen</string>
+    <string name="roadCameras_speedLayer">Fasta fartkameror</string>
+    <string name="roadCameras_trafficLayer">Trafikkameror</string>
+    <string name="roadCameras_roadConditionLayer">Väglagskameror</string>
+    <string name="roadCameras_layerHelp">Visa kameror på kartan</string>
+    <string name="roadCameras_loading">Hämtar kamerabild…</string>
+    <string name="roadCameras_unavailable">Kamerabilden kunde inte hämtas.</string>
+    <string name="roadCameras_rateLimited">Gränsen för kamerabilder är nådd. Försök igen senare.</string>
+    <string name="roadCameras_photoTime">Bild uppdaterad %1$s</string>
+    <string name="roadCameras_retry">Försök igen</string>
+    <string name="roadCameras_catalogUnavailable">Kameror kunde inte uppdateras. Sparade kameror visas om de finns.</string>
     <string name="convoy_invitationFrom">bjuder in till konvoj</string>
     <string name="convoy_invitationJoin">Gå med</string>
     <string name="convoy_invitationDecline">Neka</string>

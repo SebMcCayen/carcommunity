@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "road-cameras.schema.json",
+  "title": "Road camera catalog and on-demand images",
+  "$defs": {
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "latitude", "longitude", "direction"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(speed|traffic|road_condition)_[a-f0-9]{32}$"
+        },
+        "type": {
+          "enum": ["speed", "traffic", "road_condition"]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "direction": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "exclusiveMaximum": 360
+        }
+      }
+    },
+    "catalogRequest": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "catalogResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cameras", "updatedAt"],
+      "properties": {
+        "cameras": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/camera"
+          }
+        },
+        "updatedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+    "photoRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cameraId"],
+      "properties": {
+        "cameraId": {
+          "type": "string",
+          "pattern": "^(speed|traffic|road_condition)_[a-f0-9]{32}$"
+        }
+      }
+    },
+    "photoResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base64", "contentType", "photoTime", "cacheSeconds"],
+      "properties": {
+        "base64": {
+          "type": "string",
+          "maxLength": 174764,
+          "description": "At most128KiB decoded image bytes."
+        },
+        "contentType": {
+          "enum": ["image/jpeg", "image/png"]
+        },
+        "photoTime": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Actual image HTTP Last-Modified update timestamp, null when absent; never the daily catalog timestamp."
+        },
+        "cacheSeconds": {
+          "const": 300
+        }
+      }
+    }
+  }
+}

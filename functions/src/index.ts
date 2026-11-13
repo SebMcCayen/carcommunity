@@ -204,6 +204,8 @@ import { confirm as confirmIncident } from './incidents/confirm';
 import { reportCleared as reportIncidentCleared } from './incidents/reportCleared';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
+import { catalog as roadCameraCatalog, photo as roadCameraPhoto } from './roadCameras/callables';
+import { sync as syncRoadCameras } from './roadCameras/sync';
 import { report as reportPolice } from './police/report';
 import { listNearby as listNearbyPolice } from './police/listNearby';
 import { remove as removePolice } from './police/remove';
@@ -1058,6 +1060,13 @@ export const crashReporting = {
  * roadwork/traffic situations from the Trafikverket open API — GUARDED on the
  * `TRAFIKVERKET_API_KEY` secret, so it no-ops safely until the free key is set.
  */
+/** Daily camera metadata and strictly budgeted on-demand images. */
+export const roadCameras = {
+  catalog: roadCameraCatalog,
+  photo: roadCameraPhoto,
+  sync: syncRoadCameras,
+};
+
 export const incidents = {
   report: reportIncident,
   listNearby: listNearbyIncidents,

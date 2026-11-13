@@ -80,6 +80,7 @@ enum MapReadingSelection: Hashable {
     case crown(String)
     case incident(String)
     case police(String)
+    case camera(String)
     case nearby(String)
     case convoyMember(String)
 }

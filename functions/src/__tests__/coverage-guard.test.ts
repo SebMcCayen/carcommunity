@@ -5,9 +5,10 @@
  * suite — the coverage audit can no longer regress silently.
  */
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { discoverTestFiles } from '../../scripts/emulator-test-groups.mjs';
 
 describe('callable test coverage (Phase 16)', () => {
   it('every implemented callable is exercised by an emulator test', () => {
@@ -15,10 +16,11 @@ describe('callable test coverage (Phase 16)', () => {
       readFileSync(join(__dirname, '../../../contracts/functions/functions.json'), 'utf8'),
     ) as { functions: Array<{ name: string; status: string }> };
 
-    const testsDir = __dirname;
-    const testSource = readdirSync(testsDir)
-      .filter((f) => f.endsWith('.emulator.test.ts'))
-      .map((f) => readFileSync(join(testsDir, f), 'utf8'))
+    // Discover the same recursive file set as the emulator runner so tests
+    // colocated with their domain count just like suites under __tests__.
+    const functionsDir = join(__dirname, '../..');
+    const testSource = discoverTestFiles()
+      .map((file) => readFileSync(join(functionsDir, file), 'utf8'))
       .join('\n');
 
     const uncovered = registry.functions

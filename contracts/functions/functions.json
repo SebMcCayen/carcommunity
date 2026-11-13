@@ -1628,6 +1628,24 @@
       "appCheck": true,
       "status": "implemented",
       "source": "functions/src/clubCalendar/README.md"
+    },
+    {
+      "name": "roadCameras.catalog",
+      "domain": "roadCameras",
+      "description": "Bounded national Trafikverket camera catalog; daily device cache. Backend externalDataSources flag, active account, App Check; 3/hour and 10/day per UID, 100/day globally. Images and image URLs are excluded.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "contracts/schemas/road-cameras.schema.json"
+    },
+    {
+      "name": "roadCameras.photo",
+      "domain": "roadCameras",
+      "description": "On-demand bounded JPEG/PNG camera image by opaque cameraId. Active account and App Check; 6/minute, 30/hour, 100/day per UID; shared 128 MiB/day encoded-response reservation budget. Max 128 KiB decoded image; cached locally 5 minutes; no automatic refresh.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "contracts/schemas/road-cameras.schema.json"
     }
   ]
 }

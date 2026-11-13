@@ -125,6 +125,7 @@ struct ShellView: View {
     @State private var liveLocationRepository: LiveLocationRepository?
     @State private var convoyCreateCoordinator: ConvoyCreateCoordinator?
     @State private var incidentMapCoordinator: IncidentMapCoordinator?
+    @State private var roadCameraCoordinator: RoadCameraMapCoordinator?
     @State private var convoyCreateVehicleId: String?
     @State private var convoyCreateReturnsToList = false
     @State private var selectedConvoyId: String?
@@ -517,7 +518,13 @@ struct ShellView: View {
 
     private var shellReadingInteractions: AnyView {
         shellBaseInteractions
-        .onChange(of: mapReadingSelection) { _, selection in centerMapReading(selection) }
+        .onChange(of: mapReadingSelection) { _, selection in
+            if case .camera = selection {} else { roadCameraCoordinator?.dismiss() }
+            centerMapReading(selection)
+        }
+        .onChange(of: roadCameraCoordinator?.selectedCamera?.id) { _, id in
+            if id == nil, case .camera = mapReadingSelection { mapReadingSelection = nil }
+        }
         .onChange(of: incidentMapCoordinator?.selectedIncident?.id) { _, id in
             if let id {
                 billboardsCoordinator?.dismiss()
@@ -631,6 +638,10 @@ struct ShellView: View {
             if let item = incidentMapCoordinator?.selectedIncident, item.id == id {
                 mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
             }
+        case .camera(let id):
+            if let item = roadCameraCoordinator?.selectedCamera, item.id == id {
+                mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
+            }
         case .police(let id):
             if let item = incidentMapCoordinator?.selectedPolice, item.id == id {
                 mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
@@ -684,6 +695,7 @@ struct ShellView: View {
             MapLayersSheet(
                 preferences: mapLayerPreferences,
                 systemIsDark: colorScheme == .dark,
+                cameraCatalogErrorKey: roadCameraCoordinator?.catalogErrorKey,
                 trafikverketDataShown: incidentMapCoordinator?.incidents.contains(where: \.isImported) == true,
                 onTrafficAlertsChanged: { enabled in
                     incidentMapCoordinator?.setTrafficAlertsEnabled(enabled)
@@ -864,6 +876,13 @@ struct ShellView: View {
                     ownFix: crownHuntComposition?.mapCoordinator?.latestFix
                 )
             }
+            if let roadCameraCoordinator {
+                RoadCameraMapOverlay(coordinator: roadCameraCoordinator, surface: mapSurface) { camera in
+                    clearIncidentSelection()
+                    roadCameraCoordinator.select(camera)
+                    selectMapReading(.camera(camera.id))
+                }
+            }
             if let incidentMapCoordinator {
                 IncidentMapOverlay(
                     coordinator: incidentMapCoordinator,
@@ -970,6 +989,11 @@ struct ShellView: View {
 
     private var mapContent: AnyView {
         mapOverlayWithWaves
+            .task(id: roadCameraLifecycleKey) {
+                guard let roadCameraCoordinator else { return }
+                guard foregroundMapWorkActive else { roadCameraCoordinator.stop(); return }
+                await roadCameraCoordinator.refresh(enabledTypes: mapLayerPreferences.cameraLayers)
+            }
             .task(id: incidentMapLifecycleKey) {
                 guard foregroundMapWorkActive, let incidentMapCoordinator else { return }
                 incidentMapCoordinator.start(
@@ -1374,6 +1398,12 @@ struct ShellView: View {
                     IncidentDetailsContent(coordinator: coordinator)
                 }
             }
+        case .camera(let id):
+            if let coordinator = roadCameraCoordinator, let camera = coordinator.selectedCamera, camera.id == id {
+                MapReadingPanel(title: LocalizedStringKey(camera.type.titleKey), onClose: dismissMapReading) {
+                    RoadCameraDetailsContent(coordinator: coordinator, camera: camera)
+                }
+            }
         case .police(let id):
             if let coordinator = incidentMapCoordinator, coordinator.selectedPolice?.id == id {
                 MapReadingPanel(title: "police.sheetTitle", onClose: dismissMapReading) {
@@ -1400,6 +1430,7 @@ struct ShellView: View {
     }
 
     private func selectMapReading(_ selection: MapReadingSelection) {
+        if case .camera = selection {} else { roadCameraCoordinator?.dismiss() }
         // The marker coordinator still owns authorization, freshness and actions.
         if case .crown = mapReadingSelection { crownHuntComposition?.mapCoordinator?.dismissSelection() }
         billboardsCoordinator?.dismiss()
@@ -1418,6 +1449,7 @@ struct ShellView: View {
     }
 
     private func dismissMapReading() {
+        roadCameraCoordinator?.dismiss()
         if case .crown = mapReadingSelection { crownHuntComposition?.mapCoordinator?.dismissSelection() }
         mapReadingSelection = nil
         clearIncidentSelection()
@@ -2513,6 +2545,8 @@ struct ShellView: View {
         convoyCreateCoordinator = nil
         incidentMapCoordinator?.stop()
         incidentMapCoordinator = nil
+        roadCameraCoordinator?.stop()
+        roadCameraCoordinator = nil
         billboardsCoordinator?.stop()
         billboardsCoordinator = nil
         mapSurface.setBillboardMarkers([])
@@ -2578,6 +2612,8 @@ struct ShellView: View {
         incidentMap.setTrafficAlertsEnabled(mapLayerPreferences.trafficAlertsEnabled)
         incidentMap.setIncidentMaxAge(mapLayerPreferences.incidentMaxAge)
         incidentMapCoordinator = incidentMap
+        roadCameraCoordinator = RoadCameraMapCoordinator(repository:
+            FirebaseRoadCameraRepository.createIfAvailable().map { CachedRoadCameraRepository(upstream: $0) })
         let eventChat = eventChatEnabled
             ? FirebaseEventChatRepository.createIfAvailable() : nil
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
@@ -2956,6 +2992,11 @@ struct ShellView: View {
               let point = currentMapCenter else { return }
         incidentMapCoordinator.cancelMapSelection()
         Task { await incidentMapCoordinator.report(type, at: point) }
+    }
+
+    private var roadCameraLifecycleKey: String {
+        "\(signedInUid ?? "unavailable")|\(foregroundMapWorkActive)|\(roadCameraCoordinator != nil)|"
+            + mapLayerPreferences.cameraLayers.map(\.rawValue).sorted().joined(separator: ",")
     }
 
     private var incidentMapLifecycleKey: String {

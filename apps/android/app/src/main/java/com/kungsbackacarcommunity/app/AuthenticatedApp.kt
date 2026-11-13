@@ -1380,6 +1380,7 @@ fun AuthenticatedApp(
 
             val snackbarHostState = remember { SnackbarHostState() }
             val context = LocalContext.current
+            val roadCameraLayers = com.kungsbackacarcommunity.app.roadcameras.rememberRoadCameraLayerState(context, selectedTab == ShellTab.Map)
 
             // Crowd-sourced incidents layer (navigation feature). Guarded:
             // createIfAvailable returns null in a config-less / CI build, so the
@@ -4135,6 +4136,7 @@ fun AuthenticatedApp(
             var invitationDockHeightPx by remember { mutableIntStateOf(0) }
             CompositionLocalProvider(
                 LocalSnackbarHostState provides snackbarHostState,
+                com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers provides roadCameraLayers,
                 com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader provides
                     if (route == ShellRoute.Profile) null else com.kungsbackacarcommunity.app.shell.AeroOwnerHeader(
                         avatarUrl = mapAvatarUrl,
@@ -6787,6 +6789,10 @@ fun AuthenticatedApp(
                                 // is removed) out from under an open sheet closes it
                                 // rather than leaving a sheet describing a marker
                                 // that is no longer on the map.
+                                roadCameraLayers.selected(tappedIncidentId)?.let { camera ->
+                                    com.kungsbackacarcommunity.app.roadcameras.RoadCameraDetailsSheet(
+                                        camera, roadCameraLayers.repository, mapSurface::consumeIncidentTap)
+                                }
                                 val openIncident = tappedIncident
                                 if (openIncident != null) {
                                     IncidentDetailsSheet(

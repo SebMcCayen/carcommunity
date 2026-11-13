@@ -28,6 +28,7 @@ struct MapLayersSheet: View {
 
     let preferences: MapLayerPreferences
     let systemIsDark: Bool
+    let cameraCatalogErrorKey: String?
     let trafikverketDataShown: Bool
     let onTrafficAlertsChanged: (Bool) -> Void
     let onTrafficChanged: (Bool) -> Void
@@ -67,6 +68,22 @@ struct MapLayersSheet: View {
                         Text("shell.layersAlertAgeHelp")
                             .font(.subheadline)
                             .foregroundStyle(KccTheme.secondary)
+                    }
+                    ForEach(RoadCameraType.allCases, id: \.self) { type in
+                        Divider()
+                        layerRow(LocalizedStringKey(type.titleKey), help: "roadCameras.layerHelp",
+                                 icon: type.symbol, binding: Binding(
+                                    get: { preferences.cameraLayers.contains(type) },
+                                    set: { preferences.setCameraLayer(type, enabled: $0) }
+                                 ), id: type.titleKey)
+                    }
+                    if !preferences.cameraLayers.isEmpty {
+                        if let cameraCatalogErrorKey {
+                            Text(LocalizedStringKey(cameraCatalogErrorKey))
+                                .font(.subheadline).foregroundStyle(KccTheme.secondary)
+                        }
+                        Text("incidents.sourceTrafikverket")
+                            .font(.footnote).foregroundStyle(KccTheme.secondary)
                     }
                     if preferences.basemap == .standard {
                         Divider()
