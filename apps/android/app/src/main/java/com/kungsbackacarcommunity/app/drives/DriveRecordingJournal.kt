@@ -160,8 +160,13 @@ class DriveRecordingJournal(private val directory: File) {
 
     private fun loadDiagnostics(sourceSessionId: String): DriveRecordingDiagnostics? = runCatching {
         val target = diagnosticsFileFor(sourceSessionId)
-        if (!target.exists() || target.length() > 1_024) return@runCatching null
-        DriveRecordingDiagnostics.fromJournalLine(target.readText())
+        if (!target.exists()) return@runCatching null
+        // A corrupt optional trailer must not erase the bounded valid counters.
+        // Read only a fixed prefix, never allocate the whole damaged sidecar.
+        val prefix = CharArray(DriveRecordingDiagnostics.MAX_CHECKPOINT_CHARACTERS)
+        val read = target.bufferedReader().use { it.read(prefix) }
+        if (read <= 0) return@runCatching null
+        DriveRecordingDiagnostics.fromJournalLine(String(prefix, 0, read))
     }.getOrNull()
 
     /**

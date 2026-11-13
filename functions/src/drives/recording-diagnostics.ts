@@ -8,7 +8,7 @@ import {
 
 const count = z.number().int().min(0).max(10_000_000);
 
-/** Bounded aggregates only. Raw fixes, identifiers and free text are forbidden. */
+/** Bounded aggregates and recording-source context. Raw fixes and identifiers are forbidden. */
 export const recordingDiagnosticsSchema = z
   .object({
     version: z.literal(1),
@@ -26,8 +26,18 @@ export const recordingDiagnosticsSchema = z
     maxGapMs: z.number().int().min(0).max(604_800_000),
     gapCount: count,
     resumedCount: count,
+    // Captured at recording start and retained through journal restore/retry.
+    // Optional context is advisory even when the counters themselves are valid.
+    platform: z.enum(['android', 'ios']).optional().catch(undefined),
+    appVersion: z.string().min(1).max(50).optional().catch(undefined),
   })
-  .strict();
+  .strict()
+  .transform(({ platform, appVersion, ...counters }) => ({
+    ...counters,
+    // Firestore rejects undefined values: omit malformed optional context entirely.
+    ...(platform !== undefined ? { platform } : {}),
+    ...(appVersion !== undefined ? { appVersion } : {}),
+  }));
 
 export type RecordingDiagnostics = z.infer<typeof recordingDiagnosticsSchema>;
 

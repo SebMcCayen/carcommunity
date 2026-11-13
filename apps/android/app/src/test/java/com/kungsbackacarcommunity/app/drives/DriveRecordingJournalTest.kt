@@ -40,7 +40,7 @@ class DriveRecordingJournalTest {
         assertEquals(diagnostics, j.load(session)!!.diagnostics)
         val c = resumeCoordinator(CoroutineScope(UnconfinedTestDispatcher(testScheduler)), JournalFakeRepository(), j)
         c.start()
-        assertEquals(diagnostics.copy(resumedCount = 1), c.recordingDiagnostics)
+        assertEquals(diagnostics.copy(resumedCount = 1, platform = "android"), c.recordingDiagnostics)
         c.stop()
         assertEquals(1, j.load(session)!!.diagnostics!!.resumedCount)
         j.clear(session)
@@ -104,6 +104,55 @@ class DriveRecordingJournalTest {
         assertEquals(5, c.recordingDiagnostics.receivedPoints)
         assertEquals(2, c.recordingDiagnostics.acceptedPoints)
         assertEquals(3, c.recordingDiagnostics.rejectedAccuracy)
+    }
+
+    @Test
+    fun `recording start context survives restart and app update before any fix arrives`() = runTest {
+        val j = journal()
+        val original = DriveRecordingCoordinator(JournalFakeRepository(), session, clock = { 1_000L }, journal = j, recordingAppVersion = "1.1.13")
+        original.start()
+        assertEquals("android", j.load(session)!!.diagnostics!!.platform)
+        assertEquals("1.1.13", j.load(session)!!.diagnostics!!.appVersion)
+        // A repeat start and a newer process may not relabel this old recording.
+        original.start(appVersion = "1.1.14")
+        val repo = JournalFakeRepository()
+        val resumed = DriveRecordingCoordinator(repo, session, clock = { 2_000L }, journal = j, recordingAppVersion = "1.2.0")
+        resumed.start()
+        assertEquals("1.1.13", resumed.recordingDiagnostics.appVersion)
+        resumed.stop()
+        resumed.save(null)
+        val wire = repo.lastRequest!!["recordingDiagnostics"] as Map<*, *>
+        assertEquals("android", wire["platform"])
+        assertEquals("1.1.13", wire["appVersion"])
+    }
+
+    @Test
+    fun `legacy recording has known platform and unknown version after app update`() {
+        val j = journal()
+        j.begin(session, 1_000L)
+        j.appendPoints(session, listOf(RecordedPoint(57.0, 12.0, 1_100L)))
+        j.writeDiagnostics(session, DriveRecordingDiagnostics(receivedPoints = 1, acceptedPoints = 1))
+        val resumed = DriveRecordingCoordinator(JournalFakeRepository(), session, journal = j, recordingAppVersion = "1.2.0")
+        resumed.start()
+        assertEquals("android", resumed.recordingDiagnostics.platform)
+        assertNull(resumed.recordingDiagnostics.appVersion)
+        assertTrue("appVersion" !in resumed.recordingDiagnostics.toWire())
+    }
+
+    @Test
+    fun `damaged optional metadata cannot discard a valid route or counters`() {
+        val dir = tempFolder.newFolder("damaged-metadata")
+        val j = DriveRecordingJournal(dir)
+        j.begin(session, 1_000L)
+        val point = RecordedPoint(57.0, 12.0, 1_100L)
+        j.appendPoints(session, listOf(point))
+        val counters = DriveRecordingDiagnostics(receivedPoints = 4, acceptedPoints = 1, rejectedAccuracy = 3)
+        j.writeDiagnostics(session, counters)
+        val sidecar = dir.listFiles()!!.single { it.name.endsWith(".diagnostics") }
+        sidecar.appendText(",unknown," + "x".repeat(20_000))
+        val restored = j.load(session)!!
+        assertEquals(listOf(point), restored.points)
+        assertEquals(counters, restored.diagnostics)
     }
 
     // --- Pure journal round-trip -----------------------------------------

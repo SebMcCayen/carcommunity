@@ -101,6 +101,8 @@ class DriveRecordingCoordinator(
      * and the config-less path record nothing; production injects the Logcat sink.
      */
     private val log: DriveRecordingLog = NoopDriveRecordingLog,
+    /** Supplied by the app once; restoration never attributes an old recording to a newer build. */
+    private val recordingAppVersion: String? = null,
 ) {
     /**
      * The fixes rehydrated from the on-disk journal when [start] RESUMED a
@@ -215,7 +217,7 @@ class DriveRecordingCoordinator(
      * flushed fix rather than starting an empty drive (which would strand the run
      * already driven). A fresh session (no journal) BEGINS a new journal instead.
      */
-    fun start() {
+    fun start(appVersion: String? = recordingAppVersion) {
         if (recorder != null) return
         val restored = journal?.load(sourceSessionId)
         if (restored != null) {
@@ -233,9 +235,10 @@ class DriveRecordingCoordinator(
             val missingAccepted = (rebuilt.pointCount - (checkpoint?.acceptedPoints ?: 0)).coerceAtLeast(0)
             val previousDiagnostics = checkpoint?.copy(
                 acceptedPoints = rebuilt.pointCount,
+                platform = checkpoint.platform ?: "android",
                 receivedPoints = (checkpoint.receivedPoints.toLong() + missingAccepted)
                     .coerceAtMost(DriveRecordingDiagnostics.MAX_COUNT.toLong()).toInt(),
-            ) ?: DriveRecordingDiagnostics(receivedPoints = rebuilt.pointCount, acceptedPoints = rebuilt.pointCount)
+            ) ?: DriveRecordingDiagnostics(receivedPoints = rebuilt.pointCount, acceptedPoints = rebuilt.pointCount, platform = "android")
             quality = DriveRecordingQuality(
                 previousDiagnostics.copy(resumedCount = DriveRecordingQuality.increment(previousDiagnostics.resumedCount)),
                 rebuilt.snapshot().lastOrNull(),
@@ -262,7 +265,7 @@ class DriveRecordingCoordinator(
             return
         }
         val started = clock()
-        quality = DriveRecordingQuality()
+        quality = DriveRecordingQuality(DriveRecordingDiagnostics(platform = "android", appVersion = DriveRecordingDiagnostics.validAppVersion(appVersion)))
         recorder =
             DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId, convoyMembers = convoyMembers)
         startedAtMillis = started
@@ -272,6 +275,8 @@ class DriveRecordingCoordinator(
         pendingJournalPoints.clear()
         lastJournalFlushMillis = started
         journal?.begin(sourceSessionId, started)
+        // Preserve origin even if the process dies before the first GPS callback.
+        journal?.writeDiagnostics(sourceSessionId, quality.diagnostics)
         log.started(sourceSessionId, started)
         stateFlow.value = RecordingState.Recording(pointCount = 0, elapsedMillis = 0L)
     }

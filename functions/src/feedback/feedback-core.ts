@@ -208,6 +208,7 @@ function publicDriveDiagnostics(diagnostics: FeedbackDriveDiagnostics | undefine
       : '- Drive diagnostics: unavailable for this recording',
     ...(recording
       ? [
+          `- Recording source platform: ${recording.platform ?? 'unknown'}; recording app version: ${recording.appVersion && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(recording.appVersion) ? recording.appVersion : 'unknown/private'}`,
           `- Recording quality: ${recording.algorithmVersion}; accepted ${recording.acceptedPoints}/${recording.receivedPoints} points; accuracy rejected ${recording.rejectedAccuracy}; stale rejected ${recording.rejectedStale}; time rejected ${recording.rejectedTime}; speed rejected ${recording.rejectedSpeed}; delivery gaps ${recording.gapCount}`,
         ]
       : []),
@@ -249,7 +250,8 @@ export function buildGitHubIssueBody(
   // Firestore doc keeps the raw bounded values). reportId/submittedAtIso are
   // server-generated and left as-is.
   const context = [
-    `- App version: ${report.appVersion ? neutralizeMentions(report.appVersion) : 'unknown'}`,
+    ...(report.driveDiagnostics ? [`- Reporter platform: ${report.platform}`] : []),
+    `- ${report.driveDiagnostics ? 'Reporter app version' : 'App version'}: ${report.appVersion ? neutralizeMentions(report.appVersion) : 'unknown'}`,
     `- OS version: ${report.osVersion ? neutralizeMentions(report.osVersion) : 'unknown'}`,
     `- Device model: ${report.deviceModel ? neutralizeMentions(report.deviceModel) : 'unknown'}`,
     `- Report ID: ${reportId}`,

@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.drives
 
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
+import java.util.Base64
+
 /** Raw recording input. Monotonic clocks are local to one device boot and never uploaded. */
 data class DriveLocationSample(
     val latitude: Double,
@@ -27,6 +31,9 @@ data class DriveRecordingDiagnostics(
     val maxGapMs: Long = 0,
     val gapCount: Int = 0,
     val resumedCount: Int = 0,
+    /** Recording origin, captured at Start; unrelated to the device reporting a bug. */
+    val platform: String? = null,
+    val appVersion: String? = null,
 ) {
     fun toWire(): Map<String, Any> =
         linkedMapOf(
@@ -45,24 +52,55 @@ data class DriveRecordingDiagnostics(
             "maxGapMs" to maxGapMs,
             "gapCount" to gapCount,
             "resumedCount" to resumedCount,
-        )
+        ).apply {
+            validPlatform(platform)?.let { put("platform", it) }
+            validAppVersion(appVersion)?.let { put("appVersion", it) }
+        }
 
-    /** A complete append-only checkpoint; older journals can ignore the D record. */
-    fun journalLine(): String = "D,1," + listOf(
-        receivedPoints, acceptedPoints, rejectedInvalid, rejectedAccuracy,
-        rejectedStale, rejectedTime, rejectedSpeed, droppedCapacity,
-        droppedStationary, droppedThrottled, maxGapMs, gapCount, resumedCount,
-    ).joinToString(",")
+    /** D1 counters remain readable without optional recording-origin metadata. */
+    fun journalLine(): String {
+        val counters = "D,1," + listOf(
+            receivedPoints, acceptedPoints, rejectedInvalid, rejectedAccuracy,
+            rejectedStale, rejectedTime, rejectedSpeed, droppedCapacity,
+            droppedStationary, droppedThrottled, maxGapMs, gapCount, resumedCount,
+        ).joinToString(",")
+        val recordingPlatform = validPlatform(platform)
+        val recordingVersion = validAppVersion(appVersion)
+        if (recordingPlatform == null && recordingVersion == null) return counters
+        val encodedVersion = recordingVersion?.let {
+            Base64.getEncoder().encodeToString(it.toByteArray(Charsets.UTF_8))
+        } ?: "-"
+        return "$counters,M1,${recordingPlatform ?: "-"},$encodedVersion"
+    }
 
     companion object {
         const val ALGORITHM_VERSION = "recording-quality-v1"
         const val MAX_COUNT = 10_000_000
         const val MAX_GAP_MS = 604_800_000L
+        const val MAX_CHECKPOINT_CHARACTERS = 1_024
+
+        fun validAppVersion(value: String?): String? =
+            value?.takeIf { it.length in 1..50 && it.isNotBlank() && it.none(Char::isISOControl) }
+
+        private fun validPlatform(value: String?): String? = value?.takeIf { it == "android" || it == "ios" }
+
+        private fun decodeVersion(value: String): String? = runCatching {
+            val bytes = Base64.getDecoder().decode(value)
+            val decoded = Charsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes)).toString()
+            validAppVersion(decoded)
+        }.getOrNull()
 
         fun fromJournalLine(line: String): DriveRecordingDiagnostics? {
-            val values = line.split(',')
-            if (values.size != 15 || values[0] != "D" || values[1] != "1") return null
-            val numbers = values.drop(2).map { it.toLongOrNull() ?: return null }
+            val values = line.take(MAX_CHECKPOINT_CHARACTERS).split(',')
+            if (values.size < 15 || values[0] != "D" || values[1] != "1") return null
+            val numbers = values.subList(2, 15).map { it.toLongOrNull() ?: return null }
+            // Optional metadata corruption cannot discard valid route/counter facts.
+            val hasMetadata = values.size == 18 && values[15] == "M1"
+            val recordingPlatform = if (hasMetadata) validPlatform(values[16]) else null
+            val recordingVersion = if (hasMetadata) decodeVersion(values[17]) else null
             if (numbers.withIndex().any { (index, value) ->
                     value !in 0..(if (index == 10) MAX_GAP_MS else MAX_COUNT.toLong())
                 }
@@ -72,6 +110,8 @@ data class DriveRecordingDiagnostics(
                 numbers[3].toInt(), numbers[4].toInt(), numbers[5].toInt(),
                 numbers[6].toInt(), numbers[7].toInt(), numbers[8].toInt(),
                 numbers[9].toInt(), numbers[10], numbers[11].toInt(), numbers[12].toInt(),
+                platform = recordingPlatform,
+                appVersion = recordingVersion,
             )
         }
     }

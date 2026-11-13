@@ -701,6 +701,36 @@ final class DriveRecordingCoordinatorTests: XCTestCase {
         coordinator.reset()
     }
 
+    func testRecordingVersionIsCheckpointedBeforeFirstFixAndPreservedAfterAppUpgrade() async throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let journal = FileDriveRecordingJournal(fileURL: directory.appendingPathComponent("active.routejournal"))
+        let repository = FakeRepository()
+        let original = DriveRecordingCoordinator(repository: repository,
+            provider: StubLocationProvider(authorization: .whileInUse), journal: journal,
+            recordingAppVersion: "1.2.3", now: { start })
+        original.start(context: context())
+        let checkpoint = try XCTUnwrap(journal.restore(sessionId: context().sourceSessionId))
+        XCTAssertEqual(checkpoint.recordingDiagnostics?.platform, "ios")
+        XCTAssertEqual(checkpoint.recordingDiagnostics?.appVersion, "1.2.3")
+        XCTAssertEqual(checkpoint.points.count, 0)
+
+        // A new process reads the persisted file after the installed app changed.
+        let resumed = DriveRecordingCoordinator(repository: repository,
+            provider: StubLocationProvider(authorization: .whileInUse), journal: journal,
+            recordingAppVersion: "2.0.0", now: { start.addingTimeInterval(60) })
+        resumed.start(context: context())
+        resumed.endSession(context: context())
+        await waitUntil { repository.requests.count == 1 }
+        XCTAssertEqual(repository.requests.first?.recordingDiagnostics?.platform, "ios")
+        XCTAssertEqual(repository.requests.first?.recordingDiagnostics?.appVersion, "1.2.3")
+        XCTAssertEqual(repository.requests.first?.recordingDiagnostics?.resumedCount, 1)
+        original.reset()
+        resumed.reset()
+    }
+
     private func makeCoordinator(
         _ repository: FakeRepository,
         _ provider: StubLocationProvider,

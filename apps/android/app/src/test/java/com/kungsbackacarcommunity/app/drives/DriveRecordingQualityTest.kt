@@ -135,10 +135,38 @@ class DriveRecordingQualityTest {
     }
 
     @Test
+    fun `recording context wire and optional checkpoint trailer preserve original source`() {
+        val diagnostics = DriveRecordingDiagnostics(
+            receivedPoints = 5, acceptedPoints = 4, rejectedAccuracy = 1,
+            platform = "android", appVersion = "1.1.13+recording",
+        )
+        assertEquals("android", diagnostics.toWire()["platform"])
+        assertEquals("1.1.13+recording", diagnostics.toWire()["appVersion"])
+        assertEquals(diagnostics, DriveRecordingDiagnostics.fromJournalLine(diagnostics.journalLine()))
+        assertTrue(diagnostics.journalLine().none { it == '\n' || it == '\r' })
+        val oldCounters = diagnostics.copy(platform = null, appVersion = null)
+        assertEquals(oldCounters, DriveRecordingDiagnostics.fromJournalLine(oldCounters.journalLine()))
+        assertEquals(15, oldCounters.journalLine().split(',').size)
+        assertEquals(oldCounters, DriveRecordingDiagnostics.fromJournalLine(oldCounters.journalLine() + ",M9,unknown,unknown"))
+        assertEquals(
+            oldCounters.copy(platform = "android"),
+            DriveRecordingDiagnostics.fromJournalLine(oldCounters.journalLine() + ",M1,android,!invalid-base64"),
+        )
+        assertEquals(
+            oldCounters.copy(platform = "android"),
+            DriveRecordingDiagnostics.fromJournalLine(oldCounters.journalLine() + ",M1,android,/w=="),
+        )
+        val invalid = diagnostics.copy(platform = "unsupported", appVersion = "version\nwith-control")
+        assertTrue("platform" !in invalid.toWire())
+        assertTrue("appVersion" !in invalid.toWire())
+        assertTrue("appVersion" !in diagnostics.copy(appVersion = "x".repeat(51)).toWire())
+    }
+
+    @Test
     fun `bounded journal checkpoint rejects corrupt values and carries no coordinates`() {
         val diagnostics = DriveRecordingDiagnostics(receivedPoints = 6, acceptedPoints = 3, rejectedAccuracy = 2, rejectedSpeed = 1, resumedCount = 1)
         assertEquals(diagnostics, DriveRecordingDiagnostics.fromJournalLine(diagnostics.journalLine()))
-        assertNull(DriveRecordingDiagnostics.fromJournalLine(diagnostics.journalLine() + ",unknown"))
+        assertEquals(diagnostics, DriveRecordingDiagnostics.fromJournalLine(diagnostics.journalLine() + ",unknown"))
         assertNull(DriveRecordingDiagnostics.fromJournalLine(diagnostics.journalLine().replace("D,1,6", "D,1,-1")))
         assertEquals("recording-quality-v1", diagnostics.toWire()["algorithmVersion"])
         assertEquals(15, diagnostics.toWire().size)

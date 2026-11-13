@@ -36,6 +36,7 @@ enum DriveRecordingState: Equatable, Sendable {
 final class DriveRecordingCoordinator {
     private let repository: DriveRecordingRepository?
     private let provider: LocationProvider
+    private let recordingAppVersion: String?
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let journal: DriveRecordingJournal?
     @ObservationIgnored private let uploadSpool: DriveRouteUploadSpool?
@@ -59,6 +60,7 @@ final class DriveRecordingCoordinator {
         provider: LocationProvider,
         journal: DriveRecordingJournal? = nil,
         uploadSpool: DriveRouteUploadSpool? = nil,
+        recordingAppVersion: String? = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
         now: @escaping @Sendable () -> Date = { Date() },
         expiryTickWait: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(for: .seconds(1))
@@ -69,6 +71,7 @@ final class DriveRecordingCoordinator {
     ) {
         self.repository = repository
         self.provider = provider
+        self.recordingAppVersion = DriveRecordingDiagnostics.normalizedAppVersion(recordingAppVersion)
         self.journal = journal
         self.uploadSpool = uploadSpool
         self.now = now
@@ -299,8 +302,10 @@ final class DriveRecordingCoordinator {
             )
         } else {
             journal?.clear()
-            recorder = DriveRecorder(startedAt: now(), context: context)
+            recorder = DriveRecorder(startedAt: now(), context: context, appVersion: recordingAppVersion)
             journal?.begin(context: context, startedAt: recorder.startedAt)
+            // Persist the source version even before the first position arrives.
+            journal?.updateDiagnostics(recorder.recordingDiagnostics, sessionId: context.sourceSessionId)
         }
         self.recorder = recorder
         stoppedAt = nil

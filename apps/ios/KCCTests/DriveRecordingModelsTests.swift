@@ -207,6 +207,53 @@ final class DriveRecordingModelsTests: XCTestCase {
         XCTAssertEqual(recorder.points.count, DriveRecorder.maximumRoutePoints)
     }
 
+    func testRecordingSourceMetadataSurvivesRestoreAndIsSeparateFromFeedbackDevice() throws {
+        var original = DriveRecorder(startedAt: start, context: context(), appVersion: "1.2.3")
+        _ = original.add(fix(latitude: 57, longitude: 12, offset: 0))
+        let restored = DriveRecorder(startedAt: start, context: context(), restoring: original.points,
+            diagnostics: original.recordingDiagnostics)
+        let payload = restored.request(endedAt: start.addingTimeInterval(10), title: nil).payload
+        let diagnostics = try XCTUnwrap(payload["recordingDiagnostics"] as? [String: Any])
+        XCTAssertEqual(diagnostics["platform"] as? String, "ios")
+        XCTAssertEqual(diagnostics["appVersion"] as? String, "1.2.3")
+        XCTAssertEqual(diagnostics["algorithmVersion"] as? String, "recording-quality-v1")
+
+        let legacy = DriveRecorder(startedAt: start, context: context(), restoring: original.points)
+        XCTAssertEqual(legacy.recordingDiagnostics.platform, "ios")
+        XCTAssertNil(legacy.recordingDiagnostics.appVersion)
+    }
+
+    func testInvalidOptionalSourceMetadataDoesNotDiscardRequiredCounters() throws {
+        var original = DriveRecordingDiagnostics()
+        original.receivedPoints = 3
+        original.acceptedPoints = 1
+        original.rejectedAccuracy = 2
+        let legacyData = try JSONSerialization.data(withJSONObject: original.wireValue)
+        let legacy = try JSONDecoder().decode(DriveRecordingDiagnostics.self, from: legacyData)
+        XCTAssertEqual(legacy, original, "A checkpoint without optional source keys must retain every counter")
+        let invalidContexts: [[String: Any]] = [
+            ["platform": 42, "appVersion": ["wrong": "type"]],
+            ["platform": "future-platform", "appVersion": String(repeating: "x", count: 51)],
+        ]
+        for context in invalidContexts {
+            let data = try JSONSerialization.data(withJSONObject: original.wireValue.merging(context) { _, new in new })
+            let decoded = try JSONDecoder().decode(DriveRecordingDiagnostics.self, from: data)
+            XCTAssertTrue(decoded.isValid)
+            XCTAssertEqual(decoded.receivedPoints, 3)
+            XCTAssertEqual(decoded.rejectedAccuracy, 2)
+            XCTAssertNil(decoded.platform)
+            XCTAssertNil(decoded.appVersion)
+        }
+        original.platform = "unrecognized"
+        original.appVersion = String(repeating: "x", count: 10_000)
+        let encoded = try JSONEncoder().encode(original)
+        XCTAssertLessThan(encoded.count, 1_024)
+        let decoded = try JSONDecoder().decode(DriveRecordingDiagnostics.self, from: encoded)
+        XCTAssertEqual(decoded.receivedPoints, 3)
+        XCTAssertNil(decoded.platform)
+        XCTAssertNil(decoded.appVersion)
+    }
+
     private func context() -> DriveRecordingContext {
         DriveRecordingContext(
             sourceSessionId: "session",

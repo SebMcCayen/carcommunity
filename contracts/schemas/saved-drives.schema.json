@@ -6,7 +6,7 @@
   "$defs": {
     "recordingDiagnostics": {
       "type": "object",
-      "description": "Optional, bounded client-reported quality counters. No coordinates, identifiers or free text. maxGapMs/gapCount describe monotonic delivery silence within one process run; the transient clock anchor resets on restore while counters survive. Gaps exceed 15 seconds. Stored owner-only with the ride; not returned by listHistory. Malformed, incomplete or future-version client summaries are discarded without blocking a valid drive save. Requires backend support before releasing updated clients.",
+      "description": "Optional, bounded client-reported quality counters and source platform/app version captured at recording start. No coordinates, account identifiers or arbitrary fields. maxGapMs/gapCount describe monotonic delivery silence within one process run; the transient clock anchor resets on restore while counters survive. Gaps exceed 15 seconds. Stored owner-only with the ride; not returned by listHistory. Malformed, incomplete or future-version client summaries are discarded without blocking a valid drive save. Requires backend support before releasing updated clients.",
       "properties": {
         "version": { "const": 1 },
         "algorithmVersion": { "const": "recording-quality-v1" },
@@ -22,7 +22,17 @@
         "droppedThrottled": { "type": "integer", "minimum": 0, "maximum": 10000000 },
         "maxGapMs": { "type": "integer", "minimum": 0, "maximum": 604800000 },
         "gapCount": { "type": "integer", "minimum": 0, "maximum": 10000000 },
-        "resumedCount": { "type": "integer", "minimum": 0, "maximum": 10000000 }
+        "resumedCount": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "platform": {
+          "enum": ["android", "ios"],
+          "description": "Optional source platform captured at recording start, independent of the reporting device. Invalid context is omitted without discarding valid counters."
+        },
+        "appVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50,
+          "description": "Optional source app version captured at recording start and preserved on restore/retry. Only conventional numeric x.y.z versions are allowed into public diagnostic summaries; other bounded versions remain private. Invalid context is omitted without discarding valid counters."
+        }
       },
       "required": [
         "version",

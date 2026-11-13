@@ -94,6 +94,41 @@ describe('bounded recording diagnostics', () => {
     expect(parsed.input.recordingDiagnostics).toBeUndefined();
     expect(parseSaveDriveInput({ ...times, unexpected: true }).ok).toBe(false);
   });
+
+  it.each([
+    { platform: 'web' },
+    { platform: 123 },
+    { platform: null },
+    { appVersion: '' },
+    { appVersion: 'x'.repeat(51) },
+    { appVersion: { latitude: 57 } },
+    { platform: false, appVersion: null },
+  ])('removes malformed optional context while preserving counters %j', (context) => {
+    const parsed = parseSaveDriveInput({
+      ...times,
+      recordingDiagnostics: { ...recording, ...context },
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error('valid counters must survive malformed context');
+    expect(parsed.input.recordingDiagnostics).toEqual(recording);
+    expect(parsed.input.recordingDiagnostics).not.toHaveProperty('platform');
+    expect(parsed.input.recordingDiagnostics).not.toHaveProperty('appVersion');
+    expect(
+      feedbackDriveDiagnostics({ recordingDiagnostics: { ...recording, ...context } }),
+    ).toEqual({ recordingDiagnostics: recording });
+  });
+
+  it('retains valid context independently of malformed companion fields', () => {
+    const parsed = recordingDiagnosticsSchema.parse({
+      ...recording,
+      platform: 'android',
+      appVersion: 'x'.repeat(51),
+    });
+    expect(parsed).toEqual({ ...recording, platform: 'android' });
+    expect(
+      recordingDiagnosticsSchema.parse({ ...recording, platform: 'web', appVersion: '1.1.13' }),
+    ).toEqual({ ...recording, appVersion: '1.1.13' });
+  });
 });
 
 describe('server calculation diagnostics', () => {
@@ -129,6 +164,74 @@ describe('server calculation diagnostics', () => {
 });
 
 describe('explicit drive feedback privacy', () => {
+  it('distinguishes the recording source from a different reporting platform and version', () => {
+    const diagnostics = feedbackDriveDiagnostics({
+      recordingDiagnostics: { ...recording, platform: 'android', appVersion: '1.1.13' },
+    });
+    const parsed = parseReportIssueInput({
+      description: 'Distance is wrong',
+      platform: 'ios',
+      appVersion: '2.4.6',
+      rideId: 'private-ride',
+    });
+    if (!parsed.ok) throw new Error('expected valid feedback');
+    const report = { ...parsed.input, driveDiagnostics: diagnostics };
+    const payload = buildGitHubIssuePayload(report, 'report', 'submitted');
+    expect(payload.title).toMatch(/^\[iOS\]/);
+    expect(payload.body).toContain('- Reporter platform: ios');
+    expect(payload.body).toContain('- Reporter app version: 2.4.6');
+    expect(payload.body).toContain(
+      '- Recording source platform: android; recording app version: 1.1.13',
+    );
+    expect(payload.body).not.toContain('private-ride');
+    const privateDoc = buildFeedbackReportDocument(report, 'owner', () => 'TS');
+    expect(privateDoc.platform).toBe('ios');
+    expect(privateDoc.appVersion).toBe('2.4.6');
+    expect(privateDoc.driveDiagnostics).toEqual(diagnostics);
+  });
+
+  it.each([
+    'user@example.com',
+    'branch-private-id',
+    '1.2.3\n@owner',
+    '1.2',
+    '1.2.3.4',
+    '12345.2.3',
+  ])('retains bounded nonstandard versions privately without publishing %s', (appVersion) => {
+    const diagnostics = feedbackDriveDiagnostics({
+      recordingDiagnostics: { ...recording, platform: 'ios', appVersion },
+    });
+    expect(diagnostics.recordingDiagnostics?.appVersion).toBe(appVersion);
+    const parsed = parseReportIssueInput({ description: 'Distance is wrong' });
+    if (!parsed.ok) throw new Error('expected valid feedback');
+    const payload = buildGitHubIssuePayload(
+      { ...parsed.input, driveDiagnostics: diagnostics },
+      'report',
+      'submitted',
+    );
+    expect(payload.body).toContain(
+      '- Recording source platform: ios; recording app version: unknown/private',
+    );
+    expect(payload.body).not.toContain(appVersion);
+  });
+
+  it('does not infer legacy recording context from the reporting device', () => {
+    const parsed = parseReportIssueInput({
+      description: 'Distance is wrong',
+      platform: 'ios',
+      appVersion: '2.4.6',
+    });
+    if (!parsed.ok) throw new Error('expected valid feedback');
+    const payload = buildGitHubIssuePayload(
+      { ...parsed.input, driveDiagnostics: { recordingDiagnostics: recording } },
+      'report',
+      'submitted',
+    );
+    expect(payload.body).toContain(
+      '- Recording source platform: unknown; recording app version: unknown/private',
+    );
+  });
+
   it('publishes allowlisted counts but keeps ride, endpoints and measurement times private', () => {
     const calculation = computeCalculationDiagnostics([
       { latitude: 57, longitude: 12, timestampMs: 123_456 },

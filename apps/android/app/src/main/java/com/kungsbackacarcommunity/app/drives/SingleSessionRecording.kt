@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.location.CurrentSpeed
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -211,6 +212,7 @@ object SingleSessionRecording {
                 convoyMembers = convoyMembers,
                 journal = journal,
                 log = log,
+                recordingAppVersion = BuildConfig.VERSION_NAME,
             )
         ownerUid = uid
         uploadScope = scope

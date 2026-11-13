@@ -243,6 +243,8 @@ describe('drives-save', () => {
       maxGapMs: 20_000,
       gapCount: 1,
       resumedCount: 1,
+      platform: 'android',
+      appVersion: '1.1.13',
     };
     const request = { ...validSave, sourceSessionId: 'diagnostics-once', recordingDiagnostics };
     const saved = (await call('drives-save', request)).data as {
@@ -257,13 +259,51 @@ describe('drives-save', () => {
     const retry = (
       await call('drives-save', {
         ...request,
-        recordingDiagnostics: { ...recordingDiagnostics, resumedCount: 99 },
+        recordingDiagnostics: {
+          ...recordingDiagnostics,
+          resumedCount: 99,
+          platform: 'ios',
+          appVersion: '2.4.6',
+        },
       })
     ).data as { alreadySaved: boolean };
     expect(retry.alreadySaved).toBe(true);
     expect(
       (await adminDb.collection('rides').doc(saved.rideId).get()).data()?.recordingDiagnostics,
     ).toEqual(recordingDiagnostics);
+    const malformed = (
+      await call('drives-save', {
+        ...request,
+        sourceSessionId: 'diagnostics-malformed-context',
+        recordingDiagnostics: {
+          ...recordingDiagnostics,
+          platform: 'unsupported',
+          appVersion: null,
+        },
+      })
+    ).data as { rideId: string };
+    const sanitized = (await adminDb.collection('rides').doc(malformed.rideId).get()).data()
+      ?.recordingDiagnostics;
+    expect(sanitized.acceptedPoints).toBe(recordingDiagnostics.acceptedPoints);
+    expect(sanitized).not.toHaveProperty('platform');
+    expect(sanitized).not.toHaveProperty('appVersion');
+    const legacyCounters = Object.fromEntries(
+      Object.entries(recordingDiagnostics).filter(
+        ([key]) => key !== 'platform' && key !== 'appVersion',
+      ),
+    );
+    const legacyRequest = {
+      ...request,
+      sourceSessionId: 'diagnostics-legacy-source',
+      recordingDiagnostics: legacyCounters,
+    };
+    const legacy = (await call('drives-save', legacyRequest)).data as { rideId: string };
+    await call('drives-save', { ...legacyRequest, recordingDiagnostics });
+    const originalLegacy = (await adminDb.collection('rides').doc(legacy.rideId).get()).data()
+      ?.recordingDiagnostics;
+    expect(originalLegacy).toEqual(legacyCounters);
+    expect(originalLegacy).not.toHaveProperty('platform');
+    expect(originalLegacy).not.toHaveProperty('appVersion');
     const own = await getDoc(doc(getFirestore(app), 'rides', saved.rideId));
     expect(own.data()?.recordingDiagnostics).toEqual(recordingDiagnostics);
     const history = JSON.stringify((await call('drives-listHistory', {})).data);

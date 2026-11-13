@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import kotlinx.coroutines.launch
@@ -83,7 +84,7 @@ fun RecordDriveScreen(
         if (controller == null) {
             // Location unavailable (config-less build / no device). Recording
             // still runs; no fixes arrive, so a summary-only save results.
-            coordinator.start()
+            coordinator.start(appVersion = BuildConfig.VERSION_NAME)
             return
         }
         val started =
@@ -96,7 +97,7 @@ fun RecordDriveScreen(
         if (started) {
             // Only enter the Recording state once GPS updates are actually
             // flowing; otherwise the permission-denied UI (start button) shows.
-            coordinator.start()
+            coordinator.start(appVersion = BuildConfig.VERSION_NAME)
         } else {
             permissionDenied = true
         }

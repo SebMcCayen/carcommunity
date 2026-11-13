@@ -40,6 +40,13 @@ has no stationary/cadence suppression after its location request, so those two
 counters are zero there. These counts distinguish intentional suppression from
 faults; they do not measure how many real kilometres were lost.
 
+Optional `platform` and `appVersion` describe the **recording source**, captured
+when a new recording begins and checkpointed before its first fix. Restoration
+retains that original version even after an app update. A legacy journal has a
+known local platform but an unknown recording version; the current app version
+must not be substituted for that missing evidence. Invalid optional source
+metadata is omitted without losing valid counters or the route.
+
 Reception gaps measure silence **between consecutive observed raw deliveries**
 within one continuous run. A final outage with no later delivery does not close
 a gap: trailing silence between the last delivery and Stop is not measured.
@@ -82,6 +89,12 @@ available. It never receives the drive ID, session ID, timestamps identifying a
 journey, route geometry, coordinates, ownership data, or arbitrary diagnostic
 strings. The existing report ID lets authorized support locate private evidence.
 The ordinary free-text public-report notice remains visible on both clients.
+
+Reporter context remains separate from recording context: an Android drive can
+be reported from iOS (or the reverse). The public summary names the recording
+platform and includes its app version only when it has a bounded conventional
+numeric `x.y.z` format; other bounded version strings remain private. It never
+infers the recording source from the reporting phone.
 
 ## Validation and rollout
 

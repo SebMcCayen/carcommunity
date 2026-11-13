@@ -84,6 +84,20 @@ struct DriveRecordingDiagnostics: Equatable, Codable, Sendable {
     var maxGapMs = 0
     var gapCount = 0
     var resumedCount = 0
+    /// Recording source, independent of the device later filing feedback.
+    var platform: String? = nil
+    var appVersion: String? = nil
+
+    static func normalizedPlatform(_ value: String?) -> String? {
+        value == "ios" || value == "android" ? value : nil
+    }
+
+    static func normalizedAppVersion(_ value: String?) -> String? {
+        guard let value, !value.isEmpty, value.utf16.count <= 50,
+              value.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }),
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return value
+    }
 
     var isValid: Bool {
         version == 1 && algorithmVersion == "recording-quality-v1" &&
@@ -95,13 +109,16 @@ struct DriveRecordingDiagnostics: Equatable, Codable, Sendable {
     }
 
     var wireValue: [String: Any] {
-        ["version": version, "algorithmVersion": algorithmVersion,
+        var result: [String: Any] = ["version": version, "algorithmVersion": algorithmVersion,
          "receivedPoints": receivedPoints, "acceptedPoints": acceptedPoints,
          "rejectedInvalid": rejectedInvalid, "rejectedAccuracy": rejectedAccuracy,
          "rejectedStale": rejectedStale, "rejectedTime": rejectedTime,
          "rejectedSpeed": rejectedSpeed, "droppedCapacity": droppedCapacity,
          "droppedStationary": droppedStationary, "droppedThrottled": droppedThrottled,
          "maxGapMs": maxGapMs, "gapCount": gapCount, "resumedCount": resumedCount]
+        if let platform = Self.normalizedPlatform(platform) { result["platform"] = platform }
+        if let appVersion = Self.normalizedAppVersion(appVersion) { result["appVersion"] = appVersion }
+        return result
     }
 
     static func increment(_ count: inout Int) { count = min(maximumCount, count + 1) }
@@ -123,6 +140,60 @@ struct DriveRecordingDiagnostics: Equatable, Codable, Sendable {
         let accounted = acceptedPoints + rejectedInvalid + rejectedAccuracy + rejectedStale +
             rejectedTime + rejectedSpeed + droppedCapacity + droppedStationary + droppedThrottled
         receivedPoints = min(Self.maximumCount, max(receivedPoints, accounted))
+    }
+}
+
+// Optional source context is deliberately decoded separately from the required
+// counter contract. Bad or absent context must not discard valid evidence.
+extension DriveRecordingDiagnostics {
+    private enum CodingKeys: String, CodingKey {
+        case version, algorithmVersion, receivedPoints, acceptedPoints
+        case rejectedInvalid, rejectedAccuracy, rejectedStale, rejectedTime, rejectedSpeed
+        case droppedCapacity, droppedStationary, droppedThrottled, maxGapMs, gapCount, resumedCount
+        case platform, appVersion
+    }
+
+    init(from decoder: Decoder) throws {
+        self.init()
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        algorithmVersion = try values.decode(String.self, forKey: .algorithmVersion)
+        receivedPoints = try values.decode(Int.self, forKey: .receivedPoints)
+        acceptedPoints = try values.decode(Int.self, forKey: .acceptedPoints)
+        rejectedInvalid = try values.decode(Int.self, forKey: .rejectedInvalid)
+        rejectedAccuracy = try values.decode(Int.self, forKey: .rejectedAccuracy)
+        rejectedStale = try values.decode(Int.self, forKey: .rejectedStale)
+        rejectedTime = try values.decode(Int.self, forKey: .rejectedTime)
+        rejectedSpeed = try values.decode(Int.self, forKey: .rejectedSpeed)
+        droppedCapacity = try values.decode(Int.self, forKey: .droppedCapacity)
+        droppedStationary = try values.decode(Int.self, forKey: .droppedStationary)
+        droppedThrottled = try values.decode(Int.self, forKey: .droppedThrottled)
+        maxGapMs = try values.decode(Int.self, forKey: .maxGapMs)
+        gapCount = try values.decode(Int.self, forKey: .gapCount)
+        resumedCount = try values.decode(Int.self, forKey: .resumedCount)
+        platform = Self.normalizedPlatform(try? values.decode(String.self, forKey: .platform))
+        appVersion = Self.normalizedAppVersion(try? values.decode(String.self, forKey: .appVersion))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(version, forKey: .version)
+        try values.encode(algorithmVersion, forKey: .algorithmVersion)
+        try values.encode(receivedPoints, forKey: .receivedPoints)
+        try values.encode(acceptedPoints, forKey: .acceptedPoints)
+        try values.encode(rejectedInvalid, forKey: .rejectedInvalid)
+        try values.encode(rejectedAccuracy, forKey: .rejectedAccuracy)
+        try values.encode(rejectedStale, forKey: .rejectedStale)
+        try values.encode(rejectedTime, forKey: .rejectedTime)
+        try values.encode(rejectedSpeed, forKey: .rejectedSpeed)
+        try values.encode(droppedCapacity, forKey: .droppedCapacity)
+        try values.encode(droppedStationary, forKey: .droppedStationary)
+        try values.encode(droppedThrottled, forKey: .droppedThrottled)
+        try values.encode(maxGapMs, forKey: .maxGapMs)
+        try values.encode(gapCount, forKey: .gapCount)
+        try values.encode(resumedCount, forKey: .resumedCount)
+        try values.encodeIfPresent(Self.normalizedPlatform(platform), forKey: .platform)
+        try values.encodeIfPresent(Self.normalizedAppVersion(appVersion), forKey: .appVersion)
     }
 }
 
@@ -212,9 +283,11 @@ struct DriveRecorder: Sendable {
     private(set) var recordingDiagnostics = DriveRecordingDiagnostics()
     private var lastReceiptUptime: TimeInterval?
 
-    init(startedAt: Date, context: DriveRecordingContext) {
+    init(startedAt: Date, context: DriveRecordingContext, appVersion: String? = nil) {
         self.startedAt = startedAt
         self.context = context
+        recordingDiagnostics.platform = "ios"
+        recordingDiagnostics.appVersion = DriveRecordingDiagnostics.normalizedAppVersion(appVersion)
         points.reserveCapacity(1_024)
     }
 
@@ -226,6 +299,10 @@ struct DriveRecorder: Sendable {
         }
         recordingDiagnostics = diagnostics.flatMap { $0.isValid ? $0 : nil }
             ?? DriveRecordingDiagnostics()
+        // The local platform is known for a legacy iOS journal. Its original
+        // app version is unknown, so never substitute the version restoring it.
+        recordingDiagnostics.platform = DriveRecordingDiagnostics.normalizedPlatform(recordingDiagnostics.platform) ?? "ios"
+        recordingDiagnostics.appVersion = DriveRecordingDiagnostics.normalizedAppVersion(recordingDiagnostics.appVersion)
         recordingDiagnostics.reconcile(acceptedCount: points.count)
         DriveRecordingDiagnostics.increment(&recordingDiagnostics.resumedCount)
         // A monotonic clock belongs to one process/boot epoch; never restore it.
