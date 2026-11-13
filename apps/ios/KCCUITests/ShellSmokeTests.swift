@@ -1205,10 +1205,24 @@ final class ShellSmokeTests: XCTestCase {
         let bar = title.map { app.navigationBars[$0] }
             ?? app.navigationBars.allElementsBoundByIndex.first(where: { $0.isHittable })
             ?? app.navigationBars.firstMatch
-        XCTAssertTrue(bar.waitForExistence(timeout: 5))
-        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
-        start.press(forDuration: 0.1, thenDragTo: end)
+        let exists = bar.waitForExistence(timeout: 5)
+        XCTAssertTrue(exists)
+        guard exists else { return }
+        // Freeze the sheet's title: a firstMatch query could resolve to the
+        // underlying navigation bar once this sheet has disappeared.
+        let sheetTitle = title ?? (bar.identifier.isEmpty ? bar.label : bar.identifier)
+        let sheetBar = app.navigationBars[sheetTitle]
+        // A drag from the large detent may first settle at medium. Require
+        // dismissal before the caller taps controls behind the modal surface.
+        for _ in 0..<2 {
+            let start = sheetBar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+            start.press(forDuration: 0.1, thenDragTo: end)
+            let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: sheetBar)
+            if XCTWaiter.wait(for: [gone], timeout: 5) == .completed { return }
+        }
+        chatProof(app, name: "sheet-dismissal-failure", tree: true)
+        XCTAssertFalse(sheetBar.exists, "Dismissal must remove the sheet before using the screen behind it")
     }
 
     private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
