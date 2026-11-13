@@ -194,12 +194,189 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
-    func testCommunityComposerStaysVisibleWithKeyboard() {
+    func testSnapshotSelectionRequiresTheRequestedSelectedIdentifier() {
+        typealias Node = ChatViewportEvidence.Element
+        let frame = CGRect(x: 20, y: 80, width: 180, height: 48)
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let selected = Node(identifier: "chatHub.channel.3", type: .button, frame: frame, selected: true)
+        let evidence = ChatViewportEvidence(window: window, elements: [selected])
+        XCTAssertTrue(evidence.isSelected("chatHub.channel.3"))
+        XCTAssertFalse(evidence.isSelected("chatHub.channel.0"), "Another selected channel is not proof of the requested selection")
+        XCTAssertFalse(evidence.isSelected(""))
+        var unselected = selected
+        unselected.selected = false
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: [unselected]).isSelected("chatHub.channel.3"))
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: []).isSelected("chatHub.channel.3"))
+    }
+
+    func testChatViewportEvidenceRequiresFullReadableMessageAndNoOccludingModal() {
+        typealias Node = ChatViewportEvidence.Element
+        // Derived from the maximum-text CI failure's message/footer geometry:
+        // the complete message was readable while its separate AX hit-test stalled.
+        // The AX Keyboard frame excludes the predictive bar above its key rows.
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let chrome: [Node] = [
+            Node(identifier: "chat.thread.messages", type: .scrollView,
+                frame: CGRect(x: 0, y: 63, width: 402, height: 811)),
+            Node(identifier: "chat.quickEmojiRow", type: .scrollView,
+                frame: CGRect(x: 0, y: 403.7, width: 402, height: 48)),
+            Node(identifier: "chat.composer.input", type: .textField,
+                frame: CGRect(x: 20, y: 463.7, width: 210, height: 63.3)),
+            Node(identifier: "chat.composer.send", type: .button,
+                frame: CGRect(x: 250, y: 464.3, width: 92, height: 62)),
+            Node(identifier: "chat.keyboard.dismiss", type: .button,
+                frame: CGRect(x: 350, y: 471.3, width: 44, height: 48)),
+            Node(identifier: "", type: .keyboard,
+                frame: CGRect(x: 0, y: 583, width: 402, height: 233)),
+        ]
+        let id = "chat.message.text.fixture-39"
+        let message = Node(identifier: id, label: "Fixture message 39", type: .staticText,
+            frame: CGRect(x: 68, y: 214, width: 280, height: 125.3), inMessageThread: true)
+        let readable = ChatViewportEvidence(window: window, elements: chrome + [message])
+        XCTAssertTrue(readable.keyboardPresented)
+        XCTAssertTrue(readable.fullyReadable(identifier: id))
+        for frame in [CGRect.zero, .null, .infinite,
+                      CGRect(x: CGFloat.nan, y: 214, width: 280, height: 125.3),
+                      CGRect(x: 68, y: 600, width: 280, height: 125.3),
+                      CGRect(x: 68, y: 390, width: 280, height: 125.3),
+                      CGRect(x: 68, y: -20, width: 280, height: 125.3),
+                      CGRect(x: 380, y: 214, width: 280, height: 125.3)] {
+            let hidden = Node(identifier: id, type: .staticText, frame: frame, inMessageThread: true)
+            XCTAssertFalse(ChatViewportEvidence(window: window, elements: chrome + [hidden])
+                .fullyReadable(identifier: id), "Empty, offscreen or clipped text cannot satisfy visibility")
+        }
+        for type in [XCUIElement.ElementType.alert, .sheet] {
+            let covered = ChatViewportEvidence(window: window, elements: chrome + [message,
+                Node(identifier: "modal", type: type, frame: window)])
+            XCTAssertFalse(covered.fullyReadable(identifier: id))
+            XCTAssertFalse(covered.keyboardPresented)
+        }
+        for missing in ["chat.thread.messages", "chat.composer.input"] {
+            let incomplete = ChatViewportEvidence(window: window,
+                elements: chrome.filter { $0.identifier != missing } + [message])
+            XCTAssertFalse(incomplete.fullyReadable(identifier: id))
+            XCTAssertFalse(incomplete.keyboardPresented)
+            XCTAssertFalse(incomplete.readsHistory(hiding: "Fixture reply"))
+        }
+        for id in ["shell.tab.chat", "chatHub.source.chats", "chatHub.channel.0", "chatHub.events"] {
+            let retainedNavigation = Node(identifier: id, type: .button,
+                frame: CGRect(x: 0, y: 1_000, width: 48, height: 48))
+            XCTAssertFalse(ChatViewportEvidence(window: window,
+                elements: chrome + [message, retainedNavigation]).keyboardPresented,
+                "Hidden navigation must leave the accessibility tree, not just move offscreen")
+        }
+        let unrelated = Node(identifier: id, type: .staticText, frame: message.frame)
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: chrome + [unrelated])
+            .fullyReadable(identifier: id), "A matching label outside the thread is not message evidence")
+        let nonMessage = Node(identifier: "chat.sender.profile.fixture-39", label: "😊", type: .staticText,
+            frame: message.frame, inMessageThread: true)
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: chrome + [nonMessage])
+            .fullyReadable(label: "😊"), "A reaction label on a non-message node cannot prove that a message was sent")
+
+        // A real old message must remain visible. Merely failing to find the
+        // newest label (or showing a blank viewport) is not proof of history.
+        let hiddenReply = Node(identifier: "chat.message.text.reply", label: "Fixture reply", type: .staticText,
+            frame: CGRect(x: 68, y: -100, width: 100, height: 40), inMessageThread: true)
+        XCTAssertTrue(ChatViewportEvidence(window: window, elements: chrome + [message, hiddenReply])
+            .readsHistory(hiding: "Fixture reply"))
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: chrome + [hiddenReply])
+            .readsHistory(hiding: "Fixture reply"))
+        let partiallyVisibleReply = Node(identifier: "chat.message.text.reply", label: "Fixture reply", type: .staticText,
+            frame: CGRect(x: 68, y: 400, width: 100, height: 40), inMessageThread: true)
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: chrome + [message, partiallyVisibleReply])
+            .readsHistory(hiding: "Fixture reply"), "Even a partially reappearing newest message violates history position")
+    }
+
+    func testChatViewportEvidenceRequiresRealKeyboardAbsenceAndRestoredNavigation() {
+        typealias Node = ChatViewportEvidence.Element
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let dismissed: [Node] = [
+            Node(identifier: "chat.thread.messages", type: .scrollView,
+                frame: CGRect(x: 0, y: 237, width: 402, height: 550)),
+            Node(identifier: "chat.quickEmojiRow", type: .scrollView,
+                frame: CGRect(x: 0, y: 650, width: 402, height: 48)),
+            Node(identifier: "chat.composer.input", type: .textField,
+                frame: CGRect(x: 20, y: 710, width: 280, height: 48)),
+            Node(identifier: "chat.composer.send", type: .button,
+                frame: CGRect(x: 310, y: 710, width: 80, height: 48)),
+            Node(identifier: "shell.tab.chat", type: .button,
+                frame: CGRect(x: 80, y: 785, width: 60, height: 60)),
+            Node(identifier: "chatHub.source.chats", type: .button,
+                frame: CGRect(x: 20, y: 80, width: 180, height: 48)),
+        ]
+        XCTAssertTrue(ChatViewportEvidence(window: window, elements: dismissed).keyboardDismissed)
+        let visibleKeyboard = Node(identifier: "", type: .keyboard,
+            frame: CGRect(x: 0, y: 583, width: 402, height: 233))
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: dismissed + [visibleKeyboard]).keyboardDismissed,
+            "Navigation alone cannot prove keyboard dismissal")
+        let offscreenKeyboard = Node(identifier: "", type: .keyboard,
+            frame: CGRect(x: 0, y: 874, width: 402, height: 233))
+        XCTAssertTrue(ChatViewportEvidence(window: window, elements: dismissed + [offscreenKeyboard]).keyboardDismissed,
+            "An offscreen stale keyboard node does not cover the conversation")
+        let zeroAreaKeyboard = Node(identifier: "", type: .keyboard, frame: .zero)
+        XCTAssertTrue(ChatViewportEvidence(window: window, elements: dismissed + [zeroAreaKeyboard]).keyboardDismissed)
+        for unknownFrame in [CGRect.null, .infinite, CGRect(x: CGFloat.nan, y: 583, width: 402, height: 233)] {
+            let unknownKeyboard = Node(identifier: "", type: .keyboard, frame: unknownFrame)
+            let evidence = ChatViewportEvidence(window: window, elements: dismissed + [unknownKeyboard])
+            XCTAssertFalse(evidence.keyboardDismissed, "Unknown keyboard geometry is not proof of dismissal")
+            XCTAssertNil(evidence.readableViewport, "Unknown keyboard coverage cannot prove readable content")
+        }
+        XCTAssertFalse(ChatViewportEvidence(window: window,
+            elements: dismissed.filter { $0.identifier != "shell.tab.chat" }).keyboardDismissed,
+            "A missing keyboard alone cannot prove that navigation was restored")
+    }
+
+    func testKeyboardEntryEvidenceRequiresTheNativeHeaderAndReadableFixture() {
+        typealias Node = ChatViewportEvidence.Element
+        let window = CGRect(x: 0, y: 0, width: 402, height: 874)
+        // Captured native entry geometry from CI: this header has Back to Map,
+        // source selection and channels. The retired Events shortcut is absent.
+        let nodes: [Node] = [
+            Node(identifier: "chatHub.opaqueScreen", type: .other, frame: CGRect(x: 0, y: 0, width: 402, height: 768)),
+            Node(identifier: "shell.tab.chat", type: .button, frame: CGRect(x: 85.3, y: 776, width: 77, height: 56), selected: true),
+            Node(identifier: "chatHub.source.chats", type: .button, frame: CGRect(x: 20, y: 82, width: 181, height: 48), selected: true),
+            Node(identifier: "chatHub.source.driver", type: .button, frame: CGRect(x: 201, y: 82, width: 181, height: 48)),
+            Node(identifier: "chatHub.channel.0", type: .button, frame: CGRect(x: 68, y: 162, width: 105.3, height: 63.3), selected: true),
+            Node(identifier: "chatHub.backToMap", type: .button, frame: CGRect(x: 8, y: 169.7, width: 48, height: 48)),
+            Node(identifier: "chat.thread.messages", type: .scrollView, frame: CGRect(x: 0, y: 237.7, width: 402, height: 530.3)),
+            Node(identifier: "chat.quickEmojiRow", type: .scrollView, frame: CGRect(x: 0, y: 642, width: 402, height: 48)),
+            Node(identifier: "chat.quickEmoji.happy", type: .button, frame: CGRect(x: 8, y: 642, width: 48, height: 48)),
+            Node(identifier: "chat.composer.input", type: .textField, frame: CGRect(x: 20, y: 718, width: 277.7, height: 22)),
+            Node(identifier: "chat.composer.send", type: .button, frame: CGRect(x: 317.7, y: 698, width: 76.3, height: 62)),
+            Node(identifier: "chat.message.text.fixture-39", type: .staticText,
+                frame: CGRect(x: 68, y: 595, width: 150, height: 20.3), inMessageThread: true),
+        ]
+        XCTAssertTrue(ChatViewportEvidence(window: window, elements: nodes).keyboardFixtureReady,
+            "The actual native header must be accepted without a retired Events shortcut")
+        for missing in ["chatHub.opaqueScreen", "chatHub.source.driver", "chatHub.backToMap",
+                        "chat.thread.messages", "chat.composer.input", "chat.message.text.fixture-39"] {
+            XCTAssertFalse(ChatViewportEvidence(window: window,
+                elements: nodes.filter { $0.identifier != missing }).keyboardFixtureReady,
+                "Entry needs the actual Chat fixture, not a selected tab or recovery screen alone")
+        }
+        for unselected in ["shell.tab.chat", "chatHub.source.chats", "chatHub.channel.0"] {
+            let wrongSelection = nodes.map { node -> Node in
+                var node = node
+                if node.identifier == unselected { node.selected = false }
+                return node
+            }
+            XCTAssertFalse(ChatViewportEvidence(window: window, elements: wrongSelection).keyboardFixtureReady)
+        }
+        let keyboard = Node(identifier: "", type: .keyboard, frame: CGRect(x: 0, y: 583, width: 402, height: 233))
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: nodes + [keyboard]).keyboardFixtureReady,
+            "The initial fixture must be settled before focusing the composer")
+    }
+
+    func testCommunityComposerStaysVisibleWithKeyboard() throws {
         for largeText in [false, true] {
-            let app = launch(language: "sv", largeText: largeText, theme: "Dark", chatFixture: true)
-            app.buttons["shell.tab.chat"].tap()
-            let composer = app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
-            XCTAssertTrue(composer.waitForExistence(timeout: 15))
+            // Navigation has its own physical Map → Chat acceptance coverage.
+            // This contract starts in an explicitly guarded config-less fixture.
+            let app = launch(language: "sv", largeText: largeText, theme: "Dark",
+                chatFixture: true, chatKeyboardFixture: true)
+            _ = try requireChatEvidence(in: app, name: "chat-keyboard-entry-failure",
+                message: "The keyboard fixture must start in the selected Chat thread with readable content") {
+                $0.keyboardFixtureReady
+            }
             XCTAssertTrue(app.buttons["chat.quickEmoji.happy"].isEnabled,
                 "Quick reactions must work with an empty draft")
             // SwiftUI's vertical TextField may expose a measuring TextField
@@ -213,89 +390,77 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertTrue(input.isHittable)
             XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
             XCTAssertTrue(focusComposerKeyboard(in: app), "The composer must open the software keyboard")
-            let latest = app.staticTexts["chat.message.text.fixture-39"]
-            let dismiss = app.buttons["chat.keyboard.dismiss"]
-            XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
-            // Resolve the stable ID through the keyboard's AX-tree transition.
-            // Keep the poll cheap: querying several frames can exhaust its
-            // entire deadline on a loaded hosted simulator. Measure geometry
-            // after visibility is established, outside the polling deadline.
-            let latestVisible = XCTNSPredicateExpectation(
-                predicate: NSPredicate { _, _ in
-                    let current = app.staticTexts["chat.message.text.fixture-39"]
-                    return current.exists && current.isHittable
-                }, object: app)
-            let latestReady = XCTWaiter.wait(for: [latestVisible], timeout: 15) == .completed
-            if !latestReady { chatProof(app, name: "chat-keyboard-latest-failure", tree: true) }
-            XCTAssertTrue(latestReady, "Resizing for the keyboard must keep the latest message visible")
-            XCTAssertFalse(app.buttons["shell.tab.chat"].exists, "Hide the primary navigation while writing")
-            XCTAssertFalse(app.buttons["chatHub.source.chats"].exists)
-            XCTAssertFalse(app.buttons["chatHub.channel.0"].exists)
-            XCTAssertFalse(app.buttons["chatHub.events"].exists)
+            let writing = try requireChatEvidence(in: app, name: "chat-keyboard-latest-failure",
+                message: "Resizing for the keyboard must keep the latest message fully readable") {
+                $0.keyboardPresented && $0.fullyReadable(identifier: "chat.message.text.fixture-39")
+            }
             // Require usable conversation space, not merely a visible composer.
-            let titleBottom = app.scrollViews["chat.thread.messages"].frame.minY
+            XCTAssertGreaterThan(try XCTUnwrap(writing.readableViewport).height, 200)
             let emojiRow = app.scrollViews["chat.quickEmojiRow"]
-            let latestFrame = app.staticTexts["chat.message.text.fixture-39"].frame
-            XCTAssertGreaterThanOrEqual(latestFrame.minY, titleBottom)
-            XCTAssertLessThanOrEqual(latestFrame.maxY, emojiRow.frame.minY + 1)
-            XCTAssertGreaterThan(emojiRow.frame.minY - titleBottom, 200)
             // SwiftUI can replace the editor's native accessibility element.
             // Keep typing into the focused responder through the application.
             app.typeText("Fixture reply")
             assertComposerDraft("Fixture reply", present: true, in: app)
             let send = app.buttons["chat.composer.send"]
             XCTAssertTrue(send.isHittable)
-            XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
-            XCTAssertLessThanOrEqual(latest.frame.maxY, emojiRow.frame.minY + 1)
+            let typed = try ChatViewportEvidence(capturing: app)
+            XCTAssertTrue(typed.keyboardPresented && typed.fullyReadable(identifier: "chat.message.text.fixture-39"),
+                "Typing must preserve the latest message and keep Send above the keyboard")
             app.buttons["chat.quickEmoji.happy"].tap()
-            let happy = app.staticTexts.matching(NSPredicate(
-                format: "identifier BEGINSWITH %@ AND label == %@", "chat.message.text.", "😊")).firstMatch
-            XCTAssertTrue(happy.waitForExistence(timeout: 5))
-            XCTAssertTrue(happy.isHittable)
+            _ = try requireChatEvidence(in: app, name: "chat-happy-reaction-failure", timeout: 5,
+                message: "Quick reaction must send a readable message while the keyboard stays open") {
+                $0.keyboardPresented && $0.fullyReadable(label: "😊")
+            }
             assertComposerDraft("Fixture reply", present: true, in: app)
             emojiRow.swipeLeft()
-            XCTAssertTrue(app.keyboards.firstMatch.exists, "Browsing quick reactions must keep the keyboard open")
+            XCTAssertTrue(try ChatViewportEvidence(capturing: app).keyboardPresented,
+                "Browsing quick reactions must keep the keyboard open")
             let crownButton = app.buttons["chat.quickEmoji.crown"]
             XCTAssertTrue(crownButton.isHittable, "The horizontal row must expose Android's final crown reaction")
             crownButton.tap()
-            let crown = app.staticTexts.matching(NSPredicate(
-                format: "identifier BEGINSWITH %@ AND label == %@", "chat.message.text.", "👑")).firstMatch
-            XCTAssertTrue(crown.waitForExistence(timeout: 5))
-            XCTAssertTrue(crown.isHittable)
+            _ = try requireChatEvidence(in: app, name: "chat-crown-reaction-failure", timeout: 5,
+                message: "The final reaction must send a readable crown message with the keyboard open") {
+                $0.keyboardPresented && $0.fullyReadable(label: "👑")
+            }
             assertComposerDraft("Fixture reply", present: true, in: app)
             chatProof(app, name: largeText ? "chat-writing-sv-accessibility" : "chat-writing-sv")
-            dismiss.tap()
-            XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
-            XCTAssertFalse(app.keyboards.firstMatch.exists)
+            app.buttons["chat.keyboard.dismiss"].tap()
+            _ = try requireChatEvidence(in: app, name: "chat-first-dismiss-failure", timeout: 5,
+                message: "Dismiss must remove the software keyboard and restore navigation") { $0.keyboardDismissed }
             assertComposerDraft("Fixture reply", present: true, in: app)
-            XCTAssertTrue(app.buttons["chatHub.source.chats"].exists)
             // A vertical editor's AX activation point can land in its padding
             // after accessibility-size layout. Tap the actual editing surface;
             // reopening the keyboard and preserving the draft remain required.
             composerInput(in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            _ = try requireChatEvidence(in: app, name: "chat-reopen-failure", timeout: 5,
+                message: "The composer must reopen the real keyboard with navigation hidden") { $0.keyboardPresented }
             send.tap()
-            let reply = app.staticTexts["Fixture reply"]
-            XCTAssertTrue(reply.waitForExistence(timeout: 5))
-            XCTAssertTrue(reply.isHittable)
+            _ = try requireChatEvidence(in: app, name: "chat-sent-reply-failure", timeout: 5,
+                message: "Send must produce a fully readable reply in the actual conversation") {
+                $0.fullyReadable(label: "Fixture reply")
+            }
             assertComposerDraft("Fixture reply", present: false, in: app)
             // Keyboard resizing must also respect a deliberate history read.
             // Clearing SwiftUI's vertical editor can already close the keyboard.
             // Dismiss it if needed, then require the same keyboard-free history
             // starting state before exercising the next keyboard transition.
-            let historyDismiss = app.buttons["chat.keyboard.dismiss"]
-            if historyDismiss.exists { historyDismiss.tap() }
-            let keyboardClosed = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
-            XCTAssertEqual(XCTWaiter.wait(for: [keyboardClosed], timeout: 15), .completed)
-            XCTAssertTrue(app.buttons["shell.tab.chat"].waitForExistence(timeout: 5))
+            let afterSend = try ChatViewportEvidence(capturing: app)
+            if afterSend.visible("chat.keyboard.dismiss") { app.buttons["chat.keyboard.dismiss"].tap() }
+            _ = try requireChatEvidence(in: app, name: "chat-history-dismiss-failure",
+                message: "The history-read starting state must have no keyboard and restored navigation") {
+                $0.keyboardDismissed
+            }
             let messages = element("chat.thread.messages", in: app)
             messages.swipeDown()
             messages.swipeDown()
-            XCTAssertFalse(reply.exists && reply.isHittable)
+            let history = try ChatViewportEvidence(capturing: app)
+            XCTAssertTrue(history.keyboardDismissed && history.readsHistory(hiding: "Fixture reply"),
+                "Reading older history must show older messages and move the sent reply out of view")
             composerInput(in: app).tap()
-            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-            XCTAssertFalse(reply.exists && reply.isHittable, "Opening the keyboard must not jump away from older history")
+            _ = try requireChatEvidence(in: app, name: "chat-history-keyboard-failure", timeout: 5,
+                message: "Opening the keyboard must preserve older history without revealing the sent reply") {
+                $0.keyboardPresented && $0.readsHistory(hiding: "Fixture reply")
+            }
             app.terminate()
         }
     }
@@ -1216,6 +1381,23 @@ final class ShellSmokeTests: XCTestCase {
         print("KCC_CHAT_PROOF_ATTACHMENT \(name)")
     }
 
+    /// Resolve keyboard, messages and footer from the SAME fresh AX snapshot.
+    /// Separate isHittable/exists/frame requests can each re-snapshot SwiftUI's
+    /// changing hierarchy and consume the entire existing wait deadline.
+    private func requireChatEvidence(in app: XCUIApplication, name: String, timeout: TimeInterval = 15, message: String,
+                                     condition: @escaping (ChatViewportEvidence) -> Bool,
+                                     file: StaticString = #filePath, line: UInt = #line) throws -> ChatViewportEvidence {
+        var accepted: ChatViewportEvidence?
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let snapshot = try? ChatViewportEvidence(capturing: app), condition(snapshot) else { return false }
+            accepted = snapshot
+            return true
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        if result != .completed { chatProof(app, name: name, tree: true) }
+        return try XCTUnwrap(result == .completed ? accepted : nil, message, file: file, line: line)
+    }
+
     /// SwiftUI's vertical field can replace its measuring UITextField with a
     /// UITextView after input/layout changes. Re-query the visible editor;
     /// retaining the original element can read a retired measuring widget.
@@ -1304,7 +1486,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(sheetBar.exists, "Dismissal must remove the sheet before using the screen behind it")
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatKeyboardFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -1312,6 +1494,7 @@ final class ShellSmokeTests: XCTestCase {
         // default can retain/transition the preceding test's category.
         app.launchArguments += ["-KCCUITestTextSize", largeText ? "AccessibilityXXXL" : "Large"]
         if chatFixture { app.launchArguments += ["-KCCUITestChatThread"] }
+        if chatKeyboardFixture { app.launchArguments += ["-KCCUITestChatKeyboard"] }
         if chatFloodFixture { app.launchArguments += ["-KCCUITestChatFlood"] }
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
         if rejectMaps { app.launchArguments += ["-KCCUITestNavigationFailure"] }
@@ -1320,6 +1503,9 @@ final class ShellSmokeTests: XCTestCase {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]
         }
         app.launch()
+        // The keyboard contract immediately verifies stronger Chat-specific
+        // readiness from one fresh snapshot, rather than querying Map controls.
+        if chatKeyboardFixture { return app }
         XCTAssertTrue(
             app.buttons["shell.menu"].waitForExistence(timeout: 15),
             "Build without GoogleService-Info.plist to test the config-less shell"
@@ -1363,23 +1549,21 @@ final class ShellSmokeTests: XCTestCase {
         return app
     }
 
-    private func assertSelected(_ tab: XCUIElement) {
-        // A tap returning does not guarantee SwiftUI has published the next
-        // accessibility snapshot. Wait for the actual selection, without retaps.
-        let selected = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in tab.exists && tab.isSelected },
-            object: nil
-        )
-        // Hosted runners can publish selection after the initial five seconds;
-        // failure diagnostics have then already observed selected=true. Keep the
-        // actual-state assertion, with the same bounded wait as launch readiness.
+    private func assertSelected(_ tab: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        // Copy the requested identity once. Each decision then uses one fresh
+        // tree, rather than separate exists/isSelected requests to retired nodes.
+        let identifier = tab.identifier
+        let app = XCUIApplication()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let snapshot = try? ChatViewportEvidence(capturing: app) else { return false }
+            return snapshot.isSelected(identifier)
+        }, object: nil)
         let result = XCTWaiter.wait(for: [selected], timeout: 15)
         if result != .completed {
-            let app = XCUIApplication()
-            chatProof(app, name: "\(tab.identifier)-selection-failure", tree: true)
+            chatProof(app, name: "\(identifier)-selection-failure", tree: true)
             diagnosePrimaryControls(app)
         }
-        XCTAssertEqual(result, .completed, "Selection did not settle for \(tab.identifier)")
+        XCTAssertEqual(result, .completed, "Selection did not settle for \(identifier)", file: file, line: line)
     }
 
     private func reveal(_ target: XCUIElement, in scroll: XCUIElement, minimumHeight: CGFloat) {
@@ -1421,5 +1605,164 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
         XCTAssertTrue(app.navigationBars[language == "sv" ? "Inställningar" : "Settings"].waitForExistence(timeout: 5))
+    }
+}
+
+/// Immutable evidence from one accessibility snapshot. Static text visibility is
+/// full geometric containment, not an input hit-test against a retired AX node.
+/// This helper is test-only; no shipping focus or scrolling behavior changes.
+private struct ChatViewportEvidence {
+    struct Element {
+        let identifier: String
+        var label = ""
+        let type: XCUIElement.ElementType
+        let frame: CGRect
+        var inMessageThread = false
+        var selected = false
+    }
+
+    let window: CGRect
+    let elements: [Element]
+
+    @MainActor
+    init(capturing app: XCUIApplication) throws {
+        let root = try app.snapshot()
+        window = root.frame
+        var captured: [Element] = []
+        @MainActor func visit(_ snapshot: any XCUIElementSnapshot, inThread: Bool) {
+            // Read the non-Sendable snapshot synchronously on the main actor.
+            // Boolean autoclosures must never capture the snapshot object.
+            let identifier = snapshot.identifier
+            let selected = snapshot.isSelected
+            var withinThread = inThread
+            if identifier == "chat.thread.messages" { withinThread = true }
+            captured.append(Element(identifier: identifier, label: snapshot.label,
+                type: snapshot.elementType, frame: snapshot.frame, inMessageThread: withinThread, selected: selected))
+            for child in snapshot.children { visit(child, inThread: withinThread) }
+        }
+        visit(root, inThread: false)
+        elements = captured
+    }
+
+    init(window: CGRect, elements: [Element]) {
+        self.window = window
+        self.elements = elements
+    }
+
+    private func usable(_ frame: CGRect) -> Bool {
+        !frame.isNull && !frame.isInfinite && !frame.isEmpty &&
+            [frame.minX, frame.minY, frame.maxX, frame.maxY].allSatisfy(\.isFinite)
+    }
+
+    private func intersectsWindow(_ frame: CGRect) -> Bool {
+        usable(window) && usable(frame) && !window.intersection(frame).isEmpty &&
+            !window.intersection(frame).isNull
+    }
+
+    private func contains(_ identifier: String) -> Bool {
+        elements.contains { $0.identifier == identifier }
+    }
+
+    func visible(_ identifier: String) -> Bool {
+        elements.contains { $0.identifier == identifier && intersectsWindow($0.frame) }
+    }
+
+    func isSelected(_ identifier: String) -> Bool {
+        !identifier.isEmpty && elements.contains { $0.identifier == identifier && $0.selected }
+    }
+
+    var keyboardFixtureReady: Bool {
+        guard keyboardDismissed, let hub = frame("chatHub.opaqueScreen"),
+              let viewport = readableViewport, hub.contains(viewport),
+              isSelected("shell.tab.chat"), isSelected("chatHub.source.chats"),
+              isSelected("chatHub.channel.0"), visible("chatHub.channel.0"),
+              visible("chatHub.source.driver"), visible("chatHub.backToMap"),
+              visible("chat.quickEmoji.happy"), visible("chat.composer.send") else { return false }
+        return fullyReadable(identifier: "chat.message.text.fixture-39")
+    }
+
+    private func frame(_ identifier: String) -> CGRect? {
+        elements.first { $0.identifier == identifier && intersectsWindow($0.frame) }?.frame
+    }
+
+    private var keyboardGeometryKnown: Bool {
+        elements.filter { $0.type == .keyboard }.allSatisfy {
+            // Empty/offscreen finite frames explicitly cover no content. Null,
+            // infinite or NaN geometry gives no trustworthy coverage evidence.
+            !$0.frame.isNull && !$0.frame.isInfinite &&
+                [$0.frame.minX, $0.frame.minY, $0.frame.maxX, $0.frame.maxY].allSatisfy(\.isFinite)
+        }
+    }
+
+    private var keyboardFrames: [CGRect] {
+        elements.filter { $0.type == .keyboard && intersectsWindow($0.frame) }.map(\.frame)
+    }
+
+    private var composerFrame: CGRect? {
+        elements.filter {
+            $0.identifier == "chat.composer.input" && ($0.type == .textField || $0.type == .textView) &&
+                intersectsWindow($0.frame)
+        }.map(\.frame).max { $0.width * $0.height < $1.width * $1.height }
+    }
+
+    var readableViewport: CGRect? {
+        guard keyboardGeometryKnown, let thread = frame("chat.thread.messages"),
+              let emoji = frame("chat.quickEmojiRow"),
+              let composer = composerFrame,
+              window.contains(emoji), window.contains(composer),
+              emoji.maxY <= composer.minY + 1 else { return nil }
+        let clippedThread = window.intersection(thread)
+        let bottom = min(min(clippedThread.maxY, emoji.minY), keyboardFrames.map(\.minY).min() ?? .infinity)
+        guard bottom > clippedThread.minY else { return nil }
+        let result = CGRect(x: clippedThread.minX, y: clippedThread.minY,
+            width: clippedThread.width, height: bottom - clippedThread.minY)
+        // Alerts/sheets can geometrically cover text while leaving its old frame
+        // in the tree. Never count that underlying content as readable.
+        guard !elements.contains(where: {
+            ($0.type == .alert || $0.type == .sheet) && intersectsWindow($0.frame) &&
+                !$0.frame.intersection(result).isNull && !$0.frame.intersection(result).isEmpty
+        }) else { return nil }
+        return result
+    }
+
+    var keyboardPresented: Bool {
+        guard let keyboardTop = keyboardFrames.map(\.minY).min(),
+              let composer = composerFrame, let send = frame("chat.composer.send"),
+              readableViewport != nil, visible("chat.keyboard.dismiss"),
+              composer.maxY <= keyboardTop + 1, send.maxY <= keyboardTop + 1 else { return false }
+        // Writing removes this navigation from accessibility, rather than
+        // merely moving still-accessible controls outside the visible window.
+        return !contains("shell.tab.chat") && !contains("chatHub.source.chats") &&
+            !contains("chatHub.channel.0") && !contains("chatHub.events")
+    }
+
+    var keyboardDismissed: Bool {
+        keyboardFrames.isEmpty && !visible("chat.keyboard.dismiss") &&
+            visible("shell.tab.chat") && visible("chatHub.source.chats") && readableViewport != nil
+    }
+
+    func fullyReadable(identifier: String? = nil, label: String? = nil) -> Bool {
+        guard let viewport = readableViewport else { return false }
+        return elements.contains {
+            $0.inMessageThread && $0.type == .staticText &&
+                $0.identifier.hasPrefix("chat.message.text.") && usable($0.frame) &&
+                (identifier == nil || $0.identifier == identifier) &&
+                (label == nil || $0.label == label) && viewport.contains($0.frame)
+        }
+    }
+
+    func readsHistory(hiding label: String) -> Bool {
+        guard let viewport = readableViewport else { return false }
+        let hasVisibleOlderMessage = elements.contains {
+            $0.inMessageThread && $0.type == .staticText &&
+                $0.identifier.hasPrefix("chat.message.text.fixture-") &&
+                usable($0.frame) && viewport.contains($0.frame)
+        }
+        let newestIntersects = elements.contains {
+            $0.inMessageThread && $0.type == .staticText && $0.label == label &&
+                usable($0.frame) && !$0.frame.intersection(viewport).isNull &&
+                !$0.frame.intersection(viewport).isEmpty
+        }
+        return hasVisibleOlderMessage && !newestIntersects
     }
 }
