@@ -72,6 +72,11 @@ struct ShellView: View {
     @State private var mapReadingSelection: MapReadingSelection?
     @State private var mapDockHeight: CGFloat = 0
     @State private var mapSessionHeight: CGFloat = 0
+    @State private var invitationFooterHeight: CGFloat = 0
+    @State private var invitationAnswerTask: Task<Void, Never>?
+    @State private var invitationBusyID: String?
+    @State private var invitationErrorID: String?
+    @State private var invitationActionError: ConvoyActionError?
     @State private var clubDeepLinkID: String?
     @State private var clubsCoordinator: ClubsCoordinator?
     @State private var savedPlacesCoordinator: SavedPlacesCoordinator?
@@ -140,7 +145,6 @@ struct ShellView: View {
     /// foreground map provider and the time-bounded live-sharing provider.
     @State private var driveLocationProvider = CoreLocationProvider(backgroundEnabled: true)
     @State private var showStartDriving = false
-    @State private var showStopConfirmation = false
     @State private var pendingSingleSessionStart = false
     @State private var pendingStartVehicleId: String?
     @State private var pendingConvoyCreate = false
@@ -181,7 +185,9 @@ struct ShellView: View {
         )
     }
 
-    var body: some View {
+    // Bound the modifier chains just like the presentation layers below. This
+    // keeps Swift's type checker within budget as shell lifecycle hooks grow.
+    private var shellWithFeatureTasks: AnyView {
         shellWithNavigation
             .modifier(ChatKeyboardObserver(isPresented: $chatKeyboardPresented))
             .environment(\.chatKeyboardPresented, chatKeyboardPresented)
@@ -198,6 +204,11 @@ struct ShellView: View {
                 guard signedInUid != nil else { return }
                 await appUpdateCoordinator.checkOnce()
             }
+            .eraseToAnyView()
+    }
+
+    private var shellWithSessionLifecycle: AnyView {
+        shellWithFeatureTasks
             .task(id: initialMapPermissionEligible) {
                 guard initialMapPermissionEligible else { return }
                 if locationPermissionCoordinator?.requestInitialMapAccess() == true {
@@ -207,6 +218,9 @@ struct ShellView: View {
             }
             .task(id: savedPlacesLocationSubscriptionKey) {
                 await observeSavedPlacesLocation()
+            }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                notificationsCoordinator?.setInvitationForeground(phase == .active)
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active, signedInUid != nil else { return }
@@ -219,6 +233,11 @@ struct ShellView: View {
                       initial: true) { _, keepAwake in
                 UIApplication.shared.isIdleTimerDisabled = keepAwake
             }
+            .eraseToAnyView()
+    }
+
+    var body: some View {
+        shellWithSessionLifecycle
             .onChange(of: featureFlags.isEnabled(.liveLocation)) { _, enabled in
                 liveLocationCoordinator?.canShare = enabled && !access.isRestricted
                 if !enabled {
@@ -266,19 +285,23 @@ struct ShellView: View {
             .task(id: convoyFollowMeSubscriptionKey) {
                 syncFollowMe()
             }
-            .onDisappear {
-                UIApplication.shared.isIdleTimerDisabled = false
-                // RootView removes the entire shell on sign-out or when a live
-                // account update becomes restricted. Stop exact-location and
-                // background drive collection synchronously during that swap.
-                liveLocationCoordinator?.standDownForRestrictedAccess()
-                convoyEndSessionCoordinator?.stop()
-                driveRecordingCoordinator?.reset()
-                notificationsCoordinator?.stopObserving()
-                billboardsCoordinator?.stop()
-                clubsCoordinator?.stop()
-                mapSurface.setBillboardMarkers([])
-            }
+            .onDisappear(perform: tearDownShell)
+    }
+
+    private func tearDownShell() {
+        UIApplication.shared.isIdleTimerDisabled = false
+        // RootView removes the entire shell on sign-out or when a live
+        // account update becomes restricted. Stop exact-location and
+        // background drive collection synchronously during that swap.
+        liveLocationCoordinator?.standDownForRestrictedAccess()
+        convoyEndSessionCoordinator?.stop()
+        driveRecordingCoordinator?.reset()
+        invitationAnswerTask?.cancel()
+        invitationAnswerTask = nil
+        notificationsCoordinator?.stopObserving()
+        billboardsCoordinator?.stop()
+        clubsCoordinator?.stop()
+        mapSurface.setBillboardMarkers([])
     }
 
     /// A retained sibling overlay, rather than a modal presentation: covering
@@ -300,44 +323,77 @@ struct ShellView: View {
                     .id(destination)
                     .zIndex(1)
             }
-            if let coordinator = notificationsCoordinator,
-               let invitation = coordinator.convoyInvitation, routes.current != .notifications,
-               scenePhase == .active, navigationDestination == nil {
-                VStack {
-                    HStack(spacing: KccSpacing.s2) {
-                        Button {
-                            let destination = coordinator.destination(for: invitation)
-                            coordinator.dismissInvitation()
-                            if let destination { openNotificationDeepLink(destination) }
-                            Task { await coordinator.markRead(notificationId: invitation.id) }
-                        } label: {
-                            Label {
-                                VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                                    Text(verbatim: invitation.title).font(.headline).lineLimit(2)
-                                    if let preview = invitation.previewText { Text(verbatim: preview).font(.subheadline).lineLimit(2) }
-                                }.frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                            } icon: { Image(systemName: "car.2.fill") }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("convoy.invitation.banner")
-                        Button(action: coordinator.dismissInvitation) {
-                            Image(systemName: "xmark").frame(width: 48, height: 48)
-                        }.accessibilityLabel(Text("convoy.close"))
-                    }
-                    .padding(KccSpacing.s3).foregroundStyle(KccTheme.text)
-                    .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-                    .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.driver) }
-                    .padding(KccSpacing.s4)
-                    Spacer(minLength: 0)
-                }.zIndex(2)
-            }
+            invitationOverlay.zIndex(2)
             if let liveLocationCoordinator, liveLocationCoordinator.wired {
                 StationaryLivePrompt(coordinator: liveLocationCoordinator) { promptID in
                     stopSingleSession(expectedStationaryPromptID: promptID)
                 }
             }
         }
+        .onPreferenceChange(InvitationFooterHeightKey.self) { invitationFooterHeight = $0 }
         .eraseToAnyView()
+    }
+
+    @ViewBuilder private var invitationOverlay: some View {
+        if let notifications = notificationsCoordinator,
+           let invitation = notifications.convoyInvitation,
+           routes.current != .notifications, scenePhase == .active {
+            let footer = routes.current == nil && navigationDestination == nil ? invitationFooterHeight : 0
+            let dock = mapHomeChromeVisible && navigationDestination == nil ? mapSessionHeight : 0
+            VStack {
+                Spacer(minLength: 0)
+                ConvoyInvitationCard(invitation: invitation, deadline: notifications.convoyInvitationDeadline,
+                    busy: invitationBusyID != nil,
+                    error: invitationErrorID == invitation.id
+                        ? invitationActionError.map(ConvoyManagementStrings.errorKey) : nil,
+                    onJoin: { answerInvitation(invitation, join: true) },
+                    onDecline: { answerInvitation(invitation, join: false) })
+            }
+            .padding(.horizontal, KccSpacing.s4)
+            .padding(.bottom, footer + dock + KccSpacing.s2)
+            .task(id: invitation.id) {
+                guard let repository = FirebaseConvoyManagementRepository.createIfAvailable(),
+                      let convoyID = invitation.relatedEntityId else { return }
+                do {
+                    for try await convoy in repository.observeConvoy(convoyId: convoyID) {
+                        guard !Task.isCancelled else { return }
+                        if convoy == nil || convoy?.status == .ended || convoy?.viewer?.inviteStatus != .invited {
+                            notifications.dismissInvitation(expectedID: invitation.id)
+                            return
+                        }
+                    }
+                } catch { /* The response callable still validates a transient listener failure. */ }
+            }
+        }
+    }
+
+    private func answerInvitation(_ invitation: AppNotification, join: Bool) {
+        guard invitationBusyID == nil, let convoyID = invitation.relatedEntityId,
+              let coordinator = convoyManagementCoordinator, let notifications = notificationsCoordinator,
+              notifications.convoyInvitation?.id == invitation.id,
+              ProcessInfo.processInfo.systemUptime < notifications.convoyInvitationDeadline else { return }
+        let identity = signedInUid
+        invitationBusyID = invitation.id
+        invitationErrorID = nil
+        // Shell-owned task survives removal of the timed card.
+        invitationAnswerTask = Task { @MainActor in
+            defer { invitationBusyID = nil }
+            let result = await coordinator.respondToInvitation(convoyId: convoyID, action: join ? .accept : .decline)
+            guard !Task.isCancelled, case .signedIn(let currentUid, _) = session.state, currentUid == identity else { return }
+            if case .updated(let convoy) = result {
+                let joined = join ? convoy : nil
+                notifications.dismissInvitation(expectedID: invitation.id)
+                if let joined {
+                    routes = .empty
+                    completeConvoyJoin(joined)
+                }
+                // Inbox bookkeeping must not keep the next invitation's actions busy.
+                Task { await notifications.markRead(notificationId: invitation.id) }
+            } else if case .failed(let error) = result {
+                invitationErrorID = invitation.id
+                invitationActionError = error
+            }
+        }
     }
 
     // Build 2 exhausted the device main-thread stack while decoding this
@@ -352,6 +408,9 @@ struct ShellView: View {
                 // Keep the footer above the map and its edge-to-edge overlays.
                 primaryNavigation
                     .fixedSize(horizontal: false, vertical: true)
+                    .background { GeometryReader { proxy in
+                        Color.clear.preference(key: InvitationFooterHeightKey.self, value: proxy.size.height)
+                    } }
                     .zIndex(1)
             }
         }
@@ -551,7 +610,10 @@ struct ShellView: View {
             }
         }
         .onChange(of: liveLocationCoordinator?.isSharing) { _, sharing in
-            if sharing != true { nearbyWaveCoordinator?.sharingEnded() }
+            if sharing != true {
+                nearbyWaveCoordinator?.sharingEnded()
+                if case .stopLive = mapReadingSelection { dismissMapReading() }
+            }
             guard let sharing,
                   let command = pendingSessionCommand,
                   command.isReconciled(isSharing: sharing)
@@ -673,16 +735,6 @@ struct ShellView: View {
         .foregroundStyle(KccTheme.text)
         .tint(KccTheme.driver)
         .background(KccTheme.page, ignoresSafeAreaEdges: .all)
-        .confirmationDialog(
-            "liveLocation.stop",
-            isPresented: $showStopConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("liveLocation.stop", role: .destructive) {
-                stopSingleSession()
-            }
-            Button("shell.liveSharePromptCancel", role: .cancel) {}
-        }
         .alert(Text("map.locationNeededTitle"), isPresented: permissionPromptIsPresented) {
             if locationPermissionCoordinator?.state == .rationale {
                 Button("map.locationDismiss", role: .cancel) {
@@ -807,6 +859,7 @@ struct ShellView: View {
                 ConfiglessNearbyLiveMarker(coordinator: nearbyLive) {
                     selectMapReading(.nearby(ConfiglessLiveSessionFixture.otherUid))
                 }
+                ConfiglessDriveSaveProbe(state: driveRecordingCoordinator?.state)
             }
             #endif
             if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
@@ -1233,7 +1286,12 @@ struct ShellView: View {
                 VStack(spacing: KccSpacing.s2) {
                     if let selection = mapReadingSelection {
                         let available = max(0, geometry.size.height - mapSessionHeight - KccSpacing.s4)
-                        if case .crown = selection {
+                        if case .stopLive = selection {
+                            mapReadingPanel(selection)
+                                .id(selection)
+                                .frame(height: min(available, max(220, min(320, geometry.size.height * 0.45))))
+                                .padding(.horizontal, -KccSpacing.s4)
+                        } else if case .crown = selection {
                             mapReadingPanel(selection)
                                 .id(selection)
                                 .frame(height: min(available, max(240, min(420, geometry.size.height * 0.62))), alignment: .bottom)
@@ -1285,6 +1343,13 @@ struct ShellView: View {
 
     @ViewBuilder private func mapReadingPanel(_ selection: MapReadingSelection) -> some View {
         switch selection {
+        case .stopLive:
+            MapReadingPanel(title: "shell.liveTitle", onClose: dismissMapReading, docksToBottom: true) {
+                LiveSessionStopContent(busy: pendingSessionCommand != nil || liveLocationCoordinator?.actionStatus == .working) {
+                    dismissMapReading()
+                    stopSingleSession()
+                }
+            }
         case .place(let place):
             MapReadingPanel(title: "shell.placeMenuTitle", onClose: dismissMapReading) {
                 PlaceNavigationContent(place: place) { navigateToPlace(place) }
@@ -1373,6 +1438,7 @@ struct ShellView: View {
             mapReadingSelection = .police(pin.id)
         } else { mapReadingSelection = selection }
         if case .savedPlaces = selection { clearIncidentSelection() }
+        if case .stopLive = selection { clearIncidentSelection() }
         if case .nearby = selection { clearIncidentSelection() }
         if case .convoyMember = selection { clearIncidentSelection() }
     }
@@ -2086,7 +2152,8 @@ struct ShellView: View {
             canShareLive: coordinator.canShare
         )
         if coordinator.isSharing {
-            showStopConfirmation = true
+            closeAddressSearch()
+            selectMapReading(.stopLive)
         } else if actions.showChooser {
             startDrivingGarage = GarageCoordinator(
                 repository: FirebaseVehiclesRepository.createIfAvailable(),
@@ -2448,7 +2515,6 @@ struct ShellView: View {
         }
 
         showStartDriving = false
-        showStopConfirmation = false
         cancelPendingCreateAction()
         clearSessionCommand()
         sessionActionError = false
@@ -3246,4 +3312,9 @@ extension ShellTab {
         featureFlags: .contractDefaults,
         diagnostics: IOSDiagnosticsComposition()
     )
+}
+
+private struct InvitationFooterHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

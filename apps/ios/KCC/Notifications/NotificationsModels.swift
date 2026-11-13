@@ -130,6 +130,8 @@ struct AppNotification: Equatable, Sendable, Identifiable {
     let createdAt: Date?
     let actionType: NotificationActionType
     let relatedEntityId: String?
+    let inviterDisplayName: String?
+    let inviterAvatarPath: String?
 
     init(
         id: String,
@@ -140,7 +142,9 @@ struct AppNotification: Equatable, Sendable, Identifiable {
         isRead: Bool = false,
         createdAt: Date? = nil,
         actionType: NotificationActionType = .none,
-        relatedEntityId: String? = nil
+        relatedEntityId: String? = nil,
+        inviterDisplayName: String? = nil,
+        inviterAvatarPath: String? = nil
     ) {
         self.id = id
         self.category = category
@@ -151,6 +155,8 @@ struct AppNotification: Equatable, Sendable, Identifiable {
         self.createdAt = createdAt
         self.actionType = actionType
         self.relatedEntityId = relatedEntityId
+        self.inviterDisplayName = inviterDisplayName
+        self.inviterAvatarPath = inviterAvatarPath
     }
 
     /// Tolerant decoding from a raw Firestore document — the iOS port of
@@ -175,7 +181,9 @@ struct AppNotification: Equatable, Sendable, Identifiable {
             isRead: fields["read"] as? Bool ?? false,
             createdAt: fields["createdAt"] as? Date,
             actionType: NotificationActionType.fromWire(fields["actionType"] as? String),
-            relatedEntityId: fields["relatedEntityId"] as? String
+            relatedEntityId: fields["relatedEntityId"] as? String,
+            inviterDisplayName: (fields["convoyInvitation"] as? [String: Any])?["inviterDisplayName"] as? String,
+            inviterAvatarPath: (fields["convoyInvitation"] as? [String: Any])?["inviterAvatarPath"] as? String
         )
     }
 }
@@ -358,5 +366,42 @@ enum Notifications {
         let trimmed = relatedEntityId?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let trimmed, !trimmed.isEmpty else { return nil }
         return trimmed
+    }
+}
+
+
+/// Presentation state only: dismissing or timing out never answers/reads the invitation.
+struct ConvoyInvitationPresentation {
+    static let displaySeconds: TimeInterval = 30
+    let startedAt: Date
+    private(set) var initialized = false
+    private(set) var seenIDs = Set<String>()
+    private(set) var pendingIDs: [String] = []
+    private(set) var currentID: String?
+    private(set) var deadline: TimeInterval = 0
+
+    mutating func update(_ items: [AppNotification], now: TimeInterval, available: Bool = true) {
+        let valid = Set(items.filter {
+            $0.category == .convoyInvite && !$0.isRead && $0.relatedEntityId?.isEmpty == false
+        }.map(\.id))
+        let arrivals = Notifications.sortedForInbox(items).reversed().filter {
+            !seenIDs.contains($0.id) && valid.contains($0.id)
+                && (initialized || ($0.createdAt ?? .distantPast) >= startedAt)
+        }.map(\.id)
+        let current = currentID.flatMap { valid.contains($0) && now < deadline ? $0 : nil }
+        var waiting: [String] = []
+        for id in pendingIDs + arrivals where valid.contains(id) && id != currentID && !waiting.contains(id) {
+            waiting.append(id)
+        }
+        let next = available ? (current ?? waiting.first) : nil
+        if let next, next != currentID { deadline = now + Self.displaySeconds }
+        currentID = next
+        pendingIDs = available ? waiting.filter { $0 != next } : []
+        seenIDs.formUnion(items.map(\.id))
+        initialized = true
+    }
+
+    mutating func dismiss(_ expectedID: String) {
+        if currentID == expectedID { currentID = nil }
     }
 }

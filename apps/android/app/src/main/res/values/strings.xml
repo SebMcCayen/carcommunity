@@ -104,6 +104,7 @@
     <string name="liveLocation_duration4h">4 timmar</string>
     <string name="liveLocation_start">Dela min position</string>
     <string name="liveLocation_stop">Stoppa delning</string>
+    <string name="liveLocation_stopSavesToHistory">När du stoppar delningen sparas körningen automatiskt i din historik.</string>
     <string name="liveLocation_hideNow">Dölj mig nu</string>
     <string name="liveLocation_lastUpdated">Senast uppdaterad</string>
     <string name="liveLocation_whoCanSeeTitle">Vem kan se mig?</string>
@@ -1282,6 +1283,7 @@
     <string name="crownHunt_spawnClose">Stäng</string>
     <string name="crownHunt_spawnMoveCloser">Kör närmare</string>
     <string name="crownHunt_spawnMoveCloserDetail">Du behöver vara inom %1$d m från kronan.</string>
+    <string name="crownHunt_spawnReadyToCollect">Inom räckhåll – du kan hämta kronan.</string>
     <string name="crownHunt_spawnProximityLabel">Kom närmare</string>
     <string name="crownHunt_spawnProximityRemaining">%1$s kvar</string>
     <string name="crownHunt_spawnStopFirst">Stanna bilen först</string>
@@ -2230,4 +2232,9 @@
     <string name="roadCameras_photoTime">Bild uppdaterad %1$s</string>
     <string name="roadCameras_retry">Försök igen</string>
     <string name="roadCameras_catalogUnavailable">Kameror kunde inte uppdateras. Sparade kameror visas om de finns.</string>
+    <string name="convoy_invitationFrom">bjuder in till konvoj</string>
+    <string name="convoy_invitationJoin">Gå med</string>
+    <string name="convoy_invitationDecline">Neka</string>
+    <string name="convoy_invitationInboxHint">Finns kvar i Notifikationer</string>
+    <string name="convoy_invitationClosesIn">Rutan stängs om %1$d s</string>
 </resources>

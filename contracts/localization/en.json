@@ -119,6 +119,7 @@
     "duration4h": "4 hours",
     "start": "Share my location",
     "stop": "Stop sharing",
+    "stopSavesToHistory": "When you stop sharing, your drive is automatically saved to your history.",
     "hideNow": "Hide me now",
     "lastUpdated": "Last updated",
     "whoCanSeeTitle": "Who can see me?",
@@ -1385,6 +1386,7 @@
     "spawnCollecting": "Collecting...",
     "spawnMoveCloser": "Move closer",
     "spawnMoveCloserDetail": "You need to be within %1$d m of the crown.",
+    "spawnReadyToCollect": "Within reach – you can collect this crown.",
     "spawnProximityLabel": "Get closer",
     "spawnProximityRemaining": "%1$s to go",
     "spawnStopFirst": "Stop the car first",
@@ -2393,5 +2395,10 @@
     "photoTime": "Image updated %1$s",
     "retry": "Try again",
     "catalogUnavailable": "Cameras could not be updated. Saved cameras are shown when available."
-  }
+  },
+  "convoy.invitationFrom": "invites you to a convoy",
+  "convoy.invitationJoin": "Join",
+  "convoy.invitationDecline": "Decline",
+  "convoy.invitationInboxHint": "Stays in Notifications",
+  "convoy.invitationClosesIn": "Closes in %1$d s"
 }

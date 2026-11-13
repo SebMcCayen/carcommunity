@@ -119,6 +119,7 @@
     "duration4h": "4 timmar",
     "start": "Dela min position",
     "stop": "Stoppa delning",
+    "stopSavesToHistory": "När du stoppar delningen sparas körningen automatiskt i din historik.",
     "hideNow": "Dölj mig nu",
     "lastUpdated": "Senast uppdaterad",
     "whoCanSeeTitle": "Vem kan se mig?",
@@ -1385,6 +1386,7 @@
     "spawnClose": "Stäng",
     "spawnMoveCloser": "Kör närmare",
     "spawnMoveCloserDetail": "Du behöver vara inom %1$d m från kronan.",
+    "spawnReadyToCollect": "Inom räckhåll – du kan hämta kronan.",
     "spawnProximityLabel": "Kom närmare",
     "spawnProximityRemaining": "%1$s kvar",
     "spawnStopFirst": "Stanna bilen först",
@@ -2393,5 +2395,10 @@
     "photoTime": "Bild uppdaterad %1$s",
     "retry": "Försök igen",
     "catalogUnavailable": "Kameror kunde inte uppdateras. Sparade kameror visas om de finns."
-  }
+  },
+  "convoy.invitationFrom": "bjuder in till konvoj",
+  "convoy.invitationJoin": "Gå med",
+  "convoy.invitationDecline": "Neka",
+  "convoy.invitationInboxHint": "Finns kvar i Notifikationer",
+  "convoy.invitationClosesIn": "Rutan stängs om %1$d s"
 }

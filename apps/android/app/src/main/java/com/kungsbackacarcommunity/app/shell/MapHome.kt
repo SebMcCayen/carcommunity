@@ -294,6 +294,7 @@ fun MapHome(
     compassModeState: MutableState<MapCompassMode>? = null,
     // Session chrome docks above the persistent footer (catalogue S16).
     liveSessionBar: (@Composable () -> Unit)? = null,
+    onSessionDockHeightChanged: (Int) -> Unit = {},
     // Full-width convoy controls join the bottom session dock only while active.
     convoyBar: (@Composable () -> Unit)? = null,
     // Optional convoy awareness layer (member markers + off-screen direction
@@ -763,9 +764,12 @@ fun MapHome(
         }
 
         if (!searchExpanded && (liveSessionBar != null || convoyBar != null)) {
+            androidx.compose.runtime.DisposableEffect(Unit) {
+                onDispose { onSessionDockHeightChanged(0) }
+            }
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .onSizeChanged { bottomChromeHeightPx = it.height }
+                    .onSizeChanged { bottomChromeHeightPx = it.height; onSessionDockHeightChanged(it.height) }
                     .testTag("map_home_session_dock")
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1331,15 +1335,17 @@ internal fun LiveSharePopup(
     )
     if (rows.showStop) {
         // The prominent stop action. Only present when the caller wires
-        // [onStop] — i.e. the shell's centre-control sheet, where this
-        // sheet is now how a running session is ended. Stopping raises
-        // the save/discard summary exactly as the bottom-bar control
-        // used to (the host's stop handler flips isSharing). Error
-        // colours make it the unmistakable primary action.
+        // [onStop] — i.e. the shell's centre-control sheet. The host saves
+        // the drive in the background after the session ends.
+        Text(
+            text = stringResource(R.string.liveLocation_stopSavesToHistory),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Button(
             onClick = {
-                onStop?.invoke()
                 onDismiss()
+                onStop?.invoke()
             },
             modifier = Modifier.fillMaxWidth(),
             colors =

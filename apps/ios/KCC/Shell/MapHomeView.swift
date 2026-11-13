@@ -684,9 +684,8 @@ private struct MapboxStandardMap: View {
                 }
             }
             .mapStyle(basemap == .satellite ? .standardSatellite : .standard)
-            // Use the Layers switch for pitch so it cannot win against a
-            // two-finger pan. Keep the SDK's native pinch, pan and rotation.
-            .gestureOptions(GestureOptions(pitchEnabled: false))
+            // Match Android's native pitch gesture alongside pan, pinch and rotation.
+            .gestureOptions(GestureOptions(pitchEnabled: true))
             // Keep Mapbox attribution/logo; hide only the requested scale
             // and the redundant SDK compass in favour of our accessible rail.
             .ornamentOptions(OrnamentOptions(

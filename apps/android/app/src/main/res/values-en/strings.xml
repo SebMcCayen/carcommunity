@@ -104,6 +104,7 @@
     <string name="liveLocation_duration4h">4 hours</string>
     <string name="liveLocation_start">Share my location</string>
     <string name="liveLocation_stop">Stop sharing</string>
+    <string name="liveLocation_stopSavesToHistory">When you stop sharing, your drive is automatically saved to your history.</string>
     <string name="liveLocation_hideNow">Hide me now</string>
     <string name="liveLocation_lastUpdated">Last updated</string>
     <string name="liveLocation_whoCanSeeTitle">Who can see me?</string>
@@ -1282,6 +1283,7 @@
     <string name="crownHunt_spawnCollecting">Collecting...</string>
     <string name="crownHunt_spawnMoveCloser">Move closer</string>
     <string name="crownHunt_spawnMoveCloserDetail">You need to be within %1$d m of the crown.</string>
+    <string name="crownHunt_spawnReadyToCollect">Within reach – you can collect this crown.</string>
     <string name="crownHunt_spawnProximityLabel">Get closer</string>
     <string name="crownHunt_spawnProximityRemaining">%1$s to go</string>
     <string name="crownHunt_spawnStopFirst">Stop the car first</string>
@@ -2230,4 +2232,9 @@
     <string name="roadCameras_photoTime">Image updated %1$s</string>
     <string name="roadCameras_retry">Try again</string>
     <string name="roadCameras_catalogUnavailable">Cameras could not be updated. Saved cameras are shown when available.</string>
+    <string name="convoy_invitationFrom">invites you to a convoy</string>
+    <string name="convoy_invitationJoin">Join</string>
+    <string name="convoy_invitationDecline">Decline</string>
+    <string name="convoy_invitationInboxHint">Stays in Notifications</string>
+    <string name="convoy_invitationClosesIn">Closes in %1$d s</string>
 </resources>

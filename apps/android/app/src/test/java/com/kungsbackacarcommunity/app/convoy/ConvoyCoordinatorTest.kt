@@ -37,6 +37,38 @@ class ConvoyCoordinatorTest {
         endedAt = null,
     )
 
+    @Test
+    fun `direct invitation responds outside capped history and retains a confirmed join`() = runTest {
+        for (accept in listOf(true, false)) {
+            val older = convoy("older", status = ConvoyStatus.Active,
+                viewerInvite = if (accept) ConvoyInviteStatus.Accepted else ConvoyInviteStatus.Declined,
+                viewerRole = ConvoyRole.Member)
+            val repo = FakeRepo().apply {
+                listResult = ConvoyListResult.Loaded(
+                    (0 until 200).map { convoy("newer-$it", status = ConvoyStatus.Ended) },
+                    emptyList(), isExhaustive = false)
+                respondResult = ConvoyMutationResult.Updated(older)
+            }
+            val coordinator = ConvoyCoordinator(repo)
+            coordinator.load()
+            assertTrue(coordinator.respondToInvitation("older", accept))
+            assertEquals(1, repo.respondCalls)
+            assertEquals(listOf(accept), repo.respondAccepts)
+            assertNull(coordinator.actionError.value)
+            if (accept) assertEquals("older", ConvoyBar.activeConvoy(coordinator.status.value)?.convoyId)
+        }
+    }
+
+    @Test
+    fun `direct invitation without history surfaces server membership rejection`() = runTest {
+        val repo = FakeRepo().apply { respondResult = ConvoyMutationResult.Failed(ConvoyActionError.AlreadyInConvoy) }
+        val coordinator = ConvoyCoordinator(repo)
+        val success = coordinator.respondToInvitation("older", true)
+        assertEquals(false, success)
+        assertEquals(1, repo.respondCalls)
+        assertEquals(ConvoyActionError.AlreadyInConvoy, coordinator.actionError.value)
+    }
+
     private class FakeRepo : ConvoyRepository {
         var listResult: ConvoyListResult = ConvoyListResult.Loaded(emptyList(), emptyList())
         var createResult: CreateConvoyResult =

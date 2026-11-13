@@ -66,7 +66,35 @@ final class NotificationsInboxCoordinator {
     private(set) var markReadStatus: MarkReadStatus = .idle
     private(set) var convoyInvitation: AppNotification?
     @ObservationIgnored private var inboxVisible = false
-    @ObservationIgnored private var dismissedInvitations: Set<String> = []
+    @ObservationIgnored private var invitationPresentation = ConvoyInvitationPresentation(startedAt: .now)
+    @ObservationIgnored nonisolated(unsafe) private var invitationExpiryTask: Task<Void, Never>?
+    @ObservationIgnored private var invitationForeground = true
+    @ObservationIgnored private var invitationItems: [AppNotification]?
+    var convoyInvitationDeadline: TimeInterval { invitationPresentation.deadline }
+
+    func setInvitationForeground(_ foreground: Bool) {
+        invitationForeground = foreground
+        updateInvitation()
+    }
+
+    /// Uses a monotonic deadline, independent of SwiftUI rendering and tab changes.
+    private func updateInvitation() {
+        guard let items = invitationItems else { return }
+        let previous = convoyInvitation?.id
+        invitationPresentation.update(items, now: ProcessInfo.processInfo.systemUptime,
+                                      available: invitationForeground && !inboxVisible)
+        convoyInvitation = items.first { $0.id == invitationPresentation.currentID }
+        guard previous != convoyInvitation?.id else { return }
+        invitationExpiryTask?.cancel()
+        invitationExpiryTask = nil
+        guard let id = convoyInvitation?.id else { return }
+        let remaining = max(0, invitationPresentation.deadline - ProcessInfo.processInfo.systemUptime)
+        invitationExpiryTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
+            guard let self, self.convoyInvitation?.id == id else { return }
+            self.updateInvitation()
+        }
+    }
 
     /// Foreground observation does not mark the inbox seen or items read.
     func observe() {
@@ -79,13 +107,16 @@ final class NotificationsInboxCoordinator {
     func stopObserving() {
         subscription?.cancel()
         subscription = nil
+        invitationExpiryTask?.cancel()
+        invitationExpiryTask = nil
         convoyInvitation = nil
         inboxVisible = false
     }
 
-    func dismissInvitation() {
-        if let id = convoyInvitation?.id { dismissedInvitations.insert(id) }
-        convoyInvitation = nil
+    func dismissInvitation(expectedID: String? = nil) {
+        guard let id = expectedID ?? convoyInvitation?.id else { return }
+        invitationPresentation.dismiss(id)
+        updateInvitation()
     }
 
     func destination(for item: AppNotification) -> NotificationDeepLink? {
@@ -128,6 +159,7 @@ final class NotificationsInboxCoordinator {
 
     deinit {
         subscription?.cancel()
+        invitationExpiryTask?.cancel()
     }
 
     /// Begins observing on first appearance. Idempotent: a second call (e.g.
@@ -138,7 +170,7 @@ final class NotificationsInboxCoordinator {
     /// on later arrivals, not just on this initial call.
     func start() {
         inboxVisible = true
-        convoyInvitation = nil
+        updateInvitation()
         // Re-entry (SwiftUI re-runs the .task after a tab switch): keep the live
         // subscription, but re-stamp the seen-marker so a previously-FAILED
         // stamp gets another attempt on reopen — matching Android's
@@ -280,14 +312,10 @@ final class NotificationsInboxCoordinator {
                 )
             }
         case .loaded(let items):
-            let presentIDs = Set(items.map(\.id))
-            dismissedInvitations.formIntersection(presentIDs)
-            convoyInvitation = inboxVisible ? nil : Notifications.sortedForInbox(items).first {
-                $0.category == .convoyInvite && !$0.isRead && !dismissedInvitations.contains($0.id)
-            }
-
             listenerFailureReported = false
             state = items.isEmpty ? .empty : .loaded(items)
+            invitationItems = items
+            updateInvitation()
             // `items` is already newest-first (Notifications.sortedForInbox),
             // so `.first` is the newest — Android's `items.firstOrNull()?.id`.
             stampSeenMarkerIfNewer(items.first?.id)

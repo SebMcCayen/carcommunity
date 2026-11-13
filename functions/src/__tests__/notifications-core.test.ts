@@ -154,6 +154,24 @@ describe('notifications-core social categories', () => {
 });
 
 describe('notifications-core builders', () => {
+  it('preserves producer-owned inviter identity for convoy invitations only', () => {
+    const convoyInvitation = {
+      inviterUid: 'member-not-owner',
+      inviterDisplayName: 'Linnea Andersson',
+      inviterAvatarPath: 'profileImages/member/avatar',
+    };
+    const input = {
+      category: 'convoy_invite' as const,
+      title: 'Konvoj',
+      previewText: 'Invite',
+      convoyInvitation,
+    };
+    expect(buildNotificationDocument(input, () => 'TS').convoyInvitation).toEqual(convoyInvitation);
+    expect(
+      buildNotificationDocument({ ...input, category: 'system_notice' }, () => 'TS'),
+    ).not.toHaveProperty('convoyInvitation');
+  });
+
   it('builds unread documents truncated to the legacy plain-text limits', () => {
     const docData = buildNotificationDocument(
       {

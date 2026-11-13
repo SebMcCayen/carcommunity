@@ -212,8 +212,7 @@ final class ShellSmokeTests: XCTestCase {
             }
             XCTAssertTrue(input.isHittable)
             XCTAssertLessThanOrEqual(input.frame.maxY, app.buttons["shell.tab.chat"].frame.minY)
-            input.tap()
-            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertTrue(focusComposerKeyboard(in: app), "The composer must open the software keyboard")
             let latest = app.staticTexts["chat.message.text.fixture-39"]
             let dismiss = app.buttons["chat.keyboard.dismiss"]
             XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
@@ -514,11 +513,9 @@ final class ShellSmokeTests: XCTestCase {
             app.buttons["Back"].firstMatch.tap()
             XCTAssertTrue(bar.waitForExistence(timeout: 10))
             stop.tap()
-            let confirmation = app.sheets.firstMatch
-            let ready = confirmation.waitForExistence(timeout: 5)
-            if !ready { chatProof(app, name: "live-stop-confirmation-missing", tree: true) }
-            XCTAssertTrue(ready)
-            confirmation.buttons["Stop sharing"].tap()
+            assertLiveStopPanel(app, language: "en")
+            chatProof(app, name: largeText ? "live-stop-panel-en-accessibility" : "live-stop-panel-en")
+            app.buttons["map.session.stop"].tap()
             let stopped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: bar)
             XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 10), .completed)
             XCTAssertEqual(stop.label, "Create")
@@ -526,6 +523,7 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertFalse(app.buttons["shell.postDriveHistory"].exists,
                 "Saved drives belong under Profile, not in the map dock after stopping")
             XCTAssertEqual(map.value as? String, identity)
+            assertDriveSavedWithoutPrompt(app)
             chatProof(app, name: largeText ? "map-after-stop-en-accessibility" : "map-after-stop-en")
 
             if !largeText {
@@ -539,6 +537,86 @@ final class ShellSmokeTests: XCTestCase {
             }
             app.terminate()
         }
+    }
+
+    func testSwedishLiveStopPanelCanBeDismissedAndSavesWithoutAnotherDialog() {
+        for largeText in [false, true] {
+            let app = launch(language: "sv", largeText: largeText,
+                theme: largeText ? "Dark" : "Light", liveFixture: true)
+            let bar = app.buttons["map.session.bar"]
+            let stop = app.buttons["shell.tab.create"]
+            let identity = app.staticTexts["shell.mapPlaceholder"].value as? String
+            stop.tap()
+            assertLiveStopPanel(app, language: "sv")
+            chatProof(app, name: largeText ? "live-stop-panel-sv-accessibility" : "live-stop-panel-sv")
+
+            app.buttons["map.reading.close"].tap()
+            XCTAssertFalse(app.buttons["map.session.stop"].exists)
+            XCTAssertTrue(bar.isHittable, "Closing the panel must leave the live session running")
+            XCTAssertFalse(element("map.fixture.savedDrive", in: app).exists)
+
+            stop.tap()
+            assertLiveStopPanel(app, language: "sv")
+            app.buttons["shell.tab.chat"].tap()
+            app.buttons["shell.tab.map"].tap()
+            XCTAssertFalse(app.buttons["map.session.stop"].exists,
+                "Leaving Map must dismiss the Stop panel without stopping sharing")
+            XCTAssertTrue(bar.wait(for: \.isHittable, toEqual: true, timeout: 5))
+
+            app.buttons["shell.search"].tap()
+            let query = app.textFields["addressSearch.query"]
+            XCTAssertTrue(query.waitForExistence(timeout: 5))
+            let hideKeyboard = app.buttons["addressSearch.keyboard.dismiss"]
+            XCTAssertTrue(hideKeyboard.waitForExistence(timeout: 5))
+            hideKeyboard.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.wait(for: \.exists, toEqual: false, timeout: 5))
+            XCTAssertTrue(query.exists, "The search overlay stays open after hiding its keyboard")
+            XCTAssertTrue(stop.isHittable)
+            stop.tap()
+            XCTAssertTrue(query.wait(for: \.exists, toEqual: false, timeout: 5),
+                "Stop must close address search before opening the docked panel")
+            assertLiveStopPanel(app, language: "sv")
+            app.buttons["map.session.stop"].tap()
+            assertDriveSavedWithoutPrompt(app)
+            XCTAssertFalse(bar.exists)
+            XCTAssertFalse(app.buttons["map.session.stop"].exists)
+            XCTAssertEqual(app.staticTexts["shell.mapPlaceholder"].value as? String, identity)
+            XCTAssertTrue(stop.isHittable)
+            app.terminate()
+        }
+    }
+
+    private func assertLiveStopPanel(_ app: XCUIApplication, language: String) {
+        let panel = element("map.reading.panel", in: app)
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[language == "sv" ? "Liveplats" : "Live location"].exists)
+        XCTAssertTrue(app.staticTexts[language == "sv" ? "Liveposition aktiv" : "Live location active"].exists)
+        let stop = app.buttons["map.session.stop"]
+        let stopExists = stop.waitForExistence(timeout: 5)
+        if !stopExists { chatProof(app, name: "live-stop-button-missing-\(language)", tree: true) }
+        XCTAssertTrue(stopExists, "The Stop button must retain its own accessibility identifier")
+        reveal(stop, in: app.scrollViews["map.reading.content"], minimumHeight: 48)
+        if !stop.isHittable { chatProof(app, name: "live-stop-button-obscured-\(language)", tree: true) }
+        XCTAssertTrue(stop.isHittable)
+        XCTAssertEqual(stop.label, language == "sv" ? "Stoppa delning" : "Stop sharing")
+        XCTAssertGreaterThanOrEqual(stop.frame.height, 48)
+        XCTAssertLessThanOrEqual(panel.frame.maxY, app.buttons["map.session.bar"].frame.minY + 1)
+        XCTAssertGreaterThan(panel.frame.maxY, app.frame.midY, "The Stop panel belongs at the bottom of Map")
+        XCTAssertLessThanOrEqual(panel.frame.minX, 1)
+        XCTAssertGreaterThanOrEqual(panel.frame.maxX, app.frame.width - 1)
+        XCTAssertTrue(app.buttons["shell.tab.map"].isHittable, "The dock must leave primary navigation available")
+        XCTAssertTrue(app.buttons["map.reading.close"].isHittable)
+        XCTAssertFalse(app.buttons["map.session.hide"].exists)
+        XCTAssertEqual(app.sheets.count, 0, "Stop uses the map dock, not a modal confirmation")
+        XCTAssertEqual(app.alerts.count, 0)
+    }
+
+    private func assertDriveSavedWithoutPrompt(_ app: XCUIApplication) {
+        let saved = element("map.fixture.savedDrive", in: app)
+        XCTAssertTrue(saved.waitForExistence(timeout: 10), "Stopping must auto-save and keep the recorded drive")
+        XCTAssertEqual(saved.value as? String, "fixture-saved-drive")
+        XCTAssertEqual(app.sheets.count, 0, "A successful save must not present a summary sheet")
+        XCTAssertEqual(app.alerts.count, 0)
     }
 
     func testSocialAndGarageDragHandlesReturnToTheRetainedMap() {
@@ -1154,6 +1232,21 @@ final class ShellSmokeTests: XCTestCase {
             ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
     }
 
+    /// Keyboard focus is setup for the viewport assertions below. SwiftUI can
+    /// replace the vertical field's measuring editor during the first tap,
+    /// leaving a hittable but unfocused field at accessibility text sizes.
+    /// Re-resolve once if needed; still require the real software keyboard.
+    private func focusComposerKeyboard(in app: XCUIApplication) -> Bool {
+        for attempt in 0..<2 {
+            guard let editor = visibleComposerInput(in: app) else { break }
+            print("CHAT_COMPOSER_FOCUS attempt=\(attempt) type=\(editor.elementType.rawValue) frame=\(editor.frame)")
+            editor.tap()
+            if app.keyboards.firstMatch.waitForExistence(timeout: 10) { return true }
+        }
+        chatProof(app, name: "chat-composer-keyboard-focus-failure", tree: true)
+        return false
+    }
+
     private func assertComposerDraft(_ text: String, present: Bool, in app: XCUIApplication,
                                      file: StaticString = #filePath, line: UInt = #line) {
         // Read the live editor value so a replaced widget or a slow XCTest
@@ -1191,10 +1284,24 @@ final class ShellSmokeTests: XCTestCase {
         let bar = title.map { app.navigationBars[$0] }
             ?? app.navigationBars.allElementsBoundByIndex.first(where: { $0.isHittable })
             ?? app.navigationBars.firstMatch
-        XCTAssertTrue(bar.waitForExistence(timeout: 5))
-        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
-        start.press(forDuration: 0.1, thenDragTo: end)
+        let exists = bar.waitForExistence(timeout: 5)
+        XCTAssertTrue(exists)
+        guard exists else { return }
+        // Freeze the sheet's title: a firstMatch query could resolve to the
+        // underlying navigation bar once this sheet has disappeared.
+        let sheetTitle = title ?? (bar.identifier.isEmpty ? bar.label : bar.identifier)
+        let sheetBar = app.navigationBars[sheetTitle]
+        // A drag from the large detent may first settle at medium. Require
+        // dismissal before the caller taps controls behind the modal surface.
+        for _ in 0..<2 {
+            let start = sheetBar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+            start.press(forDuration: 0.1, thenDragTo: end)
+            let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: sheetBar)
+            if XCTWaiter.wait(for: [gone], timeout: 5) == .completed { return }
+        }
+        chatProof(app, name: "sheet-dismissal-failure", tree: true)
+        XCTAssertFalse(sheetBar.exists, "Dismissal must remove the sheet before using the screen behind it")
     }
 
     private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {

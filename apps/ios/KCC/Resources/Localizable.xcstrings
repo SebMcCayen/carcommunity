@@ -9419,6 +9419,91 @@
         }
       }
     },
+    "convoy.invitationClosesIn": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rutan stängs om %1$lld s"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closes in %1$lld s"
+          }
+        }
+      }
+    },
+    "convoy.invitationDecline": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neka"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decline"
+          }
+        }
+      }
+    },
+    "convoy.invitationFrom": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bjuder in till konvoj"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invites you to a convoy"
+          }
+        }
+      }
+    },
+    "convoy.invitationInboxHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finns kvar i Notifikationer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stays in Notifications"
+          }
+        }
+      }
+    },
+    "convoy.invitationJoin": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gå med"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join"
+          }
+        }
+      }
+    },
     "convoy.inviteAccepted": {
       "extractionState": "manual",
       "localizations": {
@@ -13580,6 +13665,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ to go"
+          }
+        }
+      }
+    },
+    "crownHunt.spawnReadyToCollect": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inom räckhåll – du kan hämta kronan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Within reach – you can collect this crown."
           }
         }
       }
@@ -22913,6 +23015,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop sharing"
+          }
+        }
+      }
+    },
+    "liveLocation.stopSavesToHistory": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "När du stoppar delningen sparas körningen automatiskt i din historik."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When you stop sharing, your drive is automatically saved to your history."
           }
         }
       }
