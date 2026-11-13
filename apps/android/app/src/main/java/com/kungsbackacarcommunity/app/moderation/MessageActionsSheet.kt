@@ -12,6 +12,8 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ButtonDefaults
@@ -87,8 +89,19 @@ fun MessageActionsSheet(
     canReply: Boolean = false,
     onReply: () -> Unit = {},
     preview: MessageActionsPreview? = null,
+    publicModeration: PublicChatModerationSession? = null,
+    publicTarget: PublicChatTarget? = null,
 ) {
     val name = memberName?.takeIf { it.isNotBlank() }
+    val title = stringResource(R.string.moderation_messageActionsTitle,
+        name ?: stringResource(R.string.chat_unknownAuthor))
+    if (publicModeration != null && publicTarget != null) {
+        ModeratedMessageActionsSheet(title, preview, publicModeration, publicTarget, onDismiss) { context, onAction ->
+            MessageActionsContent(name, canBlock, reportAvailability, onBlock, onReport, onDismiss,
+                canReply, onReply, preview, context, onAction)
+        }
+        return
+    }
     MapDetailSheet(
         title = stringResource(R.string.moderation_messageActionsTitle,
             name ?: stringResource(R.string.chat_unknownAuthor)),
@@ -111,6 +124,8 @@ internal fun MessageActionsContent(
     canReply: Boolean = false,
     onReply: () -> Unit = {},
     preview: MessageActionsPreview? = null,
+    adminContext: PublicChatModerationContext? = null,
+    onAdminAction: (ChatAdminAction) -> Unit = {},
 ) {
     val name = memberName?.takeIf { it.isNotBlank() }
     Column(Modifier.fillMaxWidth()) {
@@ -147,6 +162,21 @@ internal fun MessageActionsContent(
                 testTag = MESSAGE_ACTIONS_BLOCK_TEST_TAG,
             )
             HorizontalDivider()
+        }
+        if (adminContext != null && (adminContext.canRemove || adminContext.canPause)) {
+            Text(stringResource(R.string.chatAdmin_section), style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(vertical = KccSpacing.s3).testTag("chat_admin_section"))
+            if (adminContext.canRemove) {
+                SheetAction(stringResource(R.string.chatAdmin_remove), Icons.Filled.Delete,
+                    { onAdminAction(ChatAdminAction.Remove) }, destructive = true, testTag = "chat_admin_remove")
+                HorizontalDivider()
+            }
+            if (adminContext.canPause) {
+                SheetAction(stringResource(R.string.chatAdmin_pause), Icons.Filled.Pause,
+                    { onAdminAction(ChatAdminAction.Pause) }, testTag = "chat_admin_pause")
+                HorizontalDivider()
+            }
         }
         SheetAction(stringResource(R.string.moderation_close), Icons.Filled.Close, onDismiss)
     }

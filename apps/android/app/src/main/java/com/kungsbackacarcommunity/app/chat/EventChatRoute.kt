@@ -102,7 +102,10 @@ fun EventChatRoute(
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
 
+    val publicModeration = com.kungsbackacarcommunity.app.moderation.rememberPublicChatModerationSession(currentUid)
     EventChatScreen(
+        publicModeration = publicModeration,
+        eventId = eventId,
         cooldownSeconds = rememberChatCooldownSeconds(cooldown),
         onSendConfirmed = { text, id -> coordinator?.post(eventId, text, cooldown, id) ?: false },
         eventTitle = eventTitle,

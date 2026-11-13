@@ -3,6 +3,35 @@
      Source: contracts/localization/en.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="chatAdmin_expectedUntil">Estimated end: %1$s.</string>
+    <string name="chatAdmin_keepLongerPause">An existing longer pause will not be shortened.</string>
+    <string name="chatAdmin_section">Administrator</string>
+    <string name="chatAdmin_remove">Delete message</string>
+    <string name="chatAdmin_pause">Pause writing…</string>
+    <string name="chatAdmin_reason">Reason (shown to the user)</string>
+    <string name="chatAdmin_warnAlso">Also warn the user?</string>
+    <string name="chatAdmin_pauseAlso">Also pause writing?</string>
+    <string name="chatAdmin_amount">Amount</string>
+    <string name="chatAdmin_minutes">Minutes</string>
+    <string name="chatAdmin_days">Days</string>
+    <string name="chatAdmin_yes">Yes</string>
+    <string name="chatAdmin_no">No</string>
+    <string name="chatAdmin_scope">Applies only to Community and event chats. DMs, convoys and club chat are unaffected.</string>
+    <string name="chatAdmin_maxDuration">Enter a whole number. Maximum %1$d days or the equivalent in minutes.</string>
+    <string name="chatAdmin_review">Review actions</string>
+    <string name="chatAdmin_reviewTitle">Review the decision</string>
+    <string name="chatAdmin_willRemove">The message will be deleted.</string>
+    <string name="chatAdmin_willPause">The user’s writing will be paused. The message will remain.</string>
+    <string name="chatAdmin_warningYes">A warning will also be sent.</string>
+    <string name="chatAdmin_warningNo">No warning will be sent.</string>
+    <string name="chatAdmin_durationSummary">Writing pause: %1$s %2$s. The duration starts when the decision is saved.</string>
+    <string name="chatAdmin_confirm">Confirm decision</string>
+    <string name="chatAdmin_saving">Saving…</string>
+    <string name="chatAdmin_edit">Edit choices</string>
+    <string name="chatAdmin_cancel">Cancel</string>
+    <string name="chatAdmin_failed">The decision could not be confirmed. Your choices are kept. Try again.</string>
+    <string name="chatAdmin_stale">The evidence has changed. Check your choices and review the decision again.</string>
+    <string name="chatAdmin_pausedUntil">Your writing in public chats is paused until %1$s.</string>
     <string name="clubBadge_accessibility">Club: %1$s</string>
     <string name="supporterBadge_accessibility">Supporter crown</string>
     <string name="supporterBadge_settingTitle">Show Supporter crown</string>
