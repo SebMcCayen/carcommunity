@@ -40,6 +40,13 @@ class ConvoyDockGeometryTest {
         val dock = bounds("map_home_session_dock")
         val stats = bounds(LIVE_SESSION_BAR_TEST_TAG)
         val convoy = bounds(CONVOY_BAR_TEST_TAG)
+        val reactions = bounds(CONVOY_REACTIONS_TAG)
+        assertTrue("reactions clear the statistics dock", reactions.bottom <= stats.top)
+        for (kind in ConvoyReactionKind.entries) {
+            val target = bounds(convoyReactionButtonTag(kind))
+            assertTrue("$kind stays in the reaction row", target.top >= reactions.top && target.bottom <= reactions.bottom)
+            assertTrue("$kind is wider than tall", target.width > target.height)
+        }
         assertTrue("statistics end before convoy controls", stats.bottom <= convoy.top + 1f)
         assertTrue("dock ends before footer", dock.bottom <= footer.top + 1f)
         assertTrue("convoy ends before footer", convoy.bottom <= footer.top + 1f)

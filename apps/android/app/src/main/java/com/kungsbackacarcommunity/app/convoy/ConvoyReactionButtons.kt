@@ -1,22 +1,24 @@
 package com.kungsbackacarcommunity.app.convoy
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocalPolice
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.WavingHand
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,26 +30,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccPalette
+import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.design.LocalKccMapColors
 import com.kungsbackacarcommunity.app.design.ReactionOverlay
 import com.kungsbackacarcommunity.app.design.ReactionOverlayEvent
+import java.util.UUID
+import kotlin.math.ceil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.UUID
-import kotlin.math.ceil
 
 /** Test tag on the convoy reaction button cluster. */
 const val CONVOY_REACTIONS_TAG = "convoy_reactions"
@@ -223,10 +227,9 @@ fun ConvoyReactionsHost(
 }
 
 /**
- * The three reaction buttons, bottom-centre. Each is a car/game-styled coloured
- * disc with a label; while its cooldown is running it greys and shows the seconds
- * left (the client mirror of the server's anti-spam window). Persistent FollowMe
- * toggles bypass that cooldown in either state, but wait for any pending toggle.
+ * Three equal, icon-only rectangular map controls. The coloured lower edge
+ * drains during cooldown; the remaining seconds are available to TalkBack.
+ * Persistent FollowMe toggles bypass that cooldown in either state, but wait for any pending toggle.
  * Pure UI — the tap decision and the send live in [ConvoyReactionsHost].
  */
 @Composable
@@ -240,9 +243,9 @@ fun ConvoyReactionButtons(
     followMeTogglePending: Boolean = false,
 ) {
     Row(
-        modifier = modifier.testTag(CONVOY_REACTIONS_TAG),
-        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s5),
-        verticalAlignment = Alignment.Top,
+        modifier = modifier.fillMaxWidth().padding(horizontal = KccSpacing.s3).testTag(CONVOY_REACTIONS_TAG),
+        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         for (kind in ConvoyReactionKind.entries) {
             // Both starting/taking over and stopping a persistent trail bypass
@@ -251,6 +254,7 @@ fun ConvoyReactionButtons(
             val active = kind == ConvoyReactionKind.FollowMe && followMeLeading
             ReactionButton(
                 kind = kind,
+                modifier = Modifier.weight(1f),
                 remainingMs = if (persistentToggle) 0L else cooldown.remainingMs(kind, nowMs),
                 active = active,
                 pending = persistentToggle && followMeTogglePending,
@@ -265,70 +269,70 @@ private fun ReactionButton(
     kind: ConvoyReactionKind,
     remainingMs: Long,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     active: Boolean = false,
     pending: Boolean = false,
 ) {
     val ready = remainingMs <= 0L && !pending
-    // Active (leading the trail) overrides the label with "Following" and marks the
-    // disc with a ring, so a leader can see their trail is on at a glance.
-    val label =
-        if (active) stringResource(R.string.convoyFollowTrail_activeLabel)
+    val colors = LocalKccMapColors.current
+    val accent = reactionColor(kind)
+    val description =
+        if (active) stringResource(R.string.convoyFollowTrail_activeContentDescription)
         else reactionButtonLabel(kind)
-    val discDescription =
-        if (active) stringResource(R.string.convoyFollowTrail_activeContentDescription) else label
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+    val cooldownDescription = if (remainingMs > 0L) {
+        stringResource(R.string.convoyReaction_cooldown, ceil(remainingMs / 1000.0).toInt())
+    } else null
+    val remainingFraction =
+        (remainingMs.toFloat() / convoyReactionCooldownMs(kind)).coerceIn(0f, 1f)
+    Surface(
+        onClick = onClick,
+        enabled = ready,
+        shape = RoundedCornerShape(KccRadius.md),
+        color = colors.overlay,
+        border = BorderStroke(if (active) 2.dp else 1.dp, if (active) accent else colors.border),
+        tonalElevation = 3.dp,
+        shadowElevation = 3.dp,
+        modifier = modifier.height(56.dp)
+            .testTag(convoyReactionButtonTag(kind))
+            .semantics {
+                contentDescription = description
+                if (cooldownDescription != null) stateDescription = cooldownDescription
+                if (kind == ConvoyReactionKind.FollowMe) selected = active
+            },
     ) {
-        Surface(
-            onClick = onClick,
-            enabled = ready,
-            shape = CircleShape,
-            color = if (ready) reactionColor(kind) else MaterialTheme.colorScheme.surfaceVariant,
-            shadowElevation = if (ready) 6.dp else 0.dp,
-            border =
-                if (active) {
-                    BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface)
-                } else {
-                    null
-                },
-            modifier =
-                Modifier
-                    .size(60.dp)
-                    .testTag(convoyReactionButtonTag(kind))
-                    .semantics {
-                        if (kind == ConvoyReactionKind.FollowMe) selected = active
-                    },
-        ) {
-            Box(contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val tint = if (ready || active) accent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+            if (kind == ConvoyReactionKind.HelloGoodbye) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_convoy_hand),
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(28.dp),
+                )
+            } else {
                 Icon(
                     imageVector = reactionIcon(kind),
-                    contentDescription = discDescription,
-                    tint =
-                        if (ready) Color.White
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(28.dp).graphicsLayer { alpha = if (ready) 1f else 0.5f },
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(28.dp),
                 )
-                if (remainingMs > 0L) {
-                    // Seconds remaining, so the member sees WHY the button is greyed
-                    // rather than a dead control.
-                    Text(
-                        text = ceil(remainingMs / 1000.0).toInt().coerceAtLeast(1).toString(),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.clearAndSetSemantics {},
-                    )
-                }
+            }
+            // A colour strip replaces the visible countdown. No text competes
+            // with the glyph; cooldown and selected state remain accessible.
+            Box(
+                Modifier.align(Alignment.BottomStart)
+                    .fillMaxWidth(if (remainingMs > 0L) remainingFraction else 1f)
+                    .height(if (active) 4.dp else 3.dp)
+                    .background(accent.copy(alpha = if (ready || active) 1f else 0.45f)),
+            )
+            if (pending) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(12.dp).clearAndSetSemantics {},
+                    color = accent,
+                    strokeWidth = 2.dp,
+                )
             }
         }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-        )
     }
 }
 

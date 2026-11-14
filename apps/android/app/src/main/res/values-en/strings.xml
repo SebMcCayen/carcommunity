@@ -851,6 +851,7 @@
     <string name="convoy_nowLeaderNotice">You\'re now the convoy leader.</string>
     <string name="convoy_leave">Leave convoy</string>
     <string name="convoy_errorNotLeader">Only the convoy leader can end the convoy for everyone. You can leave it instead.</string>
+    <string name="convoyReaction_cooldown">Available again in %1$d seconds</string>
     <string name="convoyReaction_police_label">Police</string>
     <string name="convoyReaction_police_caption">Police ahead!</string>
     <string name="convoyReaction_hello_label">Hi/Bye</string>

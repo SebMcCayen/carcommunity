@@ -85,6 +85,41 @@ final class ConvoyDesignTests: XCTestCase {
         }
     }
 
+    func testReactionButtonStatesRenderAtNarrowAndRegularWidthsInBothThemes() throws {
+        for width: CGFloat in [280, 390] {
+            for dark in [true, false] {
+                for state in ["ready", "cooldown", "active", "pending"] {
+                    let row = HStack(spacing: KccSpacing.s2) {
+                        ConvoyReactionButtonFace(symbol: "shield.lefthalf.filled", isHand: false,
+                            accent: KccPalette.errorRed, ready: state != "cooldown", active: false,
+                            pending: false, remainingFraction: state == "cooldown" ? 0.6 : 0)
+                        ConvoyReactionButtonFace(symbol: "hand.raised.fill", isHand: true,
+                            accent: KccPalette.successGreen, ready: true, active: false,
+                            pending: false, remainingFraction: 0)
+                        ConvoyReactionButtonFace(symbol: "location.north.fill", isHand: false,
+                            accent: KccPalette.crownGold, ready: state != "pending", active: state == "active",
+                            pending: state == "pending", remainingFraction: 0)
+                    }
+                    .padding(.horizontal, KccSpacing.s3)
+                    .padding(.vertical, KccSpacing.s3)
+                    .frame(width: width)
+                    .environment(\.colorScheme, dark ? .dark : .light)
+                    .environment(\.dynamicTypeSize, .accessibility5)
+                    let renderer = ImageRenderer(content: row)
+                    renderer.scale = 2
+                    let image = try XCTUnwrap(renderer.uiImage)
+                    XCTAssertEqual(image.size.width, width, accuracy: 1)
+                    XCTAssertEqual(image.size.height, 80, accuracy: 1,
+                        "Icon-only controls keep 56pt touch height with 12pt outer padding at maximum type size")
+                    let attachment = XCTAttachment(image: image)
+                    attachment.name = "convoy-reactions-\(Int(width))-\(dark ? "dark" : "light")-\(state)"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+            }
+        }
+    }
+
     private func makeConvoy(status: ConvoyStatus) -> ConvoyItem {
         ConvoyItem(convoyId: "synthetic", title: longName, status: status,
             members: [ConvoyMember(uid: "owner", displayName: longName, role: .owner, inviteStatus: .accepted)],
