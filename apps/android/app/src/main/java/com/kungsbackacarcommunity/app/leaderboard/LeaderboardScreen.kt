@@ -37,9 +37,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -161,10 +163,22 @@ private fun CategorySection(board: LeaderboardCategoryBoard) {
         if (board.entries.isEmpty()) {
             InfoNoticeCard(stringResource(R.string.leaderboard_categoryEmpty))
         } else {
+            val textMeasurer = rememberTextMeasurer()
+            val rankStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+            // Share a column wide enough for every rank, including at larger font scales.
+            val rankWidthPx = board.entries.maxOf { entry ->
+                textMeasurer.measure(
+                    text = stringResource(R.string.leaderboard_rank, entry.rank),
+                    style = rankStyle,
+                    softWrap = false,
+                    maxLines = 1,
+                ).size.width
+            }
+            val rankWidth = with(LocalDensity.current) { maxOf(KccSpacing.s6, rankWidthPx.toDp()) }
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     board.entries.forEachIndexed { index, entry ->
-                        LeaderboardListRow(entry = entry, format = board.category.format)
+                        LeaderboardListRow(entry = entry, format = board.category.format, rankWidth = rankWidth)
                         if (index < board.entries.lastIndex) HorizontalDivider()
                     }
                 }
@@ -178,6 +192,7 @@ private fun CategorySection(board: LeaderboardCategoryBoard) {
 private fun LeaderboardListRow(
     entry: LeaderboardEntry,
     format: LeaderboardValueFormat,
+    rankWidth: Dp,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -190,16 +205,19 @@ private fun LeaderboardListRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            if (entry.rank in 1..3) {
-                RankBadge(rank = entry.rank, color = medalColor(entry.rank))
-            } else {
-                Text(
-                    text = stringResource(R.string.leaderboard_rank, entry.rank),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(KccSpacing.s6),
-                )
+            Box(modifier = Modifier.width(rankWidth)) {
+                if (entry.rank in 1..3) {
+                    RankBadge(rank = entry.rank, color = medalColor(entry.rank))
+                } else {
+                    Text(
+                        text = stringResource(R.string.leaderboard_rank, entry.rank),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
             }
             MemberAvatar(avatarPath = entry.avatarPath, size = KccSpacing.s10,
                 ringColor = if (entry.isViewer) MaterialTheme.colorScheme.tertiary else null)
