@@ -41,6 +41,10 @@ env:
   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   # Available on both standard images; the verified ARM allocation uses this same SDK.
   DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  # iOS 26.4/26.5 cannot connect SKTestSession to its test environment
+  # (Apple FB22500243). Keep the complete suite on the installed 26.2 runtime
+  # until the hosted images include the fixed iOS 26.6 runtime.
+  IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-26-2
 
 # Compile ARM Debug once for Community/full UI, with a separate cached Intel
 # Debug producer for native SDK emulator compatibility. Optimized Release is separate.

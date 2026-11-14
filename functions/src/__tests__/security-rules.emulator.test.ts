@@ -2896,6 +2896,12 @@ describe('Firestore – subscription purchase-token replay locks', () => {
         uid: 'sub-owner',
         productId: 'plus_monthly',
       });
+      await setDoc(doc(ctx.firestore(), 'subscriptionAppleEvents', TOKEN_HASH), {
+        uid: 'sub-owner',
+        purchaseDateMillis: 1000,
+        signedDateMillis: 2000,
+        source: 'notification',
+      });
       await setDoc(doc(ctx.firestore(), 'subscriptionPurchaseVerifications', 'sub-owner'), {
         uid: 'sub-owner',
         productId: 'plus_monthly',
@@ -2926,6 +2932,9 @@ describe('Firestore – subscription purchase-token replay locks', () => {
       );
       await assertFails(getDoc(verificationRef));
       await assertFails(setDoc(verificationRef, { purchaseTokenHash: TOKEN_HASH }));
+      const appleEventRef = doc(ctx.firestore(), 'subscriptionAppleEvents', TOKEN_HASH);
+      await assertFails(getDoc(appleEventRef));
+      await assertFails(setDoc(appleEventRef, { signedDateMillis: 999999 }));
     }
   });
 });

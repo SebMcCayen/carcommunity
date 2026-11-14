@@ -9,6 +9,7 @@ import stat
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 SPEC = importlib.util.spec_from_file_location("ci_test_products", Path(__file__).with_name("ci-test-products.py"))
@@ -58,6 +59,34 @@ class CITestProductsTests(unittest.TestCase):
             current = {**CONTEXT, key: "different"}
             with self.subTest(key=key), self.assertRaises(ValueError):
                 MODULE.validate_manifest(manifest, "debug", self.products, current)
+
+    def test_runtime_pin_selects_the_requested_runtime_instead_of_inventory_order(self):
+        compatible = "com.apple.CoreSimulator.SimRuntime.iOS-26-2"
+        affected = "com.apple.CoreSimulator.SimRuntime.iOS-26-4"
+        inventory = json.dumps({"devices": {
+            affected: [{"name": "iPhone 17 Pro", "udid": "affected", "isAvailable": True}],
+            compatible: [
+                {"name": "iPad Pro", "udid": "ipad", "isAvailable": True},
+                {"name": "iPhone 17", "udid": "unavailable", "isAvailable": False},
+                {"name": "iPhone 17 Pro", "udid": "compatible", "isAvailable": True},
+            ],
+        }})
+        with patch.object(MODULE, "command", return_value=inventory), \
+                patch.dict(MODULE.os.environ, {"IOS_TEST_RUNTIME": compatible}):
+            self.assertEqual(MODULE.destination(), (compatible, "compatible"))
+            # An artifact's recorded runtime takes precedence over a new pin.
+            self.assertEqual(MODULE.destination(affected), (affected, "affected"))
+
+    def test_unavailable_runtime_pin_fails_without_falling_back(self):
+        inventory = json.dumps({"devices": {
+            "com.apple.CoreSimulator.SimRuntime.iOS-26-4": [
+                {"name": "iPhone 17 Pro", "udid": "affected", "isAvailable": True}
+            ],
+        }})
+        with patch.object(MODULE, "command", return_value=inventory), \
+                patch.dict(MODULE.os.environ, {"IOS_TEST_RUNTIME": "missing-runtime"}):
+            with self.assertRaisesRegex(ValueError, "No available iPhone"):
+                MODULE.destination()
 
     def test_wrong_configuration_schema_filename_and_product_location_are_rejected(self):
         manifest = self.prepare()

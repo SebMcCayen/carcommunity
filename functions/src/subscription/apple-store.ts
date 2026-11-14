@@ -5,14 +5,11 @@ import {
   SignedDataVerifier,
   VerificationException,
   VerificationStatus,
+  type JWSTransactionDecodedPayload,
 } from '@apple/app-store-server-library';
-import {
-  APPLE_BUNDLE_ID,
-  AppleVerificationError,
-  parseAppleTransaction,
-  type AppleEntitlementOutcome,
-} from './apple-store-core';
+import { APPLE_BUNDLE_ID, AppleVerificationError } from './apple-store-core';
 import type { AppleSubscriptionProviderConfig } from './provider-config';
+import { appleTransactionState, type AppleSubscriptionState } from './apple-state-core';
 
 let rootCertificate: Promise<Buffer> | undefined;
 
@@ -28,33 +25,52 @@ export class AppleSignedDataError extends Error {
   }
 }
 
-export async function verifyAppleTransaction(
+export async function appleSignedDataVerifier(
+  config: AppleSubscriptionProviderConfig,
+): Promise<SignedDataVerifier> {
+  return new SignedDataVerifier(
+    [await loadAppleRootCertificate()],
+    true,
+    config.environment === 'production' ? Environment.PRODUCTION : Environment.SANDBOX,
+    APPLE_BUNDLE_ID,
+    config.appAppleId,
+  );
+}
+
+export function rethrowAppleVerificationError(error: unknown): never {
+  if (error instanceof VerificationException) {
+    throw new AppleSignedDataError(
+      error.status === VerificationStatus.RETRYABLE_VERIFICATION_FAILURE
+        ? 'unavailable'
+        : 'invalid_signature',
+    );
+  }
+  if (error instanceof AppleSignedDataError || error instanceof AppleVerificationError) throw error;
+  throw new AppleSignedDataError('configuration');
+}
+
+async function verifiedTransaction(
+  signedTransaction: string,
+  config: AppleSubscriptionProviderConfig,
+): Promise<JWSTransactionDecodedPayload> {
+  try {
+    const verifier = await appleSignedDataVerifier(config);
+    return await verifier.verifyAndDecodeTransaction(signedTransaction);
+  } catch (error) {
+    rethrowAppleVerificationError(error);
+  }
+}
+
+export async function verifyAppleTransactionState(
   signedTransaction: string,
   expectedAppAccountToken: string,
   config: AppleSubscriptionProviderConfig,
   now: Date = new Date(),
-): Promise<AppleEntitlementOutcome> {
-  try {
-    const environment =
-      config.environment === 'production' ? Environment.PRODUCTION : Environment.SANDBOX;
-    const verifier = new SignedDataVerifier(
-      [await loadAppleRootCertificate()],
-      true,
-      environment,
-      APPLE_BUNDLE_ID,
-      config.appAppleId,
-    );
-    const decoded = await verifier.verifyAndDecodeTransaction(signedTransaction);
-    return parseAppleTransaction(decoded, expectedAppAccountToken, now);
-  } catch (error) {
-    if (error instanceof VerificationException) {
-      if (error.status === VerificationStatus.RETRYABLE_VERIFICATION_FAILURE) {
-        throw new AppleSignedDataError('unavailable');
-      }
-      throw new AppleSignedDataError('invalid_signature');
-    }
-    if (error instanceof AppleSignedDataError) throw error;
-    if (error instanceof AppleVerificationError) throw error;
-    throw new AppleSignedDataError('configuration');
-  }
+): Promise<AppleSubscriptionState> {
+  const transaction = await verifiedTransaction(signedTransaction, config);
+  return appleTransactionState(
+    transaction as Record<string, unknown>,
+    expectedAppAccountToken,
+    now,
+  );
 }

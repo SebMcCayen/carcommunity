@@ -2711,6 +2711,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Apple lifecycle ordering watermark, written atomically with entitlement.
+    match /subscriptionAppleEvents/{tokenHash} {
+      allow read, write: if false;
+    }
+
     // Backend-only generation fence that prevents an in-flight live-position
     // update from recreating discovery after stop/hide. Clients never need to
     // observe or mutate lifecycle serialization state.

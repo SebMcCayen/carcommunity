@@ -56,6 +56,23 @@ struct SubscriptionCoordinatorTests {
         #expect(finished.isEmpty)
     }
 
+    @Test("restore reconciles existing membership even when the catalogue is unavailable")
+    @MainActor
+    func catalogueFailureDoesNotBlockReconciliation() async {
+        let transaction = StoreSignedTransaction(id: 41, productID: plusMonthlyProductID,
+                                                signedTransaction: "already-owned")
+        let store = FakeSubscriptionStore(entitlements: [transaction], catalogueUnavailable: true)
+        let verifier = FakeAppleVerifier(result: .success(SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: .plus)))
+        let coordinator = SubscriptionCoordinator(uid: "member", store: store, verifier: verifier)
+        await coordinator.start()
+        #expect(coordinator.currentTier == .plus)
+        #expect(coordinator.products.isEmpty)
+        #expect(!coordinator.canPurchase)
+        let finished = await store.finishedIDs
+        #expect(finished == [41])
+    }
+
     @Test("a pending StoreKit payment never reaches verification")
     @MainActor
     func pendingPurchase() async {
@@ -214,6 +231,7 @@ private actor FakeSubscriptionStore: SubscriptionStore {
     private let availableProducts: [StoreSubscriptionProduct]
     private let purchaseResult: StorePurchaseResult
     private let entitlements: [StoreSignedTransaction]
+    private let catalogueUnavailable: Bool
     private var unfinished: [StoreSignedTransaction]
     private(set) var unfinishedReads = 0
     private let updates: AsyncStream<StoreSignedTransaction>
@@ -227,16 +245,21 @@ private actor FakeSubscriptionStore: SubscriptionStore {
         ],
         purchaseResult: StorePurchaseResult = .cancelled,
         entitlements: [StoreSignedTransaction] = [],
-        unfinished: [StoreSignedTransaction]? = nil
+        unfinished: [StoreSignedTransaction]? = nil,
+        catalogueUnavailable: Bool = false
     ) {
         (updates, continuation) = AsyncStream.makeStream()
         availableProducts = products
         self.purchaseResult = purchaseResult
         self.entitlements = entitlements
+        self.catalogueUnavailable = catalogueUnavailable
         self.unfinished = unfinished ?? entitlements
     }
 
-    func products() async throws -> [StoreSubscriptionProduct] { availableProducts }
+    func products() async throws -> [StoreSubscriptionProduct] {
+        if catalogueUnavailable { throw TestError.failed }
+        return availableProducts
+    }
     func purchase(productID: String, appAccountToken: UUID) async throws -> StorePurchaseResult {
         if case .purchased(let transaction) = purchaseResult { unfinished.append(transaction) }
         return purchaseResult

@@ -176,6 +176,7 @@ import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
 import { grantEntitlement, verify as verifySubscription } from './subscription/verify';
 import { expireLapsed as expireLapsedSubscriptions } from './subscription/scheduled';
 import { handleRtdn as handleSubscriptionRtdn } from './subscription/rtdn';
+import { handleAppleNotification } from './subscription/apple-notifications';
 import { reconcileEntitlements as reconcileSubscriptionEntitlements } from './subscription/reconcile';
 import { refreshMapRings } from './subscription/map-ring-scheduled';
 import {
@@ -1234,6 +1235,7 @@ export const subscription = {
   // → revoke). Deploys inert until the operator wires the Pub/Sub topic AND
   // enables the provider (see the PR body).
   handleRtdn: handleSubscriptionRtdn,
+  handleAppleNotification,
   // Scheduled reconciliation (deployed as subscription-reconcileEntitlements).
   // The integrity backstop: re-converges the three representations of
   // entitlement to the authoritative subscriptions/{uid} record, clearing

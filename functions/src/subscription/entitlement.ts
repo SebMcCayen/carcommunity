@@ -20,6 +20,7 @@ import { adminAuth, db } from '../firebase';
 import { applyPrivilegeChange, computeUpdatedClaims } from '../admin/claims-core';
 import { supporterBadgeEligible } from './supporter-badge-core';
 import { membershipMapRingProjection } from './map-ring-core';
+import type { AppleEventVersion } from './apple-state-core';
 import {
   buildSubscriptionDocument,
   grantsLegacyActiveMember,
@@ -29,6 +30,8 @@ import {
 export interface ApplyEntitlementOptions {
   /** Optional audit event committed atomically with the Firestore entitlement records. */
   auditEvent?: Record<string, unknown>;
+  /** Committed with the records, so retries never advance ahead of an applied Apple state. */
+  appleEvent?: { purchaseTokenHash: string; version: AppleEventVersion };
 }
 
 export async function applyEntitlement(
@@ -52,13 +55,10 @@ export async function applyEntitlement(
     commitRecords: async () => {
       const ring = membershipMapRingProjection(input, new Date(), input.userId);
       const batch = db.batch();
-      batch.set(
-        db.collection('subscriptions').doc(input.userId),
-        {
-          ...buildSubscriptionDocument(input, () => FieldValue.serverTimestamp()),
-          ...(ring.refreshAt ? { mapRingRefreshAt: ring.refreshAt } : {}),
-        },
-      );
+      batch.set(db.collection('subscriptions').doc(input.userId), {
+        ...buildSubscriptionDocument(input, () => FieldValue.serverTimestamp()),
+        ...(ring.refreshAt ? { mapRingRefreshAt: ring.refreshAt } : {}),
+      });
       batch.set(
         db.collection('users').doc(input.userId),
         {
@@ -71,6 +71,16 @@ export async function applyEntitlement(
       );
       if (options.auditEvent) {
         batch.set(db.collection('adminAuditEvents').doc(), options.auditEvent);
+      }
+      if (options.appleEvent) {
+        batch.set(
+          db.collection('subscriptionAppleEvents').doc(options.appleEvent.purchaseTokenHash),
+          {
+            ...options.appleEvent.version,
+            uid: input.userId,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+        );
       }
       await batch.commit();
     },

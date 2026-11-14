@@ -1,7 +1,7 @@
 /** Real Firestore contention coverage. Never runs outside an explicit demo emulator. */
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { beforeAll, afterEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { GLOBAL_PHOTO_BYTES_PER_DAY, PHOTO_RESERVED_BYTES } from './quota';
 
@@ -19,7 +19,13 @@ const key = (uid: string) => createHash('sha256').update(uid).digest('hex');
 beforeAll(async () => {
   reserve = (await import('./callables')).reserveCameraQuota;
 });
+beforeEach(() => {
+  // Transaction retries must stay in one quota window, even across a real
+  // minute/day boundary. Keep real timers and Firestore contention enabled.
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+});
 afterEach(async () => {
+  vi.restoreAllMocks();
   const docs = await collection.limit(100).get();
   const batch = db.batch();
   docs.docs.forEach((doc) => batch.delete(doc.ref));
