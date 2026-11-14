@@ -29598,6 +29598,57 @@
         }
       }
     },
+    "roadCameras.closePhoto": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stäng kamerabild"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close camera image"
+          }
+        }
+      }
+    },
+    "roadCameras.expandPhoto": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa kamerabild i helskärm"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View camera image full screen"
+          }
+        }
+      }
+    },
+    "roadCameras.expandPhotoHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tryck på bilden för att förstora"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the image to enlarge"
+          }
+        }
+      }
+    },
     "roadCameras.layerHelp": {
       "extractionState": "manual",
       "localizations": {

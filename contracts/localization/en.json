@@ -2431,6 +2431,9 @@
     "unavailable": "The camera image could not be loaded.",
     "rateLimited": "Camera image limit reached. Try again later.",
     "photoTime": "Image updated %1$s",
+    "expandPhoto": "View camera image full screen",
+    "expandPhotoHint": "Tap the image to enlarge",
+    "closePhoto": "Close camera image",
     "retry": "Try again",
     "catalogUnavailable": "Cameras could not be updated. Saved cameras are shown when available."
   },

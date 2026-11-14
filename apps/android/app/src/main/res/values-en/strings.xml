@@ -2266,6 +2266,9 @@
     <string name="roadCameras_unavailable">The camera image could not be loaded.</string>
     <string name="roadCameras_rateLimited">Camera image limit reached. Try again later.</string>
     <string name="roadCameras_photoTime">Image updated %1$s</string>
+    <string name="roadCameras_expandPhoto">View camera image full screen</string>
+    <string name="roadCameras_expandPhotoHint">Tap the image to enlarge</string>
+    <string name="roadCameras_closePhoto">Close camera image</string>
     <string name="roadCameras_retry">Try again</string>
     <string name="roadCameras_catalogUnavailable">Cameras could not be updated. Saved cameras are shown when available.</string>
     <string name="convoy_invitationFrom">invites you to a convoy</string>

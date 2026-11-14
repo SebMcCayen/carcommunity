@@ -35,6 +35,11 @@ within that time reuse the local image. HTTP Last-Modified is shown as image
 update time when available; the daily catalog PhotoTime is never presented as the
 timestamp of a freshly fetched image.
 
+On Android, tapping a loaded camera image opens a full-screen view with the
+camera name and Trafikverket attribution. The close button or system Back returns
+to the camera details. Enlarging the image reuses the loaded bitmap and does not
+request another photo; selecting another camera closes the previous enlarged view.
+
 The image callable deliberately relays a small image so cost limits remain
 server-authoritative; raw source URLs are not returned. This adds a small amount
 of our own outbound traffic compared with unrestricted direct image loading.
