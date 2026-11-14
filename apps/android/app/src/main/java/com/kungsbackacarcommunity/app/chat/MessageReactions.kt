@@ -232,7 +232,7 @@ fun ReactionRoomHost(room: ReactionRoom, uid: String, content: @Composable () ->
     val scope = rememberCoroutineScope()
     val factory = LocalReactionRoomFactory.current
     val state = remember(room, uid, factory) { factory?.invoke(room, uid, context.applicationContext, scope) ?: ReactionRoomState(room, uid, context.applicationContext, scope) }
-    LaunchedEffect(state) { state.start() }
+    LaunchedEffect(state, state.enabled) { if (state.enabled) state.start() }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(state, lifecycle) {
         state.foreground = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)

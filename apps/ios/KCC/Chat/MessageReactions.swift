@@ -405,6 +405,16 @@ func reactionCategoryKey(_ name: String) -> String {
 }
 
 /// Uses the existing blocking boundary and confirmation; a visible label never grants authority.
+struct ReactionReplyAction: View {
+    @Environment(\.messageReactionStore) private var store
+    let action: () -> Void
+    var body: some View {
+        Button { store?.dismiss(); action() } label: {
+            Label("chat.replyQuoteHeaderAction", systemImage: "arrowshape.turn.up.left")
+        }
+    }
+}
+
 struct ReactionBlockAction: View {
     @Environment(\.messageReactionStore) private var store
     let targetUID: String
