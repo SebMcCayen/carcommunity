@@ -89,6 +89,7 @@ import com.kungsbackacarcommunity.app.navigation.NavInitialCamera
 import com.kungsbackacarcommunity.app.shell.CircleControl
 import com.kungsbackacarcommunity.app.shell.CompassCircleControl
 import com.kungsbackacarcommunity.app.shell.IncidentMarkerLayer
+import com.kungsbackacarcommunity.app.shell.IncidentMarkerReconciler
 import com.kungsbackacarcommunity.app.shell.MapCameraSnapshot
 import com.kungsbackacarcommunity.app.shell.MapCircleControlKind
 import com.kungsbackacarcommunity.app.shell.PerkDeployCircleControl
@@ -116,6 +117,7 @@ import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
@@ -1703,9 +1705,10 @@ private class TurnByTurnEngine(
      * manager, because style images die with the style they were added to.
      */
     private val registeredIncidentImages = mutableSetOf<String>()
+    private val incidentAnnotations = IncidentMarkerReconciler<PointAnnotation>()
 
     /**
-     * Annotation id → incident id, rebuilt by every draw.
+     * Annotation id → incident id, refreshed after each reconciliation.
      *
      * Written but never read here, deliberately: this layer is display-only
      * (no click listener — see the screen's [incidentMarkers] KDoc), and the
@@ -2442,10 +2445,10 @@ private class TurnByTurnEngine(
 
     /**
      * Redraws the badges only when the set actually differs, so the ~1 Hz
-     * location ticks and the layer toggles that share this engine do not clear
-     * and rebuild the whole layer for an unchanged list. Only a COMPLETE draw is
-     * cached — an incomplete one (style handle not ready, so an icon could not be
-     * uploaded) would otherwise be remembered as applied and leave those badges
+     * location ticks and layer toggles do no unnecessary annotation work.
+     * Changed lists retain unchanged annotations by marker id. Only a COMPLETE
+     * draw is cached — an incomplete one (style handle not ready, so an icon
+     * could not be uploaded) would otherwise be remembered as applied and leave badges
      * blank until the set happened to change. Mirrors the shell surface's own
      * caching rule; the draw itself is the shared renderer.
      */
@@ -2460,8 +2463,9 @@ private class TurnByTurnEngine(
                 markers = markers,
                 registeredImages = registeredIncidentImages,
                 idsByAnnotation = incidentIdsByAnnotation,
+                annotations = incidentAnnotations,
             )
-        if (complete) lastAppliedIncidents = markers
+        lastAppliedIncidents = if (complete) markers else null
     }
 
     /**
@@ -2483,6 +2487,7 @@ private class TurnByTurnEngine(
      */
     private fun releaseIncidentMarkerManager() {
         registeredIncidentImages.clear()
+        incidentAnnotations.clear()
         incidentIdsByAnnotation.clear()
         lastAppliedIncidents = null
         val manager = incidentMarkerManager ?: return
