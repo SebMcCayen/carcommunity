@@ -36,6 +36,10 @@ letters/digits/underscore/hyphen. Response: `{messageId, emojiId, version, count
 
 `getMine`: `{scope, roomId, messageIds}` with 1..50 IDs in one room. Response:
 `{items:[{messageId,emojiId,version}]}` for only the current authenticated actor.
+Unavailable targets (missing, expired, hidden or blocked) are omitted individually;
+other valid targets in the same batch still return their state. Omission never
+means an empty reaction and never exposes a cached private record. Account and
+room authorization failures still reject the entire request.
 There is no actor roster or cross-user history endpoint.
 
 Canonical message roots are `communityChat/global/messages`,
@@ -74,6 +78,11 @@ counts. Quotas use one shared `chatReactionRateLimits/{uid}` in both backends:
 20 committed changes and 120 authenticated read/mutation requests per shared
 60-second window. Duplicate commits do not spend the change budget again;
 replays/no-ops/own-state reads still update the request guard to bound abuse.
+After account/room authorization, rejected target, state, fingerprint, version
+and change-limit checks also consume one request. Expected domain errors are
+returned from the transaction and raised only after the guard commits, preserving
+the existing single guard write and atomic authorization checks. Firestore
+transaction retries do not consume additional requests or committed changes.
 
 A changed mutation ordinarily writes private state, parent counts, guard and
 receipt. The existing CarCommunity access wrapper can additionally initialize or

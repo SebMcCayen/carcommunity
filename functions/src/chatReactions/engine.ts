@@ -100,74 +100,96 @@ export class MessageReactionEngine {
       record = this.db.doc(`chatMessageReactions/${digest(uid + '\0' + path)}`);
     const receipt = this.db.doc(`chatReactionOperations/${digest(uid + '\0' + input.operationId)}`);
     const fingerprint = digest(JSON.stringify(input));
-    return this.db.runTransaction(async (tx) => {
+    const outcome = await this.db.runTransaction(async (tx) => {
       await this.authorize(tx, uid, input, input.emojiId !== null);
-      const parent = await requireTarget(tx, this.db, uid, path),
-        parentEpoch = epoch(parent);
-      const guard = this.db.doc(`chatReactionRateLimits/${uid}`);
-      const [own, previousOp, rate] = await Promise.all([
-        tx.get(record),
-        tx.get(receipt),
-        tx.get(guard),
-      ]);
-      const current = state(own, parentEpoch);
-      if (previousOp.exists && previousOp.get('fingerprint') !== fingerprint)
-        throw new HttpsError('already-exists', 'Operation already used.');
-      // Replay is authorized again, returns CURRENT state, and never reapplies old state.
-      const duplicate = previousOp.exists;
-      if (!duplicate && current.version !== input.expectedVersion)
-        throw new HttpsError('aborted', 'Reaction changed. Refresh before retrying.');
-      const changed = !duplicate && current.emojiId !== input.emojiId;
-      const now = Date.now(),
-        nextBudget = budget(rate.data(), changed, now);
-      const result = changed ? { emojiId: input.emojiId, version: current.version + 1 } : current;
-      const counts = changed
-        ? nextCounts(parent.get('reactionCounts'), current.emojiId, input.emojiId)
-        : (parent.get('reactionCounts') ?? {});
-      tx.set(guard, { ...nextBudget, expireAt: Timestamp.fromMillis(now + 120_000) });
-      if (changed) {
-        tx.set(record, {
-          uid,
-          parentPath: path,
-          parentEpoch,
-          roomKey: `${input.scope}:${input.roomId}`,
-          ...result,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-        tx.update(parent.ref, { reactionCounts: counts, reactionCatalogVersion: '18.0' });
+      const guard = this.db.doc(`chatReactionRateLimits/${uid}`),
+        rate = await tx.get(guard),
+        now = Date.now(),
+        requestBudget = budget(rate.data(), false, now);
+      try {
+        const parent = await requireTarget(tx, this.db, uid, path),
+          parentEpoch = epoch(parent);
+        const [own, previousOp] = await Promise.all([tx.get(record), tx.get(receipt)]);
+        const current = state(own, parentEpoch);
+        if (previousOp.exists && previousOp.get('fingerprint') !== fingerprint)
+          throw new HttpsError('already-exists', 'Operation already used.');
+        // Replay is authorized again, returns CURRENT state, and never reapplies old state.
+        const duplicate = previousOp.exists;
+        if (!duplicate && current.version !== input.expectedVersion)
+          throw new HttpsError('aborted', 'Reaction changed. Refresh before retrying.');
+        const changed = !duplicate && current.emojiId !== input.emojiId;
+        const nextBudget = changed ? budget(rate.data(), true, now) : requestBudget;
+        const result = changed ? { emojiId: input.emojiId, version: current.version + 1 } : current;
+        const counts = changed
+          ? nextCounts(parent.get('reactionCounts'), current.emojiId, input.emojiId)
+          : (parent.get('reactionCounts') ?? {});
+        // All domain validation is complete before staging any reaction or receipt writes.
+        tx.set(guard, { ...nextBudget, expireAt: Timestamp.fromMillis(now + 120_000) });
+        if (changed) {
+          tx.set(record, {
+            uid,
+            parentPath: path,
+            parentEpoch,
+            roomKey: `${input.scope}:${input.roomId}`,
+            ...result,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          tx.update(parent.ref, { reactionCounts: counts, reactionCatalogVersion: '18.0' });
+        }
+        if (!duplicate)
+          tx.create(receipt, {
+            uid,
+            fingerprint,
+            parentPath: path,
+            createdAt: FieldValue.serverTimestamp(),
+            expireAt: Timestamp.fromMillis(now + 7 * 86400_000),
+          });
+        return { value: { messageId: input.messageId, ...result, counts } };
+      } catch (error) {
+        if (!(error instanceof HttpsError)) throw error;
+        // Return domain errors until commit so failed targets/versions still spend one request.
+        tx.set(guard, { ...requestBudget, expireAt: Timestamp.fromMillis(now + 120_000) });
+        return { error };
       }
-      if (!duplicate)
-        tx.create(receipt, {
-          uid,
-          fingerprint,
-          parentPath: path,
-          createdAt: FieldValue.serverTimestamp(),
-          expireAt: Timestamp.fromMillis(now + 7 * 86400_000),
-        });
-      return { messageId: input.messageId, ...result, counts };
     });
+    if (outcome.error) throw outcome.error;
+    return outcome.value!;
   }
   async getMine(uid: string, room: ReactionRoom, messageIds: string[]) {
-    return this.db.runTransaction(async (tx) => {
+    const outcome = await this.db.runTransaction(async (tx) => {
       await this.authorize(tx, uid, room, false);
       // Reject an exhausted account before the bounded, but more expensive, parent fanout.
       const guard = this.db.doc(`chatReactionRateLimits/${uid}`),
         rate = await tx.get(guard),
         now = Date.now(),
         nextBudget = budget(rate.data(), false, now);
-      const items = [];
-      for (const messageId of [...new Set(messageIds)]) {
-        const path = messagePath(room, messageId);
-        const parent = await requireTarget(tx, this.db, uid, path);
-        const own = await tx.get(this.db.doc(`chatMessageReactions/${digest(uid + '\0' + path)}`));
-        items.push({ messageId, ...state(own, epoch(parent)) });
+      try {
+        const items = [];
+        for (const messageId of [...new Set(messageIds)]) {
+          const path = messagePath(room, messageId);
+          let parent: DocumentSnapshot;
+          let parentEpoch: string;
+          try {
+            parent = await requireTarget(tx, this.db, uid, path);
+            parentEpoch = epoch(parent);
+          } catch (error) {
+            // Absence, expiry, moderation and blocks are equally unavailable. Never expose own state.
+            if (error instanceof HttpsError && error.code === 'not-found') continue;
+            throw error;
+          }
+          const own = await tx.get(this.db.doc(`chatMessageReactions/${digest(uid + '\0' + path)}`));
+          items.push({ messageId, ...state(own, parentEpoch) });
+        }
+        tx.set(guard, { ...nextBudget, expireAt: Timestamp.fromMillis(now + 120_000) });
+        return { value: { items } };
+      } catch (error) {
+        if (!(error instanceof HttpsError)) throw error;
+        tx.set(guard, { ...nextBudget, expireAt: Timestamp.fromMillis(now + 120_000) });
+        return { error };
       }
-      tx.set(guard, {
-        ...nextBudget,
-        expireAt: Timestamp.fromMillis(now + 120_000),
-      });
-      return { items };
     });
+    if (outcome.error) throw outcome.error;
+    return outcome.value!;
   }
 }
 

@@ -149,6 +149,7 @@ describe('server-only message reaction transactions', () => {
       engine().set(actor, input({ emojiId: '1f602', operationId: 'reaction-operation-002' })),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect((await db.doc(`chatReactionRateLimits/${actor}`).get()).data()).toMatchObject({ requests: 2, changes: 1 });
     const counts = (await db.doc(parent).get()).get('reactionCounts') as Record<string, number>;
     expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(1);
   });
@@ -164,9 +165,7 @@ describe('server-only message reaction transactions', () => {
       `userBlocks/${other}/blocked/${actor}`,
     ]) {
       await db.doc(path).set({});
-      await expect(engine().getMine(actor, community, ['message'])).rejects.toMatchObject({
-        code: 'not-found',
-      });
+      expect((await engine().getMine(actor, community, ['message'])).items).toEqual([]);
       await expect(engine().set(actor, input())).rejects.toMatchObject({ code: 'not-found' });
       await db.doc(path).delete();
     }
@@ -303,6 +302,39 @@ describe('server-only message reaction transactions', () => {
     await expect(engine().getMine(actor, community, ['missing-target'])).rejects.toMatchObject({
       code: 'resource-exhausted',
     });
+    await expect(engine().set(actor, input({ messageId: 'missing-target' }))).rejects.toMatchObject({ code: 'resource-exhausted' });
     expect((await db.doc(`chatReactionRateLimits/${actor}`).get()).get('requests')).toBe(120);
+  });
+  it('isolates missing, expired, hidden and blocked targets without disclosing their own state', async () => {
+    await engine().set(actor, input());
+    const batch = db.batch();
+    for (const [id, patch] of Object.entries({
+      expired: { expireAt: Timestamp.fromMillis(Date.now() - 1000) },
+      expiresAlias: { expiresAt: Timestamp.fromMillis(Date.now() - 1000) },
+      invalidEpoch: { createdAt: null },
+      hidden: { hidden: true },
+      blocked: { senderUid: 'blocked-author' },
+    })) batch.set(db.doc(`communityChat/global/messages/${id}`), {
+      senderUid: other, text: 'Unavailable fixture', createdAt: Timestamp.now(), ...patch,
+    });
+    await batch.commit();
+    await engine().set(actor, input({ messageId: 'blocked', operationId: 'reaction-block-fixture-01' }));
+    await db.doc(`userBlocks/blocked-author/blocked/${actor}`).set({});
+    expect((await engine().getMine(actor, community, ['expired', 'message', 'expiresAlias', 'invalidEpoch', 'hidden', 'missing', 'blocked', 'message'])).items)
+      .toEqual([{ messageId: 'message', emojiId: '1f44d', version: 1 }]);
+    expect((await db.doc(`chatReactionRateLimits/${actor}`).get()).get('requests')).toBe(3);
+    await db.doc(`users/${actor}`).update({ suspended: true });
+    await expect(engine().getMine(actor, community, ['message', 'missing'])).rejects.toBeDefined();
+  });
+  it('charges rejected mutations and unavailable reads without spending the change budget', async () => {
+    await engine().set(actor, input());
+    await expect(engine().set(actor, input({ emojiId: '1f602' }))).rejects.toMatchObject({ code: 'already-exists' });
+    await expect(engine().set(actor, input({ operationId: 'reaction-conflict-002' }))).rejects.toMatchObject({ code: 'aborted' });
+    await expect(engine().set(actor, input({ messageId: 'missing' }))).rejects.toMatchObject({ code: 'not-found' });
+    expect((await engine().getMine(actor, community, ['missing'])).items).toEqual([]);
+    const rate = (await db.doc(`chatReactionRateLimits/${actor}`).get()).data()!;
+    expect(rate).toMatchObject({ requests: 5, changes: 1 });
+    expect((await db.doc(parent).get()).get('reactionCounts')).toEqual({ '1f44d': 1 });
+    expect((await db.collection('chatReactionOperations').get()).size).toBe(1);
   });
 });
