@@ -542,7 +542,8 @@ fun MapHome(
     BoxWithConstraints(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
         // On wide windows the capped reaction row leaves the tool rail beside
         // it. Narrow windows reserve the row's height to prevent overlap.
-        val reserveReactionRow = convoyReactions != null && maxWidth < 640.dp
+        val toolsBesideReactions = maxWidth >= 640.dp
+        val reserveReactionRow = convoyReactions != null && !toolsBesideReactions
         // Convoy awareness (member markers + off-screen direction arrows) sits
         // at the BOTTOM of the chrome stack: it belongs to the map, so every
         // control composed below this point draws over it rather than being
@@ -637,8 +638,13 @@ fun MapHome(
             modifier =
                 Modifier
                     .align(Alignment.TopEnd)
+                    .then(if (toolsBesideReactions) Modifier.statusBarsPadding() else Modifier)
                     .padding(
-                        top = with(chromeDensity) { topChromeHeightPx.toDp() } + KccSpacing.s3,
+                        // Sharing/loading chips sit on the left. Wide windows
+                        // need only clear the avatar, leaving a full tool target
+                        // visible in the short landscape viewport.
+                        top = if (toolsBesideReactions) KccSpacing.s3 + KccSpacing.s12 + KccSpacing.s3
+                            else with(chromeDensity) { topChromeHeightPx.toDp() } + KccSpacing.s3,
                         end = KccSpacing.s4,
                         bottom = with(chromeDensity) { bottomChromeHeightPx.toDp() } + KccSpacing.s4 +
                             if (reserveReactionRow) CONVOY_REACTION_CONTROLS_CLEARANCE else 0.dp,
