@@ -111,7 +111,7 @@ class RoadCameraCaptureTest {
         compose.waitForIdle()
         assertEquals(0, photoCalls.get())
         if (screen == "layers") {
-            RoadCameraType.entries.forEach { type ->
+            listOf(RoadCameraType.Speed, RoadCameraType.Traffic).forEach { type ->
                 compose.onNodeWithTag("map_layers_camera_${type.wire}").performScrollTo().performClick()
             }
             compose.onNodeWithTag("map_layers_camera_speed").performScrollTo()

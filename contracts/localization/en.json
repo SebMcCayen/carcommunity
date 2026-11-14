@@ -2426,6 +2426,7 @@
     "speedLayer": "Fixed speed cameras",
     "trafficLayer": "Traffic cameras",
     "roadConditionLayer": "Road condition cameras",
+    "photoLayer": "Traffic and road condition cameras",
     "layerHelp": "Show cameras on the map",
     "loading": "Loading camera image…",
     "unavailable": "The camera image could not be loaded.",

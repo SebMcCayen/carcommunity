@@ -69,14 +69,18 @@ struct MapLayersSheet: View {
                             .font(.subheadline)
                             .foregroundStyle(KccTheme.secondary)
                     }
-                    ForEach(RoadCameraType.allCases, id: \.self) { type in
-                        Divider()
-                        layerRow(LocalizedStringKey(type.titleKey), help: "roadCameras.layerHelp",
-                                 icon: type.symbol, binding: Binding(
-                                    get: { preferences.cameraLayers.contains(type) },
-                                    set: { preferences.setCameraLayer(type, enabled: $0) }
-                                 ), id: type.titleKey)
-                    }
+                    Divider()
+                    layerRow("roadCameras.speedLayer", help: "roadCameras.layerHelp",
+                             icon: RoadCameraType.speed.symbol, binding: Binding(
+                                get: { preferences.cameraLayers.contains(.speed) },
+                                set: { preferences.setCameraLayer(.speed, enabled: $0) }
+                             ), id: "roadCameras.speedLayer")
+                    Divider()
+                    layerRow("roadCameras.photoLayer", help: "roadCameras.layerHelp",
+                             icon: RoadCameraType.traffic.symbol, binding: Binding(
+                                get: { preferences.cameraLayers.contains(.traffic) },
+                                set: { preferences.setCameraLayer(.traffic, enabled: $0) }
+                             ), id: "roadCameras.photoLayer")
                     if !preferences.cameraLayers.isEmpty {
                         if let cameraCatalogErrorKey {
                             Text(LocalizedStringKey(cameraCatalogErrorKey))

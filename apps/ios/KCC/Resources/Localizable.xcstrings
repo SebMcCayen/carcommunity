@@ -29683,6 +29683,23 @@
         }
       }
     },
+    "roadCameras.photoLayer": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trafik- och väglagskameror"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traffic and road condition cameras"
+          }
+        }
+      }
+    },
     "roadCameras.photoTime": {
       "extractionState": "manual",
       "localizations": {

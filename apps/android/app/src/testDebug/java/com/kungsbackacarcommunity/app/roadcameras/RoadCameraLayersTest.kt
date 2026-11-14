@@ -55,7 +55,26 @@ class RoadCameraLayersTest {
         assertEquals(0, photos.get())
     }
 
-    @Test fun cameraLayersAreIndependentPersistAndRenderThroughTheProductionPopup() {
+    @Test fun eitherLegacyPhotoLayerEnablesBothTypesAndCombinedChoiceSurvivesRestart() {
+        val prefs = compose.activity.getSharedPreferences("map_layers_preference", Context.MODE_PRIVATE)
+        for (traffic in listOf(false, true)) for (roadCondition in listOf(false, true)) {
+            prefs.edit().clear().putBoolean("camera_traffic", traffic)
+                .putBoolean("camera_road_condition", roadCondition).commit()
+            val state = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
+            state.cameras = RoadCameraType.entries.map { RoadCamera(it.wire, it, it.wire, 57.0, 12.0) }
+            assertEquals(traffic || roadCondition, state.enabled(RoadCameraType.Traffic))
+            assertEquals(traffic || roadCondition, state.enabled(RoadCameraType.RoadCondition))
+            assertEquals(if (traffic || roadCondition) 2 else 0, state.markers.size)
+            assertFalse(state.speedEnabled)
+            state.setEnabled(RoadCameraType.RoadCondition, true)
+            assertTrue(RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null).photoCamerasEnabled)
+            state.setEnabled(RoadCameraType.Traffic, false)
+            val restored = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
+            assertFalse(restored.anyEnabled)
+        }
+    }
+
+    @Test fun speedAndCombinedPhotoLayersPersistAndRenderThroughTheProductionPopup() {
         compose.activity.getSharedPreferences("map_layers_preference", Context.MODE_PRIVATE).edit().clear().commit()
         val state = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
         assertFalse(state.anyEnabled)
@@ -74,14 +93,22 @@ class RoadCameraLayersTest {
                 }
             }
         }
-        RoadCameraType.entries.forEach { type ->
+        listOf(RoadCameraType.Speed, RoadCameraType.Traffic).forEach { type ->
             compose.onNodeWithTag("map_layers_camera_${type.wire}").performScrollTo().performClick()
             assertTrue(MapLayersPreferenceStore(compose.activity).readRoadCameraLayer(type))
         }
+        compose.onNodeWithTag("map_layers_camera_road_condition").assertDoesNotExist()
         assertEquals(3, state.markers.size)
+        val restored = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
+        assertTrue(restored.speedEnabled && restored.photoCamerasEnabled)
         compose.onNodeWithTag("map_layers_camera_traffic").performScrollTo().performClick()
-        assertEquals(2, state.markers.size)
+        assertEquals(1, state.markers.size)
         assertNull(state.selected(ROAD_CAMERA_MARKER_PREFIX + "traffic"))
-        assertTrue(state.speedEnabled && state.roadConditionEnabled)
+        assertNull(state.selected(ROAD_CAMERA_MARKER_PREFIX + "road_condition"))
+        assertTrue(state.speedEnabled)
+        assertFalse(state.photoCamerasEnabled)
+        val disabled = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
+        assertTrue(disabled.speedEnabled)
+        assertFalse(disabled.photoCamerasEnabled)
     }
 }

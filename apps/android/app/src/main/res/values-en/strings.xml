@@ -2261,6 +2261,7 @@
     <string name="roadCameras_speedLayer">Fixed speed cameras</string>
     <string name="roadCameras_trafficLayer">Traffic cameras</string>
     <string name="roadCameras_roadConditionLayer">Road condition cameras</string>
+    <string name="roadCameras_photoLayer">Traffic and road condition cameras</string>
     <string name="roadCameras_layerHelp">Show cameras on the map</string>
     <string name="roadCameras_loading">Loading camera image…</string>
     <string name="roadCameras_unavailable">The camera image could not be loaded.</string>
