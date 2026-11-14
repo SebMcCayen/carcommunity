@@ -165,7 +165,8 @@ final class MessageReactionStore {
             do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
             guard let self, self.enabled, self.current, !self.busy else { return }
             let now = Date().timeIntervalSince1970
-            let ids = Array(self.visible.keys.filter { now - (self.attempted[$0] ?? 0) > 10 && (self.own[$0] == nil || now - self.own[$0]!.fetchedAt > 60) }.prefix(50))
+            let candidates = (self.selectedID.map { [$0] } ?? []) + self.visible.keys.filter { $0 != self.selectedID }
+            let ids = Array(candidates.filter { self.visible[$0] != nil && now - (self.attempted[$0] ?? 0) > 10 && (self.own[$0] == nil || now - self.own[$0]!.fetchedAt > 60) }.prefix(50))
             guard !ids.isEmpty else { return }
             ids.forEach { self.attempted[$0] = now }
             do {

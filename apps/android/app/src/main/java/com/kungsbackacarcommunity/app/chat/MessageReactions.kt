@@ -174,7 +174,8 @@ class ReactionRoomState(val room: ReactionRoom, val uid: String, private val con
             delay(100)
             if (!enabled || !foreground || !current() || busy) return@launch
             val now = System.currentTimeMillis()
-            val ids = visible.keys.filter { now - (attempts[it] ?: 0) > 10_000 && (own[it] == null || now - own[it]!!.fetchedAt > 60_000) }.take(50)
+            val candidates = (listOfNotNull(selectedId) + visible.keys).distinct()
+            val ids = candidates.filter { it in visible && now - (attempts[it] ?: 0) > 10_000 && (own[it] == null || now - own[it]!!.fetchedAt > 60_000) }.take(50)
             if (ids.isEmpty()) return@launch
             ids.forEach { attempts[it] = now }
             try {
