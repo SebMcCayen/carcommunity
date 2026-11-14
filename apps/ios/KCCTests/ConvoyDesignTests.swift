@@ -85,7 +85,7 @@ final class ConvoyDesignTests: XCTestCase {
         }
     }
 
-    func testReactionButtonStatesRenderAtNarrowAndRegularWidthsInBothThemes() throws {
+    func testReactionButtonStatesRenderAtNarrowAndRegularWidthsInBothThemes() async throws {
         for width: CGFloat in [280, 390] {
             for dark in [true, false] {
                 for state in ["ready", "cooldown", "active", "pending"] {
@@ -102,9 +102,7 @@ final class ConvoyDesignTests: XCTestCase {
                     .frame(width: width)
                     .environment(\.colorScheme, dark ? .dark : .light)
                     .environment(\.dynamicTypeSize, .accessibility5)
-                    let renderer = ImageRenderer(content: row)
-                    renderer.scale = 2
-                    let image = try XCTUnwrap(renderer.uiImage)
+                    let image = try await captureReactionRow(row, width: width, dark: dark)
                     XCTAssertEqual(image.size.width, width, accuracy: 1)
                     XCTAssertEqual(image.size.height, 80, accuracy: 1,
                         "Icon-only controls keep 56pt touch height with 12pt outer padding at maximum type size")
@@ -114,6 +112,39 @@ final class ConvoyDesignTests: XCTestCase {
                     add(attachment)
                 }
             }
+        }
+    }
+
+    /// ImageRenderer omits UIKit-backed views such as the pending ProgressView.
+    /// Capture a hosted native hierarchy so the evidence includes the real spinner.
+    private func captureReactionRow<Content: View>(_ row: Content, width: CGFloat, dark: Bool) async throws -> UIImage {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let viewport = CGSize(width: width, height: 80)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(origin: .zero, size: viewport)
+        window.overrideUserInterfaceStyle = dark ? .dark : .light
+        window.backgroundColor = .clear
+        let host = UIHostingController(rootView: row)
+        host.safeAreaRegions = []
+        host.view.backgroundColor = .clear
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            previous?.makeKeyAndVisible()
+        }
+        try await Task.sleep(for: .milliseconds(250))
+        host.view.layoutIfNeeded()
+        XCTAssertEqual(host.view.bounds.width, viewport.width, accuracy: 1)
+        XCTAssertEqual(host.view.bounds.height, viewport.height, accuracy: 1)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 2
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: viewport, format: format).image { _ in
+            XCTAssertTrue(window.drawHierarchy(in: window.bounds, afterScreenUpdates: true),
+                "Native reaction evidence must include UIKit-backed pending indicators")
         }
     }
 
