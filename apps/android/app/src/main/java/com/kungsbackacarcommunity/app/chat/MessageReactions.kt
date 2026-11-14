@@ -229,7 +229,7 @@ class ReactionRoomState(val room: ReactionRoom, val uid: String, private val con
             } catch (cancelled: CancellationException) { throw cancelled } catch (error: Exception) {
                 if ((error as? com.google.firebase.functions.FirebaseFunctionsException)?.code in listOf(com.google.firebase.functions.FirebaseFunctionsException.Code.ABORTED, com.google.firebase.functions.FirebaseFunctionsException.Code.PERMISSION_DENIED, com.google.firebase.functions.FirebaseFunctionsException.Code.NOT_FOUND, com.google.firebase.functions.FirebaseFunctionsException.Code.FAILED_PRECONDITION)) retry = null
                 // The same operation is retained for an explicit retry after an unknown transport result.
-                failed = true; own.remove(id); attempts.remove(id); request()
+                failed = true; ownRevisions[id] = ++nextOwnRevision; own.remove(id); attempts.remove(id); request()
             } finally { busy = false; if (failed) request() }
         }
     }

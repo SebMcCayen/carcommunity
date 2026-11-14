@@ -13,6 +13,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 
+/** Robolectric is intentionally scoped to the Debug test variant in this app. */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class ReactionRoomRefreshTest {
@@ -75,6 +76,31 @@ class ReactionRoomRefreshTest {
         }
         assertEquals("1f602", state.own["message"]?.emojiId)
         assertEquals(2L, state.store.own(state.room, "message")?.version)
+        state.invalidate(); state.store.clear()
+    }
+
+    @Test fun `a rejected mutation refreshes instead of restoring an obsolete in-flight choice`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        var reads = 0
+        val state = ReactionRoomState(ReactionRoom("community", "global"), "rejected-fixture", RuntimeEnvironment.getApplication(), this,
+            sessionIsCurrent = { true }, remoteCall = { name, _ ->
+                if (!name.endsWith("getMine")) error("Synthetic rejected mutation")
+                val version = if (++reads == 1) { release.await(); 1L } else 2L
+                mapOf("items" to listOf(mapOf("messageId" to "message", "emojiId" to "1f44d", "version" to version)))
+            })
+        state.store.clear(); state.enabled = true
+        state.own["message"] = ReactionChoice("1f44d", 1, fetchedAt = 0)
+        state.register("message", mapOf("1f44d" to 1L))
+        advanceTimeBy(100); runCurrent()
+        state.select("message"); state.choose("1f602"); runCurrent()
+        assertNull(state.own["message"])
+        release.complete(Unit)
+        repeat(100) {
+            advanceTimeBy(100); runCurrent()
+            if (state.own["message"]?.version != 2L) withContext(Dispatchers.IO) { Thread.sleep(10) }
+        }
+        assertEquals(2, reads)
+        assertEquals(2L, state.own["message"]?.version)
         state.invalidate(); state.store.clear()
     }
 
