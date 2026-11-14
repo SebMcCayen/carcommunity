@@ -29598,6 +29598,23 @@
         }
       }
     },
+    "roadCameras.chooseDirection": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj riktning"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose direction"
+          }
+        }
+      }
+    },
     "roadCameras.closePhoto": {
       "extractionState": "manual",
       "localizations": {
@@ -29611,6 +29628,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close camera image"
+          }
+        }
+      }
+    },
+    "roadCameras.east": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öster"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "East"
           }
         }
       }
@@ -29683,6 +29717,91 @@
         }
       }
     },
+    "roadCameras.north": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Norr"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "North"
+          }
+        }
+      }
+    },
+    "roadCameras.northEast": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nordöst"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "North-east"
+          }
+        }
+      }
+    },
+    "roadCameras.northWest": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nordväst"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "North-west"
+          }
+        }
+      }
+    },
+    "roadCameras.numberedDirection": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$lld"
+          }
+        }
+      }
+    },
+    "roadCameras.numberedView": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vy %1$lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View %1$lld"
+          }
+        }
+      }
+    },
     "roadCameras.photoTime": {
       "extractionState": "manual",
       "localizations": {
@@ -29751,6 +29870,57 @@
         }
       }
     },
+    "roadCameras.south": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Söder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "South"
+          }
+        }
+      }
+    },
+    "roadCameras.southEast": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sydöst"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "South-east"
+          }
+        }
+      }
+    },
+    "roadCameras.southWest": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sydväst"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "South-west"
+          }
+        }
+      }
+    },
     "roadCameras.speedLayer": {
       "extractionState": "manual",
       "localizations": {
@@ -29798,6 +29968,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "The camera image could not be loaded."
+          }
+        }
+      }
+    },
+    "roadCameras.west": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Väster"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "West"
           }
         }
       }
