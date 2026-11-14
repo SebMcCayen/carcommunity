@@ -39,6 +39,7 @@ struct ConvoyReactionControls: View {
                             reactionButton(kind, now: context.date)
                         }
                     }
+                    .frame(maxWidth: 456)
                     .padding(.horizontal, KccSpacing.s3)
                 }
                 .padding(.bottom, bottomClearance + KccSpacing.s3)

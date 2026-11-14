@@ -1252,20 +1252,22 @@ struct ShellView: View {
 
     /// S01 rail stays below the avatar and above the measured bottom dock.
     private var mapTopTools: some View {
-        VStack(spacing: KccSpacing.s3) {
-            HStack(alignment: .top, spacing: 0) {
-                Spacer(minLength: 0)
-                ScrollView(.vertical) { mapCommunicationControls }
-                    .scrollBounceBehavior(.basedOnSize)
-                .frame(width: 48 + KccSpacing.s4 * 2)
+        GeometryReader { geometry in
+                VStack(spacing: KccSpacing.s3) {
+                HStack(alignment: .top, spacing: 0) {
+                    Spacer(minLength: 0)
+                    ScrollView(.vertical) { mapCommunicationControls }
+                        .scrollBounceBehavior(.basedOnSize)
+                    .frame(width: 48 + KccSpacing.s4 * 2)
+                }
             }
+            .padding(.top, KccSpacing.s4 + 48 + KccSpacing.s3)
+            .padding(.bottom, mapDockHeight + (
+                geometry.size.width < 640 && convoyReactionTargetId != nil && convoyReactionCoordinator != nil
+                    ? ConvoyReactionControls.controlsClearance : 0
+            ))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         }
-        .padding(.top, KccSpacing.s4 + 48 + KccSpacing.s3)
-        .padding(.bottom, mapDockHeight + (
-            convoyReactionTargetId != nil && convoyReactionCoordinator != nil
-                ? ConvoyReactionControls.controlsClearance : 0
-        ))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 
     private var mapBottomDockVisible: Bool {

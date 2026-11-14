@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -538,7 +539,10 @@ fun MapHome(
     // the blank-flash bug (see MapSurface.Content). Everything here reaches the
     // map through the [mapSurface] hooks instead. The Box stays transparent so
     // the shell's map shows through.
-    Box(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
+        // On wide windows the capped reaction row leaves the tool rail beside
+        // it. Narrow windows reserve the row's height to prevent overlap.
+        val reserveReactionRow = convoyReactions != null && maxWidth < 640.dp
         // Convoy awareness (member markers + off-screen direction arrows) sits
         // at the BOTTOM of the chrome stack: it belongs to the map, so every
         // control composed below this point draws over it rather than being
@@ -637,7 +641,7 @@ fun MapHome(
                         top = with(chromeDensity) { topChromeHeightPx.toDp() } + KccSpacing.s3,
                         end = KccSpacing.s4,
                         bottom = with(chromeDensity) { bottomChromeHeightPx.toDp() } + KccSpacing.s4 +
-                            if (convoyReactions != null) CONVOY_REACTION_CONTROLS_CLEARANCE else 0.dp,
+                            if (reserveReactionRow) CONVOY_REACTION_CONTROLS_CLEARANCE else 0.dp,
                     )
                     .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.End,

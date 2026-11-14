@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocalPolice
@@ -246,7 +247,7 @@ fun ConvoyReactionButtons(
     followMeTogglePending: Boolean = false,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth().padding(horizontal = KccSpacing.s3).testTag(CONVOY_REACTIONS_TAG),
+        modifier = modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = KccSpacing.s3).testTag(CONVOY_REACTIONS_TAG),
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
