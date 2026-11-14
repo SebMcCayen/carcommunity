@@ -2426,6 +2426,7 @@
     "speedLayer": "Fasta fartkameror",
     "trafficLayer": "Trafikkameror",
     "roadConditionLayer": "Väglagskameror",
+    "photoLayer": "Trafik- och väglagskameror",
     "layerHelp": "Visa kameror på kartan",
     "loading": "Hämtar kamerabild…",
     "unavailable": "Kamerabilden kunde inte hämtas.",

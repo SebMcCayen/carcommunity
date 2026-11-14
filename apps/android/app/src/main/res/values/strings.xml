@@ -2261,6 +2261,7 @@
     <string name="roadCameras_speedLayer">Fasta fartkameror</string>
     <string name="roadCameras_trafficLayer">Trafikkameror</string>
     <string name="roadCameras_roadConditionLayer">Väglagskameror</string>
+    <string name="roadCameras_photoLayer">Trafik- och väglagskameror</string>
     <string name="roadCameras_layerHelp">Visa kameror på kartan</string>
     <string name="roadCameras_loading">Hämtar kamerabild…</string>
     <string name="roadCameras_unavailable">Kamerabilden kunde inte hämtas.</string>

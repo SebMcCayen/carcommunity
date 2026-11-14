@@ -86,7 +86,7 @@ final class RoadCameraTests: XCTestCase {
         XCTAssertEqual(coordinator.selectedCamera, nw, "direction switching stays within the selected site")
     }
 
-    func testLayersStartOffAndEveryChoicePersistsIndependently() {
+    func testSpeedAndCombinedPhotoLayersStartOffAndPersistIndependently() {
         let suite = "RoadCameraTests-" + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -94,10 +94,32 @@ final class RoadCameraTests: XCTestCase {
         XCTAssertTrue(preferences.cameraLayers.isEmpty)
         preferences.setCameraLayer(.speed, enabled: true)
         preferences.setCameraLayer(.traffic, enabled: true)
-        preferences.setCameraLayer(.roadCondition, enabled: true)
-        preferences.setCameraLayer(.traffic, enabled: false)
-        XCTAssertEqual(MapLayerPreferences(defaults: defaults).cameraLayers, [.speed, .roadCondition])
+        XCTAssertEqual(preferences.cameraLayers, [.speed, .traffic, .roadCondition])
+        XCTAssertEqual(MapLayerPreferences(defaults: defaults).cameraLayers, [.speed, .traffic, .roadCondition])
+        preferences.setCameraLayer(.roadCondition, enabled: false)
+        XCTAssertEqual(preferences.cameraLayers, [.speed])
+        XCTAssertEqual(MapLayerPreferences(defaults: defaults).cameraLayers, [.speed])
         XCTAssertFalse(MapLayerPreferences(defaults: defaults).trafficEnabled)
+    }
+
+    func testEitherLegacyPhotoLayerEnablesBothTypesAndCombinedChoiceSurvivesRestart() {
+        let suite = "RoadCameraTests-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for traffic in [false, true] {
+            for roadCondition in [false, true] {
+                defaults.removePersistentDomain(forName: suite)
+                defaults.set(traffic, forKey: "map.layers.camera.traffic")
+                defaults.set(roadCondition, forKey: "map.layers.camera.road_condition")
+                let preferences = MapLayerPreferences(defaults: defaults)
+                let expected: Set<RoadCameraType> = traffic || roadCondition ? [.traffic, .roadCondition] : []
+                XCTAssertEqual(preferences.cameraLayers, expected)
+                preferences.setCameraLayer(.roadCondition, enabled: true)
+                XCTAssertEqual(MapLayerPreferences(defaults: defaults).cameraLayers, [.traffic, .roadCondition])
+                preferences.setCameraLayer(.traffic, enabled: false)
+                XCTAssertTrue(MapLayerPreferences(defaults: defaults).cameraLayers.isEmpty)
+            }
+        }
     }
 
     func testCatalogPersistsFor24HoursAndFallsBackOffline() async throws {

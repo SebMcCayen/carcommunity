@@ -81,13 +81,24 @@ class MapLayersPreferenceStore(context: Context) {
     private var nightMode: MapMode? =
         MapLayersPreferences.nightModeFromStored(prefs.getString(KEY_NIGHT, null))
 
-    /** Independent, opt-in camera layers; kept device-local across sign-outs. */
+    /** Speed cameras and photo cameras are independent, device-local opt-in layers.
+     * Either legacy photo-camera choice enables the combined layer on upgrade.
+     */
     fun readRoadCameraLayer(type: com.kungsbackacarcommunity.app.roadcameras.RoadCameraType): Boolean =
-        prefs.getBoolean("camera_${type.wire}", false)
+        if (type == com.kungsbackacarcommunity.app.roadcameras.RoadCameraType.Speed) {
+            prefs.getBoolean("camera_speed", false)
+        } else {
+            prefs.getBoolean("camera_traffic", false) || prefs.getBoolean("camera_road_condition", false)
+        }
 
     fun writeRoadCameraLayer(type: com.kungsbackacarcommunity.app.roadcameras.RoadCameraType, enabled: Boolean) {
-        if (readRoadCameraLayer(type) == enabled) return
-        prefs.edit().putBoolean("camera_${type.wire}", enabled).apply()
+        if (type == com.kungsbackacarcommunity.app.roadcameras.RoadCameraType.Speed) {
+            if (readRoadCameraLayer(type) == enabled) return
+            prefs.edit().putBoolean("camera_speed", enabled).apply()
+        } else {
+            // Write both legacy keys so turning the combined layer off stays off after restart.
+            prefs.edit().putBoolean("camera_traffic", enabled).putBoolean("camera_road_condition", enabled).apply()
+        }
     }
 
     fun readBasemap(): MapBasemap {
