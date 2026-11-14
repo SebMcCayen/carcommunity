@@ -2271,6 +2271,17 @@
     <string name="roadCameras_closePhoto">Close camera image</string>
     <string name="roadCameras_retry">Try again</string>
     <string name="roadCameras_catalogUnavailable">Cameras could not be updated. Saved cameras are shown when available.</string>
+    <string name="roadCameras_chooseDirection">Choose direction</string>
+    <string name="roadCameras_numberedView">View %1$d</string>
+    <string name="roadCameras_numberedDirection">%1$s · %2$d</string>
+    <string name="roadCameras_north">North</string>
+    <string name="roadCameras_northEast">North-east</string>
+    <string name="roadCameras_east">East</string>
+    <string name="roadCameras_southEast">South-east</string>
+    <string name="roadCameras_south">South</string>
+    <string name="roadCameras_southWest">South-west</string>
+    <string name="roadCameras_west">West</string>
+    <string name="roadCameras_northWest">North-west</string>
     <string name="convoy_invitationFrom">invites you to a convoy</string>
     <string name="convoy_invitationJoin">Join</string>
     <string name="convoy_invitationDecline">Decline</string>

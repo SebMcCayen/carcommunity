@@ -54,6 +54,64 @@ struct RoadCamera: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// One map marker per named photo-camera site. Speed cameras remain individual.
+struct RoadCameraLocation: Equatable, Sendable {
+    let views: [RoadCamera]
+    var camera: RoadCamera { views[0] }
+
+    static func group(_ cameras: [RoadCamera]) -> [RoadCameraLocation] {
+        let named = Dictionary(grouping: cameras) {
+            $0.type.rawValue + "|" + $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(with: Locale(identifier: "en_US_POSIX"))
+        }
+        var locations: [RoadCameraLocation] = []
+        for cameras in named.values {
+            var groups: [[RoadCamera]] = []
+            // Stable anchors avoid catalog-order differences and proximity chains.
+            for camera in cameras.sorted(by: { $0.id < $1.id }) {
+                let index = camera.type == .speed ? nil : groups.firstIndex {
+                    let anchor = $0[0]
+                    let north = (camera.latitude - anchor.latitude) * 111_000
+                    let east = (camera.longitude - anchor.longitude) * 111_000 * cos(anchor.latitude * .pi / 180)
+                    return hypot(north, east) <= 50
+                }
+                if let index { groups[index].append(camera) }
+                else { groups.append([camera]) }
+            }
+            locations += groups.map { group in
+                RoadCameraLocation(views: group.sorted {
+                    let lhs = $0.validDirection ?? 361
+                    let rhs = $1.validDirection ?? 361
+                    return lhs == rhs ? $0.id < $1.id : lhs < rhs
+                })
+            }
+        }
+        return locations.sorted { $0.camera.id < $1.camera.id }
+    }
+}
+
+extension RoadCamera {
+    var validDirection: Double? {
+        guard let direction, direction.isFinite, (0...360).contains(direction) else { return nil }
+        return direction.truncatingRemainder(dividingBy: 360)
+    }
+
+    var compassIndex: Int? {
+        validDirection.map { Int(($0 + 22.5) / 45) % 8 }
+    }
+
+    func viewLabel(in views: [RoadCamera]) -> String {
+        let number = (views.firstIndex(where: { $0.id == id }) ?? 0) + 1
+        guard let compassIndex else {
+            return String(format: NSLocalizedString("roadCameras.numberedView", comment: ""), number)
+        }
+        let key = ["north", "northEast", "east", "southEast", "south", "southWest", "west", "northWest"][compassIndex]
+        let label = NSLocalizedString("roadCameras." + key, comment: "")
+        return views.filter { $0.compassIndex == compassIndex }.count > 1
+            ? String(format: NSLocalizedString("roadCameras.numberedDirection", comment: ""), label, number) : label
+    }
+}
+
 struct RoadCameraCatalog: Codable, Sendable {
     let cameras: [RoadCamera]
     let updatedAt: String?

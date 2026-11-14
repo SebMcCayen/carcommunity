@@ -24,6 +24,23 @@ Map movements filter cached markers locally. Backend access and synchronization
 respect the existing `externalDataSources` flag. Metadata is public road data,
 and offline copies may remain visible while a backend source is unavailable.
 
+## Camera locations and directions
+
+Android and iOS show one marker for photo-camera views of the same type whose
+trimmed, case-insensitive names match and whose coordinates are within 50 metres
+of a stable site anchor. Fixed speed cameras, different names/types, and distant
+sites remain separate. Stable ID anchors prevent proximity chains from joining
+neighboring sites. Views sort clockwise from north, then by ID, with unknown
+bearings last, so catalog order does not change the initial view across devices.
+
+The detail sheet shows direction buttons only for sites with multiple views.
+The selected button is marked, and switching loads only that view's photograph
+through the existing per-camera cache and quotas. Unknown directions use numbered
+view labels; matching compass labels receive a number to keep every button distinct.
+No other direction is prefetched, and a late image from a previous direction cannot
+replace the current image. Grouping uses the existing catalog and requires no
+backend deployment or contract/cache migration.
+
 ## On-demand images and cost controls
 
 A selected traffic/weather camera opens its detail view and requests
