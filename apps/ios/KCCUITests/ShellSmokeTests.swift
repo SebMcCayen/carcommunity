@@ -736,8 +736,10 @@ final class ShellSmokeTests: XCTestCase {
             for control in controls { XCTAssertTrue(control.waitForExistence(timeout: 15)) }
             let frames = controls.map(\.frame)
             for (index, frame) in frames.enumerated() {
-                XCTAssertGreaterThanOrEqual(frame.width, 48)
-                XCTAssertGreaterThanOrEqual(frame.height, 48)
+                // AX frame subtraction can represent 48pt as 47.999999999999986.
+                // Allow only floating-point noise, not a smaller touch target.
+                XCTAssertGreaterThanOrEqual(frame.width, 48 - 0.000001)
+                XCTAssertGreaterThanOrEqual(frame.height, 48 - 0.000001)
                 XCTAssertGreaterThanOrEqual(frame.minY, live.frame.maxY + 3)
                 XCTAssertLessThanOrEqual(frame.maxY, app.buttons["shell.tab.create"].frame.minY)
                 XCTAssertTrue(app.frame.contains(frame))
