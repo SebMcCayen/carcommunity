@@ -344,7 +344,7 @@ fun ReactionActionsPopup(onDismiss: () -> Unit, onReply: (() -> Unit)? = null, o
             return IntOffset(x, y)
         }
     }, onDismissRequest = { room.dismiss() }, properties = PopupProperties(focusable = true)) {
-        BoxWithConstraints(Modifier.widthIn(max = 360.dp).padding(horizontal = 8.dp)) {
+        Box(Modifier.widthIn(max = 360.dp).padding(horizontal = 8.dp)) {
             Column(Modifier.width(menuWidth)) {
                 Surface(color = menuColor, shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                     Row(Modifier.fillMaxWidth().padding(4.dp).then(Modifier.semantics { contentDescription = "reaction-quick-row" }), horizontalArrangement = Arrangement.SpaceEvenly) {
