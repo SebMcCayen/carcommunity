@@ -39,7 +39,8 @@ class FirebaseDriverFeedRepository private constructor(
             if (!validDriverId(commentId) || !validDriverId(author)) driverMalformed()
             DriverComment(commentId, author, comment["authorName"] as? String ?: driverMalformed(),
                 comment["text"] as? String ?: driverMalformed(),
-                (comment["createdAtMillis"] as? Number)?.toLong() ?: driverMalformed())
+                (comment["createdAtMillis"] as? Number)?.toLong() ?: driverMalformed(),
+                driverAvatarPath(comment["authorAvatarPath"], author))
         }
         return DriverDetailPage(post, DriverPage(comments, driverWireCursor(result)))
     }

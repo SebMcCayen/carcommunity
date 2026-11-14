@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.FlowPreview
@@ -195,7 +196,7 @@ fun DriverFeedContent(
                     items(state.comments, key = { it.id }) { comment ->
                         Row(Modifier.fillMaxWidth().padding(vertical = KccSpacing.s2),
                             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                            DriverAuthorIcon()
+                            DriverAuthorIcon(comment.authorAvatarPath)
                             Column(Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
                                 Text(comment.author, style = MaterialTheme.typography.titleSmall)
@@ -228,7 +229,7 @@ private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings, onOpenD
     var appOpenFailed by remember(post.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(KccSpacing.s4), verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
         Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3), verticalAlignment = Alignment.CenterVertically) {
-            DriverAuthorIcon()
+            DriverAuthorIcon(post.authorAvatarPath)
             Column(Modifier.weight(1f)) {
                 Text(post.author, style = MaterialTheme.typography.titleMedium)
                 Text(listOfNotNull(post.createdAtMillis?.let(::driverDate), strings["source"]).joinToString(" · "),
@@ -253,12 +254,15 @@ private fun DriverPostBody(post: DriverPost, strings: DriverFeedStrings, onOpenD
     }
 }
 
-/** The read contract has no avatar URL; show a native fallback instead of a sample portrait. */
+/** Resolve the canonical Storage path with the same cache as Community chat. */
 @Composable
-private fun DriverAuthorIcon() {
+private fun DriverAuthorIcon(avatarPath: String?) {
+    val url = rememberStorageImageUrl(LocalContext.current, avatarPath)
     Box(Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.primary, CircleShape)
         .clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (url != null) AsyncImage(model = url, contentDescription = null,
+            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
     }
 }
 

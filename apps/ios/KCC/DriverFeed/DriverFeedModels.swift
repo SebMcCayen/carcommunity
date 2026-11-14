@@ -23,6 +23,7 @@ struct DriverPost: Identifiable, Equatable, Sendable {
     let mediaURLs: [URL]
     let likes: Int
     let replies: Int
+    var authorAvatarPath: String? = nil
 
     static func decode(id: String, fields: [String: Any]) -> DriverPost? {
         guard validDriverId(id), let uid = fields["authorUid"] as? String, validDriverId(uid) else { return nil }
@@ -33,7 +34,8 @@ struct DriverPost: Identifiable, Equatable, Sendable {
             handle: fields["authorHandle"] as? String ?? "", text: fields["text"] as? String ?? "",
             createdAt: millis.map { Date(timeIntervalSince1970: $0.doubleValue / 1000) },
             mediaURLs: Array(media), likes: max(0, (fields["likeCount"] as? NSNumber)?.intValue ?? 0),
-            replies: max(0, (fields["replyCount"] as? NSNumber)?.intValue ?? 0)
+            replies: max(0, (fields["replyCount"] as? NSNumber)?.intValue ?? 0),
+            authorAvatarPath: driverAvatarPath(fields["authorAvatarPath"], uid: uid)
         )
     }
 }
@@ -44,6 +46,7 @@ struct DriverComment: Identifiable, Equatable, Sendable {
     let author: String
     let text: String
     let createdAt: Date?
+    var authorAvatarPath: String? = nil
 }
 
 enum DriverFeedFailure: Error, Equatable, Sendable {
@@ -58,6 +61,13 @@ struct DriverDetailPage: Sendable {
 func validDriverId(_ value: String) -> Bool {
     !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.count <= 128
         && !value.contains("/") && value != "." && value != ".."
+}
+
+func driverAvatarPath(_ value: Any?, uid: String) -> String? {
+    let prefix = "profileImages/\(uid)/"
+    guard let path = value as? String, path.count <= 500,
+        path.hasPrefix(prefix), path.count > prefix.count else { return nil }
+    return path
 }
 
 func safeDriverMedia(_ value: String) -> URL? {
@@ -75,4 +85,10 @@ protocol DriverFeedRepository: Sendable {
     func feed(uid: String, after: DriverCursor?) async throws -> DriverPage<DriverPost>
     func detail(uid: String, id: String, after: DriverCursor?) async throws -> DriverDetailPage
     func invalidations(uid: String, threadId: String?) -> AsyncStream<Void>
+    func avatarDownloadURL(for path: String) async -> URL?
+}
+
+// Config-less previews and repositories without image support retain the fallback.
+extension DriverFeedRepository {
+    func avatarDownloadURL(for path: String) async -> URL? { nil }
 }

@@ -17,7 +17,7 @@ and returns `{post: Post, comments: Comment[], nextCursor: Cursor | null}`.
 Omit cursor for the first page; explicit `null` and unknown request fields are
 invalid. `limit` defaults to 20 and must be an integer between 1 and 20.
 
-All Post fields are required:
+All Post fields shown below are returned by the current server:
 
 ```json
 {
@@ -25,6 +25,7 @@ All Post fields are required:
   "authorUid": "author_0001",
   "authorName": "Canonical display name",
   "authorHandle": "driver_handle",
+  "authorAvatarPath": "profileImages/author_0001/avatar.jpg",
   "text": "Thread content",
   "createdAtMillis": 1700000000000,
   "mediaUrls": [],
@@ -33,8 +34,16 @@ All Post fields are required:
 }
 ```
 
-Comment has exactly `id`, `authorUid`, `authorName`, `authorHandle`, `text`,
-and `createdAtMillis`, all required with the same types. `mediaUrls` contains
+Comment has `id`, `authorUid`, `authorName`, `authorHandle`, `authorAvatarPath`,
+`text`, and `createdAtMillis` with the same types. `authorAvatarPath` is an
+additive, nullable field from canonical `users/{authorUid}.avatarPath`, validated
+as an author-owned `profileImages/{authorUid}/...` path of at most 500 characters.
+It is null when missing or malformed. Older servers may omit it; native clients
+keep their placeholder in that case. In feed, detail, and comments, native clients
+resolve the path lazily through Firebase Storage, as in Community chat, and retain
+the placeholder if the image is unavailable. No additional profile reads are needed.
+
+`mediaUrls` contains
 at most four stored Firebase Storage URLs; the bridge neither signs URLs nor
 downloads media. Native clients must use authenticated storage access where
 required; returning a URL does not confer Storage permission. Counts are
