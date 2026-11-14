@@ -1253,7 +1253,7 @@ struct ShellView: View {
     /// S01 rail stays below the avatar and above the measured bottom dock.
     private var mapTopTools: some View {
         GeometryReader { geometry in
-                VStack(spacing: KccSpacing.s3) {
+            VStack(spacing: KccSpacing.s3) {
                 HStack(alignment: .top, spacing: 0) {
                     Spacer(minLength: 0)
                     ScrollView(.vertical) { mapCommunicationControls }
