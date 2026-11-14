@@ -98,7 +98,8 @@ struct ConvoyStatusBar: View {
                         .frame(width: 48, height: 48).contentShape(Rectangle())
                 }
                 .disabled(working || friendsCoordinator == nil)
-                .accessibilityLabel(Text("convoy.barInvite"))
+                .foregroundStyle(KccTheme.secondary.opacity(working || friendsCoordinator == nil ? 0.38 : 1))
+                .accessibilityLabel(Text(friendsCoordinator == nil ? "convoy.barInviteUnavailable" : "convoy.barInvite"))
                 .accessibilityIdentifier("convoy.bar.invite")
 
                 Button {
@@ -111,7 +112,7 @@ struct ConvoyStatusBar: View {
                     .frame(width: 48, height: 48).contentShape(Rectangle())
                 }
                 .disabled(working)
-                .foregroundStyle(working ? KccTheme.secondary : KccPalette.errorRed)
+                .foregroundStyle(working ? KccTheme.secondary.opacity(0.38) : KccPalette.errorRed)
                 .accessibilityLabel(Text(exitLabel))
                 .accessibilityIdentifier("convoy.bar.exit")
             }
@@ -196,7 +197,7 @@ struct ConvoyStatusBar: View {
             guard scenePhase == .active else { return }
             await coordinator.observeConvoy(id: convoy.convoyId)
         }
-        .task(id: "\(convoy.convoyId)-\(viewerUid ?? "")-\(String(describing: scenePhase))") {
+        .task(id: "\(convoy.convoyId)-\(viewerUid ?? "")-\(chat != nil)-\(String(describing: scenePhase))") {
             unreadChatCount = 0
             guard scenePhase == .active, let chat, let viewerUid else { return }
             for await count in chat.observeUnread(convoyId: convoy.convoyId, uid: viewerUid) {
@@ -258,7 +259,8 @@ struct ConvoyStatusBar: View {
 /// wrapping only when the numeric member count and controls cannot fit.
 private struct ConvoyControlLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? subviews.reduce(0) { $0 + $1.sizeThatFits(.unspecified).width }
+        let proposed = proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        let width = proposed ?? subviews.reduce(0) { $0 + $1.sizeThatFits(.unspecified).width }
         return CGSize(width: width, height: frames(width: width, subviews: subviews).map(\.maxY).max() ?? 0)
     }
 
