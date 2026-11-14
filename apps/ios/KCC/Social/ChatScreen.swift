@@ -35,6 +35,11 @@ struct ChatScreen: View {
     @State private var draft = ""
 
     var body: some View {
+        MessageReactionHost(room: MessageReactionRoom(scope: "dm", roomID: coordinator?.conversationId ?? ""), uid: currentUid) { reactionContent }
+            .id(MessageReactionRoom(scope: "dm", roomID: coordinator?.conversationId ?? "").key + ":" + currentUid)
+    }
+
+    private var reactionContent: some View {
         content
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
@@ -92,6 +97,12 @@ struct ChatScreen: View {
                 ForEach(coordinator.messages) { message in
                     MessageBubble(message: message, isOwn: message.senderUid == currentUid,
                         onRetry: { clientId in Task { await coordinator.retry(clientId: clientId) } })
+                        .messageReactions(id: message.id, counts: message.reactionCounts, eligible: message.deliveryState == .sent, isOwn: message.senderUid == currentUid) {
+                            if message.senderUid != currentUid {
+                                ReactionReportAction(messageID: message.id)
+                                ReactionBlockAction(targetUID: message.senderUid)
+                            }
+                        }
                         .id(message.id)
                 }
             }

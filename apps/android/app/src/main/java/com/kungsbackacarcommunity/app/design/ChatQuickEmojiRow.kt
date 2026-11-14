@@ -89,6 +89,7 @@ fun ChatQuickEmojiRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    if (com.kungsbackacarcommunity.app.chat.LocalReactionRoom.current?.enabled == true) return
     val rowLabel = stringResource(R.string.chat_quickEmojiRow)
     LazyRow(
         modifier =

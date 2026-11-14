@@ -107,6 +107,7 @@ struct ChannelMessage: Equatable, Sendable, Identifiable {
     let sendError: ChannelSendError?
     /// The server-built snapshot of the replied-to message, present only on a
     /// resolved reply (an ordinary message carries none).
+    let reactionCounts: [String: Int]
     let replyTo: ChannelReplyTo?
 
     init(
@@ -121,7 +122,8 @@ struct ChannelMessage: Equatable, Sendable, Identifiable {
         clientId: String? = nil,
         deliveryState: ChannelDeliveryState = .sent,
         sendError: ChannelSendError? = nil,
-        replyTo: ChannelReplyTo? = nil
+        replyTo: ChannelReplyTo? = nil,
+        reactionCounts: [String: Int] = [:]
     ) {
         self.id = id
         self.senderUid = senderUid
@@ -135,6 +137,7 @@ struct ChannelMessage: Equatable, Sendable, Identifiable {
         self.deliveryState = deliveryState
         self.sendError = sendError
         self.replyTo = replyTo
+        self.reactionCounts = reactionCounts
     }
 }
 

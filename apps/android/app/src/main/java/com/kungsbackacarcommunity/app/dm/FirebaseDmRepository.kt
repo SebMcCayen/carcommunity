@@ -366,6 +366,7 @@ private fun DocumentSnapshot.toMessage(): DmMessage? {
         // Present only on a reply whose parent the server snapshotted; the shared
         // parser tolerates a missing/malformed map (ordinary message → null).
         replyTo = DmResponseParser.parseReplyTo(get("replyTo")),
+        reactionCounts = com.kungsbackacarcommunity.app.chat.parseReactionCounts(get("reactionCounts")),
     )
 }
 

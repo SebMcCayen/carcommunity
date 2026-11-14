@@ -218,7 +218,8 @@ private final class ClubChatSubscription {
                   !["removed", "hidden"].contains(row["status"] as? String ?? ""),
                   let text = row["text"] as? String, !text.isEmpty else { return nil }
             return ChannelMessage(id: row.documentID, senderUid: author, text: text,
-                senderDisplayName: row["authorName"] as? String, createdAt: (row["createdAt"] as? Timestamp)?.dateValue())
+                senderDisplayName: row["authorName"] as? String, createdAt: (row["createdAt"] as? Timestamp)?.dateValue(),
+                reactionCounts: MessageReactionParser.counts(row["reactionCounts"]))
         }
         continuation?.yield(ClubChatSnapshot(membership: membership,
             messages: ChannelThread.merge(older: [], live: decoded), hasOlder: hasOlder))

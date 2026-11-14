@@ -75,6 +75,7 @@ export const GROUPS = [
       'chatchannels*',
       'android-chat-moderation',
       'chat-flood',
+      'message-reactions',
       'chat-guard-driver',
       'communityDigest',
       'notifications*',

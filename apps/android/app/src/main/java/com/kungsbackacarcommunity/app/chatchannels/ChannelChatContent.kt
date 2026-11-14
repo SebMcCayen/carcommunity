@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.*
 import com.kungsbackacarcommunity.app.chat.ChatMessageBody
 import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
 import com.kungsbackacarcommunity.app.chat.rememberChatSendAcknowledgement
@@ -259,12 +260,15 @@ fun ChannelChatContent(
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     cooldownSeconds: Int = 0,
     protectCommunity: Boolean = false,
+    reactionRoomId: String = "global",
     onSendConfirmed: (suspend (String, List<String>, ChannelReplyTo?, String) -> Boolean)? = null,
     onRetryConfirmed: (suspend (ChannelMessage) -> Boolean)? = null,
     publicModeration: com.kungsbackacarcommunity.app.moderation.PublicChatModerationSession? = null,
 ) {
+    ReactionRoomHost(ReactionRoom(if (surface == ChatSurface.ConvoyChannel) "convoy" else "community", reactionRoomId), currentUid) {
     val publicSession = publicModeration?.takeIf { surface == ChatSurface.CommunityChannel && it.uid == currentUid }
     val writingPaused = com.kungsbackacarcommunity.app.moderation.rememberPublicChatWritingPaused(publicSession)
+    val reactionsEnabled = LocalReactionRoom.current?.enabled == true
     val sendScope = rememberCoroutineScope()
     val draftAttempt = rememberChatDraftSendAttempt()
     var submitting by remember { mutableStateOf(false) }
@@ -460,7 +464,7 @@ fun ChannelChatContent(
                                                 .ReportAvailability.BackendMissing
                                         },
                                 )
-                        if (chatRepliesEnabled || moderationActions || publicSession?.adminCandidate == true) {
+                        if (reactionsEnabled || chatRepliesEnabled || moderationActions || publicSession?.adminCandidate == true) {
                             actionsMessageId = message.id
                         }
                     },
@@ -757,6 +761,7 @@ fun ChannelChatContent(
             },
         )
     }
+    }
 }
 
 /**
@@ -1000,7 +1005,7 @@ private fun ChannelMessageRow(
                 isOwn = true,
                 mentionDisplayNames = mentionDisplayNames,
                 onShowLocationOnMap = onShowLocationOnMap,
-                onLongPress = onLongPress.takeIf { ownMessageActionsEnabled },
+                onLongPress = onLongPress.takeIf { ownMessageActionsEnabled || LocalReactionRoom.current?.enabled == true },
                 highlighted = highlighted,
                 onQuoteTap = onQuoteTap,
             )
@@ -1140,6 +1145,8 @@ private fun ChannelBubble(
     onQuoteTap: (String) -> Unit = {},
     collapsedBodyLines: Int = 8,
 ) {
+    val reactionRoom = LocalReactionRoom.current
+    Column {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
     val textColor =
@@ -1197,7 +1204,7 @@ private fun ChannelBubble(
         color = bubbleColor,
         shape = bubbleShape,
         modifier =
-            Modifier
+            Modifier.then(reactionAnchor(message.id, onLongPress))
                 .widthIn(max = 320.dp)
                 // Keep a comfortable long-press target even for a short reply.
                 .heightIn(min = 48.dp)
@@ -1215,14 +1222,14 @@ private fun ChannelBubble(
                     },
                 )
                 .then(
-                    if (onLongPress != null) {
+                    if (onLongPress != null || reactionRoom?.enabled == true) {
                         // combinedClickable, not pointerInput: it announces the
                         // long-press to accessibility services as a custom action,
                         // so the context menu (Reply + moderation) is reachable
                         // without a physical long-press. onClick is a deliberate
                         // no-op — the bubble has no tap action; only the sender
                         // header navigates and only the quote header scrolls.
-                        Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
+                        Modifier.combinedClickable(onLongClick = { openReactionActions(reactionRoom, message.id, onLongPress) }, onClick = {})
                     } else {
                         Modifier
                     },
@@ -1257,6 +1264,8 @@ private fun ChannelBubble(
             // Reserved slot for the future message-reactions row (a reactions
             // fast-follow attaches here, keyed off this message's stable id).
         }
+    }
+    if (message.deliveryState == ChannelDeliveryState.Sent) MessageReactionChips(message.id, message.reactionCounts)
     }
 }
 

@@ -106,6 +106,7 @@ export interface MessageReplyTo {
 
 /** One message as returned by dm.getMessages. */
 export interface MessageSummary {
+  reactionCounts?: Record<string, number>;
   id: string;
   senderUid: string;
   text: string;
@@ -463,6 +464,8 @@ export function toMessageSummary(
   if (replyTo) {
     summary.replyTo = replyTo;
   }
+  if (data.reactionCounts !== undefined)
+    summary.reactionCounts = data.reactionCounts as Record<string, number>;
   return summary;
 }
 
