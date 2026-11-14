@@ -138,7 +138,9 @@ export function sanitizePhotoUrl(value: unknown): string | null {
       url.password ||
       url.port ||
       url.hash ||
-      !/^\/v\d+(?:\.\d+)?\/Images\/[A-Za-z0-9_.-]+\.(?:jpe?g|png)$/i.test(url.pathname)
+      !/^\/v\d+(?:\.\d+)?\/Images\/(?:data\/road\.infrastructure\.camera\/)?[A-Za-z0-9_.-]+\.(?:jpe?g|png)$/i.test(
+        url.pathname,
+      )
     )
       return null;
     for (const key of url.searchParams.keys()) {
