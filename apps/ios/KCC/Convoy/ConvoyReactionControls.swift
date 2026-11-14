@@ -133,7 +133,13 @@ struct ConvoyReactionButtonFace: View {
         .overlay(alignment: .topTrailing) {
             if pending {
                 ProgressView()
-                    .controlSize(.mini)
+                    .controlSize(.small)
+                    // This hidden decorative indicator must not grow over the
+                    // reaction glyph at accessibility text sizes. The native
+                    // small spinner is 20pt; reserve a 12pt corner footprint.
+                    .dynamicTypeSize(.large)
+                    .scaleEffect(0.6)
+                    .frame(width: 12, height: 12)
                     .tint(accent)
                     .padding(6)
                     .accessibilityHidden(true)
