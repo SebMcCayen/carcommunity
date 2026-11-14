@@ -298,6 +298,7 @@ export interface ChatReplyTo {
 
 /** One chat message as returned by communityChat.list / convoyChat.list. */
 export interface ChatMessageSummary {
+  reactionCounts?: Record<string, number>;
   id: string;
   senderUid: string;
   text: string;
@@ -707,6 +708,8 @@ export function toChatMessageSummary(
   if (replyTo) {
     summary.replyTo = replyTo;
   }
+  if (data.reactionCounts !== undefined)
+    summary.reactionCounts = data.reactionCounts as Record<string, number>;
   return summary;
 }
 

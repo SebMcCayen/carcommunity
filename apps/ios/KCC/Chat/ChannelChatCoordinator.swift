@@ -8,6 +8,7 @@ import Observation
 /// `ChannelChatCoordinator` used by both `CommunityChannelRoute` and
 /// `ConvoyChannelRoute`.
 protocol ChannelChatSource: Sendable {
+    var reactionRoom: MessageReactionRoom? { get }
     func observeMessages() -> AsyncStream<ChannelMessagesState>
     func loadOlder(before: String) async -> ChannelOlderResult
     /// Community forwards the accepted @mention set; convoy always sends none.
@@ -22,7 +23,10 @@ protocol ChannelChatSource: Sendable {
 /// picker is a later slice, so posts carry an empty accepted set for now (a
 /// delivered message's ``ChannelMessage/mentionedUids`` still decodes; there is
 /// no UI highlighting of it yet).
+extension ChannelChatSource { var reactionRoom: MessageReactionRoom? { nil } }
+
 struct CommunityChatSource: ChannelChatSource {
+    var reactionRoom: MessageReactionRoom? { MessageReactionRoom(scope: "community", roomID: "global") }
     let repository: CommunityChatRepository
 
     func observeMessages() -> AsyncStream<ChannelMessagesState> { repository.observeMessages() }
@@ -42,6 +46,7 @@ struct CommunityChatSource: ChannelChatSource {
 
 /// Adapts one convoy's channel (a bound `convoyId`) to ``ChannelChatSource``.
 struct ConvoyChatSource: ChannelChatSource {
+    var reactionRoom: MessageReactionRoom? { MessageReactionRoom(scope: "convoy", roomID: convoyId) }
     let repository: ConvoyChatRepository
     let convoyId: String
 
@@ -83,6 +88,7 @@ enum ChannelOlderPaging: Equatable, Sendable {
 @MainActor
 @Observable
 final class ChannelChatCoordinator {
+    var reactionRoom: MessageReactionRoom? { source.reactionRoom }
     /// Retained with this account/channel, across Chat source/tab view swaps.
     var draft = "" { didSet { draftRevision += 1 } }
     private var draftRevision = 0

@@ -1018,9 +1018,12 @@ internal fun MapLayersPopup(
             switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
         )
         com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current?.let { cameras ->
-            com.kungsbackacarcommunity.app.roadcameras.RoadCameraType.entries.forEach { type ->
+            // Traffic represents the shared traffic/road-condition photo-camera toggle.
+            listOf(com.kungsbackacarcommunity.app.roadcameras.RoadCameraType.Speed,
+                com.kungsbackacarcommunity.app.roadcameras.RoadCameraType.Traffic).forEach { type ->
                 LayerToggleRow(
-                    label = stringResource(com.kungsbackacarcommunity.app.roadcameras.cameraLabel(type)),
+                    label = stringResource(if (type == com.kungsbackacarcommunity.app.roadcameras.RoadCameraType.Speed)
+                        R.string.roadCameras_speedLayer else R.string.roadCameras_photoLayer),
                     supportingText = stringResource(R.string.roadCameras_layerHelp),
                     leading = { com.kungsbackacarcommunity.app.roadcameras.RoadCameraBadge(type) },
                     checked = cameras.enabled(type),

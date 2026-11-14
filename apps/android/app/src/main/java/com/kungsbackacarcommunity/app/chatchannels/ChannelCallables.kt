@@ -85,6 +85,7 @@ internal fun DocumentSnapshot.toChannelMessage(): ChannelMessage? {
         // Present only on a reply whose parent the server snapshotted; the shared
         // parser tolerates a missing/malformed map (ordinary message → null).
         replyTo = ChannelResponseParser.parseReplyTo(get("replyTo")),
+        reactionCounts = com.kungsbackacarcommunity.app.chat.parseReactionCounts(get("reactionCounts")),
     )
 }
 

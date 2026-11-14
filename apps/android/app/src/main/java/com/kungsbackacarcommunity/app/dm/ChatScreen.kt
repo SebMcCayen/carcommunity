@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.chat.*
 import com.kungsbackacarcommunity.app.chat.ChatMessageBody
 import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
 import com.kungsbackacarcommunity.app.chat.rememberChatSendAcknowledgement
@@ -146,6 +147,8 @@ fun ChatScreen(
     onSendConfirmed: (suspend (String, DmReplyTo?, String) -> Boolean)? = null,
     onRetryConfirmed: (suspend (DmMessage) -> Boolean)? = null,
 ) {
+    ReactionRoomHost(ReactionRoom("dm", listOf(currentUid, otherUid).sorted().joinToString("__")), currentUid) {
+    val reactionsEnabled = LocalReactionRoom.current?.enabled == true
     val sendScope = rememberCoroutineScope()
     val draftAttempt = rememberChatDraftSendAttempt()
     var submitting by remember { mutableStateOf(false) }
@@ -296,7 +299,7 @@ fun ChatScreen(
                                             ChatSurface.DirectMessage,
                                         ),
                                 )
-                        if (chatRepliesEnabled || moderationActions) {
+                        if (reactionsEnabled || chatRepliesEnabled || moderationActions) {
                             actionsMessageId = message.id
                         }
                     },
@@ -489,6 +492,7 @@ fun ChatScreen(
             },
         )
     }
+    }
 }
 
 @Composable
@@ -599,7 +603,7 @@ private fun MessageList(
                         // never applied to your own message and still don't.
                         onLongPress =
                             if (isOwn) {
-                                ({ onMessageLongPress(message) }).takeIf { chatRepliesEnabled }
+                                ({ onMessageLongPress(message) }).takeIf { chatRepliesEnabled || LocalReactionRoom.current?.enabled == true }
                             } else {
                                 { onMessageLongPress(message) }
                             },
@@ -634,6 +638,8 @@ private fun MessageBubble(
     counterpartyName: String? = null,
     retryEnabled: Boolean = true,
 ) {
+    val reactionRoom = LocalReactionRoom.current
+    Column {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
     val textColor =
@@ -687,7 +693,7 @@ private fun MessageBubble(
             shape = bubbleShape,
             modifier =
                 Modifier
-                    .widthIn(max = 280.dp)
+                    .then(reactionAnchor(message.id, onLongPress)).widthIn(max = 280.dp)
                     // A brief outline while this message is the tap-to-scroll target
                     // of a quote header, so the reader's eye lands on the original.
                     .then(
@@ -702,12 +708,12 @@ private fun MessageBubble(
                         },
                     )
                     .then(
-                        if (onLongPress != null) {
+                        if (onLongPress != null || reactionRoom?.enabled == true) {
                             // combinedClickable, not pointerInput: it announces the
                             // long-press to accessibility services as a custom
                             // action. onClick is a deliberate no-op — a DM bubble has
                             // no tap action.
-                            Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
+                            Modifier.combinedClickable(onLongClick = { openReactionActions(reactionRoom, message.id, onLongPress) }, onClick = {})
                         } else {
                             Modifier
                         },
@@ -784,6 +790,8 @@ private fun MessageBubble(
                 DmDeliveryState.Sent -> Unit
             }
         }
+    }
+    if (message.deliveryState == DmDeliveryState.Sent) MessageReactionChips(message.id, message.reactionCounts)
     }
 }
 

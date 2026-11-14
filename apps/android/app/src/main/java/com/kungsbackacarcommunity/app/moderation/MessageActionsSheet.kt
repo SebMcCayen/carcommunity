@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.moderation
 
+import com.kungsbackacarcommunity.app.chat.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -92,6 +93,14 @@ fun MessageActionsSheet(
     publicModeration: PublicChatModerationSession? = null,
     publicTarget: PublicChatTarget? = null,
 ) {
+    val reactions = LocalReactionRoom.current
+    if (reactions?.enabled == true && reactions.selectedId != null && !reactions.moreActions) {
+        ReactionActionsPopup(onDismiss, onReply.takeIf { canReply },
+            onReport.takeIf { reportAvailability == ReportAvailability.Wired }, onBlock.takeIf { canBlock },
+            onMore = ({}).takeIf { publicModeration?.adminCandidate == true })
+        return
+    }
+
     val name = memberName?.takeIf { it.isNotBlank() }
     val title = stringResource(R.string.moderation_messageActionsTitle,
         name ?: stringResource(R.string.chat_unknownAuthor))

@@ -1,3 +1,4 @@
+import { eraseUserReactions } from '../chatReactions/engine';
 /**
  * Account deletion hard-purge (Phase 9p stage 2).
  *
@@ -486,6 +487,7 @@ async function deleteEventContent(uid: string): Promise<void> {
 
 /** Purges one user's data per the plan. Idempotent — safe to re-run. */
 export async function purgeUserData(uid: string): Promise<void> {
+  await eraseUserReactions(db, uid);
   for (const collection of PURGE_DOC_TREES) {
     await db.recursiveDelete(db.collection(collection).doc(uid));
   }
@@ -530,6 +532,7 @@ export async function purgeUserData(uid: string): Promise<void> {
   // Keep the shared anti-abuse budget until canonical Auth is gone. In
   // particular, Driver-only deletion must never reset it. A failure propagates
   // so the request remains pending; a retry tolerates Auth already being absent.
+  await db.collection('chatReactionRateLimits').doc(uid).delete();
   await db.collection('chatSendGuards').doc(uid).delete();
   await db.collection('communityChatSendGuards').doc(uid).delete();
   await db.collection('accountPurgeProgress').doc(uid).delete();

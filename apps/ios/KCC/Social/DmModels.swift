@@ -110,6 +110,7 @@ struct DmMessage: Equatable, Sendable, Identifiable {
     var sendError: DmSendError?
     /// The server-built snapshot of the message this DM inline-replies to,
     /// present only on a reply whose parent was resolved.
+    var reactionCounts: [String: Int]
     var replyTo: DmReplyTo?
 
     init(
@@ -121,7 +122,8 @@ struct DmMessage: Equatable, Sendable, Identifiable {
         clientId: String? = nil,
         deliveryState: DmDeliveryState = .sent,
         sendError: DmSendError? = nil,
-        replyTo: DmReplyTo? = nil
+        replyTo: DmReplyTo? = nil,
+        reactionCounts: [String: Int] = [:]
     ) {
         self.id = id
         self.senderUid = senderUid
@@ -132,6 +134,7 @@ struct DmMessage: Equatable, Sendable, Identifiable {
         self.deliveryState = deliveryState
         self.sendError = sendError
         self.replyTo = replyTo
+        self.reactionCounts = reactionCounts
     }
 }
 
@@ -430,7 +433,8 @@ enum DmResponseParser {
             createdAtMillis: iso.flatMap(isoToMillis(_:)),
             createdAtIso: iso,
             clientId: (map["clientId"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-            replyTo: parseReplyTo(map["replyTo"])
+            replyTo: parseReplyTo(map["replyTo"]),
+            reactionCounts: MessageReactionParser.counts(map["reactionCounts"])
         )
     }
 

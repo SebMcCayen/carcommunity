@@ -67,22 +67,19 @@ val LocalRoadCameraLayers = staticCompositionLocalOf<RoadCameraLayerState?> { nu
 
 class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repository: RoadCameraRepository?) {
     var speedEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.Speed)); private set
-    var trafficEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.Traffic)); private set
-    var roadConditionEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.RoadCondition)); private set
+    var photoCamerasEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.Traffic)); private set
     var cameras by mutableStateOf(emptyList<RoadCamera>()); internal set
     private val locations by derivedStateOf { groupRoadCameraLocations(cameras) }
     var catalogFailed by mutableStateOf(false); internal set
-    val anyEnabled get() = speedEnabled || trafficEnabled || roadConditionEnabled
+    val anyEnabled get() = speedEnabled || photoCamerasEnabled
     fun enabled(type: RoadCameraType) = when (type) {
         RoadCameraType.Speed -> speedEnabled
-        RoadCameraType.Traffic -> trafficEnabled
-        RoadCameraType.RoadCondition -> roadConditionEnabled
+        RoadCameraType.Traffic, RoadCameraType.RoadCondition -> photoCamerasEnabled
     }
     fun setEnabled(type: RoadCameraType, enabled: Boolean) {
         when (type) {
             RoadCameraType.Speed -> speedEnabled = enabled
-            RoadCameraType.Traffic -> trafficEnabled = enabled
-            RoadCameraType.RoadCondition -> roadConditionEnabled = enabled
+            RoadCameraType.Traffic, RoadCameraType.RoadCondition -> photoCamerasEnabled = enabled
         }
         store.writeRoadCameraLayer(type, enabled)
     }

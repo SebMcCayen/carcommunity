@@ -479,6 +479,8 @@ describe('uncosted / unknown function surfacing', () => {
   const pendingDriverEstimates = [
     'account.getAccess',
     'account.listWarnings',
+    'chatReactions.getMine',
+    'chatReactions.set',
     'driverFeed.detail',
     'driverFeed.list',
     'roadCameras.catalog',

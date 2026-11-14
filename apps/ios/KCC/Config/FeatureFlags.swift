@@ -6,13 +6,13 @@ enum FeatureFlag: String, CaseIterable, Sendable {
     case liveLocation, chat, crownHunt, crownHuntSpawn, partners, partnerStats
     case pushNotifications, socialSharing, externalDataSources, digitalBillboards
     case partnerInsightsPassBy, crownHuntPerks, crownHuntLiveShareScoring
-    case reportTicketsBrowser, chatReplies, eventDetailsRequirePaid
+    case reportTicketsBrowser, chatReplies, chatReactions, eventDetailsRequirePaid
     case partnerMemberOffersRequirePaid, crownHuntRequirePaid
 
     var contractDefault: Bool {
         switch self {
         case .crownHuntSpawn, .partnerInsightsPassBy, .crownHuntPerks,
-             .crownHuntLiveShareScoring, .reportTicketsBrowser, .chatReplies,
+             .crownHuntLiveShareScoring, .reportTicketsBrowser, .chatReplies, .chatReactions,
              .eventDetailsRequirePaid, .partnerMemberOffersRequirePaid,
              .crownHuntRequirePaid:
             false

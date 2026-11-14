@@ -555,10 +555,11 @@ final class ShellSmokeTests: XCTestCase {
             _ = try requireChatEvidence(in: app, name: "chat-first-dismiss-failure", timeout: 5,
                 message: "Dismiss must remove the software keyboard and restore navigation") { $0.keyboardDismissed }
             assertComposerDraft("Fixture reply", present: true, in: app)
-            // A vertical editor's AX activation point can land in its padding
-            // after accessibility-size layout. Tap the actual editing surface;
-            // reopening the keyboard and preserving the draft remain required.
-            composerInput(in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            // Dismissal can replace SwiftUI's native editor. Re-resolve focus
+            // with the same bounded setup used on entry; start at the editing
+            // surface for accessibility layouts, then use fresh AX activation.
+            XCTAssertTrue(focusComposerKeyboard(in: app, centered: true),
+                "The composer must regain software-keyboard focus after dismissal")
             _ = try requireChatEvidence(in: app, name: "chat-reopen-failure", timeout: 5,
                 message: "The composer must reopen the real keyboard with navigation hidden") { $0.keyboardPresented }
             send.tap()
@@ -583,7 +584,8 @@ final class ShellSmokeTests: XCTestCase {
             let history = try ChatViewportEvidence(capturing: app)
             XCTAssertTrue(history.keyboardDismissed && history.readsHistory(hiding: "Fixture reply"),
                 "Reading older history must show older messages and move the sent reply out of view")
-            composerInput(in: app).tap()
+            XCTAssertTrue(focusComposerKeyboard(in: app),
+                "The history-read transition must focus the real composer")
             _ = try requireChatEvidence(in: app, name: "chat-history-keyboard-failure", timeout: 5,
                 message: "Opening the keyboard must preserve older history without revealing the sent reply") {
                 $0.keyboardPresented && $0.readsHistory(hiding: "Fixture reply")
@@ -1556,12 +1558,20 @@ final class ShellSmokeTests: XCTestCase {
     /// replace the vertical field's measuring editor during the first tap,
     /// leaving a hittable but unfocused field at accessibility text sizes.
     /// Re-resolve once if needed; still require the real software keyboard.
-    private func focusComposerKeyboard(in app: XCUIApplication) -> Bool {
+    private func focusComposerKeyboard(in app: XCUIApplication, centered: Bool = false) -> Bool {
         for attempt in 0..<2 {
             guard let editor = visibleComposerInput(in: app) else { break }
             print("CHAT_COMPOSER_FOCUS attempt=\(attempt) type=\(editor.elementType.rawValue) frame=\(editor.frame)")
-            editor.tap()
-            if app.keyboards.firstMatch.waitForExistence(timeout: 10) { return true }
+            if centered && attempt == 0 {
+                editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            } else {
+                editor.tap()
+            }
+            // A dismissed keyboard can retain an offscreen AX node. Require
+            // real keyboard coverage and the writing layout before accepting focus.
+            if waitForChatEvidence(in: app, timeout: 10, condition: { $0.keyboardPresented }) != nil {
+                return true
+            }
         }
         chatProof(app, name: "chat-composer-keyboard-focus-failure", tree: true)
         return false

@@ -114,6 +114,7 @@ export const FEATURE_FLAG_DEFAULTS = {
   crownHuntLiveShareScoring: false,
   reportTicketsBrowser: false,
   chatReplies: false,
+  chatReactions: false,
   eventDetailsRequirePaid: false,
   partnerMemberOffersRequirePaid: false,
   crownHuntRequirePaid: false,

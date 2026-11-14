@@ -83,6 +83,20 @@ export interface ScheduledJob {
  */
 export const REPOSITORY_SCHEDULED_JOBS: ScheduledJob[] = [
   {
+    id: 'chatReactionLifecycle-cleanup',
+    source: 'chatReactions/lifecycle.ts:cleanup',
+    label: 'Deleted-message reaction cleanup',
+    schedule: 'every 60 minutes',
+    runsPerDay: 24,
+    readsPerRun: 1,
+    writesPerRun: 0,
+    deletesPerRun: 0,
+    avgSeconds: 0.5,
+    cpu: CPU_SCHEDULED,
+    memoryGiB: 0.25,
+    note: 'Idle baseline, not a measured busy-run estimate. A pass handles at most five jobs with fifty rows each; active cleanup adds bounded record/parent reads, aggregate updates and deletes. Reaction activity and cleanup frequency are explicitly uncosted until measured.',
+  },
+  {
     id: 'roadCameras-sync',
     source: 'roadCameras/sync.ts:sync',
     label: 'Trafikverket camera catalog',
@@ -672,6 +686,8 @@ export type CallableCostClass =
  * exactly how a newly-added function surfaces instead of silently costing zero.
  */
 export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
+  'chatReactions.set': 'uncosted',
+  'chatReactions.getMine': 'uncosted',
   // Bounded author/block joins are documented in contracts/driver-feed/read-api.md.
   // The existing per-member assumptions do not yet model Driver page frequency;
   // expose that gap on Finance rather than silently counting these reads as free.

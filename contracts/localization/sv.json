@@ -2426,6 +2426,7 @@
     "speedLayer": "Fasta fartkameror",
     "trafficLayer": "Trafikkameror",
     "roadConditionLayer": "Väglagskameror",
+    "photoLayer": "Trafik- och väglagskameror",
     "layerHelp": "Visa kameror på kartan",
     "loading": "Hämtar kamerabild…",
     "unavailable": "Kamerabilden kunde inte hämtas.",
@@ -2452,5 +2453,25 @@
   "convoy.invitationJoin": "Gå med",
   "convoy.invitationDecline": "Neka",
   "convoy.invitationInboxHint": "Finns kvar i Notifikationer",
-  "convoy.invitationClosesIn": "Rutan stängs om %1$d s"
+  "convoy.invitationClosesIn": "Rutan stängs om %1$d s",
+  "reactions": {
+    "all": "Alla emojier",
+    "search": "Sök emoji",
+    "frequent": "Mest använda",
+    "more": "Visa fler",
+    "actions": "Fler åtgärder",
+    "react": "Reagera",
+    "error": "Reaktionen kunde inte sparas. Försök igen.",
+    "remove": "Ta bort min reaktion",
+    "category0": "Ansikten",
+    "category1": "Personer",
+    "category2": "Varianter",
+    "category3": "Djur och natur",
+    "category4": "Mat och dryck",
+    "category5": "Resor och platser",
+    "category6": "Aktiviteter",
+    "category7": "Föremål",
+    "category8": "Symboler",
+    "category9": "Flaggor"
+  }
 }

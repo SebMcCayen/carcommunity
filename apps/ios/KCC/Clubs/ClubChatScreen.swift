@@ -7,6 +7,11 @@ struct ClubChatScreen: View {
     @State private var cooldownSeconds = 0
 
     var body: some View {
+        MessageReactionHost(room: MessageReactionRoom(scope: "club", roomID: coordinator?.snapshot?.membership.clubID ?? ""), uid: (coordinator?.uid ?? "")) { reactionContent }
+            .id(MessageReactionRoom(scope: "club", roomID: coordinator?.snapshot?.membership.clubID ?? "").key + ":" + (coordinator?.uid ?? ""))
+    }
+
+    private var reactionContent: some View {
         Group {
             if let coordinator, coordinator.snapshot != nil {
                 room(coordinator)
@@ -79,7 +84,7 @@ struct ClubChatScreen: View {
             .foregroundStyle(own ? KccTheme.onGold : KccTheme.text)
             .background(own ? KccPalette.crownGold : KccTheme.surface,
                         in: RoundedRectangle(cornerRadius: KccRadius.md))
-            .contextMenu {
+            .messageReactions(id: message.id, counts: message.reactionCounts, eligible: message.deliveryState == .sent, isOwn: own) {
                 if message.deliveryState == .sent {
                     if !own {
                         Menu("clubs.report") {
