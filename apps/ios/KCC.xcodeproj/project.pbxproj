@@ -74,6 +74,7 @@
 		1FF6ACAA1D6E4A22FC0044C5 /* AccountDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D763F1BD23666E2332D73FB3 /* AccountDeletionTests.swift */; };
 		201903E2A7F0ECD5B05CBB55 /* ConversationsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15892EE69827A386C169C05 /* ConversationsRepository.swift */; };
 		20330AF239DE4C3F046997D8 /* NotificationSettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE8ECDB218B04103957FF16 /* NotificationSettingsModels.swift */; };
+		22E4711AA8B81D34B90D8CA5 /* RoadCameraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B054273D54458E3844FA36 /* RoadCameraTests.swift */; };
 		239B42F7B910AFF89D2F77D4 /* PointsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4803245DB2D7A4552263F3ED /* PointsCoordinatorTests.swift */; };
 		23A5B7BEE420A37586F8F53B /* CrownHuntClaimsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42A78A419991AB5C1A5281B4 /* CrownHuntClaimsCoordinatorTests.swift */; };
 		243B1F9F45B32CE5993A9BF8 /* MemberProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2247DAC7269F2E695B64F0 /* MemberProfileScreen.swift */; };
@@ -151,6 +152,7 @@
 		459A5007E61B7EF90E0965D5 /* FeedbackModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7365E8AAA809E97C78432A7F /* FeedbackModels.swift */; };
 		45AB885F82AFAB95AB358469 /* CommunityChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 079FEECDA23952119AF7FC2C /* CommunityChatScreen.swift */; };
 		47CD391A0D482A8607C53CAD /* CrownHuntMapModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E75731D76A4D302F9AB0B7 /* CrownHuntMapModelTests.swift */; };
+		47D0147F86AFBF10EB99E823 /* RoadCameraModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCBE9BB86E83875AAB513A20 /* RoadCameraModels.swift */; };
 		48182221EE13B82E02D8C4EA /* KccFunctionsErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */; };
 		4834A0BE99C4E0B72DA383BB /* CrownHuntStatsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38BE81344FC7F734C11E8B8 /* CrownHuntStatsCoordinator.swift */; };
 		4876B45F502490B4CD5F8D27 /* ConvoyReactionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F52AD4DF4C1672F8671AD2 /* ConvoyReactionRepository.swift */; };
@@ -299,6 +301,7 @@
 		A044AEBBA2C5723FA02F095B /* FirebasePerkBalanceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD5D2E8A297501B4193695C2 /* FirebasePerkBalanceRepository.swift */; };
 		A04698DDB616990EBF8DA27F /* InAppNavigationFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91669907EB5DEAC61B0BB0F0 /* InAppNavigationFactory.swift */; };
 		A1839396C02384C8278FFC9F /* MapLayerPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ADA4273944D1E94AC6D82A4 /* MapLayerPreferencesTests.swift */; };
+		A1EC039BBBF244273C309F5C /* RoadCameraMapViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A89D2BF559A556C118FD080D /* RoadCameraMapViews.swift */; };
 		A338EDD44E0F569801232217 /* LiveSessionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B5AF2B1AB131008E6E8FD5E /* LiveSessionBar.swift */; };
 		A5219FCCDAEE57D0C931719D /* GarageCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B9C0DCCDA464441F249D46 /* GarageCoordinator.swift */; };
 		A5C59311A4AC26F6C7D465BA /* FirebaseNotificationSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E84AD4B95E57EDC67F3C61 /* FirebaseNotificationSettingsRepository.swift */; };
@@ -417,6 +420,7 @@
 		E1BE1D553DBF1E8884816D4B /* LeaderboardScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 823B72DF567DBE7BF840589A /* LeaderboardScreen.swift */; };
 		E36B68A9057B1EB98BC8EF27 /* ChannelChatCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76DF6530C2C3AA39EF2D0495 /* ChannelChatCoordinator.swift */; };
 		E477115F1466E60CC9D47600 /* EventChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94541AFD9EA410314206E746 /* EventChatScreen.swift */; };
+		E4A29D7A179889BB7F38B830 /* RoadCameraRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70F5835C58B0AFFBB20B6455 /* RoadCameraRepository.swift */; };
 		E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80A81EA9949BF434E7C246D /* AuthState.swift */; };
 		E515A09C71A239BEA3846F35 /* FriendsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D164C4115AE0F4E61F35D9 /* FriendsRepository.swift */; };
 		E5DAD522A65BF61C0374D9EF /* CrashTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9050ED8A8D96ACE23EADCF /* CrashTelemetryTests.swift */; };
@@ -466,10 +470,6 @@
 		FF5DAD303A0C20F13A16B67D /* changelog.json in Resources */ = {isa = PBXBuildFile; fileRef = 18ACC38A3554DF9334B4815F /* changelog.json */; };
 		FFAF1EAA160AFCF84E155B6C /* EventAttendeesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B00397E45AB94249025E8C0 /* EventAttendeesSheet.swift */; };
 		FFC620D8B53E1BB6BFEBB181 /* EventChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B12FAC506B254D502CA6177 /* EventChatRepository.swift */; };
-		0A0C391B05A652E757C86653 /* RoadCameraModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D5D5A988139AB7F72BA43D6 /* RoadCameraModels.swift */; };
-		0C0B70A94F922ECEF2D3BFC2 /* RoadCameraRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68867B1F8371B73CDAC53371 /* RoadCameraRepository.swift */; };
-		0DBC0CD129EF3650A023A8AC /* RoadCameraMapViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D775E72CE51AF1ECDF1B9A3 /* RoadCameraMapViews.swift */; };
-		80F78BD5E87FE23683BD6879 /* RoadCameraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0EE700B8A20D10EA08CDD5F /* RoadCameraTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -686,6 +686,7 @@
 		6FA0D010B14EA9F2CFA15A70 /* SubscriptionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionCoordinatorTests.swift; sourceTree = "<group>"; };
 		70940A5568FF91A6A171D3CF /* UserProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileRepository.swift; sourceTree = "<group>"; };
 		709E866B46685ECDF7ED2631 /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
+		70F5835C58B0AFFBB20B6455 /* RoadCameraRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraRepository.swift; sourceTree = "<group>"; };
 		712EFE4AB97878EBB434C49C /* NotificationsInboxScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsInboxScreen.swift; sourceTree = "<group>"; };
 		7365E8AAA809E97C78432A7F /* FeedbackModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackModels.swift; sourceTree = "<group>"; };
 		7659E12C9C9C1F2E57CF8117 /* DrivesModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivesModelTests.swift; sourceTree = "<group>"; };
@@ -797,7 +798,9 @@
 		A7167A1118C17AD86A75C54E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A717827AADCF5D6F269BEEC0 /* FirebaseNotificationsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseNotificationsRepository.swift; sourceTree = "<group>"; };
 		A7315551383B456AF6D1C808 /* PartnerApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerApplicationTests.swift; sourceTree = "<group>"; };
+		A7B054273D54458E3844FA36 /* RoadCameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraTests.swift; sourceTree = "<group>"; };
 		A7C8CF75F4B1CA5403CC09B3 /* PrivacySettingsCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsCoordinatorTests.swift; sourceTree = "<group>"; };
+		A89D2BF559A556C118FD080D /* RoadCameraMapViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraMapViews.swift; sourceTree = "<group>"; };
 		A96B2F50FBACFA6329286FC2 /* AppleSignInProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInProviderTests.swift; sourceTree = "<group>"; };
 		A974073221EF611F67E2134F /* NearbyLiveOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyLiveOverlay.swift; sourceTree = "<group>"; };
 		A99E785B8FC0348C59CBAFCD /* ConversationsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationsScreen.swift; sourceTree = "<group>"; };
@@ -892,6 +895,7 @@
 		DBB0E5063B829CE367B7EB40 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC183FCE8F1C3FAFC61A5784 /* FirebaseUserProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseUserProfileRepository.swift; sourceTree = "<group>"; };
 		DC1B03B152F0EF9C1349297A /* SavedPlacesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedPlacesStore.swift; sourceTree = "<group>"; };
+		DCBE9BB86E83875AAB513A20 /* RoadCameraModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraModels.swift; sourceTree = "<group>"; };
 		DCF1CA6EB265BC42ECBD011A /* CrownHuntComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrownHuntComposition.swift; sourceTree = "<group>"; };
 		DD356449B915D60437161C4F /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		DDA58F2A9973F08991D2F4CF /* ClaimHistoryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaimHistoryScreen.swift; sourceTree = "<group>"; };
@@ -943,10 +947,6 @@
 		FEA57282CD5C314FBB90F9E5 /* PointsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsModels.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
 		FFB6A2C05BDF69FB106D0F24 /* SubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
-		3D5D5A988139AB7F72BA43D6 /* RoadCameraModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraModels.swift; sourceTree = "<group>"; };
-		68867B1F8371B73CDAC53371 /* RoadCameraRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraRepository.swift; sourceTree = "<group>"; };
-		3D775E72CE51AF1ECDF1B9A3 /* RoadCameraMapViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraMapViews.swift; sourceTree = "<group>"; };
-		A0EE700B8A20D10EA08CDD5F /* RoadCameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadCameraTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1426,15 +1426,15 @@
 		711475B94ECFF2E22A12ACAA /* Incidents */ = {
 			isa = PBXGroup;
 			children = (
-				3D775E72CE51AF1ECDF1B9A3 /* RoadCameraMapViews.swift */,
-				68867B1F8371B73CDAC53371 /* RoadCameraRepository.swift */,
-				3D5D5A988139AB7F72BA43D6 /* RoadCameraModels.swift */,
 				CDEB2AB98D1A071F70D7F572 /* ConfiglessMapMarkerFixture.swift */,
 				387F13C825FDF70BA38790DC /* IncidentMapCoordinator.swift */,
 				AC6C2165A841972B460CD850 /* IncidentMapViews.swift */,
 				E7ACDF8CA65059A07F4522D4 /* IncidentMarkerStyle.swift */,
 				1D6838666A82B7A2863EFC02 /* IncidentModels.swift */,
 				7774A44523D01A40506D3F0A /* IncidentRepositories.swift */,
+				A89D2BF559A556C118FD080D /* RoadCameraMapViews.swift */,
+				DCBE9BB86E83875AAB513A20 /* RoadCameraModels.swift */,
+				70F5835C58B0AFFBB20B6455 /* RoadCameraRepository.swift */,
 			);
 			path = Incidents;
 			sourceTree = "<group>";
@@ -1693,7 +1693,6 @@
 		F609A800CAF387D91FC4893D /* KCCTests */ = {
 			isa = PBXGroup;
 			children = (
-				A0EE700B8A20D10EA08CDD5F /* RoadCameraTests.swift */,
 				C28CE13BEF75D9EF55AF614C /* AccountAccessTests.swift */,
 				D763F1BD23666E2332D73FB3 /* AccountDeletionTests.swift */,
 				A96B2F50FBACFA6329286FC2 /* AppleSignInProviderTests.swift */,
@@ -1791,6 +1790,7 @@
 				E4C13E96CF6F7A3D81269B6D /* ProfileCoordinatorTests.swift */,
 				ECDEC616EC444307EE8CA283 /* ProfileEditingTests.swift */,
 				BF33E52A64ECBDCE46A94683 /* PushNotificationsTests.swift */,
+				A7B054273D54458E3844FA36 /* RoadCameraTests.swift */,
 				02D47DC5F4210E2337814CE4 /* SavedPlacesTests.swift */,
 				BD9689AE9286FCC7CF9FC91F /* SessionLocationFilterTests.swift */,
 				86A6375BFA826C51446494E2 /* SettingsDesignTests.swift */,
@@ -2033,9 +2033,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0DBC0CD129EF3650A023A8AC /* RoadCameraMapViews.swift in Sources */,
-				0C0B70A94F922ECEF2D3BFC2 /* RoadCameraRepository.swift in Sources */,
-				0A0C391B05A652E757C86653 /* RoadCameraModels.swift in Sources */,
 				CC7614CE72EA5A6B00F14FF4 /* AccountAccess.swift in Sources */,
 				91F36640DE0946C3FFE135EC /* AccountAccessRepository.swift in Sources */,
 				D1B7BD57517D10D95E1B826E /* AccountDeletionCoordinator.swift in Sources */,
@@ -2325,6 +2322,9 @@
 				C04A0DE8186BB61151E9E1DA /* PublicContentReportButton.swift in Sources */,
 				4E79C8F6CC66EC188BD6864F /* PushNotifications.swift in Sources */,
 				845130ECA692142DA1324839 /* RestrictedAccountScreen.swift in Sources */,
+				A1EC039BBBF244273C309F5C /* RoadCameraMapViews.swift in Sources */,
+				47D0147F86AFBF10EB99E823 /* RoadCameraModels.swift in Sources */,
+				E4A29D7A179889BB7F38B830 /* RoadCameraRepository.swift in Sources */,
 				54F2359A2474231CD9D08DB4 /* RootView.swift in Sources */,
 				B2AF4BFFF974FA6ED32F9D86 /* SavedDriveDetailScreen.swift in Sources */,
 				0476AE197766A9AF7F8E30C7 /* SavedPlaceModels.swift in Sources */,
@@ -2367,7 +2367,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				80F78BD5E87FE23683BD6879 /* RoadCameraTests.swift in Sources */,
 				9B07DF2A2216686205CE0EE5 /* AccountAccessTests.swift in Sources */,
 				1FF6ACAA1D6E4A22FC0044C5 /* AccountDeletionTests.swift in Sources */,
 				5FA58398E128DF16EFBBCEBF /* AppStoreCatalogTests.swift in Sources */,
@@ -2466,6 +2465,7 @@
 				861F71B6C0EEEE426160133D /* ProfileCoordinatorTests.swift in Sources */,
 				F3CA5AE27861A7A11265C91C /* ProfileEditingTests.swift in Sources */,
 				C693DB409D1309779768D0BD /* PushNotificationsTests.swift in Sources */,
+				22E4711AA8B81D34B90D8CA5 /* RoadCameraTests.swift in Sources */,
 				1ED18C0DD0C842274AFC90A9 /* SavedPlacesTests.swift in Sources */,
 				4E1E5D1E4AD380C09DF8DA6B /* SessionLocationFilterTests.swift in Sources */,
 				36EC862F33F6E46DC1E02839 /* SettingsDesignTests.swift in Sources */,
@@ -2605,14 +2605,14 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = NO;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.2;
+				MARKETING_VERSION = 0.1.3;
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kungsbackacarcommunity.app;
 				SDKROOT = iphoneos;
@@ -2661,7 +2661,7 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = YES;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
@@ -2669,7 +2669,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.2;
+				MARKETING_VERSION = 0.1.3;
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kungsbackacarcommunity.app;
 				SDKROOT = iphoneos;

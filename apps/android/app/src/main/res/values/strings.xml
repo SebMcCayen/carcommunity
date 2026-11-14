@@ -2110,6 +2110,11 @@
     <string name="whatsNew_release012Build13Navigation">Navigering i appen och förbättrad hantering av plats och livedelning.</string>
     <string name="whatsNew_release012Build13Chat">Förbättrade chattvyer och stabilare hantering av tangentbordet.</string>
     <string name="whatsNew_release012Build13Profile">Tydligare visningsnamn vid inloggning med Apple och uppdaterade instruktioner för kronjakten.</string>
+    <string name="whatsNew_release013Build14Highlight">Förbättrad karta, livekörning, konvoj och chatt.</string>
+    <string name="whatsNew_release013Build14Map">Luta kartan och visa Trafikverkets trafikkameror. Kronjakten visar avståndet till kronorna.</string>
+    <string name="whatsNew_release013Build14Live">Tydligare kontroller för livesessioner och smidigare sparning av körningar när du slutar dela din position.</string>
+    <string name="whatsNew_release013Build14Convoy">Svara på konvojinbjudningar direkt i chatten med tydligare information om inbjudans giltighetstid.</string>
+    <string name="whatsNew_release013Build14Chat">Stabilare hantering av chattens utkast och tangentbord, även med större textstorlek.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>
