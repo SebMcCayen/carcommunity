@@ -1567,7 +1567,11 @@ final class ShellSmokeTests: XCTestCase {
             } else {
                 editor.tap()
             }
-            if app.keyboards.firstMatch.waitForExistence(timeout: 10) { return true }
+            // A dismissed keyboard can retain an offscreen AX node. Require
+            // real keyboard coverage and the writing layout before accepting focus.
+            if waitForChatEvidence(in: app, timeout: 10, condition: { $0.keyboardPresented }) != nil {
+                return true
+            }
         }
         chatProof(app, name: "chat-composer-keyboard-focus-failure", tree: true)
         return false
