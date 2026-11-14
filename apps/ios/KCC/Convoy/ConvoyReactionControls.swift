@@ -69,9 +69,7 @@ struct ConvoyReactionControls: View {
             }
         } label: {
             ConvoyReactionButtonFace(
-                symbol: kind == .hello ? "hand.raised.fill" : kind.systemImage,
-                isHand: kind == .hello,
-                accent: kind.color,
+                kind: kind,
                 ready: ready,
                 active: active,
                 pending: persistentFollowMe?.isToggling == true || coordinator.sendingKinds.contains(kind),
@@ -91,30 +89,28 @@ struct ConvoyReactionControls: View {
         .accessibilityAddTraits(active ? [.isSelected] : [])
         .accessibilityIdentifier("convoy_reaction_\(kind.rawValue)")
     }
-
 }
 
 /// Shared map material and geometry; no visible labels or countdown numerals.
 struct ConvoyReactionButtonFace: View {
     @Environment(\.colorScheme) private var scheme
-    let symbol: String
-    let isHand: Bool
-    let accent: Color
+    let kind: ConvoyReactionKind
     let ready: Bool
     let active: Bool
     let pending: Bool
     let remainingFraction: Double
 
     var body: some View {
+        let accent = kind.color
         let surface = scheme == .dark ? KccDarkColors.overlayBackground : KccLightColors.overlayBackground
         let border = scheme == .dark ? KccDarkColors.overlayBorder : KccLightColors.overlayBorder
         let secondary = scheme == .dark ? KccDarkColors.textSecondary : KccLightColors.textSecondary
         let shape = RoundedRectangle(cornerRadius: KccRadius.md)
         ZStack {
-            Image(systemName: symbol)
-                .font(.system(size: 27, weight: .semibold))
-                // The stationary hand keeps the greeting silhouette without wave marks.
-                .rotationEffect(.degrees(isHand ? -25 : 0))
+            icon
+                .resizable()
+                .scaledToFit()
+                .frame(width: 28, height: 28)
                 .foregroundStyle(ready || active ? accent : secondary.opacity(0.45))
                 .accessibilityHidden(true)
         }
@@ -143,6 +139,14 @@ struct ConvoyReactionButtonFace: View {
         .overlay { shape.strokeBorder(active ? accent : border, lineWidth: active ? 2 : 1) }
         .shadow(color: .black.opacity(scheme == .dark ? 0.3 : 0.18), radius: 3, y: 2)
         .contentShape(shape)
+    }
+
+    private var icon: Image {
+        switch kind {
+        case .police: Image("incident-police")
+        case .hello: Image("convoy-hand")
+        case .followMe: Image(systemName: kind.systemImage)
+        }
     }
 }
 

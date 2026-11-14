@@ -90,14 +90,11 @@ final class ConvoyDesignTests: XCTestCase {
             for dark in [true, false] {
                 for state in ["ready", "cooldown", "active", "pending"] {
                     let row = HStack(spacing: KccSpacing.s2) {
-                        ConvoyReactionButtonFace(symbol: "shield.lefthalf.filled", isHand: false,
-                            accent: KccPalette.errorRed, ready: state != "cooldown", active: false,
+                        ConvoyReactionButtonFace(kind: .police, ready: state != "cooldown", active: false,
                             pending: false, remainingFraction: state == "cooldown" ? 0.6 : 0)
-                        ConvoyReactionButtonFace(symbol: "hand.raised.fill", isHand: true,
-                            accent: KccPalette.successGreen, ready: true, active: false,
+                        ConvoyReactionButtonFace(kind: .hello, ready: true, active: false,
                             pending: false, remainingFraction: 0)
-                        ConvoyReactionButtonFace(symbol: "location.north.fill", isHand: false,
-                            accent: KccPalette.crownGold, ready: state != "pending", active: state == "active",
+                        ConvoyReactionButtonFace(kind: .followMe, ready: state != "pending", active: state == "active",
                             pending: state == "pending", remainingFraction: 0)
                     }
                     .padding(.horizontal, KccSpacing.s3)
