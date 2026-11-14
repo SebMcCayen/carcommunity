@@ -86,4 +86,8 @@ final class ConvoyListCoordinator {
             chatRepliesEnabled: chatRepliesEnabled
         )
     }
+
+    func observeUnread(convoyId: String, uid: String) -> AsyncStream<Int> {
+        repository.observeUnread(convoyId: convoyId, uid: uid)
+    }
 }

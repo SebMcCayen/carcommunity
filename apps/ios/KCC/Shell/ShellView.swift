@@ -1304,12 +1304,12 @@ struct ShellView: View {
                                     max(180, min(320, geometry.size.height * 0.55 - mapSessionHeight))))
                         }
                     }
-                    VStack(spacing: KccSpacing.s2) { mapSessionControls }
+                    VStack(spacing: KccSpacing.s1) { mapSessionControls }
                         .background { GeometryReader { proxy in
                             Color.clear.preference(key: MapSessionHeightKey.self, value: proxy.size.height)
                         } }
                 }
-                .padding(.horizontal, KccSpacing.s4)
+                .padding(.horizontal, KccSpacing.s3)
                 .padding(.bottom, KccSpacing.s2)
                 .background { GeometryReader { proxy in
                     Color.clear.preference(key: MapDockHeightKey.self, value: proxy.size.height)
@@ -1322,6 +1322,12 @@ struct ShellView: View {
     }
 
     @ViewBuilder private var mapSessionControls: some View {
+        // Match Android's bottom dock: live metrics, then convoy controls,
+        // immediately above the persistent primary navigation.
+        if let coordinator = liveLocationCoordinator, let startedAt = liveSessionBarStart {
+            LiveSessionBar(startedAt: startedAt, live: coordinator, recording: driveRecordingCoordinator,
+                onManage: { routes = routes.opening(.liveLocation) })
+        }
         if let coordinator = convoyManagementCoordinator,
            let convoy = coordinator.activeConvoy {
             ConvoyStatusBar(
@@ -1332,12 +1338,10 @@ struct ShellView: View {
                 mapSurface: mapSurface,
                 liveLocationEnabled: liveLocationFeatureEnabled,
                 viewerUid: signedInUid,
+                chat: chatHubCoordinator?.convoyList,
+                chatRepliesEnabled: featureFlags.isEnabled(.chatReplies),
                 onOpenMemberProfile: openMemberProfile
             )
-        }
-        if let coordinator = liveLocationCoordinator, let startedAt = liveSessionBarStart {
-            LiveSessionBar(startedAt: startedAt, live: coordinator, recording: driveRecordingCoordinator,
-                onManage: { routes = routes.opening(.liveLocation) })
         }
     }
 
@@ -2706,11 +2710,19 @@ struct ShellView: View {
                 uid: uid
             )
         }
+        var convoyChatRepository = channelAndDirectChatEnabled
+            ? FirebaseConvoyChatRepository.createIfAvailable() : nil
+        var convoyManagementRepository = FirebaseConvoyManagementRepository.createIfAvailable()
+        #if DEBUG
+        if ConfiglessConvoyDockFixture.isEnabled {
+            convoyChatRepository = ConfiglessConvoyDockFixture.chat
+            convoyManagementRepository = ConfiglessConvoyDockRepository()
+        }
+        #endif
         chatHubCoordinator = ChatHubCoordinator(
             communityRepository: channelAndDirectChatEnabled
                 ? CommunityChatRepositoryFactory.make() : nil,
-            convoyRepository: channelAndDirectChatEnabled
-                ? FirebaseConvoyChatRepository.createIfAvailable() : nil,
+            convoyRepository: convoyChatRepository,
             chatRepliesEnabled: featureFlags.isEnabled(.chatReplies)
         )
         // A cold-start push can arrive before asynchronous feature composition
@@ -2718,7 +2730,7 @@ struct ShellView: View {
         // required coordinator instead of losing the one-shot handoff.
         openPendingPushDeepLink()
         let convoyManagement = ConvoyManagementCoordinator(
-            repository: FirebaseConvoyManagementRepository.createIfAvailable()
+            repository: convoyManagementRepository
         )
         convoyManagementCoordinator = convoyManagement
         convoyReactionCoordinator = FirebaseConvoyReactionRepository.createIfAvailable().map { repository in
