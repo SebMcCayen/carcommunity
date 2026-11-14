@@ -74,7 +74,7 @@ struct MapLayersSheet: View {
                              icon: RoadCameraType.speed.symbol, binding: Binding(
                                 get: { preferences.cameraLayers.contains(.speed) },
                                 set: { preferences.setCameraLayer(.speed, enabled: $0) }
-                             ), id: "roadCameras.speedLayer")
+                             ), id: "roadCameras.speedLayer", assetName: RoadCameraType.speed.assetName)
                     Divider()
                     layerRow("roadCameras.photoLayer", help: "roadCameras.layerHelp",
                              icon: RoadCameraType.traffic.symbol, binding: Binding(
@@ -186,14 +186,20 @@ struct MapLayersSheet: View {
 
     private func layerRow(
         _ title: LocalizedStringKey, help: LocalizedStringKey,
-        icon: String, binding: Binding<Bool>, id: String
+        icon: String, binding: Binding<Bool>, id: String, assetName: String? = nil
     ) -> some View {
         Toggle(isOn: binding) {
             HStack(alignment: .top, spacing: KccSpacing.s3) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .frame(width: 28)
-                    .accessibilityHidden(true)
+                Group {
+                    if let assetName {
+                        Image(assetName).renderingMode(.template).resizable().scaledToFit()
+                            .frame(width: 20, height: 20)
+                    } else {
+                        Image(systemName: icon).font(.title3)
+                    }
+                }
+                .frame(width: 28)
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: KccSpacing.s1) {
                     Text(title).font(.body)
                     Text(help)

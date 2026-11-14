@@ -7,6 +7,85 @@ final class RoadCameraTests: XCTestCase {
         FileManager.default.temporaryDirectory.appendingPathComponent("RoadCameraTests-" + UUID().uuidString)
     }
 
+    private func siteCamera(_ id: String, direction: Double?, latitude: Double = 57.45,
+                            type: RoadCameraType = .roadCondition, name: String = "Kungsbacka Syd") -> RoadCamera {
+        RoadCamera(id: id, type: type, name: name, latitude: latitude, longitude: 12.09, direction: direction)
+    }
+
+    func testDirectionsShareOneStableMarkerIndependentOfCatalogOrder() {
+        let se = siteCamera("b", direction: 135)
+        let nw = siteCamera("a", direction: 315, latitude: 57.4501)
+        let locations = RoadCameraLocation.group([nw, se])
+        XCTAssertEqual(locations, RoadCameraLocation.group([se, nw]))
+        XCTAssertEqual(locations.count, 1)
+        XCTAssertEqual(locations[0].views.map(\.id), ["b", "a"])
+        XCTAssertEqual(locations[0].camera, se)
+    }
+
+    func testOnlyNearbyPhotoCamerasWithSameNameAndTypeShareAMarker() {
+        let cameras = [siteCamera("a", direction: 135),
+            siteCamera("b", direction: 315, name: " kungsbacka syd "),
+            siteCamera("distant", direction: 135, latitude: 57.46),
+            siteCamera("other-name", direction: 135, name: "Kungsbacka Nord"),
+            siteCamera("traffic", direction: 135, type: .traffic),
+            siteCamera("speed1", direction: 135, type: .speed),
+            siteCamera("speed2", direction: 315, type: .speed)]
+        XCTAssertEqual(RoadCameraLocation.group(cameras).count, 6)
+        XCTAssertEqual(RoadCameraLocation.group([
+            siteCamera("c", direction: 135, latitude: 57.4506),
+            siteCamera("b", direction: 135, latitude: 57.4503),
+            siteCamera("a", direction: 135)]).map { $0.views.count }, [2, 1])
+    }
+
+    func testDirectionLabelsWrapAtNorthAndDisambiguateUnknownOrMatchingBearings() {
+        XCTAssertEqual(siteCamera("a", direction: 360).compassIndex, 0)
+        XCTAssertEqual(siteCamera("a", direction: 359).compassIndex, 0)
+        XCTAssertEqual(siteCamera("a", direction: 22.5).compassIndex, 1)
+        XCTAssertEqual(siteCamera("a", direction: 135).compassIndex, 3)
+        XCTAssertEqual(siteCamera("a", direction: 315).compassIndex, 7)
+        let invalidBearings: [Double?] = [nil, -1, 361, .nan]
+        for bearing in invalidBearings {
+            XCTAssertNil(siteCamera("a", direction: bearing).compassIndex)
+        }
+        let views = RoadCameraLocation.group([siteCamera("unknown", direction: nil),
+            siteCamera("b", direction: 5), siteCamera("a", direction: 360)])[0].views
+        XCTAssertEqual(views.map(\.id), ["a", "b", "unknown"])
+        XCTAssertEqual(Set(views.map { $0.viewLabel(in: views) }).count, 3)
+    }
+
+    func testChangingDirectionLoadsOnlySelectedViewAndRejectsPreviousPhoto() async {
+        let upstream = CameraStub()
+        let se = siteCamera("se", direction: 135)
+        let nw = siteCamera("nw", direction: 315)
+        upstream.catalogCameras = [nw, se]
+        upstream.suspendPhotos = true
+        let coordinator = RoadCameraMapCoordinator(repository: upstream)
+        await coordinator.refresh(enabledTypes: [.roadCondition])
+        XCTAssertEqual(coordinator.locations.count, 1)
+        coordinator.select(coordinator.locations[0].camera)
+        XCTAssertEqual(coordinator.selectedViews, [se, nw])
+        XCTAssertEqual(upstream.photoCalls, 0)
+        let first = Task { await coordinator.loadPhoto(cameraId: se.id) }
+        await waitForPendingPhotos(1, in: upstream)
+        coordinator.selectDirection(nw)
+        XCTAssertEqual(coordinator.selectedCamera, nw)
+        XCTAssertNil(coordinator.photo)
+        let second = Task { await coordinator.loadPhoto(cameraId: nw.id) }
+        await waitForPendingPhotos(2, in: upstream)
+        XCTAssertEqual(upstream.requestedCameraIds, ["se", "nw"])
+        upstream.completeFirstPhoto()
+        await first.value
+        XCTAssertNil(coordinator.photo)
+        XCTAssertTrue(coordinator.photoLoading)
+        upstream.completeFirstPhoto()
+        await second.value
+        XCTAssertNotNil(coordinator.photo)
+        coordinator.selectDirection(nw)
+        XCTAssertNotNil(coordinator.photo, "tapping the active direction should keep its loaded image")
+        coordinator.selectDirection(upstream.traffic)
+        XCTAssertEqual(coordinator.selectedCamera, nw, "direction switching stays within the selected site")
+    }
+
     func testSpeedAndCombinedPhotoLayersStartOffAndPersistIndependently() {
         let suite = "RoadCameraTests-" + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
@@ -251,6 +330,8 @@ final class RoadCameraTests: XCTestCase {
 private final class CameraStub: RoadCameraRepository {
     var catalogCalls = 0
     var photoCalls = 0
+    var requestedCameraIds: [String] = []
+    var catalogCameras: [RoadCamera]?
     var failure: KccFunctionsError?
     var suspendPhotos = false
     var pendingPhotos: [CheckedContinuation<RoadCameraPhoto, Error>] = []
@@ -261,11 +342,12 @@ private final class CameraStub: RoadCameraRepository {
         catalogCalls += 1
         await Task.yield()
         if let failure { throw failure }
-        return RoadCameraCatalog(cameras: [speed, traffic], updatedAt: nil)
+        return RoadCameraCatalog(cameras: catalogCameras ?? [speed, traffic], updatedAt: nil)
     }
 
     func photo(cameraId: String) async throws -> RoadCameraPhoto {
         photoCalls += 1
+        requestedCameraIds.append(cameraId)
         await Task.yield()
         if let failure { throw failure }
         if suspendPhotos {

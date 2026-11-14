@@ -7,6 +7,9 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +69,7 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
     var speedEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.Speed)); private set
     var photoCamerasEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.Traffic)); private set
     var cameras by mutableStateOf(emptyList<RoadCamera>()); internal set
+    private val locations by derivedStateOf { groupRoadCameraLocations(cameras) }
     var catalogFailed by mutableStateOf(false); internal set
     val anyEnabled get() = speedEnabled || photoCamerasEnabled
     fun enabled(type: RoadCameraType) = when (type) {
@@ -87,10 +93,13 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
             marker to (north * north + east * east)
         }.filter { it.second <= 50_000.0 * 50_000.0 }.sortedBy { it.second }.take(250).map { it.first }
     }
-    val markers: List<MapIncidentMarker> get() = cameras.filter { enabled(it.type) }.map {
+    val markers: List<MapIncidentMarker> get() = locations.map { it.camera }.filter { enabled(it.type) }.map {
         MapIncidentMarker(ROAD_CAMERA_MARKER_PREFIX + it.id, it.longitude, it.latitude,
             cameraColor(it.type), cameraGlyph(it.type), cameraGlyphColor(it.type))
     }
+    fun viewsFor(camera: RoadCamera): List<RoadCamera> =
+        locations.firstOrNull { location -> location.views.any { it.id == camera.id } }?.views ?: listOf(camera)
+
     fun selected(markerId: String?): RoadCamera? {
         val id = markerId?.takeIf { it.startsWith(ROAD_CAMERA_MARKER_PREFIX) }?.removePrefix(ROAD_CAMERA_MARKER_PREFIX)
         return cameras.firstOrNull { it.id == id && enabled(it.type) }
@@ -144,7 +153,19 @@ fun RoadCameraBadge(type: RoadCameraType) {
 }
 
 @Composable
-fun RoadCameraDetailsSheet(camera: RoadCamera, repository: RoadCameraRepository?, onDismiss: () -> Unit) {
+fun RoadCameraDetailsSheet(camera: RoadCamera, repository: RoadCameraRepository?,
+    views: List<RoadCamera> = listOf(camera), onDismiss: () -> Unit,
+) {
+    var selectedId by remember(camera.id) { mutableStateOf(camera.id) }
+    val selected = views.firstOrNull { it.id == selectedId } ?: camera
+    RoadCameraViewDetailsSheet(selected, repository, views, { selectedId = it.id }, onDismiss)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RoadCameraViewDetailsSheet(camera: RoadCamera, repository: RoadCameraRepository?,
+    views: List<RoadCamera>, onSelect: (RoadCamera) -> Unit, onDismiss: () -> Unit,
+) {
     var photo by remember(camera.id) { mutableStateOf<RoadCameraPhoto?>(null) }
     var loading by remember(camera.id) { mutableStateOf(camera.type != RoadCameraType.Speed) }
     var limited by remember(camera.id) { mutableStateOf(false) }
@@ -175,6 +196,16 @@ fun RoadCameraDetailsSheet(camera: RoadCamera, repository: RoadCameraRepository?
     MapDetailSheet(title = stringResource(cameraLabel(camera.type)), onDismiss = onDismiss,
         leadingContent = { RoadCameraBadge(camera.type) }, modifier = Modifier.testTag("road_camera_details")) {
         Text(camera.name, style = MaterialTheme.typography.titleMedium)
+        if (views.size > 1) {
+            Text(stringResource(R.string.roadCameras_chooseDirection), style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                views.forEachIndexed { index, view ->
+                    FilterChip(selected = camera.id == view.id, onClick = { if (camera.id != view.id) onSelect(view) },
+                        label = { Text(cameraViewLabel(view, views, index)) },
+                        modifier = Modifier.testTag("road_camera_direction_${view.id}"))
+                }
+            }
+        }
         Text(stringResource(R.string.incidents_sourceTrafikverket), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (camera.type != RoadCameraType.Speed) {
@@ -228,4 +259,22 @@ private fun RoadCameraPhotoDialog(name: String, bitmap: ImageBitmap, onDismiss: 
             }
         }
     }
+}
+
+@Composable
+private fun cameraViewLabel(camera: RoadCamera, views: List<RoadCamera>, index: Int): String {
+    val compass = camera.compassIndex() ?: return stringResource(R.string.roadCameras_numberedView, index + 1)
+    val key = when (compass) {
+        0 -> R.string.roadCameras_north
+        1 -> R.string.roadCameras_northEast
+        2 -> R.string.roadCameras_east
+        3 -> R.string.roadCameras_southEast
+        4 -> R.string.roadCameras_south
+        5 -> R.string.roadCameras_southWest
+        6 -> R.string.roadCameras_west
+        else -> R.string.roadCameras_northWest
+    }
+    val label = stringResource(key)
+    return if (views.count { it.compassIndex() == compass } > 1)
+        stringResource(R.string.roadCameras_numberedDirection, label, index + 1) else label
 }

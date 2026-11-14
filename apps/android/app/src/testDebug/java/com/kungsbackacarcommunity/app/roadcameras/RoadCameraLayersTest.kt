@@ -74,6 +74,20 @@ class RoadCameraLayersTest {
         }
     }
 
+    @Test fun colocatedDirectionsRenderOneMarkerAndKeepEveryViewAvailable() {
+        compose.activity.getSharedPreferences("map_layers_preference", Context.MODE_PRIVATE).edit().clear().commit()
+        val state = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
+        val first = RoadCamera("se", RoadCameraType.RoadCondition, "Kungsbacka Syd", 57.45, 12.09, 135.0)
+        val second = first.copy(id = "nw", direction = 315.0)
+        state.cameras = listOf(second, first)
+        state.setEnabled(RoadCameraType.Traffic, true)
+        assertEquals(listOf(ROAD_CAMERA_MARKER_PREFIX + "se"), state.markers.map { it.id })
+        assertEquals(listOf(first, second), state.viewsFor(state.selected(state.markers.single().id)!!))
+        state.setEnabled(RoadCameraType.Traffic, false)
+        assertTrue(state.markers.isEmpty())
+        assertNull(state.selected(ROAD_CAMERA_MARKER_PREFIX + "se"))
+    }
+
     @Test fun speedAndCombinedPhotoLayersPersistAndRenderThroughTheProductionPopup() {
         compose.activity.getSharedPreferences("map_layers_preference", Context.MODE_PRIVATE).edit().clear().commit()
         val state = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)

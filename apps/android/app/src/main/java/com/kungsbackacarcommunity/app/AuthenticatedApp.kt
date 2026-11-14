@@ -6791,7 +6791,8 @@ fun AuthenticatedApp(
                                 // that is no longer on the map.
                                 roadCameraLayers.selected(tappedIncidentId)?.let { camera ->
                                     com.kungsbackacarcommunity.app.roadcameras.RoadCameraDetailsSheet(
-                                        camera, roadCameraLayers.repository, mapSurface::consumeIncidentTap)
+                                        camera, roadCameraLayers.repository, views = roadCameraLayers.viewsFor(camera),
+                                        onDismiss = mapSurface::consumeIncidentTap)
                                 }
                                 val openIncident = tappedIncident
                                 if (openIncident != null) {

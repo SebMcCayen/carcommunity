@@ -2272,6 +2272,17 @@
     <string name="roadCameras_closePhoto">Stäng kamerabild</string>
     <string name="roadCameras_retry">Försök igen</string>
     <string name="roadCameras_catalogUnavailable">Kameror kunde inte uppdateras. Sparade kameror visas om de finns.</string>
+    <string name="roadCameras_chooseDirection">Välj riktning</string>
+    <string name="roadCameras_numberedView">Vy %1$d</string>
+    <string name="roadCameras_numberedDirection">%1$s · %2$d</string>
+    <string name="roadCameras_north">Norr</string>
+    <string name="roadCameras_northEast">Nordöst</string>
+    <string name="roadCameras_east">Öster</string>
+    <string name="roadCameras_southEast">Sydöst</string>
+    <string name="roadCameras_south">Söder</string>
+    <string name="roadCameras_southWest">Sydväst</string>
+    <string name="roadCameras_west">Väster</string>
+    <string name="roadCameras_northWest">Nordväst</string>
     <string name="convoy_invitationFrom">bjuder in till konvoj</string>
     <string name="convoy_invitationJoin">Gå med</string>
     <string name="convoy_invitationDecline">Neka</string>
