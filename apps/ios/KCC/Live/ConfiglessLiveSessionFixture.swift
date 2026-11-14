@@ -184,7 +184,9 @@ actor ConfiglessConvoyDockChatRepository: ConvoyChatRepository {
         unread = 0
         for stream in streams.values { stream.yield(unread) }
     }
-    func loadOlder(convoyId: String, before: String) async -> ChannelOlderResult { .loaded([]) }
+    func loadOlder(convoyId: String, before: String) async -> ChannelOlderResult {
+        .loaded(ChannelMessagesPage(messages: [], nextBefore: nil, hasMore: false))
+    }
     func post(convoyId: String, text: String, clientId: String?, replyToMessageId: String?) async -> ChannelSendResult {
         .failed(.generic)
     }
