@@ -2,6 +2,25 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 70,
+      "versionName": "1.1.15",
+      "releaseDate": "2026-11-14",
+      "highlights": [
+        "Visa Trafikverkets kameror bland kartans lager",
+        "Gemensamt dag- och nattläge för app, karta och navigation",
+        "Svara på konvojinbjudningar direkt i appen"
+      ],
+      "changes": [
+        "Visa fartkameror, trafikkameror och väglagskameror från Trafikverket i separata kartlager",
+        "Öppna trafik- och väglagskameror på kartan för att se tillgängliga kamerabilder",
+        "Välj dag, natt eller automatiskt läge för app, karta och navigation, med egna tider för automatiskt byte",
+        "Tacka ja eller nej till konvojinbjudningar direkt från ett inbjudningskort i appen",
+        "Live-körningar sparas automatiskt i bakgrunden när du stoppar delningen",
+        "Förbättrad positionshantering vid inspelning av körningar och möjlighet att bifoga körningsdiagnostik i en felrapport",
+        "Administratörer kan ta bort meddelanden och tillfälligt pausa skrivning i Community- och eventchattar"
+      ]
+    },
+    {
       "versionCode": 69,
       "versionName": "1.1.14",
       "releaseDate": "2026-11-11",
