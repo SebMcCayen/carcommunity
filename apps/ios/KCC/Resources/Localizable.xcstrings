@@ -38472,6 +38472,91 @@
         }
       }
     },
+    "whatsNew.release013Build14Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stabilare hantering av chattens utkast och tangentbord, även med större textstorlek."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More reliable handling of chat drafts and the keyboard, including at larger text sizes."
+          }
+        }
+      }
+    },
+    "whatsNew.release013Build14Convoy": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svara på konvojinbjudningar direkt i chatten med tydligare information om inbjudans giltighetstid."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respond to convoy invitations directly in chat, with clearer information about when invitations expire."
+          }
+        }
+      }
+    },
+    "whatsNew.release013Build14Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättrad karta, livekörning, konvoj och chatt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improved maps, live driving, convoys, and chat."
+          }
+        }
+      }
+    },
+    "whatsNew.release013Build14Live": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tydligare kontroller för livesessioner och smidigare sparning av körningar när du slutar dela din position."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clearer live-session controls and smoother drive saving when you stop sharing your location."
+          }
+        }
+      }
+    },
+    "whatsNew.release013Build14Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luta kartan och visa Trafikverkets trafikkameror. Kronjakten visar avståndet till kronorna."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilt the map and view Trafikverket traffic cameras. Crown Hunt shows the distance to crowns."
+          }
+        }
+      }
+    },
     "whatsNew.title": {
       "extractionState": "manual",
       "localizations": {

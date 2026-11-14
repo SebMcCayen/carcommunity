@@ -2110,6 +2110,11 @@
     <string name="whatsNew_release012Build13Navigation">In-app navigation and improved handling of location and live sharing.</string>
     <string name="whatsNew_release012Build13Chat">Improved chat views and more reliable keyboard handling.</string>
     <string name="whatsNew_release012Build13Profile">Clearer display names when signing in with Apple and updated Crown Hunt instructions.</string>
+    <string name="whatsNew_release013Build14Highlight">Improved maps, live driving, convoys, and chat.</string>
+    <string name="whatsNew_release013Build14Map">Tilt the map and view Trafikverket traffic cameras. Crown Hunt shows the distance to crowns.</string>
+    <string name="whatsNew_release013Build14Live">Clearer live-session controls and smoother drive saving when you stop sharing your location.</string>
+    <string name="whatsNew_release013Build14Convoy">Respond to convoy invitations directly in chat, with clearer information about when invitations expire.</string>
+    <string name="whatsNew_release013Build14Chat">More reliable handling of chat drafts and the keyboard, including at larger text sizes.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

@@ -2260,7 +2260,12 @@
     "release012Build13Highlight": "Förbättrad navigering, chatt och profil i iOS-appen.",
     "release012Build13Navigation": "Navigering i appen och förbättrad hantering av plats och livedelning.",
     "release012Build13Chat": "Förbättrade chattvyer och stabilare hantering av tangentbordet.",
-    "release012Build13Profile": "Tydligare visningsnamn vid inloggning med Apple och uppdaterade instruktioner för kronjakten."
+    "release012Build13Profile": "Tydligare visningsnamn vid inloggning med Apple och uppdaterade instruktioner för kronjakten.",
+    "release013Build14Highlight": "Förbättrad karta, livekörning, konvoj och chatt.",
+    "release013Build14Map": "Luta kartan och visa Trafikverkets trafikkameror. Kronjakten visar avståndet till kronorna.",
+    "release013Build14Live": "Tydligare kontroller för livesessioner och smidigare sparning av körningar när du slutar dela din position.",
+    "release013Build14Convoy": "Svara på konvojinbjudningar direkt i chatten med tydligare information om inbjudans giltighetstid.",
+    "release013Build14Chat": "Stabilare hantering av chattens utkast och tangentbord, även med större textstorlek."
   },
   "driver": {
     "feed": {
