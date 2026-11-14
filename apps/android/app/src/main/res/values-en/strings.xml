@@ -1741,7 +1741,7 @@
     <string name="channel_locationLink">📍 Show on map</string>
     <string name="chatHub_title">Chat</string>
     <string name="chatHub_tabChats">Chats</string>
-    <string name="chatHub_tabDriver">Driver posts</string>
+    <string name="chatHub_tabDriver">Driver</string>
     <string name="chatHub_back">Back</string>
     <string name="chatHub_tabCommunity">Community</string>
     <string name="chatHub_tabConvoys">Convoys</string>
