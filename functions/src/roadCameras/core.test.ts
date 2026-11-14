@@ -10,7 +10,8 @@ import {
   toPublicCamera,
 } from './core';
 
-const image = 'https://api.trafikinfo.trafikverket.se/v2/Images/TrafficFlowCamera_123.Jpeg';
+const image =
+  'https://api.trafikinfo.trafikverket.se/v2/Images/data/road.infrastructure.camera/TrafficFlowCamera_123.jpg';
 const liveCamera = {
   Id: 'live/123',
   Name: 'Bridge',
@@ -170,9 +171,21 @@ describe('complete catalog parsing', () => {
 });
 
 describe('server-only photo URL policy', () => {
+  it.each([
+    'TrafficFlowCamera_123.jpg',
+    'TrafficFlowCamera_123_thumbnail.jpg',
+    'RoadConditionCamera_VViS_123_K1.jpg',
+    'RoadConditionCamera_VViS_123_K1_thumbnail.jpg',
+  ])('accepts the published camera data path for %s', (filename) => {
+    const url = `https://api.trafikinfo.trafikverket.se/v2/Images/data/road.infrastructure.camera/${filename}`;
+    expect(sanitizePhotoUrl(url)).toBe(`${url}?maxage=15`);
+  });
+
   it('canonicalizes standard size and bounded age, including legacy endpoint versions', () => {
     expect(sanitizePhotoUrl(`${image}?type=fullsize&maxage=999`)).toBe(`${image}?maxage=15`);
     expect(sanitizePhotoUrl(image.replace('/v2/', '/v1.3/'))).toContain('/v1.3/Images/');
+    const legacy = image.replace('/data/road.infrastructure.camera', '');
+    expect(sanitizePhotoUrl(legacy)).toBe(`${legacy}?maxage=15`);
     expect(MAX_PHOTO_BYTES).toBe(131_072);
   });
 
@@ -184,6 +197,9 @@ describe('server-only photo URL policy', () => {
     'https://api.trafikinfo.trafikverket.se:443/v2/Images/a.jpeg',
     'https://api.trafikinfo.trafikverket.se/v2/Images/a.svg',
     'https://api.trafikinfo.trafikverket.se/v2/Images/a%2fb.jpeg',
+    'https://api.trafikinfo.trafikverket.se/v2/Images/data/other/a.jpeg',
+    'https://api.trafikinfo.trafikverket.se/v2/Images/data/road.infrastructure.camera/extra/a.jpeg',
+    'https://api.trafikinfo.trafikverket.se/v2/Images/data/road.infrastructure.camera/a%2fb.jpeg',
     `${image}#fragment`,
     `${image}?authenticationkey=secret`,
     `${image}?redirect=https://evil.example`,

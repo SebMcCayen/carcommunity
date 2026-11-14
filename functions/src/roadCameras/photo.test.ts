@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MAX_PHOTO_BYTES } from './core';
 import { fetchCameraPhoto } from './photo';
 
-const url = 'https://api.trafikinfo.trafikverket.se/v2/Images/TrafficFlowCamera_123.Jpeg';
+const url =
+  'https://api.trafikinfo.trafikverket.se/v2/Images/data/road.infrastructure.camera/TrafficFlowCamera_123.jpg';
 const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 const png = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
 
