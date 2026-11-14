@@ -67,7 +67,7 @@ class ConvoyDockGeometryTest {
         rule.onNodeWithTag(MAP_HOME_SAVED_PLACES_TAG).assertDoesNotExist()
         for (tag in listOf(MAP_HOME_REPORT_TAG, MAP_HOME_LAYERS_TAG, MAP_HOME_COMPASS_TAG)) {
             rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
-            assertTrue("$tag stays above measured dock", bounds(tag).bottom <= dock.top + 1f)
+            assertTrue("$tag stays above the full-width reaction controls", bounds(tag).bottom <= reactions.top + 1f)
         }
         rule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
         rule.waitForIdle()

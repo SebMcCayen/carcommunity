@@ -1261,7 +1261,10 @@ struct ShellView: View {
             }
         }
         .padding(.top, KccSpacing.s4 + 48 + KccSpacing.s3)
-        .padding(.bottom, mapDockHeight)
+        .padding(.bottom, mapDockHeight + (
+            convoyReactionTargetId != nil && convoyReactionCoordinator != nil
+                ? ConvoyReactionControls.controlsClearance : 0
+        ))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 

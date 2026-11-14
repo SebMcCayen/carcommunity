@@ -53,6 +53,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** The full-width action row and its gap above the session dock. */
+val CONVOY_REACTION_CONTROLS_CLEARANCE = 56.dp + KccSpacing.s3
+
 /** Test tag on the convoy reaction button cluster. */
 const val CONVOY_REACTIONS_TAG = "convoy_reactions"
 

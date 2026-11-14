@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Map overlay for the transient reaction controls and incoming reaction pop.
 struct ConvoyReactionControls: View {
+    static let buttonHeight: CGFloat = 56
+    static var controlsClearance: CGFloat { buttonHeight + KccSpacing.s3 }
+
     @Bindable var coordinator: ConvoyReactionCoordinator
     let followMeCoordinator: ConvoyFollowMeCoordinator?
     let bottomClearance: CGFloat
@@ -115,7 +118,7 @@ struct ConvoyReactionButtonFace: View {
                 .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 56)
+        .frame(height: ConvoyReactionControls.buttonHeight)
         .background(surface)
         .overlay(alignment: .bottomLeading) {
             GeometryReader { geometry in

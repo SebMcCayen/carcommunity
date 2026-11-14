@@ -112,6 +112,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.convoy.CONVOY_REACTION_CONTROLS_CLEARANCE
 import com.kungsbackacarcommunity.app.coachmark.CoachMarkStep
 import com.kungsbackacarcommunity.app.coachmark.coachMarkAnchor
 import com.kungsbackacarcommunity.app.design.KccAlpha
@@ -635,7 +636,8 @@ fun MapHome(
                     .padding(
                         top = with(chromeDensity) { topChromeHeightPx.toDp() } + KccSpacing.s3,
                         end = KccSpacing.s4,
-                        bottom = with(chromeDensity) { bottomChromeHeightPx.toDp() } + KccSpacing.s4,
+                        bottom = with(chromeDensity) { bottomChromeHeightPx.toDp() } + KccSpacing.s4 +
+                            if (convoyReactions != null) CONVOY_REACTION_CONTROLS_CLEARANCE else 0.dp,
                     )
                     .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.End,
