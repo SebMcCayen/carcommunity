@@ -75,7 +75,7 @@ struct MapLayersSheet: View {
                                  icon: type.symbol, binding: Binding(
                                     get: { preferences.cameraLayers.contains(type) },
                                     set: { preferences.setCameraLayer(type, enabled: $0) }
-                                 ), id: type.titleKey)
+                                 ), id: type.titleKey, assetName: type.assetName)
                     }
                     if !preferences.cameraLayers.isEmpty {
                         if let cameraCatalogErrorKey {
@@ -182,14 +182,20 @@ struct MapLayersSheet: View {
 
     private func layerRow(
         _ title: LocalizedStringKey, help: LocalizedStringKey,
-        icon: String, binding: Binding<Bool>, id: String
+        icon: String, binding: Binding<Bool>, id: String, assetName: String? = nil
     ) -> some View {
         Toggle(isOn: binding) {
             HStack(alignment: .top, spacing: KccSpacing.s3) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .frame(width: 28)
-                    .accessibilityHidden(true)
+                Group {
+                    if let assetName {
+                        Image(assetName).renderingMode(.template).resizable().scaledToFit()
+                            .frame(width: 20, height: 20)
+                    } else {
+                        Image(systemName: icon).font(.title3)
+                    }
+                }
+                .frame(width: 28)
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: KccSpacing.s1) {
                     Text(title).font(.body)
                     Text(help)
