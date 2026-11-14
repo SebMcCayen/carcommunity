@@ -141,7 +141,6 @@ struct ConvoyStatusBar: View {
         .background(KccTheme.overlay, in: RoundedRectangle(cornerRadius: KccRadius.full))
         .overlay { RoundedRectangle(cornerRadius: KccRadius.full).strokeBorder(KccTheme.border).allowsHitTesting(false) }
         .shadow(color: .black.opacity(0.14), radius: 3, y: 3)
-        .accessibilityIdentifier("convoy.bar")
         .sheet(item: $chatTarget) { target in
             if let chat {
                 ConvoyDockChatSheet(list: chat, target: target, chatRepliesEnabled: chatRepliesEnabled,

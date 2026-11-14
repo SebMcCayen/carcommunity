@@ -1337,7 +1337,7 @@ struct ShellView: View {
                 awareness: convoyAwareness,
                 mapSurface: mapSurface,
                 liveLocationEnabled: liveLocationFeatureEnabled,
-                viewerUid: signedInUid,
+                viewerUid: memberProfileViewerUid,
                 chat: chatHubCoordinator?.convoyList,
                 chatRepliesEnabled: featureFlags.isEnabled(.chatReplies),
                 onOpenMemberProfile: openMemberProfile
