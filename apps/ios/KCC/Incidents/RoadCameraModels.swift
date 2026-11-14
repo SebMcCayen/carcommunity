@@ -22,6 +22,9 @@ enum RoadCameraType: String, Codable, CaseIterable, Hashable, Sendable {
         }
     }
 
+    /// The speed camera uses the same vector artwork as Android.
+    var assetName: String? { self == .speed ? "camera-speed" : nil }
+
     var color: UInt32 {
         switch self {
         case .speed: 0xFFEAB54B
@@ -50,7 +53,8 @@ struct RoadCamera: Codable, Identifiable, Equatable, Sendable {
     var marker: MapIncidentMarker {
         MapIncidentMarker(id: id, longitude: longitude, latitude: latitude,
                           colorArgb: type.color, iconName: type.symbol,
-                          glyphColorArgb: IncidentMarkerStyle.glyphColor(on: type.color))
+                          glyphColorArgb: IncidentMarkerStyle.glyphColor(on: type.color),
+                          assetName: type.assetName)
     }
 }
 
