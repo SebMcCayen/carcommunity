@@ -41,7 +41,7 @@ class RoadCameraCaptureTest {
     @Test fun captureCameraComponents() {
         val args = InstrumentationRegistry.getArguments()
         val screen = args.getString("cameraSurface") ?: "markers"
-        require(screen in setOf("markers", "layers", "photo"))
+        require(screen in setOf("markers", "layers", "photo", "expanded"))
         val dark = args.getString("redesignTheme") != "light"
         val scale = args.getString("cameraFontScale")?.toFloat() ?: 1f
         require(scale in 1f..2f)
@@ -87,7 +87,7 @@ class RoadCameraCaptureTest {
                                         }
                                     }
                                 }
-                                if (screen == "photo") {
+                                if (screen == "photo" || screen == "expanded") {
                                     var open by remember { mutableStateOf(false) }
                                     Button(onClick = { open = true }, modifier = Modifier.testTag("open_test_camera")) {
                                         Text("Öppna lokal testkamera")
@@ -116,16 +116,29 @@ class RoadCameraCaptureTest {
             }
             compose.onNodeWithTag("map_layers_camera_speed").performScrollTo()
         }
-        if (screen == "photo") {
+        if (screen == "photo" || screen == "expanded") {
             compose.onNodeWithTag("open_test_camera").performClick()
             compose.waitUntil(5_000) {
                 compose.onAllNodesWithTag("road_camera_photo").fetchSemanticsNodes().isNotEmpty()
             }
             assertEquals(1, photoCalls.get())
             compose.onNodeWithTag("road_camera_photo").assertIsDisplayed()
+            if (screen == "expanded") {
+                compose.onNodeWithTag("road_camera_photo").performScrollTo().performClick()
+                compose.onNodeWithTag("road_camera_photo_viewer").assertIsDisplayed()
+                compose.onNodeWithTag("road_camera_photo_close").assertIsDisplayed().performClick()
+                compose.onNodeWithTag("road_camera_details").assertIsDisplayed()
+                compose.onNodeWithTag("road_camera_photo").performScrollTo().performClick()
+                androidx.test.espresso.Espresso.pressBack()
+                compose.onNodeWithTag("road_camera_photo_viewer").assertDoesNotExist()
+                compose.onNodeWithTag("road_camera_details").assertIsDisplayed()
+                compose.onNodeWithTag("road_camera_photo").performScrollTo().performClick()
+                assertEquals(1, photoCalls.get())
+            }
         }
         compose.waitForIdle()
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        val bitmap = (if (screen == "expanded") compose.onNodeWithTag("road_camera_photo_viewer")
+            else compose.onRoot()).captureToImage().asAndroidBitmap()
         val output = File(context.getExternalFilesDir(null), "road-cameras")
         check(output.mkdirs() || output.isDirectory)
         File(output, "$screen-${if (dark) "dark" else "light"}-$scale.png").outputStream().use {

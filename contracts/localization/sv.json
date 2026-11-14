@@ -2431,6 +2431,9 @@
     "unavailable": "Kamerabilden kunde inte hämtas.",
     "rateLimited": "Gränsen för kamerabilder är nådd. Försök igen senare.",
     "photoTime": "Bild uppdaterad %1$s",
+    "expandPhoto": "Visa kamerabild i helskärm",
+    "expandPhotoHint": "Tryck på bilden för att förstora",
+    "closePhoto": "Stäng kamerabild",
     "retry": "Försök igen",
     "catalogUnavailable": "Kameror kunde inte uppdateras. Sparade kameror visas om de finns."
   },

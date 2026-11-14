@@ -6,14 +6,23 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,12 +36,17 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
@@ -139,6 +153,7 @@ fun RoadCameraDetailsSheet(camera: RoadCamera, repository: RoadCameraRepository?
     var limited by remember(camera.id) { mutableStateOf(false) }
     var failed by remember(camera.id) { mutableStateOf(false) }
     var retry by remember(camera.id) { mutableIntStateOf(0) }
+    var photoExpanded by remember(camera.id) { mutableStateOf(false) }
     LaunchedEffect(camera.id, retry) {
         if (camera.type == RoadCameraType.Speed) return@LaunchedEffect
         loading = true; failed = false; limited = false
@@ -174,13 +189,45 @@ fun RoadCameraDetailsSheet(camera: RoadCamera, repository: RoadCameraRepository?
                 TextButton(onClick = { retry++ }, enabled = !limited) { Text(stringResource(R.string.roadCameras_retry)) }
             } else {
                 Image(bitmap, contentDescription = camera.name,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp).testTag("road_camera_photo"),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp)
+                        .clickable(onClickLabel = stringResource(R.string.roadCameras_expandPhoto), role = Role.Button) {
+                            photoExpanded = true
+                        }.testTag("road_camera_photo"),
                     contentScale = ContentScale.Fit)
+                Text(stringResource(R.string.roadCameras_expandPhotoHint),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 photo?.photoTime?.let { raw ->
                     val time = runCatching { DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
                         .withZone(ZoneId.systemDefault()).format(Instant.parse(raw)) }.getOrNull()
                     if (time != null) Text(stringResource(R.string.roadCameras_photoTime, time), style = MaterialTheme.typography.bodySmall)
                 }
+            }
+        }
+    }
+    if (photoExpanded && bitmap != null && !loading && !failed) {
+        RoadCameraPhotoDialog(camera.name, bitmap, onDismiss = { photoExpanded = false })
+    }
+}
+
+@Composable
+private fun RoadCameraPhotoDialog(name: String, bitmap: ImageBitmap, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize().testTag("road_camera_photo_viewer")) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    IconButton(onClick = onDismiss, modifier = Modifier.testTag("road_camera_photo_close")) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.roadCameras_closePhoto))
+                    }
+                }
+                Image(bitmap, contentDescription = name,
+                    modifier = Modifier.fillMaxWidth().weight(1f).testTag("road_camera_photo_expanded"),
+                    contentScale = ContentScale.Fit)
+                Text(stringResource(R.string.incidents_sourceTrafikverket),
+                    modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
