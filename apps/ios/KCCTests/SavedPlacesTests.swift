@@ -467,7 +467,13 @@ final class SavedPlacesTests: XCTestCase {
         coordinator.updateQuery("first", proximity: nil)
         try await Task.sleep(for: .milliseconds(100))
         coordinator.updateQuery("second", proximity: nil)
-        try await Task.sleep(for: .milliseconds(400))
+        // The debounce starts when its task is scheduled. A loaded simulator
+        // may need longer than the 100 ms margin in a fixed 400 ms sleep.
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        while coordinator.isSearching && clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
 
         let recorded = await calls.values()
         XCTAssertEqual(recorded, ["second"])
