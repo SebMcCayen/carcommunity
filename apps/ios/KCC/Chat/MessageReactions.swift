@@ -106,13 +106,13 @@ final class MessageReactionStore {
     var picker = false
     var busy = false
     var failed = false
-    private var visible: [String: [String: Int]] = [:]
+    fileprivate var visible: [String: [String: Int]] = [:]
     private var attempted: [String: TimeInterval] = [:]
     private var generation = 0
     private var flags: ListenerRegistration?
     private var authHandle: AuthStateDidChangeListenerHandle?
     private var refresh: Task<Void, Never>?
-    private var pending: (id: String, emoji: String?, payload: [String: Any], operation: String)?
+    private var pending: (id: String, emoji: String?, version: Int, operation: String)?
     private var recorded: Set<String> = []
     init(room: MessageReactionRoom, uid: String) { self.room = room; self.uid = uid; history = .store(uid: uid) }
     private var current: Bool { FirebaseApp.app() != nil && Auth.auth().currentUser?.uid == uid }
@@ -144,20 +144,21 @@ final class MessageReactionStore {
         }
     }
     func stop() {
-        generation += 1; visible = [:]
+        generation += 1
         flags?.remove(); flags = nil
         if let authHandle, FirebaseApp.app() != nil { Auth.auth().removeStateDidChangeListener(authHandle) }; authHandle = nil
         refresh?.cancel(); enabled = false; dismiss(); own = [:]
     }
     func dismiss() { selectedID = nil; picker = false; failed = false }
     func select(_ id: String) { guard enabled, visible[id] != nil else { return }; selectedID = id; failed = false; request() }
+    func reload() { if let id = selectedID { own[id] = nil; attempted[id] = nil }; failed = false; request() }
     func register(_ id: String, counts: [String: Int]) {
         if let old = visible[id], old != counts { own[id] = nil; attempted[id] = nil; history.forget(room) }
         visible[id] = counts
         if own[id] == nil { own[id] = history.cached(room, id: id) }
         request()
     }
-    func unregister(_ id: String) { visible[id] = nil; if selectedID == id { dismiss() } }
+    func unregister(_ id: String) { visible[id] = nil; own[id] = nil; attempted[id] = nil; if selectedID == id { dismiss() } }
     func request() {
         refresh?.cancel()
         refresh = Task { [weak self] in
@@ -177,28 +178,31 @@ final class MessageReactionStore {
                     self.own[id] = choice; self.history.remember(self.room, id: id, choice: choice)
                 }
                 self.history.save()
-            } catch is CancellationError { return } catch { self.own = [:]; self.history.forget(self.room) }
+            } catch is CancellationError { return } catch { self.own = [:]; self.history.forget(self.room); self.failed = self.selectedID != nil }
         }
     }
     func choose(_ emojiID: String?) {
         guard current, let id = selectedID, visible[id] != nil, let before = own[id], !busy else { failed = true; request(); return }
         let desired = before.emojiID == emojiID ? nil : emojiID
         guard before.emojiID != desired else { dismiss(); return }
-        let operation: String, payload: [String: Any]
-        if let pending, pending.id == id, pending.emoji == desired { operation = pending.operation; payload = pending.payload }
+        let operation: String, expectedVersion: Int
+        if let pending, pending.id == id, pending.emoji == desired { operation = pending.operation; expectedVersion = pending.version }
         else {
             operation = UUID().uuidString
-            payload = ["scope": room.scope, "roomId": room.roomID, "messageId": id, "emojiId": desired as Any? ?? NSNull(), "expectedVersion": before.version, "operationId": operation]
+            expectedVersion = before.version
         }
-        pending = (id, desired, payload, operation); busy = true; failed = false
+        pending = (id, desired, expectedVersion, operation); busy = true; failed = false
         Task {
             defer { busy = false; if failed { request() } }
             do {
-                let response = try await functions.httpsCallable(setName).call(payload)
+                // Construct a fresh SDK payload; the retained retry state contains only Sendable values.
+                let response = try await functions.httpsCallable(setName).call(["scope": room.scope, "roomId": room.roomID, "messageId": id, "emojiId": desired as Any? ?? NSNull(), "expectedVersion": expectedVersion, "operationId": operation])
                 guard current, visible[id] != nil, let data = response.data as? [String: Any], let version = data["version"] as? Int else { return }
                 let choice = MessageReactionChoice(emojiID: data["emojiId"] as? String, version: version)
+                visible[id] = MessageReactionParser.counts(data["counts"])
                 own[id] = choice; history.remember(room, id: id, choice: choice)
                 if let desired, choice.emojiID == desired, recorded.insert(operation).inserted { history.record(desired) }
+                if recorded.count > 100, let first = recorded.first { recorded.remove(first) }
                 pending = nil; history.save(); dismiss()
             } catch {
                 let code = FunctionsErrorCode(rawValue: (error as NSError).code)
@@ -248,13 +252,13 @@ struct MessageReactionHost<Content: View>: View {
                         VStack(spacing: KccSpacing.s2) {
                             HStack(spacing: KccSpacing.s2) { selected.actions }
                                 .labelStyle(ReactionActionLabelStyle()).buttonStyle(.plain)
-                            if store.failed { Text("reactions.error").font(.footnote).foregroundStyle(KccTheme.error) }
+                            if store.failed { Button("reactions.error") { store.reload() }.font(.footnote).foregroundStyle(KccTheme.error) }
                             if store.busy { ProgressView() }
                         }
                         .padding(KccSpacing.s3).frame(width: width)
                         .background(KccTheme.surface, in: RoundedRectangle(cornerRadius: KccRadius.lg))
                         .overlay(RoundedRectangle(cornerRadius: KccRadius.lg).stroke(KccTheme.border))
-                        .position(x: x, y: min(geometry.size.height - 52, rect.maxY + 52))
+                        .position(x: x, y: min(geometry.size.height - 52, rect.maxY + (store.visible[id]?.isEmpty == false ? 48 : 0) + 52))
                     }
                 }
             }
@@ -390,7 +394,7 @@ private struct ReactionEmojiPicker: View {
             .searchable(text: $search, prompt: Text("reactions.search"))
             .navigationTitle(Text("reactions.all"))
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("moderation.close") { store.picker = false } } }
-            .safeAreaInset(edge: .bottom) { if store.failed { Text("reactions.error").foregroundStyle(KccTheme.error).padding() } }
+            .safeAreaInset(edge: .bottom) { if store.failed { Button("reactions.error") { store.reload() }.foregroundStyle(KccTheme.error).padding() } }
         }
     }
 }

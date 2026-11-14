@@ -150,6 +150,11 @@ export class MessageReactionEngine {
   async getMine(uid: string, room: ReactionRoom, messageIds: string[]) {
     return this.db.runTransaction(async (tx) => {
       await this.authorize(tx, uid, room, false);
+      // Reject an exhausted account before the bounded, but more expensive, parent fanout.
+      const guard = this.db.doc(`chatReactionRateLimits/${uid}`),
+        rate = await tx.get(guard),
+        now = Date.now(),
+        nextBudget = budget(rate.data(), false, now);
       const items = [];
       for (const messageId of [...new Set(messageIds)]) {
         const path = messagePath(room, messageId);
@@ -157,11 +162,8 @@ export class MessageReactionEngine {
         const own = await tx.get(this.db.doc(`chatMessageReactions/${digest(uid + '\0' + path)}`));
         items.push({ messageId, ...state(own, epoch(parent)) });
       }
-      const guard = this.db.doc(`chatReactionRateLimits/${uid}`),
-        rate = await tx.get(guard),
-        now = Date.now();
       tx.set(guard, {
-        ...budget(rate.data(), false, now),
+        ...nextBudget,
         expireAt: Timestamp.fromMillis(now + 120_000),
       });
       return { items };

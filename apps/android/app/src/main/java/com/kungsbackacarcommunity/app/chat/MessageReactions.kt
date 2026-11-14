@@ -67,6 +67,8 @@ class ReactionLocalStore(context: Context, uid: String) {
     }
     private var loaded = false
     private val saveMutex = kotlinx.coroutines.sync.Mutex()
+    private val diskLock = Any()
+    @Volatile private var generation = 0L
     private val file = File(context.noBackupFilesDir, "emoji-history-" + MessageDigest.getInstance("SHA-256")
         .digest(uid.toByteArray()).joinToString("") { "%02x".format(it) } + ".json")
     private var data = JSONObject()
@@ -74,7 +76,9 @@ class ReactionLocalStore(context: Context, uid: String) {
     suspend fun load() {
         if (loaded) return
         loaded = true
+        val revision = generation
         val loaded = withContext(Dispatchers.IO) { runCatching { JSONObject(file.readText()) }.getOrElse { JSONObject() } }
+        if (revision != generation) return
         data = loaded
         loaded.optJSONObject("usage")?.let { rows -> rows.keys().forEach { id ->
             val row = rows.optJSONArray(id) ?: return@forEach
@@ -107,11 +111,17 @@ class ReactionLocalStore(context: Context, uid: String) {
         saveMutex.lock()
         try {
             val text = data.toString()
-            withContext(Dispatchers.IO) { runCatching { val temp = File(file.path + ".tmp"); temp.writeText(text); if (!temp.renameTo(file)) temp.delete() } }
+            val revision = generation
+            withContext(Dispatchers.IO) { synchronized(diskLock) {
+                if (revision == generation) runCatching { val temp = File(file.path + ".tmp"); temp.writeText(text); if (!temp.renameTo(file)) temp.delete() }
+            } }
         } finally { saveMutex.unlock() }
     }
 
-    fun clear() { usage.clear(); data = JSONObject(); file.delete(); File(file.path + ".tmp").delete() }
+    fun clear() {
+        usage.clear(); data = JSONObject()
+        synchronized(diskLock) { generation++; file.delete(); File(file.path + ".tmp").delete() }
+    }
 }
 
 class ReactionRoomState(val room: ReactionRoom, val uid: String, private val context: Context, private val scope: CoroutineScope, private val sessionIsCurrent: (() -> Boolean)? = null, private val remoteCall: (suspend (String, Map<String, Any?>) -> Map<String, Any?>?)? = null) {
@@ -155,7 +165,8 @@ class ReactionRoomState(val room: ReactionRoom, val uid: String, private val con
         if (id !in own) store.own(room, id)?.let { own[id] = it }
         if (changed || id !in own) request()
     }
-    fun unregister(id: String) { visible.remove(id); bounds.remove(id); actions.remove(id); if (selectedId == id) dismiss() }
+    fun unregister(id: String) { visible.remove(id); own.remove(id); attempts.remove(id); bounds.remove(id); actions.remove(id); if (selectedId == id) dismiss() }
+    fun reload() { selectedId?.let { attempts.remove(it); own.remove(it) }; failed = false; request() }
     fun request() {
         refresh?.cancel()
         refresh = scope.launch {
@@ -176,7 +187,7 @@ class ReactionRoomState(val room: ReactionRoom, val uid: String, private val con
                     own[id] = choice; store.cache(room, id, choice)
                 }
                 store.save()
-            } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { own.clear(); store.forget(room) }
+            } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { own.clear(); store.forget(room); failed = selectedId != null }
         }
     }
     fun choose(emojiId: String?) {
@@ -195,8 +206,11 @@ class ReactionRoomState(val room: ReactionRoom, val uid: String, private val con
                 val result = call(setName, payload) ?: error("Missing response")
                 if (!current() || id !in visible) return@launch
                 val choice = ReactionChoice(result["emojiId"] as? String, (result["version"] as? Number)?.toLong() ?: error("Missing version"))
+                // Acknowledge the authoritative aggregate before the message listener re-registers it.
+                visible[id] = parseReactionCounts(result["counts"])
                 own[id] = choice; store.cache(room, id, choice)
                 if (desired != null && choice.emojiId == desired && recordedOperations.add(operation)) store.record(desired)
+                if (recordedOperations.size > 100) recordedOperations.remove(recordedOperations.first())
                 retry = null; store.save(); dismiss()
             } catch (cancelled: CancellationException) { throw cancelled } catch (error: Exception) {
                 if ((error as? com.google.firebase.functions.FirebaseFunctionsException)?.code in listOf(com.google.firebase.functions.FirebaseFunctionsException.Code.ABORTED, com.google.firebase.functions.FirebaseFunctionsException.Code.PERMISSION_DENIED, com.google.firebase.functions.FirebaseFunctionsException.Code.NOT_FOUND, com.google.firebase.functions.FirebaseFunctionsException.Code.FAILED_PRECONDITION)) retry = null
@@ -248,6 +262,7 @@ fun ReactionRoomHost(room: ReactionRoom, uid: String, content: @Composable () ->
 @Composable
 fun reactionAnchor(id: String, onActions: (() -> Unit)? = null): Modifier {
     val room = LocalReactionRoom.current
+    if (room?.enabled != true) return Modifier
     return Modifier.onGloballyPositioned { room?.bounds?.set(id, it.boundsInWindow()); room?.actions?.set(id, onActions) }
 }
 
@@ -292,9 +307,9 @@ fun ReactionActionsPopup(onDismiss: () -> Unit, onReply: (() -> Unit)? = null, o
     val density = LocalDensity.current
     val menuWidth = (LocalConfiguration.current.screenWidthDp - 32).coerceIn(192, 360).dp
     val quickCount = ((menuWidth.value - 8) / 48).toInt().minus(1).coerceIn(1, 5)
-    val gap = with(density) { anchor.height.toDp() + 16.dp + if (room.visible[id].orEmpty().isNotEmpty()) 48.dp else 0.dp }
+    val gap = with(density) { anchor.height.toDp() + 40.dp + if (room.visible[id].orEmpty().isNotEmpty()) 48.dp else 0.dp }
     if (room.picker) {
-        ModalBottomSheet(onDismissRequest = { room.picker = false }) {
+        ModalBottomSheet(onDismissRequest = { room.picker = false }, modifier = Modifier.fillMaxHeight(0.92f)) {
             var search by remember { mutableStateOf("") }
             var category by remember { mutableStateOf<String?>(null) }
             Text(stringResource(R.string.reactions_all), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
@@ -310,7 +325,7 @@ fun ReactionActionsPopup(onDismiss: () -> Unit, onReply: (() -> Unit)? = null, o
             }
             val results = remember(search, category, room.catalog) { room.catalog.filter { (category == null || it.category == category) && (search.isBlank() || it.keywords.contains(search, ignoreCase = true) || it.glyph == search) } }
             if (room.failed) Text(stringResource(R.string.reactions_error), modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-            LazyVerticalGrid(columns = GridCells.Adaptive(48.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp).padding(8.dp)) {
+            LazyVerticalGrid(columns = GridCells.Adaptive(48.dp), modifier = Modifier.fillMaxWidth().weight(1f).padding(8.dp).imePadding()) {
                 items(results, key = { it.id }) { emoji -> EmojiButton(emoji, room.busy) { room.choose(emoji.id) } }
             }
         }
@@ -319,7 +334,7 @@ fun ReactionActionsPopup(onDismiss: () -> Unit, onReply: (() -> Unit)? = null, o
     Popup(popupPositionProvider = object : PopupPositionProvider {
         override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
             val x = ((anchor.left + anchor.right) / 2 - popupContentSize.width / 2).toInt().coerceIn(8, (windowSize.width - popupContentSize.width - 8).coerceAtLeast(8))
-            val y = (anchor.top - with(density) { 64.dp.toPx() }).toInt().coerceIn(8, (windowSize.height - popupContentSize.height - 8).coerceAtLeast(8))
+            val y = (anchor.top - with(density) { 88.dp.toPx() }).toInt().coerceIn(8, (windowSize.height - popupContentSize.height - 8).coerceAtLeast(8))
             return IntOffset(x, y)
         }
     }, onDismissRequest = { room.dismiss() }, properties = PopupProperties(focusable = true)) {
@@ -342,7 +357,7 @@ fun ReactionActionsPopup(onDismiss: () -> Unit, onReply: (() -> Unit)? = null, o
                             onBlock?.let { action -> MenuAction(Icons.Default.Block, R.string.blocking_blockUser) { room.dismiss(); action() } }
                         }
                         onMore?.let { action -> TextButton(onClick = { room.moreActions = true; action() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.reactions_actions)) } }
-                        if (room.failed) Text(stringResource(R.string.reactions_error), modifier = Modifier.padding(8.dp), color = MaterialTheme.colorScheme.error)
+                        if (room.failed) TextButton(onClick = { room.reload() }) { Text(stringResource(R.string.reactions_error), color = MaterialTheme.colorScheme.error) }
                         if (room.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     }
                 }

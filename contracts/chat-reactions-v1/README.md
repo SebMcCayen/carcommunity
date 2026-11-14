@@ -115,7 +115,7 @@ inventing a zero estimate. Cleanup has an explicit idle scheduler baseline.
 ## Lifecycle, delivery and review
 
 Account hard purge erases own choices with atomic count adjustment, receipts and
-the shared guard after Auth deletion. Parent removal/hiding and shared-club
+the shared guard after access revocation; the guard is removed after Auth deletion. Parent removal/hiding and shared-club
 archival enqueue private cleanup; an hourly bounded sweep handles at most five
 jobs and fifty rows per job. Cleanup never recreates missing parents or removes
 a different message creation epoch. State needed for version ordering remains

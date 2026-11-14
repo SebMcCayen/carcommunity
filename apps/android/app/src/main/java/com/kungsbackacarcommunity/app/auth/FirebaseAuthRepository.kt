@@ -31,6 +31,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 class FirebaseAuthRepository private constructor(
     private val firebaseAuth: FirebaseAuth,
     private val incidentAgePreferences: IncidentAgeFilterPreferenceStore,
+    private val applicationContext: Context,
 ) : AuthRepository {
 
     private val state = MutableStateFlow(firebaseAuth.currentUser.toAuthState())
@@ -39,6 +40,10 @@ class FirebaseAuthRepository private constructor(
 
     init {
         firebaseAuth.addAuthStateListener { auth ->
+            val previous = state.value as? AuthState.SignedIn
+            if (previous != null && previous.uid != auth.currentUser?.uid) {
+                com.kungsbackacarcommunity.app.chat.ReactionLocalStore.forUser(applicationContext, previous.uid).clear()
+            }
             state.value = auth.currentUser.toAuthState()
         }
     }
@@ -98,6 +103,7 @@ class FirebaseAuthRepository private constructor(
                 cached ?: FirebaseAuthRepository(
                     FirebaseAuth.getInstance(),
                     IncidentAgeFilterPreferenceStore.getInstance(context),
+                    context.applicationContext,
                 ).also { cached = it }
             }
         }

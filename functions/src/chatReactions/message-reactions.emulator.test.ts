@@ -59,12 +59,10 @@ describe.runIf(!!process.env.FIREBASE_AUTH_EMULATOR_HOST)(
         });
         const functions = getFunctions(app, 'europe-west1');
         connectFunctionsEmulator(functions, '127.0.0.1', 5001);
-        await expect(
-          httpsCallable(
-            functions,
-            'chatReactions-getMine',
-          )({ ...community, messageIds: ['message'] }),
-        ).rejects.toMatchObject({ code: 'functions/unauthenticated' });
+        const readMine = httpsCallable(functions, 'chatReactions-getMine');
+        await expect(readMine({ ...community, messageIds: ['message'] })).rejects.toMatchObject({
+          code: 'functions/unauthenticated',
+        });
         const credential = await createUserWithEmailAndPassword(
           auth,
           `reaction-${Date.now()}@example.com`,
@@ -81,10 +79,7 @@ describe.runIf(!!process.env.FIREBASE_AUTH_EMULATOR_HOST)(
           .set({ initialized: true }, { merge: true });
         const response = await httpsCallable(functions, 'chatReactions-set')(input());
         expect(response.data).toMatchObject({ messageId: 'message', emojiId: '1f44d', version: 1 });
-        const mine = await httpsCallable(
-          functions,
-          'chatReactions-getMine',
-        )({ ...community, messageIds: ['message'] });
+        const mine = await readMine({ ...community, messageIds: ['message'] });
         expect(mine.data).toMatchObject({
           items: [{ messageId: 'message', emojiId: '1f44d', version: 1 }],
         });
@@ -300,5 +295,14 @@ describe('server-only message reaction transactions', () => {
       ),
     ).rejects.toMatchObject({ code: 'resource-exhausted' });
     expect((await db.doc(parent).get()).get('reactionCounts')).toEqual({ '1f44d': 1 });
+  });
+  it('rejects exhausted read quotas before resolving any supplied target', async () => {
+    await db
+      .doc(`chatReactionRateLimits/${actor}`)
+      .set({ windowStart: Date.now(), requests: 120, changes: 0 });
+    await expect(engine().getMine(actor, community, ['missing-target'])).rejects.toMatchObject({
+      code: 'resource-exhausted',
+    });
+    expect((await db.doc(`chatReactionRateLimits/${actor}`).get()).get('requests')).toBe(120);
   });
 });
