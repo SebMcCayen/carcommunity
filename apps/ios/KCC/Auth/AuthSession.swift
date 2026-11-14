@@ -38,6 +38,10 @@ final class AuthSession {
         if let repository {
             observation = Task { [weak self] in
                 for await newState in repository.authStateUpdates() {
+                    if let previous = self.flatMap({ Self.uid(in: $0.state) }),
+                       previous != Self.uid(in: newState) {
+                        ReactionLocalHistory.store(uid: previous).clear()
+                    }
                     self?.state = newState
                     onIdentityChange(Self.uid(in: newState))
                 }

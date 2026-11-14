@@ -413,3 +413,32 @@ extension ChatModelTests {
         XCTAssertFalse(ChatSendCooldowns.forUser("account-a") === ChatSendCooldowns.forUser("account-b"))
     }
 }
+
+final class MessageReactionModelTests: XCTestCase {
+    func testFrequencyRankingUsesCountThenRecencyAndStableID() {
+        XCTAssertEqual(MessageReactionParser.ranking([
+            "a": ReactionUsage(count: 10, lastUsed: 0), "b": ReactionUsage(count: 3, lastUsed: 10),
+            "c": ReactionUsage(count: 3, lastUsed: 20), "d": ReactionUsage(count: 1, lastUsed: 200)
+        ]), ["a", "c", "b", "d"])
+    }
+    func testCountsRejectIdentityTextAndInvalidNumbers() {
+        XCTAssertEqual(MessageReactionParser.counts([
+            "1f44d": 2, "2764-fe0f": 3, "victim": 100, "1f602": 1.5,
+            "1f60a": -1, "1f451": 0, "1f680": Int64.max, "1f603": true
+        ]), ["1f44d": 2, "2764-fe0f": 3])
+        XCTAssertEqual(MessageReactionParser.counts(nil), [:])
+    }
+    func testChannelAndPrivatePaginationPreserveCounts() {
+        let raw: [String: Any] = ["id": "m", "senderUid": "a", "text": "fixture", "reactionCounts": ["1f44d": 2]]
+        XCTAssertEqual(ChannelResponseParser.parseMessage(raw)?.reactionCounts, ["1f44d": 2])
+        XCTAssertEqual(DmResponseParser.parseMessage(raw)?.reactionCounts, ["1f44d": 2])
+        XCTAssertEqual(ChannelResponseParser.parseMessage(["id": "m", "senderUid": "a"])?.reactionCounts, [:])
+    }
+    @MainActor func testLocalHistoryIsAccountIsolatedAndNotSharedAcrossUIDs() {
+        let first = ReactionLocalHistory.store(uid: "reaction-unit-first"), second = ReactionLocalHistory.store(uid: "reaction-unit-second")
+        first.clear(); second.clear(); first.record("1f44d"); first.save()
+        XCTAssertEqual(first.usage["1f44d"]?.count, 1)
+        XCTAssertNil(second.usage["1f44d"])
+        first.clear(); second.clear()
+    }
+}

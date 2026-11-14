@@ -298,7 +298,7 @@ class FirebaseClubRepository private constructor(
         if (doc.getString("status") in setOf("hidden", "removed")) return null
         val author = doc.getString("authorUid") ?: return null
         val text = doc.getString("text")?.takeIf { it.isNotBlank() } ?: return null
-        return ClubMessage(doc.id, author, doc.getString("authorName"), text, doc.getTimestamp("createdAt")?.toDate()?.time)
+        return ClubMessage(doc.id, author, doc.getString("authorName"), text, doc.getTimestamp("createdAt")?.toDate()?.time, com.kungsbackacarcommunity.app.chat.parseReactionCounts(doc.get("reactionCounts")))
     }
     companion object {
         fun createIfAvailable(context: Context, uid: String): ClubRepository? {

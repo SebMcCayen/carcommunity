@@ -143,5 +143,6 @@ private fun DocumentSnapshot.toChatMessage(): ChatMessage? {
         // and allowed both render normally.
         isAutoHidden = state == ChatModerationState.AUTO_HIDDEN,
         createdAtMillis = getTimestamp("createdAt")?.toDate()?.time,
+        reactionCounts = com.kungsbackacarcommunity.app.chat.parseReactionCounts(get("reactionCounts")),
     )
 }

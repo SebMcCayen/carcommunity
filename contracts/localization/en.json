@@ -2441,5 +2441,25 @@
   "convoy.invitationJoin": "Join",
   "convoy.invitationDecline": "Decline",
   "convoy.invitationInboxHint": "Stays in Notifications",
-  "convoy.invitationClosesIn": "Closes in %1$d s"
+  "convoy.invitationClosesIn": "Closes in %1$d s",
+  "reactions": {
+    "all": "All emoji",
+    "search": "Search emoji",
+    "frequent": "Frequently used",
+    "more": "Show more",
+    "actions": "More actions",
+    "react": "React",
+    "error": "Could not save the reaction. Try again.",
+    "remove": "Remove my reaction",
+    "category0": "Smileys",
+    "category1": "People",
+    "category2": "Variants",
+    "category3": "Animals and nature",
+    "category4": "Food and drink",
+    "category5": "Travel and places",
+    "category6": "Activities",
+    "category7": "Objects",
+    "category8": "Symbols",
+    "category9": "Flags"
+  }
 }

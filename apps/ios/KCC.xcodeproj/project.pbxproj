@@ -470,6 +470,8 @@
 		FF5DAD303A0C20F13A16B67D /* changelog.json in Resources */ = {isa = PBXBuildFile; fileRef = 18ACC38A3554DF9334B4815F /* changelog.json */; };
 		FFAF1EAA160AFCF84E155B6C /* EventAttendeesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B00397E45AB94249025E8C0 /* EventAttendeesSheet.swift */; };
 		FFC620D8B53E1BB6BFEBB181 /* EventChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B12FAC506B254D502CA6177 /* EventChatRepository.swift */; };
+		2DB43A83F1D406309A1B8E23 /* MessageReactions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5059F2E84DF76EA68EAA8F02 /* MessageReactions.swift */; };
+		C8CC72D0E9D4C8EF4D148C1F /* EmojiCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 5F368DB359671F9E6F6C012A /* EmojiCatalog.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -947,6 +949,8 @@
 		FEA57282CD5C314FBB90F9E5 /* PointsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsModels.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
 		FFB6A2C05BDF69FB106D0F24 /* SubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
+		5059F2E84DF76EA68EAA8F02 /* MessageReactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReactions.swift; sourceTree = "<group>"; };
+		5F368DB359671F9E6F6C012A /* EmojiCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = EmojiCatalog.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1040,6 +1044,8 @@
 		158B8318E894A52E872B0AD9 /* Chat */ = {
 			isa = PBXGroup;
 			children = (
+				5F368DB359671F9E6F6C012A /* EmojiCatalog.json */,
+				5059F2E84DF76EA68EAA8F02 /* MessageReactions.swift */,
 				76DF6530C2C3AA39EF2D0495 /* ChannelChatCoordinator.swift */,
 				D11CDD124E35FCE223DE9DCB /* ChannelChatScreen.swift */,
 				82E603DFF92371FE42A37AC1 /* ChatColors.swift */,
@@ -1952,6 +1958,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C8CC72D0E9D4C8EF4D148C1F /* EmojiCatalog.json */,
 				5D52528DBD475FAC372ABBA0 /* AppStore.xcstrings in Resources */,
 				D8BF05C62ECB34F2AA5C4ADA /* Assets.xcassets in Resources */,
 				2E0B84011EAD087064F1C3FA /* ContentSafety.xcstrings in Resources */,
@@ -2033,6 +2040,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2DB43A83F1D406309A1B8E23 /* MessageReactions.swift */,
 				CC7614CE72EA5A6B00F14FF4 /* AccountAccess.swift in Sources */,
 				91F36640DE0946C3FFE135EC /* AccountAccessRepository.swift in Sources */,
 				D1B7BD57517D10D95E1B826E /* AccountDeletionCoordinator.swift in Sources */,

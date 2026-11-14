@@ -8,6 +8,11 @@ struct EventChatScreen: View {
     @State private var reportMessage: EventChatMessage?
 
     var body: some View {
+        MessageReactionHost(room: MessageReactionRoom(scope: "event", roomID: coordinator.eventId), uid: coordinator.currentUserId) { reactionContent }
+            .id(MessageReactionRoom(scope: "event", roomID: coordinator.eventId).key + ":" + coordinator.currentUserId)
+    }
+
+    private var reactionContent: some View {
         Group {
             if accessCoordinator.canOpenEventChat {
                 messageArea
@@ -90,7 +95,7 @@ struct EventChatScreen: View {
                     isOwn: message.authorUserId == coordinator.currentUserId
                 )
                 .id(message.id)
-                .contextMenu {
+                .messageReactions(id: message.id, counts: message.reactionCounts, eligible: !message.isRemoved && !message.isAutoHidden, isOwn: message.authorUserId == coordinator.currentUserId) {
                     if message.authorUserId != coordinator.currentUserId,
                         !message.isRemoved,
                         !message.isAutoHidden

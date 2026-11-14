@@ -34,7 +34,7 @@ data class ClubMember(val uid: String, val displayName: String, val role: ClubRo
 /** A present value, including both nulls, overrides the callable copy. */
 data class ClubMemberAvatar(val avatarPath: String?, val avatarUrl: String?)
 data class ClubEvent(val eventId: String, val title: String, val startMillis: Long, val endMillis: Long?, val locationName: String?)
-data class ClubMessage(val id: String, val authorUid: String, val authorName: String?, val text: String, val createdAtMillis: Long?)
+data class ClubMessage(val id: String, val authorUid: String, val authorName: String?, val text: String, val createdAtMillis: Long?, val reactionCounts: Map<String, Long> = emptyMap())
 data class ClubMessageCursor(val id: String, val seconds: Long, val nanoseconds: Int)
 data class ClubMessagePage(val ids: List<String>, val nextCursor: ClubMessageCursor?, val hasMore: Boolean)
 data class ClubPage<T>(val items: List<T>, val nextCursor: String?)

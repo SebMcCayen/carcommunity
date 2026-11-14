@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.chat.parseReactionCounts
 import com.kungsbackacarcommunity.app.profile.LiveProfile
 import com.kungsbackacarcommunity.app.profile.LiveProfiles
 
@@ -110,6 +111,7 @@ data class DmMessage(
      * snapshot, superseded by the delivered document on reconcile.
      */
     val replyTo: DmReplyTo? = null,
+    val reactionCounts: Map<String, Long> = emptyMap(),
 )
 
 /** Denormalized last-message preview shown on an inbox row. */
@@ -438,6 +440,7 @@ object DmResponseParser {
             createdAtIso = iso,
             clientId = (map["clientId"] as? String)?.takeIf { it.isNotBlank() },
             replyTo = parseReplyTo(map["replyTo"]),
+            reactionCounts = parseReactionCounts(map["reactionCounts"]),
         )
     }
 

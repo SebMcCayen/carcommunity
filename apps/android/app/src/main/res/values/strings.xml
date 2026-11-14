@@ -2276,4 +2276,22 @@
     <string name="convoy_invitationDecline">Neka</string>
     <string name="convoy_invitationInboxHint">Finns kvar i Notifikationer</string>
     <string name="convoy_invitationClosesIn">Rutan stängs om %1$d s</string>
+    <string name="reactions_all">Alla emojier</string>
+    <string name="reactions_search">Sök emoji</string>
+    <string name="reactions_frequent">Mest använda</string>
+    <string name="reactions_more">Visa fler</string>
+    <string name="reactions_actions">Fler åtgärder</string>
+    <string name="reactions_react">Reagera</string>
+    <string name="reactions_error">Reaktionen kunde inte sparas. Försök igen.</string>
+    <string name="reactions_remove">Ta bort min reaktion</string>
+    <string name="reactions_category0">Ansikten</string>
+    <string name="reactions_category1">Personer</string>
+    <string name="reactions_category2">Varianter</string>
+    <string name="reactions_category3">Djur och natur</string>
+    <string name="reactions_category4">Mat och dryck</string>
+    <string name="reactions_category5">Resor och platser</string>
+    <string name="reactions_category6">Aktiviteter</string>
+    <string name="reactions_category7">Föremål</string>
+    <string name="reactions_category8">Symboler</string>
+    <string name="reactions_category9">Flaggor</string>
 </resources>

@@ -359,6 +359,9 @@ fun KeepPinnedToNewest(
     LaunchedEffect(listState) {
         if (didInitialJump) return@LaunchedEffect
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+        // layoutInfo can publish while the first measure is still active.
+        // Yield before scrollToItem forces another measure (also with reaction rows).
+        withFrameNanos { }
         listState.scrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
         alignMeasuredChatTail(listState)
         didInitialJump = true

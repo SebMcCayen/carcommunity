@@ -94,6 +94,7 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
      * until then. Message reactions are a separate future feature.
      */
     CHAT_REPLIES("chatReplies", false),
+    CHAT_REACTIONS("chatReactions", false),
 
     /** Legacy compatibility key: full details are free; roster access is always paid/admin. */
     EVENT_DETAILS_REQUIRE_PAID("eventDetailsRequirePaid", false),

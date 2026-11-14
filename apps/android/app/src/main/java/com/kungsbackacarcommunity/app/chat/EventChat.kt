@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chat
 
+import com.kungsbackacarcommunity.app.chat.parseReactionCounts
 import com.kungsbackacarcommunity.app.events.EventStatus
 import com.kungsbackacarcommunity.app.events.RsvpStatus
 
@@ -60,6 +61,7 @@ data class ChatMessage(
     val isRemoved: Boolean,
     val isAutoHidden: Boolean = false,
     val createdAtMillis: Long?,
+    val reactionCounts: Map<String, Long> = emptyMap(),
 )
 
 object EventChat {

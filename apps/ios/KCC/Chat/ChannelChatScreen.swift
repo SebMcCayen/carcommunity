@@ -38,6 +38,11 @@ struct ChannelChatScreen: View {
     }
 
     var body: some View {
+        MessageReactionHost(room: (coordinator?.reactionRoom ?? MessageReactionRoom(scope: "community", roomID: "global")), uid: (coordinator?.currentUserId ?? "")) { reactionContent }
+            .id((coordinator?.reactionRoom ?? MessageReactionRoom(scope: "community", roomID: "global")).key + ":" + (coordinator?.currentUserId ?? ""))
+    }
+
+    private var reactionContent: some View {
         Group {
             if showsNavigationTitle {
                 content.navigationTitle(title)
@@ -129,7 +134,7 @@ struct ChannelChatScreen: View {
                                collapsedLines: protectCommunity ? 4 : nil,
                                coordinator: coordinator,
                                onViewProfile: onViewProfile)
-                        .contextMenu { messageActions(message, coordinator: coordinator) }
+                        .messageReactions(id: message.id, counts: message.reactionCounts, eligible: message.deliveryState == .sent, isOwn: message.senderUid == coordinator.currentUserId, leadingInset: 48) { messageActions(message, coordinator: coordinator) }
                         .id(message.id)
                 }
             }
@@ -204,12 +209,11 @@ struct ChannelChatScreen: View {
                 .disabled(coordinator.cooldown.isBlocked)
         }
         if coordinator.chatRepliesEnabled, message.deliveryState == .sent {
-            Button { coordinator.setReplyTarget(message) } label: {
-                Label("chat.replyQuoteHeaderAction", systemImage: "arrowshape.turn.up.left")
-            }
+            ReactionReplyAction { coordinator.setReplyTarget(message) }
         }
         if message.deliveryState == .sent, message.senderUid != coordinator.currentUserId {
             ReportMenu(message: message, coordinator: coordinator)
+            ReactionBlockAction(targetUID: message.senderUid)
         }
     }
 
@@ -508,6 +512,7 @@ private struct ChannelSenderAvatar: View {
 /// the outcome is not surfaced per-reason (matching the callable's refusal to
 /// reveal report state).
 private struct ReportMenu: View {
+    @Environment(\.messageReactionStore) private var reactionStore
     let message: ChannelMessage
     let coordinator: ChannelChatCoordinator
 
@@ -515,6 +520,7 @@ private struct ReportMenu: View {
         Menu {
             ForEach(ChatReportReason.allCases, id: \.self) { reason in
                 Button {
+                    reactionStore?.dismiss()
                     Task { await coordinator.report(message, reason: reason) }
                 } label: {
                     Text(Self.reasonKey(reason))

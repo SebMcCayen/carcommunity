@@ -2276,4 +2276,22 @@
     <string name="convoy_invitationDecline">Decline</string>
     <string name="convoy_invitationInboxHint">Stays in Notifications</string>
     <string name="convoy_invitationClosesIn">Closes in %1$d s</string>
+    <string name="reactions_all">All emoji</string>
+    <string name="reactions_search">Search emoji</string>
+    <string name="reactions_frequent">Frequently used</string>
+    <string name="reactions_more">Show more</string>
+    <string name="reactions_actions">More actions</string>
+    <string name="reactions_react">React</string>
+    <string name="reactions_error">Could not save the reaction. Try again.</string>
+    <string name="reactions_remove">Remove my reaction</string>
+    <string name="reactions_category0">Smileys</string>
+    <string name="reactions_category1">People</string>
+    <string name="reactions_category2">Variants</string>
+    <string name="reactions_category3">Animals and nature</string>
+    <string name="reactions_category4">Food and drink</string>
+    <string name="reactions_category5">Travel and places</string>
+    <string name="reactions_category6">Activities</string>
+    <string name="reactions_category7">Objects</string>
+    <string name="reactions_category8">Symbols</string>
+    <string name="reactions_category9">Flags</string>
 </resources>
