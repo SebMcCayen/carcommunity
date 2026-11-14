@@ -38,6 +38,11 @@ struct ChannelChatScreen: View {
     }
 
     var body: some View {
+        MessageReactionHost(room: (coordinator?.reactionRoom ?? MessageReactionRoom(scope: "community", roomID: "global")), uid: (coordinator?.currentUserId ?? "")) { reactionContent }
+            .id((coordinator?.reactionRoom ?? MessageReactionRoom(scope: "community", roomID: "global")).key + ":" + (coordinator?.currentUserId ?? ""))
+    }
+
+    private var reactionContent: some View {
         Group {
             if showsNavigationTitle {
                 content.navigationTitle(title)
@@ -129,7 +134,7 @@ struct ChannelChatScreen: View {
                                collapsedLines: protectCommunity ? 4 : nil,
                                coordinator: coordinator,
                                onViewProfile: onViewProfile)
-                        .contextMenu { messageActions(message, coordinator: coordinator) }
+                        .messageReactions(id: message.id, counts: message.reactionCounts, eligible: message.deliveryState == .sent, isOwn: message.senderUid == coordinator.currentUserId, leadingInset: 48) { messageActions(message, coordinator: coordinator) }
                         .id(message.id)
                 }
             }
@@ -210,6 +215,7 @@ struct ChannelChatScreen: View {
         }
         if message.deliveryState == .sent, message.senderUid != coordinator.currentUserId {
             ReportMenu(message: message, coordinator: coordinator)
+            ReactionBlockAction(targetUID: message.senderUid)
         }
     }
 

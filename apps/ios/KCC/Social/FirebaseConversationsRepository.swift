@@ -260,7 +260,8 @@ final class FirebaseConversationsRepository: ConversationsRepository, @unchecked
             // Echoed idempotency key: lets the live snapshot reconcile
             // against the sender's optimistic bubble (doc id == clientId).
             clientId: document.get("clientId") as? String,
-            replyTo: DmResponseParser.parseReplyTo(document.get("replyTo"))
+            replyTo: DmResponseParser.parseReplyTo(document.get("replyTo")),
+            reactionCounts: MessageReactionParser.counts(document.get("reactionCounts"))
         )
     }
 

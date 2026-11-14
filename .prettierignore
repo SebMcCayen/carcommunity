@@ -5,3 +5,8 @@ functions/lib
 coverage
 package-lock.json
 firebase/public
+
+# Generated versioned emoji data; verified by scripts/verify-chat-reactions.mjs.
+**/emoji-catalog.json
+**/EmojiCatalog.json
+**/emoji-ids.ts

@@ -173,7 +173,8 @@ private final class EventChatMessagesListener: @unchecked Sendable {
             authorDisplayName: document.get("authorDisplayName") as? String,
             message: document.get("message") as? String ?? "",
             moderationState: .fromWire(document.get("moderationState") as? String),
-            createdAt: (document.get("createdAt") as? Timestamp)?.dateValue()
+            createdAt: (document.get("createdAt") as? Timestamp)?.dateValue(),
+            reactionCounts: MessageReactionParser.counts(document.get("reactionCounts"))
         )
     }
 }

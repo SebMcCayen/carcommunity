@@ -44,7 +44,8 @@ enum ChatFirestore {
             createdAtIso: date.map(ChannelTime.isoString),
             mentionedUids: ChannelResponseParser.parseMentionedUids(document.get("mentionedUids")),
             clientId: (document.get("clientId") as? String).flatMap { $0.isEmpty ? nil : $0 },
-            replyTo: ChannelResponseParser.parseReplyTo(document.get("replyTo"))
+            replyTo: ChannelResponseParser.parseReplyTo(document.get("replyTo")),
+            reactionCounts: MessageReactionParser.counts(document.get("reactionCounts"))
         )
     }
 

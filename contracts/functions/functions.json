@@ -1646,6 +1646,24 @@
       "appCheck": true,
       "status": "implemented",
       "source": "contracts/schemas/road-cameras.schema.json"
+    },
+    {
+      "name": "chatReactions.set",
+      "domain": "chatReactions",
+      "description": "Sets the authenticated caller's one desired emoji or null on an authorized Community, convoy, DM or event message. Strict catalog IDs, expectedVersion and operationId; transactional account/product/membership/block/pause checks, shared request/mutation budget, idempotent receipts, no notification or unread effects. Default-off chatReactions flag. Club reactions use the Driver-owned adapter.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "contracts/chat-reactions-v1/README.md"
+    },
+    {
+      "name": "chatReactions.getMine",
+      "domain": "chatReactions",
+      "description": "Returns only the authenticated caller's emoji/version for at most 50 authorized message IDs in one room. No actor roster, aggregate scan or history synchronization. Same current room/account/block checks as mutation. Default-off chatReactions flag.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "contracts/chat-reactions-v1/README.md"
     }
   ]
 }

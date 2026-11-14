@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.parseReactionCounts
 import com.kungsbackacarcommunity.app.profile.LiveProfile
 import com.kungsbackacarcommunity.app.profile.LiveProfiles
 
@@ -105,6 +106,7 @@ data class ChannelMessage(
      * document's authoritative copy on reconcile.
      */
     val replyTo: ChannelReplyTo? = null,
+    val reactionCounts: Map<String, Long> = emptyMap(),
 )
 
 /**
@@ -441,6 +443,7 @@ object ChannelResponseParser {
             mentionedUids = parseMentionedUids(map["mentionedUids"]),
             clientId = (map["clientId"] as? String)?.takeIf { it.isNotBlank() },
             replyTo = parseReplyTo(map["replyTo"]),
+            reactionCounts = parseReactionCounts(map["reactionCounts"]),
         )
     }
 

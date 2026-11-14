@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.clubs
 
+import com.kungsbackacarcommunity.app.chat.*
 import com.kungsbackacarcommunity.app.chat.ChatSendCooldowns
 import com.kungsbackacarcommunity.app.chat.rememberChatCooldownSeconds
 import com.kungsbackacarcommunity.app.chat.ChatCooldownNotice
@@ -104,6 +105,7 @@ private fun VerifiedClubChat(uid: String, repo: ClubRepository?, profiles: LiveP
 
 @Composable
 private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubChatState.Ready, profiles: LiveProfileRepository, sendCooldown: com.kungsbackacarcommunity.app.chat.ChatSendCooldown?, roomOutbox: ClubRoomOutbox) {
+    ReactionRoomHost(ReactionRoom("club", ready.membership.clubId), uid) {
     val membership = ready.membership
     val cooldown = remember(uid, sendCooldown) { sendCooldown ?: ChatSendCooldowns.forUser(uid) }
     val cooldownSeconds = rememberChatCooldownSeconds(cooldown)
@@ -279,7 +281,12 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
         )
     }
     visibleMessages.firstOrNull { it.id == actionsMessageId }?.let { message ->
-        AlertDialog(
+        val reactionState = LocalReactionRoom.current
+        if (reactionState?.enabled == true && reactionState.selectedId != null && !reactionState.moreActions) {
+            ReactionActionsPopup(onDismiss = { actionsMessageId = null },
+                onReport = ({ actionsMessageId = null; reportingId = message.id }).takeIf { message.authorUid != uid },
+                onMore = {})
+        } else AlertDialog(
             onDismissRequest = { actionsMessageId = null },
             title = { Text(stringResource(R.string.clubs_messageActions)) },
             text = { Column {
@@ -325,6 +332,7 @@ private fun ClubChatRoom(uid: String, repository: ClubRepository, ready: ClubCha
                 }
             },
         )
+    }
     }
 }
 

@@ -1,0 +1,9 @@
+{
+  "unicodeVersion": "18.0",
+  "inputsSha256": {
+    "emoji-test.txt": "8f3735cda1f92a779d78af67cf86066bb1f07143dc22f2ac29394d9bc57ab21a",
+    "cldr-sv.json": "15bda553e4817f499574668557393c0c5eca4b64aebef546d0a4f3a5ef0498e0",
+    "cldr-derived-sv.json": "ab6d10933d19a4d1e646f5672bbd1e887bda55ed682c87c60cef3a99bfbd3dbb",
+    "unicode-license.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
+  }
+}

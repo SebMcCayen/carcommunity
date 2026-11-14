@@ -21,6 +21,7 @@ struct EventChatMessage: Equatable, Sendable, Identifiable {
     let message: String
     let moderationState: EventChatModerationState
     let createdAt: Date?
+    var reactionCounts: [String: Int] = [:]
 
     var isRemoved: Bool { moderationState == .removed }
     var isAutoHidden: Bool { moderationState == .autoHidden }
