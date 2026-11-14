@@ -4,6 +4,7 @@ import android.content.Context
 import com.mapbox.geojson.Point
 import com.mapbox.maps.Style
 import com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 
@@ -23,9 +24,9 @@ import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
  * ## What the caller owns
  * Everything with a lifetime. A `PointAnnotationManager` and the style images
  * registered against a style both die with that style, so each map keeps its
- * own manager, its own [registeredImages] set and its own [idsByAnnotation]
- * lookup, and resets them wherever it recreates the manager. This object holds
- * no state at all, which is what makes it safe to point at two live maps.
+ * own manager, its own [registeredImages] set, [annotations] reconciler and
+ * [idsByAnnotation] lookup, and resets them whenever it recreates the manager.
+ * This object holds no state, so it can safely serve two live maps.
  *
  * ## Layer identity
  * Each map's annotation manager creates its OWN GeoJSON source and symbol layer
@@ -37,11 +38,11 @@ import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
  */
 internal object IncidentMarkerLayer {
     /**
-     * Clears and redraws [markers] on [manager] — one CATEGORY ICON per marker —
+     * Reconciles [markers] on [manager], retaining unchanged annotations by id,
      * and rebuilds [idsByAnnotation] so a tap can be resolved back to the
      * incident it landed on. Returns whether the draw was COMPLETE, i.e. whether
-     * every image it needed was on the style; an incomplete draw must not be
-     * cached by the caller, or the missing icons would persist as blank
+     * every image and annotation operation succeeded. An incomplete draw must
+     * not be cached by the caller, or the missing icons would persist as blank
      * annotations until the marker set happened to change.
      *
      * These were plain coloured circles, which made colour the only thing
@@ -55,9 +56,8 @@ internal object IncidentMarkerLayer {
      * ([registeredImages]); the annotations then only reference it by name, so
      * redrawing the layer does not re-upload bitmaps.
      *
-     * The lookup is cleared FIRST and repopulated as annotations are created, so
-     * it can never outlive the annotations it describes and hand a click
-     * listener a stale incident id after a redraw.
+     * The lookup is rebuilt from retained annotations after reconciliation, so
+     * unchanged badges keep both their native identity and their tap target.
      *
      * Every native call is wrapped defensively so a partial/failed draw degrades
      * rather than crashing the map.
@@ -85,6 +85,7 @@ internal object IncidentMarkerLayer {
      * @param registeredImages the image names already uploaded to [style], owned
      *   and reset by the caller alongside its manager.
      * @param idsByAnnotation the caller's annotation-id → incident-id lookup.
+     * @param annotations retained annotations, cleared with the manager.
      */
     fun draw(
         manager: PointAnnotationManager,
@@ -93,67 +94,63 @@ internal object IncidentMarkerLayer {
         markers: List<MapIncidentMarker>,
         registeredImages: MutableSet<String>,
         idsByAnnotation: MutableMap<String, String>,
+        annotations: IncidentMarkerReconciler<PointAnnotation>,
     ): Boolean {
-        // Every image this draw needs must be on the style, or the annotations
-        // below would reference a name the style does not know and render as
-        // nothing. Tracked so the CALLER can decline to cache an incomplete draw
-        // and simply try again on the next update.
-        var complete = true
-        runCatching { manager.deleteAll() }
-        idsByAnnotation.clear()
-        for (marker in markers) {
-            val imageId =
-                IncidentMarkerBitmaps.imageId(
-                    iconRes = marker.iconRes,
-                    discColorArgb = marker.colorArgb,
-                    glyphColorArgb = marker.glyphColorArgb,
-                    // Part of the KEY, not just the pixels: a normal marker and
-                    // its struck-through twin differ only by the slash, so
-                    // without this they would collide on one style-image name
-                    // and whichever was registered first would be drawn for both.
-                    reportedCleared = marker.reportedCleared,
+        val complete = annotations.reconcile(
+            markers = markers,
+            prepare = { marker ->
+                registerImage(marker, style, context, registeredImages)
+            },
+            create = { marker ->
+                manager.create(
+                    PointAnnotationOptions()
+                        .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                        .withIconImage(imageId(marker))
+                        .withIconAnchor(IconAnchor.CENTER),
                 )
-            // Register this category's image on first use against the current
-            // style. If the style handle or context is unavailable the image
-            // cannot be uploaded, so this draw is incomplete — never a crash.
-            if (imageId !in registeredImages) {
-                val bitmap =
-                    if (style != null && context != null) {
-                        IncidentMarkerBitmaps.create(
-                            context = context,
-                            iconRes = marker.iconRes,
-                            discColorArgb = marker.colorArgb,
-                            glyphColorArgb = marker.glyphColorArgb,
-                            reportedCleared = marker.reportedCleared,
-                        )
-                    } else {
-                        null
-                    }
-                // Only remember it as registered once the upload actually
-                // succeeded, so a transient failure retries on the next redraw
-                // rather than permanently marking the icon as present.
-                val added =
-                    bitmap != null &&
-                        style != null &&
-                        runCatching { style.addImage(imageId, bitmap) }.isSuccess
-                if (added) registeredImages.add(imageId) else complete = false
-            }
-            runCatching {
-                val annotation =
-                    manager.create(
-                        PointAnnotationOptions()
-                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                            .withIconImage(imageId)
-                            // Anchored at the centre: this is a disc badge marking a
-                            // point, not a pin whose tip is the location.
-                            .withIconAnchor(IconAnchor.CENTER),
-                    )
-                // Record the drawn annotation so a tap on it resolves back to the
-                // incident it represents.
-                idsByAnnotation[annotation.id] = marker.id
-            }
-        }
+            },
+            update = { annotation, marker ->
+                annotation.point = Point.fromLngLat(marker.longitude, marker.latitude)
+                annotation.iconImage = imageId(marker)
+                manager.update(annotation)
+            },
+            delete = { annotation -> manager.delete(annotation) },
+        )
+        idsByAnnotation.clear()
+        annotations.forEachAnnotation { id, annotation -> idsByAnnotation[annotation.id] = id }
         return complete
+    }
+
+    private fun imageId(marker: MapIncidentMarker): String =
+        IncidentMarkerBitmaps.imageId(
+            iconRes = marker.iconRes,
+            discColorArgb = marker.colorArgb,
+            glyphColorArgb = marker.glyphColorArgb,
+            reportedCleared = marker.reportedCleared,
+        )
+
+    private fun registerImage(
+        marker: MapIncidentMarker,
+        style: Style?,
+        context: Context?,
+        registeredImages: MutableSet<String>,
+    ): Boolean {
+        val imageId = imageId(marker)
+        if (imageId in registeredImages) return true
+        if (style == null || context == null) return false
+        val added = runCatching {
+            val bitmap = IncidentMarkerBitmaps.create(
+                context = context,
+                iconRes = marker.iconRes,
+                discColorArgb = marker.colorArgb,
+                glyphColorArgb = marker.glyphColorArgb,
+                reportedCleared = marker.reportedCleared,
+            ) ?: return@runCatching false
+            style.addImage(imageId, bitmap)
+            true
+        }.getOrDefault(false)
+        if (added) registeredImages.add(imageId)
+        return added
     }
 
     /**

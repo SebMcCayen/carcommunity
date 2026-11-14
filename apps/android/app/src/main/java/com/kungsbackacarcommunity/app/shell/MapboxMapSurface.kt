@@ -359,7 +359,7 @@ class MapboxMapSurface(
     // Maps a drawn annotation back to the incident id it represents, so a click
     // can be reported across the seam. Keyed on the annotation's own id rather
     // than a coordinate so two incidents reported at the same spot stay distinct.
-    // Rebuilt on every redraw and cleared with the manager.
+    // Refreshed after reconciliation and cleared with the manager.
     //
     // Module-visible rather than private only so unit tests can seed a drawn
     // badge without a GL surface (annotations cannot be created off-device).
@@ -397,10 +397,10 @@ class MapboxMapSurface(
     // released: style images do NOT survive a style reload, so a stale "already
     // registered" entry would leave an icon-less marker behind.
     private val registeredIncidentImages = mutableSetOf<String>()
-    // The incident markers currently drawn, so a recomposition only clears and
-    // redraws them when the set ACTUALLY changes (unrelated recompositions must
-    // not flicker the layer). Reset to null whenever the manager is (re)created
-    // or torn down so a cleared-then-recreated map always redraws.
+    private val incidentAnnotations = IncidentMarkerReconciler<PointAnnotation>()
+    // The incident markers currently drawn, so unrelated recompositions skip
+    // reconciliation. Changed lists retain annotations by marker id. Reset with
+    // the manager so a recreated map always draws the current markers.
     private var lastAppliedIncidents: List<MapIncidentMarker>? = null
 
     // ---- Kronjakt crown layer -----------------------------------------------
@@ -1984,6 +1984,7 @@ class MapboxMapSurface(
                         crownMarkerManager = null
                         routeLineManager = null
                         destMarkerManager = null
+                        incidentAnnotations.clear()
                         incidentMarkerManager = null
                         eventMarkerManager = null
                         billboardMarkerManager = null
@@ -2075,6 +2076,8 @@ class MapboxMapSurface(
                                 }
                             incidentClickListener = incidentClick
                             incidentManager.addClickListener(incidentClick)
+                            incidentAnnotations.clear()
+                            incidentIdsByAnnotation.clear()
                             incidentMarkerManager = incidentManager
                             lastAppliedIncidents = null
                             // Style images are owned by the style that was just
@@ -2360,6 +2363,7 @@ class MapboxMapSurface(
                 }
                 billboardClickListener = null
                 destMarkerManager = null
+                incidentAnnotations.clear()
                 incidentMarkerManager = null
                 crownMarkerManager = null
                 eventMarkerManager = null
@@ -2568,10 +2572,9 @@ class MapboxMapSurface(
     }
 
     /**
-     * Redraws the incident markers only when the set differs from the last one
-     * applied, so unrelated recompositions (traffic toggle, route redraw,
-     * live-sharing pulse) don't clear/redraw the whole incidents layer. The
-     * cache is reset to null wherever the manager is (re)created or torn down.
+     * Reconciles the incident markers only when the list differs from the last
+     * one applied. The reconciler ignores list order and retains unchanged ids.
+     * The cache is reset to null wherever the manager is (re)created or torn down.
      */
     private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>) {
         if (markers == lastAppliedIncidents) return
@@ -2582,13 +2585,11 @@ class MapboxMapSurface(
         // drawn as blank, icon-less annotations for as long as the set did not
         // change. Declining to cache costs one redundant redraw and makes the
         // next update repair it.
-        if (applyIncidentMarkers(markers)) {
-            lastAppliedIncidents = markers
-        }
+        lastAppliedIncidents = if (applyIncidentMarkers(markers)) markers else null
     }
 
     /**
-     * Clears and redraws the incident markers on THIS surface. A no-op until the
+     * Reconciles the incident markers on THIS surface. A no-op until the
      * manager exists (style loaded).
      *
      * The draw itself is [IncidentMarkerLayer.draw] — the one renderer shared
@@ -2607,6 +2608,7 @@ class MapboxMapSurface(
             markers = markers,
             registeredImages = registeredIncidentImages,
             idsByAnnotation = incidentIdsByAnnotation,
+            annotations = incidentAnnotations,
         )
     }
 
