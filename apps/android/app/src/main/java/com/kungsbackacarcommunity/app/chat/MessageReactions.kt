@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -283,8 +284,9 @@ fun MessageReactionChips(id: String, counts: Map<String, Long>) {
         choices.take(3).forEach { (key, count) ->
             val emoji = room.catalog.firstOrNull { it.id == key } ?: return@forEach
             val selected = room.own[id]?.emojiId == key
-            Surface(shape = RoundedCornerShape(24.dp), border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+            Surface(shape = RoundedCornerShape(24.dp), border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
                 color = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.heightIn(min = 48.dp).clickable { room.select(id); room.choose(key) }) {
                 Text("${emoji.glyph} $count${if (selected) " ✓" else ""}", modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
                     .semantics { contentDescription = "${emoji.name}, $count"; this.selected = selected })
@@ -305,6 +307,9 @@ fun ReactionActionsPopup(onDismiss: () -> Unit, onReply: (() -> Unit)? = null, o
     }
     val anchor = room.bounds[id] ?: Rect.Zero
     val density = LocalDensity.current
+    val menuColor = if (com.kungsbackacarcommunity.app.design.LocalKccDarkTheme.current)
+        com.kungsbackacarcommunity.app.design.KccPalette.darkCharcoal.copy(alpha = 0.65f).compositeOver(MaterialTheme.colorScheme.surface)
+        else MaterialTheme.colorScheme.surface
     val menuWidth = (LocalConfiguration.current.screenWidthDp - 32).coerceIn(192, 360).dp
     val quickCount = ((menuWidth.value - 8) / 48).toInt().minus(1).coerceIn(1, 5)
     val gap = with(density) { anchor.height.toDp() + 40.dp + if (room.visible[id].orEmpty().isNotEmpty()) 48.dp else 0.dp }
@@ -340,7 +345,7 @@ fun ReactionActionsPopup(onDismiss: () -> Unit, onReply: (() -> Unit)? = null, o
     }, onDismissRequest = { room.dismiss() }, properties = PopupProperties(focusable = true)) {
         BoxWithConstraints(Modifier.widthIn(max = 360.dp).padding(horizontal = 8.dp)) {
             Column(Modifier.width(menuWidth)) {
-                Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Surface(color = menuColor, shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                     Row(Modifier.fillMaxWidth().padding(4.dp).then(Modifier.semantics { contentDescription = "reaction-quick-row" }), horizontalArrangement = Arrangement.SpaceEvenly) {
                         val defaults = listOf("1f44d", "2764-fe0f", "1f602", "1f60a", "1f451")
                         val keys = (rankReactionEmojis(room.store.usage) + defaults).distinct().take(quickCount)
@@ -349,7 +354,7 @@ fun ReactionActionsPopup(onDismiss: () -> Unit, onReply: (() -> Unit)? = null, o
                     }
                 }
                 Spacer(Modifier.height(gap))
-                Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Surface(color = menuColor, shape = RoundedCornerShape(24.dp), tonalElevation = 6.dp, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                     Column {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             onReply?.let { action -> MenuAction(Icons.AutoMirrored.Filled.Reply, R.string.moderation_reply) { room.dismiss(); action() } }
@@ -379,7 +384,7 @@ private fun EmojiButton(emoji: ReactionEmoji, busy: Boolean, onClick: () -> Unit
 }
 @Composable
 private fun MenuAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: Int, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 64.dp)) {
+    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 64.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null); Text(stringResource(label), style = MaterialTheme.typography.labelSmall) }
     }
 }
