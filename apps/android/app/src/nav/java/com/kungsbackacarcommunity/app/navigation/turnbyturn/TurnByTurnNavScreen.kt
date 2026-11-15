@@ -1004,7 +1004,8 @@ fun TurnByTurnNavScreen(
         val cameraTap by engine.roadCameraTap.collectAsState()
         cameraLayerState?.selected(cameraTap)?.let { camera ->
             com.kungsbackacarcommunity.app.roadcameras.RoadCameraDetailsSheet(
-                camera, cameraLayerState.repository, engine::consumeRoadCameraTap)
+                camera, cameraLayerState.repository, views = cameraLayerState.viewsFor(camera),
+                onDismiss = engine::consumeRoadCameraTap)
         }
 
         // The SHARED map-layers popup from the map home — the same composable,

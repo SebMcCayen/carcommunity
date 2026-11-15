@@ -9,6 +9,7 @@ final class RoadCameraMapCoordinator {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var selectionGeneration = 0
     private(set) var cameras: [RoadCamera] = []
+    private(set) var locations: [RoadCameraLocation] = []
     private(set) var enabledTypes = Set<RoadCameraType>()
     private(set) var selectedCamera: RoadCamera?
     private(set) var photo: RoadCameraPhoto?
@@ -25,12 +26,14 @@ final class RoadCameraMapCoordinator {
         if let selectedCamera, !enabledTypes.contains(selectedCamera.type) { dismiss() }
         guard !enabledTypes.isEmpty, let repository else {
             cameras = []
+            locations = []
             return
         }
         do {
             let catalog = try await repository.catalog()
             guard !Task.isCancelled, request == generation else { return }
             cameras = catalog.cameras
+            locations = RoadCameraLocation.group(catalog.cameras)
             catalogErrorKey = nil
         } catch {
             guard !Task.isCancelled, request == generation else { return }
@@ -42,6 +45,7 @@ final class RoadCameraMapCoordinator {
         generation += 1
         enabledTypes = []
         cameras = []
+        locations = []
         dismiss()
     }
 
@@ -50,7 +54,7 @@ final class RoadCameraMapCoordinator {
         let distance = max(500, min(radius ?? 15_000, 50_000))
         let latitudeSpan = distance / 111_000
         let longitudeSpan = latitudeSpan / max(0.1, cos(center.latitude * .pi / 180))
-        return Array(cameras.filter {
+        return Array(locations.map(\.camera).filter {
             enabledTypes.contains($0.type)
                 && abs($0.latitude - center.latitude) <= latitudeSpan
                 && abs($0.longitude - center.longitude) <= longitudeSpan
@@ -58,6 +62,16 @@ final class RoadCameraMapCoordinator {
             hypot($0.latitude - center.latitude, ($0.longitude - center.longitude) * cos(center.latitude * .pi / 180))
                 < hypot($1.latitude - center.latitude, ($1.longitude - center.longitude) * cos(center.latitude * .pi / 180))
         }.prefix(250))
+    }
+
+    var selectedViews: [RoadCamera] {
+        guard let selectedCamera else { return [] }
+        return locations.first { $0.views.contains { $0.id == selectedCamera.id } }?.views ?? [selectedCamera]
+    }
+
+    func selectDirection(_ camera: RoadCamera) {
+        guard camera.id != selectedCamera?.id, selectedViews.contains(where: { $0.id == camera.id }) else { return }
+        select(camera)
     }
 
     func select(_ camera: RoadCamera) {
@@ -141,6 +155,13 @@ struct RoadCameraDetailsContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
             Text(camera.name).font(.headline)
+            if coordinator.selectedViews.count > 1 {
+                Text("roadCameras.chooseDirection").font(.subheadline)
+                ViewThatFits(in: .horizontal) {
+                    directionButtons(horizontal: true)
+                    directionButtons(horizontal: false)
+                }
+            }
             Text("incidents.sourceTrafikverket").font(.footnote).foregroundStyle(KccTheme.secondary)
             if camera.type != .speed {
                 if let photo = coordinator.photo, let image = UIImage(data: photo.data) {
@@ -162,6 +183,27 @@ struct RoadCameraDetailsContent: View {
             }
         }
         .task(id: camera.id) { await coordinator.loadPhoto(cameraId: camera.id) }
+    }
+
+    @ViewBuilder
+    private func directionButtons(horizontal: Bool) -> some View {
+        let layout = horizontal ? AnyLayout(HStackLayout(spacing: KccSpacing.s2))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: KccSpacing.s2))
+        layout {
+            ForEach(coordinator.selectedViews) { view in
+                Button { coordinator.selectDirection(view) } label: {
+                    HStack {
+                        if view.id == camera.id { Image(systemName: "checkmark") }
+                        Text(view.viewLabel(in: coordinator.selectedViews))
+                    }
+                    .padding(.horizontal, KccSpacing.s2).frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .tint(view.id == camera.id ? KccTheme.driver : KccTheme.secondary)
+                .accessibilityAddTraits(view.id == camera.id ? .isSelected : [])
+                .accessibilityIdentifier("roadCamera.direction." + view.id)
+            }
+        }
     }
 
     private func photoTimeLabel(_ timestamp: String) -> String {

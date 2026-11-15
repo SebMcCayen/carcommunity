@@ -37,6 +37,17 @@ class DriverFeedTest {
             DriverPost.decode("post", mapOf("authorUid" to "author", "mediaUrls" to media))!!.mediaUrls)
     }
 
+    @Test fun `canonical avatar path is decoded with legacy and malformed fallback`() {
+        val path = "profileImages/author/current.jpg"
+        val fields = mapOf("authorUid" to "author", "authorAvatarPath" to path)
+        assertEquals(path, DriverPost.decode("post", fields)!!.authorAvatarPath)
+        assertNull(DriverPost.decode("post", mapOf("authorUid" to "author"))!!.authorAvatarPath)
+        for (invalid in listOf(null, 42, "", "https://example.com/a.jpg", "profileImages/other/a.jpg",
+            "profileImages/author/", "profileImages/author/" + "x".repeat(500))) {
+            assertNull(DriverPost.decode("post", fields + ("authorAvatarPath" to invalid))!!.authorAvatarPath)
+        }
+    }
+
     @Test fun `empty filtered page retains cursor and can load more`() = runTest {
         val seen = mutableListOf<DriverCursor?>()
         val repo = Fake(feedRead = { after ->

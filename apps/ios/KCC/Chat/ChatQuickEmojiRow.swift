@@ -3,6 +3,7 @@ import SwiftUI
 /// Same ordered one-tap messages as Android's shared ChatQuickEmojis. A quick
 /// send goes through the caller's normal send path and never edits its draft.
 struct ChatQuickEmojiRow: View {
+    @Environment(\.messageReactionStore) private var reactions
     let enabled: Bool
     let onSelect: (String) -> Void
     private static let choices = [
@@ -11,6 +12,7 @@ struct ChatQuickEmojiRow: View {
     ]
 
     var body: some View {
+        if reactions?.enabled != true {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: KccSpacing.s2) {
                 ForEach(Self.choices, id: \.0) { key, glyph in
@@ -34,5 +36,6 @@ struct ChatQuickEmojiRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("chat.quickEmojiRow"))
         .accessibilityIdentifier("chat.quickEmojiRow")
+        }
     }
 }

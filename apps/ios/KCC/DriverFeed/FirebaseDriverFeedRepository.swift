@@ -2,6 +2,7 @@ import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
 import FirebaseFunctions
+import FirebaseStorage
 import Foundation
 
 /// One server-authorized read per page; no direct content queries or legacy fallback.
@@ -40,7 +41,8 @@ final class FirebaseDriverFeedRepository: DriverFeedRepository, @unchecked Senda
                 let author = value["authorName"] as? String, let text = value["text"] as? String,
                 let millis = value["createdAtMillis"] as? NSNumber else { throw DriverFeedFailure.error }
             return DriverComment(id: id, authorUid: authorUid, author: author, text: text,
-                createdAt: Date(timeIntervalSince1970: millis.doubleValue / 1000))
+                createdAt: Date(timeIntervalSince1970: millis.doubleValue / 1000),
+                authorAvatarPath: driverAvatarPath(value["authorAvatarPath"], uid: authorUid))
         }
         return DriverDetailPage(post: post, comments: DriverPage(items: comments, next: try driverWireCursor(fields)))
     }
@@ -68,6 +70,10 @@ final class FirebaseDriverFeedRepository: DriverFeedRepository, @unchecked Senda
         try fence(user)
         guard let fields = result.data as? [String: Any] else { throw DriverFeedFailure.error }
         return fields
+    }
+
+    func avatarDownloadURL(for path: String) async -> URL? {
+        try? await Storage.storage().reference(withPath: path).downloadURL()
     }
 
     private func fence(_ user: User) throws {

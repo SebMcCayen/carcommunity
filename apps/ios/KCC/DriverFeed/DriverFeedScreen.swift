@@ -59,7 +59,7 @@ private struct DriverFeedSession: View {
                         ForEach(coordinator.state.posts) { post in
                             VStack(alignment: .leading, spacing: KccSpacing.s2) {
                                 Button { coordinator.open(post.id) } label: {
-                                    DriverPostBody(post: post, strings: strings)
+                                    DriverPostBody(post: post, strings: strings, avatarURL: coordinator.avatarURL)
                                 }.buttonStyle(.plain)
                                 DriverContentSafetyActions(viewerUID: uid, authorUID: post.authorUid,
                                     target: PublicContentTarget(surface: "driver_post", itemID: post.id))
@@ -70,14 +70,15 @@ private struct DriverFeedSession: View {
                         }
                     } else if let post = coordinator.state.post {
                         VStack(alignment: .leading, spacing: KccSpacing.s2) {
-                            DriverPostBody(post: post, strings: strings)
+                            DriverPostBody(post: post, strings: strings, avatarURL: coordinator.avatarURL)
                             DriverContentSafetyActions(viewerUID: uid, authorUID: post.authorUid,
                                 target: PublicContentTarget(surface: "driver_post", itemID: post.id))
                         }.kccContentCard()
                         Text(strings["comments"]).font(.headline).accessibilityAddTraits(.isHeader)
                         ForEach(coordinator.state.comments) { comment in
                             VStack(alignment: .leading, spacing: KccSpacing.s1) {
-                                Text(comment.author).font(.headline)
+                                DriverAuthorLabel(name: comment.author, avatarPath: comment.authorAvatarPath,
+                                    avatarURL: coordinator.avatarURL)
                                 if let date = comment.createdAt {
                                     Text(date.formatted(date: .abbreviated, time: .shortened))
                                         .font(.caption).foregroundStyle(.secondary)
@@ -128,10 +129,11 @@ private struct DriverFeedTaskIdentity: Equatable {
 struct DriverPostBody: View {
     let post: DriverPost
     let strings: DriverFeedStrings
+    var avatarURL: (String?) async -> URL? = { _ in nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            SocialMemberLabel(name: post.author)
+            DriverAuthorLabel(name: post.author, avatarPath: post.authorAvatarPath, avatarURL: avatarURL)
             // Source is inline metadata, never a separate banner, logo, or chat label.
             Text([post.createdAt?.formatted(date: .abbreviated, time: .shortened), strings["source"]]
                 .compactMap { $0 }.joined(separator: " · "))
@@ -152,5 +154,37 @@ struct DriverPostBody: View {
             }
             .font(.caption).foregroundStyle(KccTheme.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Lazily loads visible authors; a missing or failed image retains the native fallback.
+private struct DriverAuthorLabel: View {
+    let name: String
+    let avatarPath: String?
+    let avatarURL: (String?) async -> URL?
+    @State private var url: URL?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: KccSpacing.s3) {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() }
+                else {
+                    Image(systemName: "person.fill").font(.system(size: 20))
+                        .foregroundStyle(KccChatColors.readingAccent)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(KccTheme.subtle)
+                }
+            }
+            .frame(width: 40, height: 40).clipShape(Circle()).accessibilityHidden(true)
+            .task(id: avatarPath) {
+                url = nil
+                let resolved = await avatarURL(avatarPath)
+                guard !Task.isCancelled else { return }
+                url = resolved
+            }
+            Text(verbatim: name).font(.headline).foregroundStyle(KccTheme.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }

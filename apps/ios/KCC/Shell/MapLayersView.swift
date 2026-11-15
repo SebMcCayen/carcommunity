@@ -69,14 +69,18 @@ struct MapLayersSheet: View {
                             .font(.subheadline)
                             .foregroundStyle(KccTheme.secondary)
                     }
-                    ForEach(RoadCameraType.allCases, id: \.self) { type in
-                        Divider()
-                        layerRow(LocalizedStringKey(type.titleKey), help: "roadCameras.layerHelp",
-                                 icon: type.symbol, binding: Binding(
-                                    get: { preferences.cameraLayers.contains(type) },
-                                    set: { preferences.setCameraLayer(type, enabled: $0) }
-                                 ), id: type.titleKey)
-                    }
+                    Divider()
+                    layerRow("roadCameras.speedLayer", help: "roadCameras.layerHelp",
+                             icon: RoadCameraType.speed.symbol, binding: Binding(
+                                get: { preferences.cameraLayers.contains(.speed) },
+                                set: { preferences.setCameraLayer(.speed, enabled: $0) }
+                             ), id: "roadCameras.speedLayer", assetName: RoadCameraType.speed.assetName)
+                    Divider()
+                    layerRow("roadCameras.photoLayer", help: "roadCameras.layerHelp",
+                             icon: RoadCameraType.traffic.symbol, binding: Binding(
+                                get: { preferences.cameraLayers.contains(.traffic) },
+                                set: { preferences.setCameraLayer(.traffic, enabled: $0) }
+                             ), id: "roadCameras.photoLayer")
                     if !preferences.cameraLayers.isEmpty {
                         if let cameraCatalogErrorKey {
                             Text(LocalizedStringKey(cameraCatalogErrorKey))
@@ -182,14 +186,20 @@ struct MapLayersSheet: View {
 
     private func layerRow(
         _ title: LocalizedStringKey, help: LocalizedStringKey,
-        icon: String, binding: Binding<Bool>, id: String
+        icon: String, binding: Binding<Bool>, id: String, assetName: String? = nil
     ) -> some View {
         Toggle(isOn: binding) {
             HStack(alignment: .top, spacing: KccSpacing.s3) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .frame(width: 28)
-                    .accessibilityHidden(true)
+                Group {
+                    if let assetName {
+                        Image(assetName).renderingMode(.template).resizable().scaledToFit()
+                            .frame(width: 20, height: 20)
+                    } else {
+                        Image(systemName: icon).font(.title3)
+                    }
+                }
+                .frame(width: 28)
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: KccSpacing.s1) {
                     Text(title).font(.body)
                     Text(help)

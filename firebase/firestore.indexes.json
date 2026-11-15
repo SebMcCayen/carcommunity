@@ -4,8 +4,14 @@
       "collectionGroup": "invitations",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "status", "order": "ASCENDING"},
-        {"fieldPath": "expiresAt", "order": "ASCENDING"}
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
@@ -1323,6 +1329,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "chatMessageReactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "parentPath",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "parentEpoch",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
@@ -1412,6 +1432,23 @@
     {
       "collectionGroup": "roadCameraRecords",
       "fieldPath": "photoUrl",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "reactionCounts",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "chatReactionOperations",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "chatReactionRateLimits",
+      "fieldPath": "expireAt",
+      "ttl": true,
       "indexes": []
     }
   ]

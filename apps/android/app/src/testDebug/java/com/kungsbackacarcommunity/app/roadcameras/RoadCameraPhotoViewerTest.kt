@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.roadcameras
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -61,6 +62,36 @@ class RoadCameraPhotoViewerTest {
         }
         assertEquals(1, photoCalls.get())
         assertEquals(0, sheetDismisses)
+    }
+
+    @Test fun directionButtonsOnlyAppearForMultipleViewsAndLoadTheChosenCamera() {
+        val first = camera.copy(id = "se", direction = 135.0)
+        val second = camera.copy(id = "nw", direction = 315.0)
+        val requested = mutableListOf<String>()
+        val source = object : RoadCameraRepository {
+            override suspend fun catalog() = error("No catalog fetch from direction buttons")
+            override suspend fun photo(cameraId: String): RoadCameraPhoto {
+                requested.add(cameraId)
+                return repository.photo(cameraId)
+            }
+        }
+        val views = mutableStateOf(listOf(first, second))
+        compose.setContent {
+            KccTheme { DockedMapSheetHost {
+                RoadCameraDetailsSheet(first, source, views = views.value) {}
+            } }
+        }
+        awaitPhoto()
+        compose.onNodeWithTag("road_camera_direction_se").assertIsSelected()
+        compose.onNodeWithTag("road_camera_direction_nw").performScrollTo().performClick()
+        compose.waitUntil(5_000) { requested.size == 2 }
+        awaitPhoto()
+        compose.onNodeWithTag("road_camera_direction_nw").assertIsSelected().performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("se", "nw"), requested)
+        compose.runOnIdle { views.value = listOf(first) }
+        compose.onNodeWithTag("road_camera_direction_se").assertDoesNotExist()
+        compose.onNodeWithTag("road_camera_direction_nw").assertDoesNotExist()
     }
 
     @Test fun switchingCameraClosesThePreviousExpandedPhoto() {

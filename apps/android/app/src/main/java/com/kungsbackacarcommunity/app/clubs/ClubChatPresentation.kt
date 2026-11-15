@@ -14,7 +14,7 @@ internal fun clubChatPresentation(
         .filterNot { it.authorUid in hiddenUids }
         .distinctBy { it.id }
         .sortedWith(compareBy<ClubMessage> { it.createdAtMillis ?: Long.MAX_VALUE }.thenBy { it.id })
-        .map { ChannelMessage(it.id, it.authorUid, it.text, it.authorName, null, it.createdAtMillis, null) }
+        .map { ChannelMessage(it.id, it.authorUid, it.text, it.authorName, null, it.createdAtMillis, null, reactionCounts = it.reactionCounts) }
         .toList(),
     profiles,
 )

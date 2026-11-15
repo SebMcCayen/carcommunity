@@ -523,7 +523,9 @@ struct ShellView: View {
             centerMapReading(selection)
         }
         .onChange(of: roadCameraCoordinator?.selectedCamera?.id) { _, id in
-            if id == nil, case .camera = mapReadingSelection { mapReadingSelection = nil }
+            if case .camera = mapReadingSelection {
+                mapReadingSelection = id.map { .camera($0) }
+            }
         }
         .onChange(of: incidentMapCoordinator?.selectedIncident?.id) { _, id in
             if let id {

@@ -1595,3 +1595,24 @@ export const carCommunityAccess = { onAccessWrite, onIdentityWrite };
 
 /** Canonical shared-club invitation delivery; Driver remains the invitation writer. */
 export { onInvitationWritten as onClubInvitationWritten } from './clubInvitations';
+
+import { set as setMessageReaction, getMine as getMyMessageReactions } from './chatReactions';
+import {
+  communityRemoved,
+  convoyRemoved,
+  dmRemoved,
+  eventRemoved,
+  clubRemoved,
+  clubArchived,
+  cleanup as reactionCleanup,
+} from './chatReactions/lifecycle';
+export const chatReactions = { set: setMessageReaction, getMine: getMyMessageReactions };
+export const chatReactionLifecycle = {
+  communityRemoved,
+  convoyRemoved,
+  dmRemoved,
+  eventRemoved,
+  clubRemoved,
+  clubArchived,
+  cleanup: reactionCleanup,
+};

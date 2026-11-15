@@ -1,8 +1,10 @@
 # Trafikverket road cameras
 
-Android and iOS expose three independent, device-local Map layers choices:
-fixed speed cameras, traffic cameras, and road condition cameras. All default
-off. The icons reuse the existing incident marker badge/ring/palette; distinct
+Android and iOS expose two independent, device-local Map layers choices:
+fixed speed cameras, and a combined traffic and road condition cameras layer. Both
+default off. On upgrade, either enabled legacy photo-camera choice enables the
+combined layer; toggling it persists both legacy choices together. The source
+camera types remain distinct in markers and details. The icons reuse the existing incident marker badge/ring/palette; distinct
 camera glyphs and accessible labels identify each category. No camera or photo
 permission is needed to view public road images.
 
@@ -23,6 +25,23 @@ update fails. It only requests the catalog when at least one camera layer is on.
 Map movements filter cached markers locally. Backend access and synchronization
 respect the existing `externalDataSources` flag. Metadata is public road data,
 and offline copies may remain visible while a backend source is unavailable.
+
+## Camera locations and directions
+
+Android and iOS show one marker for photo-camera views of the same type whose
+trimmed, case-insensitive names match and whose coordinates are within 50 metres
+of a stable site anchor. Fixed speed cameras, different names/types, and distant
+sites remain separate. Stable ID anchors prevent proximity chains from joining
+neighboring sites. Views sort clockwise from north, then by ID, with unknown
+bearings last, so catalog order does not change the initial view across devices.
+
+The detail sheet shows direction buttons only for sites with multiple views.
+The selected button is marked, and switching loads only that view's photograph
+through the existing per-camera cache and quotas. Unknown directions use numbered
+view labels; matching compass labels receive a number to keep every button distinct.
+No other direction is prefetched, and a late image from a previous direction cannot
+replace the current image. Grouping uses the existing catalog and requires no
+backend deployment or contract/cache migration.
 
 ## On-demand images and cost controls
 

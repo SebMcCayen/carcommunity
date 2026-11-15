@@ -27,7 +27,7 @@ import {
 } from './contract';
 
 type Request = Pick<CallableRequest<unknown>, 'auth' | 'data'>;
-type Author = { name: string; handle: string };
+type Author = { name: string; handle: string; avatarPath: string | null };
 
 /** One bounded page; no writes to Driver content, profiles, consent, or roles. */
 export class DriverFeedReader {
@@ -119,7 +119,13 @@ export class DriverFeedReader {
             !/^[a-z0-9_]{3,24}$/.test(handle)
           )
             return null;
-          return { name, handle };
+          // Use the same canonical profile as Community chat, never stale
+          // identity copies on Driver content or Driver's private profile.
+          const path: unknown = canonical!.data()?.avatarPath;
+          const prefix = `profileImages/${other}/`;
+          const avatarPath = typeof path === 'string' && path.length <= 500 &&
+            path.startsWith(prefix) && path.length > prefix.length ? path : null;
+          return { name, handle, avatarPath };
         })();
         authors.set(other, result);
       }
@@ -169,6 +175,7 @@ export class DriverFeedReader {
       authorUid: data.authorUid as string,
       authorName: identity.name,
       authorHandle: identity.handle,
+      authorAvatarPath: identity.avatarPath,
       text: data.text,
       createdAtMillis: Math.floor((data.createdAt as Timestamp).toMillis()),
     };

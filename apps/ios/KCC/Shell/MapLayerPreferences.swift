@@ -102,7 +102,12 @@ final class MapLayerPreferences {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        cameraLayers = Set(RoadCameraType.allCases.filter { defaults.bool(forKey: Key.cameraPrefix + $0.rawValue) })
+        var storedCameraLayers = Set(RoadCameraType.allCases.filter { defaults.bool(forKey: Key.cameraPrefix + $0.rawValue) })
+        // Preserve either legacy photo-camera choice when upgrading to the combined layer.
+        if storedCameraLayers.contains(.traffic) || storedCameraLayers.contains(.roadCondition) {
+            storedCameraLayers.formUnion([.traffic, .roadCondition])
+        }
+        cameraLayers = storedCameraLayers
         incidentMaxAge = IncidentAgeOption.fromStoredName(defaults.string(forKey: Key.incidentMaxAge))
         trafficEnabled = defaults.object(forKey: Key.traffic) as? Bool
             ?? Self.trafficDefault
@@ -135,8 +140,12 @@ final class MapLayerPreferences {
     }
 
     func setCameraLayer(_ type: RoadCameraType, enabled: Bool) {
-        if enabled { cameraLayers.insert(type) } else { cameraLayers.remove(type) }
-        defaults.set(enabled, forKey: Key.cameraPrefix + type.rawValue)
+        let types: Set<RoadCameraType> = type == .speed ? [.speed] : [.traffic, .roadCondition]
+        if enabled { cameraLayers.formUnion(types) } else { cameraLayers.subtract(types) }
+        // Keep both legacy keys aligned so disabling the combined layer survives restart.
+        for cameraType in types {
+            defaults.set(enabled, forKey: Key.cameraPrefix + cameraType.rawValue)
+        }
     }
 
     func setTrafficEnabled(_ enabled: Bool) {

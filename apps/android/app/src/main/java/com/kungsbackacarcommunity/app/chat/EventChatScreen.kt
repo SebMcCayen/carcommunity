@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chat
 
+import com.kungsbackacarcommunity.app.chat.*
 import com.kungsbackacarcommunity.app.chat.rememberChatDraftSendAttempt
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -131,13 +132,16 @@ fun EventChatScreen(
     publicModeration: com.kungsbackacarcommunity.app.moderation.PublicChatModerationSession? = null,
     eventId: String? = null,
 ) {
+    ReactionRoomHost(ReactionRoom("event", eventId.orEmpty()), currentUid) {
     val publicSession = publicModeration?.takeIf { !eventId.isNullOrBlank() && it.uid == currentUid }
     val writingPaused = com.kungsbackacarcommunity.app.moderation.rememberPublicChatWritingPaused(publicSession)
+    val reactionsEnabled = LocalReactionRoom.current?.enabled == true
     val dates = rememberChatDateContext()
     var draft by rememberSaveable { mutableStateOf("") }
     var draftRevision by rememberSaveable { mutableLongStateOf(0L) }
     var pending by rememberSaveable(stateSaver = eventPendingSendSaver) { mutableStateOf(emptyList<EventPendingSend>()) }
     val delivered = (state as? ChatMessagesState.Loaded)?.messages.orEmpty()
+    val deliveredMessageIds = delivered.mapTo(mutableSetOf()) { it.id }
     val deliveredIds = delivered.filter { it.authorUserId == currentUid }.mapTo(mutableSetOf()) { it.id }
     val latestDeliveredIds by rememberUpdatedState(deliveredIds)
     val localRows = pending.filterNot { it.id in deliveredIds }
@@ -330,6 +334,7 @@ fun EventChatScreen(
                                 val isOwn = message.authorUserId == currentUid
                                 MessageRow(
                                     message = message,
+                                    allowReactions = message.id in deliveredMessageIds,
                                     isOwn = isOwn,
                                     dates = dates,
                                     // Tap the author's name → their profile. Never
@@ -348,7 +353,7 @@ fun EventChatScreen(
                                     onLongPress =
                                         if (!message.isRemoved &&
                                             !message.isAutoHidden &&
-                                            (publicSession?.adminCandidate == true || MessageModeration.canActOn(message.authorUserId, currentUid)) &&
+                                            (reactionsEnabled || publicSession?.adminCandidate == true || MessageModeration.canActOn(message.authorUserId, currentUid)) &&
                                             MessageModeration.hasActions(
                                                 canBlock = canBlock,
                                                 reportAvailability =
@@ -470,7 +475,7 @@ fun EventChatScreen(
                 // Recheck the same eligibility as long-press: live moderation or access
                 // changes must not expose a now-hidden body through the quoted preview.
                 canParticipate && !it.isRemoved && !it.isAutoHidden &&
-                    (publicSession?.adminCandidate == true || MessageModeration.canActOn(it.authorUserId, currentUid)) &&
+                    (reactionsEnabled || publicSession?.adminCandidate == true || MessageModeration.canActOn(it.authorUserId, currentUid)) &&
                     MessageModeration.hasActions(canBlock, MessageModeration.reportAvailability(ChatSurface.EventChat))
             }
     LaunchedEffect(actionsMessageId, actionsMessage == null) {
@@ -531,6 +536,7 @@ fun EventChatScreen(
             },
         )
     }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -538,10 +544,12 @@ fun EventChatScreen(
 private fun MessageRow(
     message: ChatMessage,
     isOwn: Boolean,
+    allowReactions: Boolean = true,
     dates: ChatDateContext,
     onViewProfile: (() -> Unit)?,
     onLongPress: (() -> Unit)?,
 ) {
+    val reactionRoom = LocalReactionRoom.current
     // Per-user, ephemeral reveal for an auto-hidden message. Keyed on the message
     // id so a reveal never leaks onto a different message reusing this row, and
     // rememberSaveable so it survives rotation without being persisted anywhere.
@@ -582,16 +590,16 @@ private fun MessageRow(
                     else MaterialTheme.colorScheme.surface),
                 border = if (isOwn) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                 modifier =
-                    Modifier
+                    Modifier.then(reactionAnchor(message.id, onLongPress))
                         .fillMaxWidth()
                         .then(
-                            if (onLongPress != null) {
+                            if (onLongPress != null || (reactionRoom?.enabled == true && allowReactions && !message.isRemoved && !message.isAutoHidden)) {
                                 // combinedClickable, not pointerInput: it announces the
                                 // long-press to accessibility services as a custom action,
                                 // so the moderation sheet is reachable without a physical
                                 // long-press. onClick is a deliberate no-op — only the
                                 // author's name navigates.
-                                Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
+                                Modifier.combinedClickable(onLongClick = { openReactionActions(reactionRoom, message.id, onLongPress) }, onClick = {})
                             } else {
                                 Modifier
                             },
@@ -653,6 +661,7 @@ private fun MessageRow(
                     }
                 }
             }
+            if (allowReactions && !message.isRemoved && !message.isAutoHidden) MessageReactionChips(message.id, message.reactionCounts)
         }
     }
 }

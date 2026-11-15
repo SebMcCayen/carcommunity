@@ -34,6 +34,32 @@ final class DriverFeedTests: XCTestCase {
         XCTAssertEqual(value.mediaURLs.map(\.absoluteString), (1...4).map { "https://example.com/\($0).jpg" })
     }
 
+    func testCanonicalAvatarPathAndLegacyFallback() {
+        let path = "profileImages/author/current.jpg"
+        XCTAssertEqual(DriverPost.decode(id: "post", fields: ["authorUid": "author", "authorAvatarPath": path])?.authorAvatarPath, path)
+        XCTAssertNil(DriverPost.decode(id: "post", fields: ["authorUid": "author"])?.authorAvatarPath)
+        let invalidPaths: [Any] = [NSNull(), 42, "", "https://example.com/a.jpg", "profileImages/other/a.jpg",
+            "profileImages/author/", "profileImages/author/" + String(repeating: "x", count: 500)]
+        for invalid in invalidPaths {
+            XCTAssertNil(DriverPost.decode(id: "post", fields: ["authorUid": "author", "authorAvatarPath": invalid])?.authorAvatarPath)
+        }
+    }
+
+    func testAvatarResolutionIsSharedByRowsAndRefreshAllowsRetry() async {
+        let repo = FakeDriverFeedRepository()
+        let model = DriverFeedCoordinator(repository: repo, uid: "uid")
+        let path = "profileImages/author/current.jpg"
+        let missing = await model.avatarURL(for: nil)
+        XCTAssertNil(missing)
+        let first = await model.avatarURL(for: path)
+        let repeated = await model.avatarURL(for: path)
+        XCTAssertEqual(first, repeated)
+        XCTAssertEqual(repo.avatarPaths, [path])
+        model.refresh()
+        _ = await model.avatarURL(for: path)
+        XCTAssertEqual(repo.avatarPaths, [path, path])
+    }
+
     func testEmptyFilteredPageCanContinue() async {
         let repo = FakeDriverFeedRepository()
         repo.pages = [DriverPage(items: [], next: cursor), DriverPage(items: [post("visible")], next: nil)]
@@ -173,6 +199,11 @@ final class DriverFeedTests: XCTestCase {
 
 @MainActor
 private final class FakeDriverFeedRepository: DriverFeedRepository {
+    var avatarPaths: [String] = []
+    func avatarDownloadURL(for path: String) async -> URL? {
+        avatarPaths.append(path)
+        return URL(string: "https://example.com/avatar.jpg")
+    }
     var pages: [DriverPage<DriverPost>] = []
     var commentPages: [DriverPage<DriverComment>] = []
     var original: DriverPost?
