@@ -19,7 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class ConvoyEndBindingTest {
+class LocalConvoyExitBindingTest {
     @get:Rule val compose = createComposeRule()
 
     @Test fun ownEndNeverPresentsChoiceWhenConvoyEchoArrivesFirst() = ownExit(sessionFirst = false)
