@@ -62,6 +62,8 @@ fun rememberConvoyEndBinding(
     onStopRecording: () -> Unit,
     onCommandFailed: () -> Unit,
     timeoutMillis: Long = 20_000L,
+    localConvoyExit: Boolean = false,
+    pendingConvoyExit: Boolean = false,
 ): ConvoyEndBinding = key(uid) {
     val session = sessionLoad.sessionOrNull
     val convoyId = session?.takeIf { it.convoyAutoStarted }?.convoyId
@@ -91,18 +93,19 @@ fun rememberConvoyEndBinding(
     val currentNow by rememberUpdatedState(now)
     val stopRecording by rememberUpdatedState(onStopRecording)
     val commandFailed by rememberUpdatedState(onCommandFailed)
-    val currentUserEnded by rememberUpdatedState(userEndedSession)
+    val currentUserEnded by rememberUpdatedState(userEndedSession || localConvoyExit)
 
     // The shell's derived sharing producer can lag a new session by one frame.
     // End/transfer decisions must use this observed session's actual status/expiry.
     val observedSharing = LiveLocation.isSharing(session, now())
-    val confirmedEnd = ConvoyEndObservation.ended(session, convoy, userEndedSession, now())
-    val eligible = ConvoyEndObservation.eligible(session, userEndedSession, now())
+    val deliberateEnd = userEndedSession || localConvoyExit
+    val confirmedEnd = !pendingConvoyExit && ConvoyEndObservation.ended(session, convoy, deliberateEnd, now())
+    val eligible = ConvoyEndObservation.eligible(session, deliberateEnd, now())
     val oldId = pending ?: prompt
     val replaced = sessionLoad.observed && session != null && oldId != null && session.sessionId != oldId
     val cancelled = sessionLoad.observed && session != null && !eligible
-    val visiblePrompt = prompt?.takeUnless { replaced || cancelled }
-    val awaitingEndDocument = eligible && !observedSharing && convoyId != null &&
+    val visiblePrompt = prompt?.takeUnless { replaced || cancelled || pendingConvoyExit }
+    val awaitingEndDocument = !pendingConvoyExit && eligible && !observedSharing && convoyId != null &&
         session?.sessionId != decided && !confirmedEnd && prompt == null && pending == null &&
         (!observation.first || (convoy != null && convoy.convoyId == convoyId && convoy.status != ConvoyStatus.Ended))
     val currentAwaitingEndDocument by rememberUpdatedState(awaitingEndDocument)
@@ -130,11 +133,12 @@ fun rememberConvoyEndBinding(
         }
     }
 
-    LaunchedEffect(confirmedEnd, session?.sessionId, decided, pending, userEndedSession,
+    LaunchedEffect(confirmedEnd, session?.sessionId, decided, pending, deliberateEnd,
         observedSharing, eligible, sessionLoad.observed, sharing) {
         // Consume deliberate stops before the shell clears its self-stop marker.
         // Otherwise the same stopped session could raise a convoy choice later.
-        if (session?.convoyAutoStarted == true && sessionLoad.observed && !observedSharing && !eligible) {
+        if (session?.convoyAutoStarted == true && sessionLoad.observed &&
+            (localConvoyExit || !observedSharing && !eligible)) {
             decided = session.sessionId
         }
         if (confirmedEnd && session != null && session.sessionId != decided && pending == null) {
@@ -172,7 +176,7 @@ fun rememberConvoyEndBinding(
         }
         if (result != LiveCommandResult.Success) failed = true
     }
-    LaunchedEffect(pending, operation, sessionLoad, sharing, failed, timedOut, userEndedSession) {
+    LaunchedEffect(pending, operation, sessionLoad, sharing, failed, timedOut, deliberateEnd) {
         val id = pending ?: return@LaunchedEffect
         if (!sessionLoad.observed) return@LaunchedEffect
         val different = session != null && session.sessionId != id
@@ -190,7 +194,7 @@ fun rememberConvoyEndBinding(
             }
             // Explicit privacy stops and hard expiry keep the ordinary lifecycle's
             // neutral save reason, including when they interrupt a transfer.
-            userEndedSession || (session != null && session.expiresAtMillis?.let { it <= now() } == true) -> {
+            deliberateEnd || (session != null && session.expiresAtMillis?.let { it <= now() } == true) -> {
                 pending = null
                 prompt = null
             }
@@ -210,7 +214,8 @@ fun rememberConvoyEndBinding(
 
     ConvoyEndBinding(
         promptSessionId = visiblePrompt,
-        holdRecording = (confirmedEnd && session?.sessionId != decided) || prompt != null || pending != null ||
+        holdRecording = (pendingConvoyExit && eligible) ||
+            (confirmedEnd && session?.sessionId != decided) || (prompt != null && !cancelled) || pending != null ||
             // Reconcile independent listeners even after an ACTIVE document has
             // already emitted. Neither ordering may stop the recorder before choice.
             awaitingEndDocument ||

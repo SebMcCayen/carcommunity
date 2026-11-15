@@ -76,6 +76,35 @@ final class ConvoyEndSessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(h.saves.requests.count, 1)
     }
 
+    func testOwnExitWithDelayedSuccessNeverOffersContinuationInEitherListenerOrder() async {
+        for sessionFirst in [false, true] {
+            let h = Harness()
+            await h.update(h.autoSession())
+            await wait { h.convoys.hasObserver }
+            h.exiting.pending = true
+            h.coordinator.tick()
+            if sessionFirst { await h.update(h.autoSession(.stopped)) }
+            h.convoys.emit(h.convoy(.ended))
+            // Drain the convoy listener while the callable is still pending.
+            try? await Task.sleep(for: .milliseconds(20))
+            XCTAssertFalse(h.coordinator.presentsChoice)
+            XCTAssertTrue(h.saves.requests.isEmpty)
+            if !sessionFirst { await h.update(h.autoSession(.stopped)) }
+            XCTAssertFalse(h.coordinator.presentsChoice)
+            h.exiting.value = true
+            h.exiting.pending = false
+            h.coordinator.tick()
+            await wait { h.saves.requests.count == 1 }
+            XCTAssertFalse(h.coordinator.presentsChoice)
+            // Late echoes cannot revive the choice after the deliberate exit.
+            await h.update(h.autoSession(.stopped))
+            h.coordinator.tick()
+            XCTAssertFalse(h.coordinator.presentsChoice)
+            XCTAssertEqual(h.saves.requests.count, 1)
+            h.stop()
+        }
+    }
+
     func testFailedContinuationAndMissingManualEchoSaveRatherThanOrphanRecorder() async {
         for startFails in [true, false] {
             let h = Harness()
