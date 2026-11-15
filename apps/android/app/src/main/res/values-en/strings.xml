@@ -2289,6 +2289,10 @@
     <string name="roadCameras_southWest">South-west</string>
     <string name="roadCameras_west">West</string>
     <string name="roadCameras_northWest">North-west</string>
+    <string name="roadCameras_groupCount">%1$d cameras</string>
+    <string name="roadCameras_bothDirections">Speed cameras in both directions</string>
+    <string name="roadCameras_zoomHint">Zoom in to see the camera locations.</string>
+    <string name="roadCameras_showCameras">Show cameras</string>
     <string name="convoy_invitationFrom">invites you to a convoy</string>
     <string name="convoy_invitationJoin">Join</string>
     <string name="convoy_invitationDecline">Decline</string>

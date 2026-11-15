@@ -20,6 +20,19 @@ import org.junit.Test
 
 class DriveRecordingTest {
 
+    @Test
+    fun `live map suffix retains recorder order and cannot mutate the saved route`() {
+        val recorder = DriveRecorder(sourceSessionId = "live-tail", startedAtMillis = 0L)
+        val points = (1..10).map { RecordedPoint(57.0, 12.0 + it * 0.0001, it * 1_000L) }
+        points.forEach { recorder.addPoint(it) }
+        val recent = recorder.recentPoints(3)
+        assertEquals(points.takeLast(3), recent)
+        recorder.addPoint(RecordedPoint(57.0, 12.002, 11_000L))
+        assertEquals(points.takeLast(3), recent)
+        assertEquals(11, recorder.snapshot().size)
+        assertEquals(recorder.snapshot(), recorder.recentPoints(3_000))
+    }
+
     // ---------------------------------------------------------------------
     // DriveRecorder — point accumulation, ordering, cap.
     // ---------------------------------------------------------------------

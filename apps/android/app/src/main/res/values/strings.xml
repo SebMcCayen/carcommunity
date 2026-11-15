@@ -2289,6 +2289,10 @@
     <string name="roadCameras_southWest">Sydväst</string>
     <string name="roadCameras_west">Väster</string>
     <string name="roadCameras_northWest">Nordväst</string>
+    <string name="roadCameras_groupCount">%1$d kameror</string>
+    <string name="roadCameras_bothDirections">Fartkameror i båda riktningarna</string>
+    <string name="roadCameras_zoomHint">Zooma in för att se kamerornas platser.</string>
+    <string name="roadCameras_showCameras">Visa kamerorna</string>
     <string name="convoy_invitationFrom">bjuder in till konvoj</string>
     <string name="convoy_invitationJoin">Gå med</string>
     <string name="convoy_invitationDecline">Neka</string>

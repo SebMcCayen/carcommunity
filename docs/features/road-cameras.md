@@ -4,7 +4,7 @@ Android and iOS expose two independent, device-local Map layers choices:
 fixed speed cameras, and a combined traffic and road condition cameras layer. Both
 default off. On upgrade, either enabled legacy photo-camera choice enables the
 combined layer; toggling it persists both legacy choices together. The source
-camera types remain distinct in markers and details. The icons reuse the existing incident marker badge/ring/palette; distinct
+camera types remain distinct in markers and details. Individual icons reuse the existing incident marker badge/ring/palette; distinct
 camera glyphs and accessible labels identify each category. No camera or photo
 permission is needed to view public road images.
 
@@ -30,18 +30,54 @@ and offline copies may remain visible while a backend source is unavailable.
 
 Android and iOS show one marker for photo-camera views of the same type whose
 trimmed, case-insensitive names match and whose coordinates are within 50 metres
-of a stable site anchor. Fixed speed cameras, different names/types, and distant
-sites remain separate. Stable ID anchors prevent proximity chains from joining
+of a stable site anchor. Two fixed speed cameras with the same normalized name
+form one site only within 150 metres and with valid opposing bearings (at least
+135 degrees apart). Same-facing or unknown bearings, different names/types, and
+distant sites remain separate. Stable ID anchors prevent proximity chains from joining
 neighboring sites. Views sort clockwise from north, then by ID, with unknown
 bearings last, so catalog order does not change the initial view across devices.
 
-The detail sheet shows direction buttons only for sites with multiple views.
+Below zoom 17, nearby sites of the same source type form temporary visual groups.
+The radius corresponds to about 64 logical map pixels at integer zoom levels,
+bounded to 10 km. Zooming in restores individual sites; a verified speed-camera
+pair stays one site with two selectable directions. A white capsule retains the
+source glyph and shows the source-camera count; opposing arrows are exclusive to
+verified pairs. Groups are anchored at an actual camera rather than an averaged
+coordinate between roads. Camera types never mix, even under the combined photo
+layer toggle. Both clients group the local catalog within 50 km before the
+250-marker draw cap so group counts include all candidates. Grid-indexed anchor
+lookup avoids scanning every visible site against every other site on camera updates.
+No map movement or zoom requests metadata or photographs.
+
+The detail sheet shows direction buttons for sites/groups with multiple views.
+Different site names are included in view labels. The main map also offers
+"Show cameras" to zoom into a visual group. Android turn-by-turn uses the same
+zoom grouping and view selection on its separate map. An open selection keeps
+its member IDs across viewport regrouping; catalog removals and layer disable
+still remove invalid choices.
 The selected button is marked, and switching loads only that view's photograph
 through the existing per-camera cache and quotas. Unknown directions use numbered
 view labels; matching compass labels receive a number to keep every button distinct.
 No other direction is prefetched, and a late image from a previous direction cannot
 replace the current image. Grouping uses the existing catalog and requires no
 backend deployment or contract/cache migration.
+
+## Live route and convoy spacing
+
+On Android the private approximately 1 km live tail uses the recorder's accepted
+GPS fixes, the same geometry uploaded for History, instead of independently
+sampling Mapbox's animated puck. Recorder ownership includes its empty initial
+state; puck fixes cannot append shortcuts or omit a recorded corner under the
+fallback jitter threshold. Only the newest 3,000 recorder fixes are copied for
+map updates, then trimmed by distance. Puck-based jitter/jump handling remains a
+fallback when no recorder is available. A gap over 300 metres starts a fresh live
+tail, including when its endpoints were accepted by the recorder. Saved History
+data is unchanged. Nothing is road-snapped or reconstructed
+across missing fixes. iOS does not currently draw this private self-tail, so the
+existing Android-only rendering discrepancy does not apply to its map.
+
+On both platforms, the vertical gap from convoy reactions to the live metrics
+equals the gap from the live metrics to the convoy status bar (4 dp/pt).
 
 ## On-demand images and cost controls
 

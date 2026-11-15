@@ -7,6 +7,52 @@ class RoadCameraLocationTest {
     private val southEast = RoadCamera("b", RoadCameraType.RoadCondition, "Kungsbacka Syd", 57.45, 12.09, 135.0)
     private val northWest = southEast.copy(id = "a", direction = 315.0, latitude = 57.4501)
 
+    @Test fun oppositeSpeedCamerasShareARealAnchorAndKeepTheirDirectionsAtHighZoom() {
+        val first = southEast.copy(id = "first", type = RoadCameraType.Speed)
+        val opposite = first.copy(id = "opposite", latitude = first.latitude + 0.0008, direction = 315.0)
+        val sites = groupRoadCameraLocations(listOf(opposite, first))
+        assertEquals(1, sites.size)
+        val group = groupRoadCameraMarkers(sites, 20.0).single()
+        assertTrue(group.opposingDirections)
+        assertEquals(listOf(first, opposite), group.views)
+        assertTrue(group.views.contains(group.camera))
+        assertEquals(sites, groupRoadCameraLocations(listOf(first, opposite)))
+    }
+
+    @Test fun proximityAloneNeverMakesUnverifiedSpeedCamerasAnOppositeDirectionSite() {
+        val first = southEast.copy(id = "a", type = RoadCameraType.Speed)
+        for (other in listOf(first.copy(id = "b"), first.copy(id = "b", direction = null),
+            first.copy(id = "b", direction = 315.0, name = "Other road"),
+            first.copy(id = "b", direction = 315.0, latitude = first.latitude + 0.002))) {
+            assertEquals(2, groupRoadCameraLocations(listOf(first, other)).size)
+        }
+    }
+
+    @Test fun zoomGroupsPreserveAllCamerasAndNeverMixLayerTypes() {
+        val cameras = RoadCameraType.entries.flatMap { type -> (0..3).map { i ->
+            southEast.copy(id = "${type.wire}-$i", type = type, name = "Site $i", latitude = 57.45 + i * 0.0001)
+        } }
+        val sites = groupRoadCameraLocations(cameras)
+        val groups = groupRoadCameraMarkers(sites, 13.0)
+        assertEquals(3, groups.size)
+        assertEquals(listOf(4, 4, 4), groups.map { it.views.size })
+        assertEquals(cameras.map { it.id }.sorted(), groups.flatMap { it.views }.map { it.id }.sorted())
+        assertTrue(groups.all { group -> group.views.map { it.type }.distinct().size == 1 })
+        assertEquals(groups, groupRoadCameraMarkers(sites.reversed(), 13.9))
+        assertEquals(12, groupRoadCameraMarkers(sites, 17.0).size)
+    }
+
+    @Test fun zoomGroupsDoNotJoinChainsAndKeepCountsAcrossAdjacentGridCells() {
+        val sites = (0..2).map { i -> RoadCameraLocation(listOf(
+            southEast.copy(id = "$i", name = "Site $i", latitude = 57.45 + i * 0.002))) }
+        val groups = groupRoadCameraMarkers(sites, 13.0)
+        assertEquals(listOf(2, 1), groups.map { it.views.size })
+        assertEquals(sites.first().camera, groups.first().camera)
+        assertFalse(groups.first().opposingDirections)
+        assertTrue(groupRoadCameraMarkers(emptyList(), 13.0).isEmpty())
+        assertEquals(groups, groupRoadCameraMarkers(sites, 13.99))
+    }
+
     @Test fun overlappingDirectionsHaveOneStableMarkerAndClockwiseViews() {
         val expected = groupRoadCameraLocations(listOf(southEast, northWest))
         assertEquals(expected, groupRoadCameraLocations(listOf(northWest, southEast)))

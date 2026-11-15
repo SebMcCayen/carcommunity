@@ -671,7 +671,7 @@ fun TurnByTurnNavScreen(
     // one, so flipping it while driving takes the badges off immediately.
     val roadCameraViewport by engine.cameraSnapshot.collectAsState()
     val roadCameraMarkers = com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current
-        ?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude).orEmpty()
+        ?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude, roadCameraViewport?.zoom ?: 17.0).orEmpty()
     LaunchedEffect(engine, incidentMarkers, incidentsLayerEnabled, roadCameraMarkers) {
         engine.setIncidentMarkers((if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers)
     }
@@ -1004,7 +1004,8 @@ fun TurnByTurnNavScreen(
         val cameraTap by engine.roadCameraTap.collectAsState()
         cameraLayerState?.selected(cameraTap)?.let { camera ->
             com.kungsbackacarcommunity.app.roadcameras.RoadCameraDetailsSheet(
-                camera, cameraLayerState.repository, views = cameraLayerState.viewsFor(camera),
+                camera, cameraLayerState.repository,
+                views = com.kungsbackacarcommunity.app.roadcameras.rememberRoadCameraSelectionViews(cameraLayerState, camera),
                 onDismiss = engine::consumeRoadCameraTap)
         }
 

@@ -2453,7 +2453,11 @@
     "south": "South",
     "southWest": "South-west",
     "west": "West",
-    "northWest": "North-west"
+    "northWest": "North-west",
+    "groupCount": "%1$d cameras",
+    "bothDirections": "Speed cameras in both directions",
+    "zoomHint": "Zoom in to see the camera locations.",
+    "showCameras": "Show cameras"
   },
   "convoy.invitationFrom": "invites you to a convoy",
   "convoy.invitationJoin": "Join",

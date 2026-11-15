@@ -450,7 +450,8 @@ fun MapHome(
     // giving the toggle a real on/off effect on the map.
     val roadCameraLayers = com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current
     val roadCameraViewport by mapSurface.cameraSnapshot.collectAsState()
-    val roadCameraMarkers = roadCameraLayers?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude).orEmpty()
+    val roadCameraMarkers = roadCameraLayers?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude,
+        roadCameraViewport?.zoom ?: 17.0).orEmpty()
     LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled, roadCameraMarkers) {
         mapSurface.setIncidentMarkers((if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers)
     }
@@ -783,8 +784,9 @@ fun MapHome(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .onSizeChanged { bottomChromeHeightPx = it.height; onSessionDockHeightChanged(it.height) }
                     .testTag("map_home_session_dock")
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                    .padding(horizontal = 12.dp)
+                    .padding(top = KccSpacing.s1, bottom = KccSpacing.s2),
+                verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
             ) {
                 liveSessionBar?.invoke()
                 convoyBar?.invoke()

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.roadcameras
 
 import android.graphics.Bitmap
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsSelected
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.DockedMapSheetHost
+import com.kungsbackacarcommunity.app.shell.MapLayersPreferenceStore
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
@@ -41,6 +43,32 @@ class RoadCameraPhotoViewerTest {
             bitmap.recycle()
             return RoadCameraPhoto(bytes, "image/jpeg", null)
         }
+    }
+
+    @Test fun zoomingAnOpenGroupKeepsTheChosenCameraUntilItIsRemovedFromTheCatalog() {
+        compose.activity.getSharedPreferences("map_layers_preference", Context.MODE_PRIVATE).edit().clear().commit()
+        val first = camera.copy(id = "a", name = "First site", direction = 135.0)
+        val second = camera.copy(id = "b", name = "Second site", latitude = first.latitude + 0.0008, direction = 315.0)
+        val state = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), repository)
+        state.cameras = listOf(first, second)
+        state.setEnabled(RoadCameraType.Traffic, true)
+        val zoom = mutableStateOf(13.0)
+        compose.setContent {
+            state.markersNear(first.latitude, first.longitude, zoom.value)
+            KccTheme { DockedMapSheetHost {
+                RoadCameraDetailsSheet(first, repository, views = rememberRoadCameraSelectionViews(state, first)) {}
+            } }
+        }
+        awaitPhoto()
+        compose.onNodeWithTag("road_camera_direction_b").performScrollTo().performClick()
+        compose.waitUntil(5_000) { photoCalls.get() == 2 }
+        awaitPhoto()
+        compose.runOnIdle { zoom.value = 17.0 }
+        compose.onNodeWithTag("road_camera_direction_b").assertIsSelected()
+        assertEquals(2, photoCalls.get())
+        compose.runOnIdle { state.cameras = listOf(first) }
+        compose.onNodeWithTag("road_camera_direction_b").assertDoesNotExist()
+        compose.waitUntil(5_000) { photoCalls.get() == 3 }
     }
 
     @Test fun openingAndClosingLargerPhotoKeepsTheSheetAndReusesTheLoadedImage() {

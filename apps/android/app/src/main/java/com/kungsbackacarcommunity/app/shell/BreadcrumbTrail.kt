@@ -12,8 +12,9 @@ import kotlin.math.sqrt
  * (Android-free) logic so the trimming / jitter / jump rules are JVM-unit
  * testable without a map, GPS or a device.
  *
- * This is deliberately a LOCAL, PRIVATE buffer: it is fed from the device puck's
- * own position fixes and drawn client-side only (see [MapboxMapSurface]). Nothing
+ * This is deliberately a LOCAL, PRIVATE buffer: accepted recorder fixes are
+ * preferred, with device puck positions as a fallback when no recorder exists.
+ * It is drawn client-side only (see [MapboxMapSurface]). Nothing
  * here is written to RTDB, Firestore, or any shared location, and it is never
  * pushed across the [MapSurface] seam to other convoy members — it exists solely
  * so the signed-in user can see the road they have just driven while their own
@@ -33,8 +34,7 @@ import kotlin.math.sqrt
  *   drawing a straight line across half the map the trail is reset to start fresh
  *   at the new point. This self-heals within ~1 km of driving.
  *
- * Not thread-safe: it is only ever touched on the map's main-thread position
- * callback.
+ * Not thread-safe: callers use the map's main thread.
  */
 class BreadcrumbTrail(
     private val windowMeters: Double = DEFAULT_WINDOW_METERS,
@@ -44,6 +44,29 @@ class BreadcrumbTrail(
     // Oldest point first, newest last — so the drawn LineString runs tail→head
     // and the fade gradient (line-progress 0 = oldest) reads the same direction.
     private val trail = ArrayDeque<MapPoint>()
+    private var recordedSource: List<MapPoint>? = null
+
+    /**
+     * Prefer accepted recorder fixes over the animated map puck. An empty list
+     * still owns the trail: no puck segment may invent a route before GPS arrives.
+     * Null releases ownership and starts a fresh fallback tail.
+     */
+    fun setRecordedPoints(points: List<MapPoint>?): Boolean {
+        if (recordedSource == points && (points == null || trail.isNotEmpty() || points.isEmpty())) return false
+        recordedSource = points?.toList()
+        val recorded = points.orEmpty()
+        // Preserve accepted close corner fixes, but never connect the unknown
+        // road across a recording discontinuity (for example a long tunnel).
+        var start = 0
+        for (index in recorded.lastIndex downTo 1) {
+            if (haversineMeters(recorded[index - 1], recorded[index]) > maxJumpMeters) {
+                start = index
+                break
+            }
+        }
+        seed(recorded.subList(start, recorded.size))
+        return true
+    }
 
     /** The current tail, oldest→newest. A defensive copy so callers can't mutate it. */
     fun points(): List<MapPoint> = trail.toList()
@@ -61,6 +84,7 @@ class BreadcrumbTrail(
     /** Drop the whole tail (session ended). */
     fun clear() {
         trail.clear()
+        recordedSource = null
     }
 
     /**
@@ -90,6 +114,7 @@ class BreadcrumbTrail(
      * emitting a fix every frame returns false and triggers no redraw.
      */
     fun add(point: MapPoint): Boolean {
+        if (recordedSource != null) return false
         val last = trail.lastOrNull()
         if (last == null) {
             trail.addLast(point)

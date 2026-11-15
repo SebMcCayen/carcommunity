@@ -29904,6 +29904,23 @@
         }
       }
     },
+    "roadCameras.bothDirections": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fartkameror i båda riktningarna"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speed cameras in both directions"
+          }
+        }
+      }
+    },
     "roadCameras.catalogUnavailable": {
       "extractionState": "manual",
       "localizations": {
@@ -30002,6 +30019,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tap the image to enlarge"
+          }
+        }
+      }
+    },
+    "roadCameras.groupCount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld kameror"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld cameras"
           }
         }
       }
@@ -30210,6 +30244,23 @@
         }
       }
     },
+    "roadCameras.showCameras": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa kamerorna"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show cameras"
+          }
+        }
+      }
+    },
     "roadCameras.south": {
       "extractionState": "manual",
       "localizations": {
@@ -30325,6 +30376,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "West"
+          }
+        }
+      }
+    },
+    "roadCameras.zoomHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zooma in för att se kamerornas platser."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom in to see the camera locations."
           }
         }
       }

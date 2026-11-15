@@ -287,6 +287,9 @@ class DriveRecorder(
     /** Immutable snapshot of the accumulated points, in arrival order. */
     fun snapshot(): List<RecordedPoint> = points.toList()
 
+    /** Bounded newest fixes without copying the entire drive on every map update. */
+    fun recentPoints(limit: Int): List<RecordedPoint> = points.takeLast(limit)
+
     /**
      * Builds the exact `drives-save` callable payload as a `Map<String, Any?>`.
      *
