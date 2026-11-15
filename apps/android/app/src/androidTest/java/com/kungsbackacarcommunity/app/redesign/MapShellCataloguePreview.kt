@@ -31,6 +31,8 @@ import com.kungsbackacarcommunity.app.CreateChooserDialog
 import com.kungsbackacarcommunity.app.convoy.ConvoyBar
 import com.kungsbackacarcommunity.app.convoy.ConvoyBarState
 import com.kungsbackacarcommunity.app.convoy.ConvoyBarMember
+import com.kungsbackacarcommunity.app.convoy.ConvoyReactionButtons
+import com.kungsbackacarcommunity.app.convoy.ConvoyReactionCooldownState
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.ShellBottomBar
 import com.kungsbackacarcommunity.app.ShellBottomBarHeight
@@ -175,6 +177,14 @@ fun MapShellCataloguePreview(
                             { LiveSessionBar(sessionStartMillis = 0L, distanceMeters = 12_400.0,
                                 speedSample = com.kungsbackacarcommunity.app.location.SpeedSample(15.0, 754_000L),
                                 now = { 754_000L }) }
+                        } else null,
+                        convoyReactions = if (screen == "map-convoy") {
+                            {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                                    ConvoyReactionButtons(ConvoyReactionCooldownState(), 0L, {},
+                                        modifier = Modifier.padding(bottom = 12.dp))
+                                }
+                            }
                         } else null,
                         convoyBar = if (screen == "map-convoy") {
                             {

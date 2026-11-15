@@ -95,7 +95,7 @@ class Wave2RedesignCaptureTest {
         val args = InstrumentationRegistry.getArguments()
         val screens = args.getString("wave2Screen")?.split(',')?.map(String::trim)
             ?.filter(String::isNotEmpty)?.distinct() ?: listOf(
-            "map-place", "map-live", "chat", "driver", "driver-detail",
+            "map-place", "map-live", "map-convoy", "chat", "driver", "driver-detail",
             "events", "event-detail", "event-detail-paid", "event-detail-creator",
             "event-create", "event-edit", "event-saving", "event-chat", "event-chat-restricted",
             "event-check-in", "event-group-drive", "event-share", "crown", "crown-shop", "crown-stats",

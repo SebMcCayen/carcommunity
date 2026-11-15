@@ -916,6 +916,7 @@
     "errorNotLeader": "Only the convoy leader can end the convoy for everyone. You can leave it instead."
   },
   "convoyReaction": {
+    "cooldown": "Available again in %1$d seconds",
     "police": {
       "label": "Police",
       "caption": "Police ahead!"

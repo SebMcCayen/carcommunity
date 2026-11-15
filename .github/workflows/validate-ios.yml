@@ -564,13 +564,23 @@ jobs:
         run: |
           python3 apps/ios/scripts/simulator-package.py \
             "${RUNNER_TEMP}/ios-tests/Build/Products/Debug-iphonesimulator/KCC.app"
-      - name: Export failure screenshots and structured summary
-        if: failure()
+      # Passing visual tests attach the convoy states too. Preserve a portable
+      # summary and images without requiring the optional full xcresult bundle.
+      - name: Export test screenshots and structured summary
+        if: always()
         timeout-minutes: 6
         run: |
           python3 apps/ios/scripts/export-test-results.py \
             --results "${RUNNER_TEMP}/ios-tests.xcresult" \
             --output "${RUNNER_TEMP}/ios-failure-evidence"
+      - name: Preserve simulator screenshots and summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-simulator-evidence-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-failure-evidence
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Preserve test failure evidence and optional passing results
         if: failure() || vars.IOS_UPLOAD_TEST_ARTIFACTS == 'true'
         uses: actions/upload-artifact@v7

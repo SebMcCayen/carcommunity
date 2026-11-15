@@ -10881,6 +10881,23 @@
         }
       }
     },
+    "convoyReaction.cooldown": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tillgänglig igen om %1$lld sekunder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Available again in %1$lld seconds"
+          }
+        }
+      }
+    },
     "convoyReaction.followMe.caption": {
       "extractionState": "manual",
       "localizations": {
