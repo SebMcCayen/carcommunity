@@ -1389,7 +1389,7 @@
     {
       "name": "finance.estimate",
       "domain": "finance",
-      "description": "Admin-only on-demand cost estimate in SEK ({} input — takes no client-controlled fields). Computes an IN-APP COST MODEL (estimated, NOT the real Google Cloud bill): a sourced+dated price table (functions/src/finance/pricing.ts), labelled usage assumptions (assumptions.ts), and the function inventory (inventory.ts). Reads the latest metrics/{YYYY-MM-DD} snapshot's totalUsers for the LIVE member count so the variable half tracks community growth (falls back to a labelled default with source:'fallback' when no snapshot exists yet). Splits cost into two honest halves: COMMITTED (scheduled jobs — cadence x per-run work, independent of members; Trafikverket's ~2,775 writes/run x 48 runs/day dominates) and VARIABLE (per-member Firestore/Functions/RTDB/Storage usage). Applies each service's free tier explicitly (gross -> free -> billable -> SEK). Returns a Google Cloud subtotal, a SEPARATE Mapbox vendor estimate (never blended in), and a SEPARATE recurring-costs section (operator-entered ACTUALS read from the financeRecurringCosts collection — Claude, tooling, domains …; a yearly cost is normalised to /12 and USD is converted via the same dated FX rate), plus a grand total and any uncosted functions. On-demand rather than scheduled on purpose: no history is needed, so it avoids adding a scheduled Firestore write (a cost of its own). Every MODELLED figure is a MODEL ESTIMATE; the admin page carries that banner and links to the Google Cloud billing console. Deployed via grouped export as finance-estimate (functions/src/finance/estimate.ts).",
+      "description": "Admin-only on-demand model in SEK plus server-only daily Monitoring and Billing aggregates. Reads current member count, recurring costs, two fixed financeSnapshots and financeSettings/workloads. Workload resource pools share free quotas and occupy legacy envelopes without double counting. Missing/stale telemetry uses labelled adjustable assumptions. Reported Google Cloud costs (shared KCC/Driver project, net credits, excluding tax) and preliminary forecast stay separate from model totals, Mapbox and subscriptions. No external provider queries on page load. Source: functions/src/finance/estimate.ts.",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -1664,6 +1664,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "contracts/chat-reactions-v1/README.md"
+    },
+    {
+      "name": "finance.updateWorkloadAssumptions",
+      "domain": "finance",
+      "description": "Admin-only. Replaces fallback workload frequencies: {overrides:[{id,eventsPerMemberPerDay}]}. Known workload IDs only, unique IDs, at most ten entries, finite rates 0..1000. Empty list resets to code defaults. Does not override measured request counts. Writes financeSettings/workloads and immutable adminAuditEvents in one batch. App Check and live admin authorization required.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/finance/settings.ts"
     }
   ]
 }

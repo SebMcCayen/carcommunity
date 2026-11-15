@@ -13,6 +13,9 @@
  * types — the writer and reader each declare the shape. Keep the two in sync.
  */
 
+import type { FinanceCoverage } from './costCoverage';
+export * from './costCoverage';
+
 import { callAdmin } from '@/lib/callables';
 
 // Recurring-costs CRUD (operator-entered actuals) — its own module, re-exported
@@ -95,7 +98,7 @@ export interface ProjectionPoint {
   grandTotalSekPerMonth: number;
 }
 
-export interface FinanceEstimate {
+export interface FinanceEstimate extends FinanceCoverage {
   generatedAtMs: number;
   fx: { usdToSek: number; capturedOn: string };
   member: { count: number; source: MemberCountSource; asOf: string | null };

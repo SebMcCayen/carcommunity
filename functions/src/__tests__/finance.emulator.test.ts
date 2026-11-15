@@ -155,6 +155,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await adminDb.collection('metrics').doc(SNAPSHOT_DATE).delete();
+  await adminDb.collection('financeSettings').doc('workloads').delete();
+  await adminDb.collection('financeSnapshots').doc('usage').delete();
+  await adminDb.collection('financeSnapshots').doc('billing').delete();
   await deleteApp(app);
 });
 
@@ -170,6 +173,13 @@ interface RecurringCostLineResult {
 }
 
 interface EstimateResult {
+  workloads: {
+    id: string;
+    eventsPerMonth: number;
+    assumedEventsPerMemberPerDay: number;
+    source: string;
+  }[];
+  reportedBilling: { totalSek: number | null; state: string };
   member: { count: number; source: string; asOf: string | null };
   googleCloud: {
     totalSekPerMonth: number;
@@ -227,6 +237,72 @@ describe('finance-estimate', () => {
     expect(result.recurringCosts.count).toBe(result.recurringCosts.items.length);
     expect(result.recurringCosts.totalSekPerMonth).toBeGreaterThanOrEqual(0);
     expect(Number.isFinite(result.recurringCosts.totalSekPerMonth)).toBe(true);
+  });
+});
+
+describe('finance evidence and workload settings', () => {
+  it('rejects non-admin settings writes and invalid input', async () => {
+    await signInAs(memberUser);
+    expect(
+      await callableErrorCode(call('finance-updateWorkloadAssumptions', { overrides: [] })),
+    ).toBe('functions/permission-denied');
+    await signInAs(adminUser);
+    expect(
+      await callableErrorCode(
+        call('finance-updateWorkloadAssumptions', {
+          overrides: [{ id: 'unknown', eventsPerMemberPerDay: 1 }],
+        }),
+      ),
+    ).toBe('functions/invalid-argument');
+  });
+
+  it('persists an audited fallback update and reads it through the estimate', async () => {
+    await signInAs(adminUser);
+    await call('finance-updateWorkloadAssumptions', {
+      overrides: [{ id: 'roadCameras.photo', eventsPerMemberPerDay: 0 }],
+    });
+    const result = (await call('finance-estimate', {})).data as EstimateResult;
+    expect(result.workloads.find((w) => w.id === 'roadCameras.photo')?.eventsPerMonth).toBe(0);
+    const audit = await latestAuditFor('finance.updateWorkloadAssumptions', 'workloads');
+    expect(audit?.adminId).toBe(adminUser.uid);
+    await call('finance-updateWorkloadAssumptions', { overrides: [] });
+  });
+
+  it('uses valid server-side measured usage and rejects malformed billing without breaking the model', async () => {
+    const capturedAtMs = Date.now();
+    const endMs = Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth(),
+      new Date().getUTCDate(),
+    );
+    await adminDb
+      .collection('financeSnapshots')
+      .doc('usage')
+      .set({
+        state: 'ready',
+        data: {
+          capturedAtMs,
+          startMs: endMs - 30 * 86_400_000,
+          endMs,
+          functions: [
+            { id: 'roadCameras.photo', requests: 500, sentBytes: 1234567, billableSeconds: 25 },
+          ],
+        },
+      });
+    await adminDb
+      .collection('financeSnapshots')
+      .doc('billing')
+      .set({ state: 'ready', data: { totalSek: 0 } });
+    await signInAs(adminUser);
+    const result = (await call('finance-estimate', {})).data as EstimateResult;
+    expect(result.workloads.find((w) => w.id === 'roadCameras.photo')?.source).toBe(
+      'measured-usage',
+    );
+    expect(result.reportedBilling.totalSek).toBeNull();
+    expect(result.reportedBilling.state).toBe('unavailable');
+    expect(Number.isFinite(result.grandTotalSekPerMonth)).toBe(true);
+    await adminDb.collection('financeSnapshots').doc('usage').delete();
+    await adminDb.collection('financeSnapshots').doc('billing').delete();
   });
 });
 

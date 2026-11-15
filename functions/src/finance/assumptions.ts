@@ -211,3 +211,8 @@ export const FALLBACK_MEMBER_COUNT = 16;
 // is intentionally no constant to replace it: an empty collection contributes 0
 // and the board shows an empty-state rather than a fabricated number.
 // ---------------------------------------------------------------------------
+
+/** Planning storage budget (2026-11-15): 4,500 private camera records at 1 KB,
+ * two public catalog generations at 200 bytes/entry, and 200 KB for the two
+ * finance evidence snapshots and settings. Not a measured bucket size. */
+export const CAMERA_AND_FINANCE_DOCUMENT_BYTES = 4500 * 1000 + 2 * 4500 * 200 + 200_000;
