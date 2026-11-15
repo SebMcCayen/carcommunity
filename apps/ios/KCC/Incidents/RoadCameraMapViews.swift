@@ -195,13 +195,20 @@ struct RoadCameraGroupBadge: View {
                 Text(group.views.count.formatted()).monospacedDigit()
             }
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(Color(argb: group.camera.type == .speed ? 0xFF040211 : group.camera.type.color))
+            .foregroundStyle(roadCameraGroupColor(group.camera.type == .speed ? 0xFF040211 : group.camera.type.color))
             .padding(.horizontal, 8).frame(height: 36)
             .background(.white, in: Capsule())
-            .overlay { Capsule().strokeBorder(Color(argb: 0xFF040211), lineWidth: 1) }
+            .overlay { Capsule().strokeBorder(roadCameraGroupColor(0xFF040211), lineWidth: 1) }
             .accessibilityHidden(true)
         }
     }
+}
+
+private func roadCameraGroupColor(_ argb: UInt32) -> Color {
+    Color(red: Double((argb >> 16) & 0xFF) / 255,
+          green: Double((argb >> 8) & 0xFF) / 255,
+          blue: Double(argb & 0xFF) / 255,
+          opacity: Double((argb >> 24) & 0xFF) / 255)
 }
 
 struct RoadCameraDetailsContent: View {
