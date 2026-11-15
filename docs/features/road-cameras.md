@@ -52,7 +52,9 @@ No map movement or zoom requests metadata or photographs.
 The detail sheet shows direction buttons for sites/groups with multiple views.
 Different site names are included in view labels. The main map also offers
 "Show cameras" to zoom into a visual group. Android turn-by-turn uses the same
-zoom grouping and view selection on its separate map.
+zoom grouping and view selection on its separate map. An open selection keeps
+its member IDs across viewport regrouping; catalog removals and layer disable
+still remove invalid choices.
 The selected button is marked, and switching loads only that view's photograph
 through the existing per-camera cache and quotas. Unknown directions use numbered
 view labels; matching compass labels receive a number to keep every button distinct.
@@ -68,7 +70,9 @@ sampling Mapbox's animated puck. Recorder ownership includes its empty initial
 state; puck fixes cannot append shortcuts or omit a recorded corner under the
 fallback jitter threshold. Only the newest 3,000 recorder fixes are copied for
 map updates, then trimmed by distance. Puck-based jitter/jump handling remains a
-fallback when no recorder is available. Nothing is road-snapped or reconstructed
+fallback when no recorder is available. A gap over 300 metres starts a fresh live
+tail, including when its endpoints were accepted by the recorder. Saved History
+data is unchanged. Nothing is road-snapped or reconstructed
 across missing fixes. iOS does not currently draw this private self-tail, so the
 existing Android-only rendering discrepancy does not apply to its map.
 

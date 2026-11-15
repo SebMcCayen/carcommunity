@@ -6809,7 +6809,8 @@ fun AuthenticatedApp(
                                 // that is no longer on the map.
                                 roadCameraLayers.selected(tappedIncidentId)?.let { camera ->
                                     com.kungsbackacarcommunity.app.roadcameras.RoadCameraDetailsSheet(
-                                        camera, roadCameraLayers.repository, views = roadCameraLayers.viewsFor(camera),
+                                        camera, roadCameraLayers.repository,
+                                        views = com.kungsbackacarcommunity.app.roadcameras.rememberRoadCameraSelectionViews(roadCameraLayers, camera),
                                         onZoomIn = {
                                             val zoom = (mapSurface.cameraSnapshot.value?.zoom ?: 13.0) + 2
                                             mapSurface.setBrowsingZoom(zoom.coerceIn(14.0, 17.0))

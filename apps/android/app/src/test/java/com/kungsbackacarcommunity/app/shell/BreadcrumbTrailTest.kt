@@ -18,6 +18,18 @@ import org.junit.Test
 class BreadcrumbTrailTest {
 
     @Test
+    fun `a long accepted recording gap starts a new live tail without joining unknown roads`() {
+        val trail = BreadcrumbTrail()
+        val recorded = listOf(pointAtStep(0), pointAtStep(1), pointAtStep(10), pointAtStep(11))
+        trail.setRecordedPoints(recorded.take(3))
+        assertEquals(listOf(pointAtStep(10)), trail.points())
+        trail.setRecordedPoints(recorded)
+        assertEquals(listOf(pointAtStep(10), pointAtStep(11)), trail.points())
+        // Display trimming never changes the recording used by History.
+        assertEquals(4, recorded.size)
+    }
+
+    @Test
     fun `recorded corner replaces the puck shortcut and keeps fixes under the jitter floor`() {
         val trail = BreadcrumbTrail()
         val approach = MapPoint(longitude = 12.0, latitude = 57.0)

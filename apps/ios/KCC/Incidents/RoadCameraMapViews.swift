@@ -9,6 +9,7 @@ final class RoadCameraMapCoordinator {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var selectionGeneration = 0
     private(set) var cameras: [RoadCamera] = []
+    private var catalogById: [String: RoadCamera] = [:]
     private(set) var locations: [RoadCameraLocation] = []
     private(set) var enabledTypes = Set<RoadCameraType>()
     private(set) var selectedCamera: RoadCamera?
@@ -27,6 +28,7 @@ final class RoadCameraMapCoordinator {
         if let selectedCamera, !enabledTypes.contains(selectedCamera.type) { dismiss() }
         guard !enabledTypes.isEmpty, let repository else {
             cameras = []
+            catalogById = [:]
             locations = []
             return
         }
@@ -34,7 +36,16 @@ final class RoadCameraMapCoordinator {
             let catalog = try await repository.catalog()
             guard !Task.isCancelled, request == generation else { return }
             cameras = catalog.cameras
+            catalogById = Dictionary(uniqueKeysWithValues: catalog.cameras.map { ($0.id, $0) })
             locations = RoadCameraLocation.group(catalog.cameras)
+            if let group = selectedGroup {
+                let retained = group.views.compactMap { catalogById[$0.id] }
+                selectedGroup = retained.isEmpty ? nil : RoadCameraMapGroup(sites: RoadCameraLocation.group(retained))
+            }
+            if let selectedCamera {
+                if let current = catalogById[selectedCamera.id] { self.selectedCamera = current }
+                else { dismiss() }
+            }
             catalogErrorKey = nil
         } catch {
             guard !Task.isCancelled, request == generation else { return }
@@ -46,6 +57,7 @@ final class RoadCameraMapCoordinator {
         generation += 1
         enabledTypes = []
         cameras = []
+        catalogById = [:]
         locations = []
         dismiss()
     }
@@ -74,8 +86,15 @@ final class RoadCameraMapCoordinator {
 
     var selectedViews: [RoadCamera] {
         guard let selectedCamera else { return [] }
-        if let selectedGroup { return selectedGroup.views }
+        if let selectedGroup {
+            return selectedGroup.views.compactMap { catalogById[$0.id] }.filter { enabledTypes.contains($0.type) }
+        }
         return locations.first { $0.views.contains { $0.id == selectedCamera.id } }?.views ?? [selectedCamera]
+    }
+
+    var selectedOpposingDirections: Bool {
+        let views = selectedViews
+        return views.count == 2 && views[0].type == .speed && RoadCameraLocation.group(views).count == 1
     }
 
     func selectDirection(_ camera: RoadCamera) {
@@ -222,7 +241,7 @@ struct RoadCameraDetailsContent: View {
             if coordinator.selectedViews.count > 1 {
                 Text(String(format: NSLocalizedString("roadCameras.groupCount", comment: ""), coordinator.selectedViews.count))
                     .font(.subheadline.weight(.semibold))
-                if coordinator.selectedGroup?.opposingDirections == true {
+                if coordinator.selectedOpposingDirections {
                     Text("roadCameras.bothDirections")
                 }
                 Text("roadCameras.zoomHint").font(.footnote).foregroundStyle(KccTheme.secondary)

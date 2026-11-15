@@ -1004,7 +1004,8 @@ fun TurnByTurnNavScreen(
         val cameraTap by engine.roadCameraTap.collectAsState()
         cameraLayerState?.selected(cameraTap)?.let { camera ->
             com.kungsbackacarcommunity.app.roadcameras.RoadCameraDetailsSheet(
-                camera, cameraLayerState.repository, views = cameraLayerState.viewsFor(camera),
+                camera, cameraLayerState.repository,
+                views = com.kungsbackacarcommunity.app.roadcameras.rememberRoadCameraSelectionViews(cameraLayerState, camera),
                 onDismiss = engine::consumeRoadCameraTap)
         }
 

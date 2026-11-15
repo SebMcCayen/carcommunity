@@ -54,7 +54,17 @@ class BreadcrumbTrail(
     fun setRecordedPoints(points: List<MapPoint>?): Boolean {
         if (recordedSource == points && (points == null || trail.isNotEmpty() || points.isEmpty())) return false
         recordedSource = points?.toList()
-        seed(points.orEmpty())
+        val recorded = points.orEmpty()
+        // Preserve accepted close corner fixes, but never connect the unknown
+        // road across a recording discontinuity (for example a long tunnel).
+        var start = 0
+        for (index in recorded.lastIndex downTo 1) {
+            if (haversineMeters(recorded[index - 1], recorded[index]) > maxJumpMeters) {
+                start = index
+                break
+            }
+        }
+        seed(recorded.subList(start, recorded.size))
         return true
     }
 

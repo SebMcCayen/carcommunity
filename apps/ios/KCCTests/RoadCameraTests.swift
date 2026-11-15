@@ -98,6 +98,51 @@ final class RoadCameraTests: XCTestCase {
         XCTAssertNil(coordinator.selectedCamera)
     }
 
+    func testAnOpenGroupRetainsSelectionAcrossZoomAndHonorsCatalogRemoval() async {
+        let upstream = CameraStub()
+        let first = siteCamera("a", direction: 135, type: .traffic, name: "First site")
+        let second = siteCamera("b", direction: 315, latitude: 57.4508, type: .traffic, name: "Second site")
+        upstream.catalogCameras = [first, second]
+        let coordinator = RoadCameraMapCoordinator(repository: upstream)
+        await coordinator.refresh(enabledTypes: [.traffic])
+        let overview = MapCameraSnapshot(latitude: 57.45, longitude: 12.09, zoom: 13, bearing: 0, pitch: 0)
+        coordinator.selectGroup(coordinator.visibleGroups(center: overview, radius: nil)[0])
+        coordinator.selectDirection(second)
+        let close = MapCameraSnapshot(latitude: 57.45, longitude: 12.09, zoom: 17, bearing: 0, pitch: 0)
+        XCTAssertEqual(coordinator.visibleGroups(center: close, radius: nil).count, 2)
+        XCTAssertEqual(coordinator.selectedCamera?.id, second.id)
+        XCTAssertEqual(coordinator.selectedViews, [first, second])
+        upstream.catalogCameras = [second]
+        await coordinator.refresh(enabledTypes: [.traffic])
+        XCTAssertEqual(coordinator.selectedViews, [second])
+        XCTAssertEqual(coordinator.selectedCamera?.id, second.id)
+        upstream.catalogCameras = []
+        await coordinator.refresh(enabledTypes: [.traffic])
+        XCTAssertNil(coordinator.selectedCamera)
+        XCTAssertTrue(coordinator.selectedViews.isEmpty)
+        XCTAssertEqual(upstream.photoCalls, 0)
+    }
+
+    func testOpenPairReconcilesChangedBearingWithoutAddingNewMembersOrFetchingPhotos() async {
+        let upstream = CameraStub()
+        let first = siteCamera("a", direction: 135, type: .speed)
+        let opposite = siteCamera("b", direction: 315, type: .speed)
+        upstream.catalogCameras = [first, opposite]
+        let coordinator = RoadCameraMapCoordinator(repository: upstream)
+        await coordinator.refresh(enabledTypes: [.speed])
+        let center = MapCameraSnapshot(latitude: 57.45, longitude: 12.09, zoom: 13, bearing: 0, pitch: 0)
+        coordinator.selectGroup(coordinator.visibleGroups(center: center, radius: nil)[0])
+        XCTAssertTrue(coordinator.selectedOpposingDirections)
+        let changed = siteCamera("b", direction: 135, type: .speed)
+        upstream.catalogCameras = [first, changed, siteCamera("c", direction: 315, type: .speed)]
+        await coordinator.refresh(enabledTypes: [.speed])
+        XCTAssertEqual(coordinator.selectedViews.map(\.id), ["a", "b"])
+        XCTAssertFalse(coordinator.selectedOpposingDirections)
+        XCTAssertEqual(coordinator.selectedGroup?.sites.count, 2)
+        XCTAssertEqual(coordinator.selectedCamera?.id, "a")
+        XCTAssertEqual(upstream.photoCalls, 0)
+    }
+
     func testOnlyNearbyPhotoCamerasWithSameNameAndTypeShareAMarker() {
         let cameras = [siteCamera("a", direction: 135),
             siteCamera("b", direction: 315, name: " kungsbacka syd "),

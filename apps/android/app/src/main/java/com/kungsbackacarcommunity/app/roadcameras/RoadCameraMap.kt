@@ -118,6 +118,14 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
     }
 }
 
+/** Keep an open selection stable across viewport regrouping, while honoring catalog removals. */
+@Composable
+fun rememberRoadCameraSelectionViews(state: RoadCameraLayerState, camera: RoadCamera): List<RoadCamera> {
+    val memberIds = remember(state, camera.id) { state.viewsFor(camera).map { it.id } }
+    val catalog = remember(state.cameras) { state.cameras.associateBy { it.id } }
+    return memberIds.mapNotNull { id -> catalog[id]?.takeIf { state.enabled(it.type) } }
+}
+
 /** Enabling a layer is the only catalog trigger; map movement never calls the service. */
 @Composable
 fun rememberRoadCameraLayerState(context: Context, mapVisible: Boolean,
