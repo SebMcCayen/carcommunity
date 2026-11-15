@@ -2266,7 +2266,12 @@
     "release013Build14Map": "Luta kartan och visa Trafikverkets trafikkameror. Kronjakten visar avståndet till kronorna.",
     "release013Build14Live": "Tydligare kontroller för livesessioner och smidigare sparning av körningar när du slutar dela din position.",
     "release013Build14Convoy": "Svara på konvojinbjudningar direkt i chatten med tydligare information om inbjudans giltighetstid.",
-    "release013Build14Chat": "Stabilare hantering av chattens utkast och tangentbord, även med större textstorlek."
+    "release013Build14Chat": "Stabilare hantering av chattens utkast och tangentbord, även med större textstorlek.",
+    "release014Build15Highlight": "Uppdaterad chatt, konvoj och kameravisning på kartan.",
+    "release014Build15Chat": "Förbättrat stöd för meddelandereaktioner och stabilare hantering av tangentbordet i chatten.",
+    "release014Build15Convoy": "Tydligare konvojkontroller och reaktionsknappar med bättre stöd för stora textstorlekar.",
+    "release014Build15Cameras": "Trafik- och väglagskameror delar kartlager. Kameror på samma plats grupperas med val av riktning och uppdaterade ikoner.",
+    "release014Build15Driver": "Driver-fliken har ett kortare namn och inläggen visar rätt profilbilder för författarna."
   },
   "driver": {
     "feed": {

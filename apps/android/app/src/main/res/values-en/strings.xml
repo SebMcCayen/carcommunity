@@ -2116,6 +2116,11 @@
     <string name="whatsNew_release013Build14Live">Clearer live-session controls and smoother drive saving when you stop sharing your location.</string>
     <string name="whatsNew_release013Build14Convoy">Respond to convoy invitations directly in chat, with clearer information about when invitations expire.</string>
     <string name="whatsNew_release013Build14Chat">More reliable handling of chat drafts and the keyboard, including at larger text sizes.</string>
+    <string name="whatsNew_release014Build15Highlight">Updated chat, convoy controls, and camera views on the map.</string>
+    <string name="whatsNew_release014Build15Chat">Improved support for message reactions and more reliable keyboard handling in chat.</string>
+    <string name="whatsNew_release014Build15Convoy">Clearer convoy controls and reaction buttons with better support for larger text sizes.</string>
+    <string name="whatsNew_release014Build15Cameras">Traffic and road-condition cameras share a map layer. Cameras at the same location are grouped with direction selection and updated icons.</string>
+    <string name="whatsNew_release014Build15Driver">The Driver tab has a shorter name and posts display the correct author avatars.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

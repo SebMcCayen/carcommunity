@@ -39135,6 +39135,91 @@
         }
       }
     },
+    "whatsNew.release014Build15Cameras": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trafik- och väglagskameror delar kartlager. Kameror på samma plats grupperas med val av riktning och uppdaterade ikoner."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traffic and road-condition cameras share a map layer. Cameras at the same location are grouped with direction selection and updated icons."
+          }
+        }
+      }
+    },
+    "whatsNew.release014Build15Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättrat stöd för meddelandereaktioner och stabilare hantering av tangentbordet i chatten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improved support for message reactions and more reliable keyboard handling in chat."
+          }
+        }
+      }
+    },
+    "whatsNew.release014Build15Convoy": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tydligare konvojkontroller och reaktionsknappar med bättre stöd för stora textstorlekar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clearer convoy controls and reaction buttons with better support for larger text sizes."
+          }
+        }
+      }
+    },
+    "whatsNew.release014Build15Driver": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Driver-fliken har ett kortare namn och inläggen visar rätt profilbilder för författarna."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Driver tab has a shorter name and posts display the correct author avatars."
+          }
+        }
+      }
+    },
+    "whatsNew.release014Build15Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppdaterad chatt, konvoj och kameravisning på kartan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated chat, convoy controls, and camera views on the map."
+          }
+        }
+      }
+    },
     "whatsNew.title": {
       "extractionState": "manual",
       "localizations": {
