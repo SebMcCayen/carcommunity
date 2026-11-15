@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Map overlay for the transient reaction controls and incoming reaction pop.
 struct ConvoyReactionControls: View {
+    static let buttonHeight: CGFloat = 56
+    static var controlsClearance: CGFloat { buttonHeight + KccSpacing.s3 }
+
     @Bindable var coordinator: ConvoyReactionCoordinator
     let followMeCoordinator: ConvoyFollowMeCoordinator?
     let bottomClearance: CGFloat
@@ -31,11 +34,13 @@ struct ConvoyReactionControls: View {
             VStack {
                 Spacer()
                 TimelineView(.periodic(from: .now, by: 0.5)) { context in
-                    HStack(alignment: .top, spacing: KccSpacing.s5) {
+                    HStack(spacing: KccSpacing.s2) {
                         ForEach(ConvoyReactionKind.allCases) { kind in
                             reactionButton(kind, now: context.date)
                         }
                     }
+                    .frame(maxWidth: 456)
+                    .padding(.horizontal, KccSpacing.s3)
                 }
                 .padding(.bottom, bottomClearance + KccSpacing.s3)
             }
@@ -55,64 +60,102 @@ struct ConvoyReactionControls: View {
             ?? (remaining == 0 && !coordinator.sendingKinds.contains(kind))
         let seconds = max(Int(ceil(Double(remaining) / 1_000)), 1)
 
-        return VStack(spacing: KccSpacing.s1) {
-            Button {
-                if let persistentFollowMe {
-                    let activate = !persistentFollowMe.isLeading
-                    Task {
-                        _ = await persistentFollowMe.setLeading(activate) {
-                            await coordinator.send(.followMe)
-                        }
-                    }
-                } else {
-                    Task { await coordinator.send(kind) }
-                }
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(ready || active ? kind.color : Color(.secondarySystemFill))
-                        .shadow(color: .black.opacity(ready ? 0.22 : 0), radius: 6, y: 3)
-                    if active {
-                        Circle()
-                            .stroke(.primary, lineWidth: 3)
-                            .padding(3)
-                    }
-                    Image(systemName: kind.systemImage)
-                        .font(.system(size: 27, weight: .semibold))
-                        .foregroundStyle(ready || active ? .white : .secondary)
-                        .opacity(ready || active ? 1 : 0.45)
-                    if persistentFollowMe?.isToggling == true {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.primary)
-                            .accessibilityHidden(true)
-                    } else if remaining > 0, persistentFollowMe == nil {
-                        Text("\(seconds)")
-                            .font(.caption.bold())
-                            .foregroundStyle(.primary)
-                            .accessibilityHidden(true)
-                    } else if coordinator.sendingKinds.contains(kind) {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.primary)
-                            .accessibilityHidden(true)
+        return Button {
+            if let persistentFollowMe {
+                let activate = !persistentFollowMe.isLeading
+                Task {
+                    _ = await persistentFollowMe.setLeading(activate) {
+                        await coordinator.send(.followMe)
                     }
                 }
-                .frame(width: 60, height: 60)
+            } else {
+                Task { await coordinator.send(kind) }
             }
-            .buttonStyle(.plain)
-            .disabled(!ready)
-            .accessibilityLabel(Text(active ? "convoyFollowTrail.activeLabel" : kind.labelKey))
-            .accessibilityValue(
-                active
-                    ? Text("convoyFollowTrail.activeContentDescription")
-                    : (remaining > 0 && persistentFollowMe == nil ? Text("\(seconds)") : Text(""))
+        } label: {
+            ConvoyReactionButtonFace(
+                kind: kind,
+                ready: ready,
+                active: active,
+                pending: persistentFollowMe?.isToggling == true || coordinator.sendingKinds.contains(kind),
+                remainingFraction: persistentFollowMe == nil
+                    ? min(max(Double(remaining) / Double(kind.cooldownMilliseconds), 0), 1) : 0
             )
-            .accessibilityIdentifier("convoy_reaction_\(kind.rawValue)")
+        }
+        .buttonStyle(.plain)
+        .disabled(!ready)
+        .accessibilityLabel(Text(active ? "convoyFollowTrail.activeLabel" : kind.labelKey))
+        .accessibilityValue(
+            active
+                ? Text("convoyFollowTrail.activeContentDescription")
+                : (remaining > 0 && persistentFollowMe == nil
+                    ? Text(String(format: String(localized: "convoyReaction.cooldown"), seconds)) : Text(""))
+        )
+        .accessibilityAddTraits(active ? [.isSelected] : [])
+        .accessibilityIdentifier("convoy_reaction_\(kind.rawValue)")
+    }
+}
 
-            Text(active ? "convoyFollowTrail.activeLabel" : kind.labelKey)
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
+/// Shared map material and geometry; no visible labels or countdown numerals.
+struct ConvoyReactionButtonFace: View {
+    @Environment(\.colorScheme) private var scheme
+    let kind: ConvoyReactionKind
+    let ready: Bool
+    let active: Bool
+    let pending: Bool
+    let remainingFraction: Double
+
+    var body: some View {
+        let accent = kind.color
+        let surface = scheme == .dark ? KccDarkColors.overlayBackground : KccLightColors.overlayBackground
+        let border = scheme == .dark ? KccDarkColors.overlayBorder : KccLightColors.overlayBorder
+        let secondary = scheme == .dark ? KccDarkColors.textSecondary : KccLightColors.textSecondary
+        let shape = RoundedRectangle(cornerRadius: KccRadius.md)
+        ZStack {
+            icon
+                .resizable()
+                .scaledToFit()
+                .frame(width: 28, height: 28)
+                .foregroundStyle(ready || active ? accent : secondary.opacity(0.45))
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: ConvoyReactionControls.buttonHeight)
+        .background(surface)
+        .overlay(alignment: .bottomLeading) {
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(accent.opacity(ready || active ? 1 : 0.45))
+                    .frame(width: geometry.size.width * (remainingFraction > 0 ? remainingFraction : 1))
+            }
+            .frame(height: active ? 4 : 3)
+            .accessibilityHidden(true)
+        }
+        .overlay(alignment: .topTrailing) {
+            if pending {
+                ProgressView()
+                    .controlSize(.small)
+                    // This hidden decorative indicator must not grow over the
+                    // reaction glyph at accessibility text sizes. The native
+                    // small spinner is 20pt; reserve a 12pt corner footprint.
+                    .dynamicTypeSize(.large)
+                    .scaleEffect(CGFloat(0.6))
+                    .frame(width: 12, height: 12)
+                    .tint(accent)
+                    .padding(6)
+                    .accessibilityHidden(true)
+            }
+        }
+        .clipShape(shape)
+        .overlay { shape.strokeBorder(active ? accent : border, lineWidth: active ? 2 : 1) }
+        .shadow(color: .black.opacity(scheme == .dark ? 0.3 : 0.18), radius: 3, y: 2)
+        .contentShape(shape)
+    }
+
+    private var icon: Image {
+        switch kind {
+        case .police: Image("incident-police")
+        case .hello: Image("convoy-hand")
+        case .followMe: Image(systemName: kind.systemImage)
         }
     }
 }

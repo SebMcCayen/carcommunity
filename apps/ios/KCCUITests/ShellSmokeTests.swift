@@ -566,7 +566,16 @@ final class ShellSmokeTests: XCTestCase {
                 "The composer must regain software-keyboard focus after dismissal")
             _ = try requireChatEvidence(in: app, name: "chat-reopen-failure", timeout: 5,
                 message: "The composer must reopen the real keyboard with navigation hidden") { $0.keyboardPresented }
-            send.tap()
+            assertComposerDraft("Fixture reply", present: true, in: app)
+            // Reopening the vertical editor replaces native AX geometry. A CI
+            // failure showed the default Send activation selecting draft text
+            // instead. Resolve the visible button again and tap its center;
+            // the sent-message and cleared-draft assertions remain mandatory.
+            let reopenedSend = app.buttons["chat.composer.send"]
+            XCTAssertTrue(reopenedSend.isEnabled)
+            XCTAssertTrue(reopenedSend.isHittable)
+            print("CHAT_COMPOSER_SEND frame=\(reopenedSend.frame) editor=\(composerInput(in: app).frame)")
+            reopenedSend.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             _ = try requireChatEvidence(in: app, name: "chat-sent-reply-failure", timeout: 5,
                 message: "Send must produce a fully readable reply in the actual conversation") {
                 $0.fullyReadable(label: "Fixture reply")
