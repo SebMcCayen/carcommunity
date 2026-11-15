@@ -53,15 +53,20 @@ final class RoadCameraMapCoordinator {
         guard let center else { return [] }
         let distance = max(500, min(radius ?? 15_000, 50_000))
         let latitudeSpan = distance / 111_000
-        let longitudeSpan = latitudeSpan / max(0.1, cos(center.latitude * .pi / 180))
-        return Array(locations.map(\.camera).filter {
-            enabledTypes.contains($0.type)
-                && abs($0.latitude - center.latitude) <= latitudeSpan
-                && abs($0.longitude - center.longitude) <= longitudeSpan
-        }.sorted {
-            hypot($0.latitude - center.latitude, ($0.longitude - center.longitude) * cos(center.latitude * .pi / 180))
-                < hypot($1.latitude - center.latitude, ($1.longitude - center.longitude) * cos(center.latitude * .pi / 180))
-        }.prefix(250))
+        let longitudeScale = cos(center.latitude * .pi / 180)
+        let longitudeSpan = latitudeSpan / max(0.1, longitudeScale)
+        let representatives: [RoadCamera] = locations.map(\.camera)
+        let nearby: [RoadCamera] = representatives.filter { camera in
+            enabledTypes.contains(camera.type)
+                && abs(camera.latitude - center.latitude) <= latitudeSpan
+                && abs(camera.longitude - center.longitude) <= longitudeSpan
+        }
+        let ordered: [RoadCamera] = nearby.sorted { lhs, rhs in
+            let lhsDistance = hypot(lhs.latitude - center.latitude, (lhs.longitude - center.longitude) * longitudeScale)
+            let rhsDistance = hypot(rhs.latitude - center.latitude, (rhs.longitude - center.longitude) * longitudeScale)
+            return lhsDistance < rhsDistance
+        }
+        return Array(ordered.prefix(250))
     }
 
     var selectedViews: [RoadCamera] {

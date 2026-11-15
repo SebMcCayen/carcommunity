@@ -196,8 +196,9 @@ final class MessageReactionStore {
         Task {
             defer { busy = false; if failed { request() } }
             do {
-                // Construct a fresh SDK payload; the retained retry state contains only Sendable values.
-                let response = try await functions.httpsCallable(setName).call(["scope": room.scope, "roomId": room.roomID, "messageId": id, "emojiId": desired as Any? ?? NSNull(), "expectedVersion": expectedVersion, "operationId": operation])
+                let response = try await Self.setReaction(functions: functions, name: setName,
+                    room: room, messageID: id, emojiID: desired,
+                    expectedVersion: expectedVersion, operationID: operation)
                 guard current, visible[id] != nil, let data = response.data as? [String: Any], let version = data["version"] as? Int else { return }
                 let choice = MessageReactionChoice(emojiID: data["emojiId"] as? String, version: version)
                 visible[id] = MessageReactionParser.counts(data["counts"])
@@ -211,6 +212,17 @@ final class MessageReactionStore {
                 failed = true; own[id] = nil; attempted[id] = nil; history.forget(room)
             }
         }
+    }
+
+    // Build and consume the untyped SDK payload outside the main actor. Only
+    // Sendable request values and the SDK's transferred result cross that boundary.
+    private nonisolated static func setReaction(functions: Functions, name: String,
+        room: MessageReactionRoom, messageID: String, emojiID: String?,
+        expectedVersion: Int, operationID: String) async throws -> sending HTTPSCallableResult {
+        let payload: [String: Any] = ["scope": room.scope, "roomId": room.roomID,
+            "messageId": messageID, "emojiId": emojiID as Any? ?? NSNull(),
+            "expectedVersion": expectedVersion, "operationId": operationID]
+        return try await functions.httpsCallable(name).call(payload)
     }
 }
 
