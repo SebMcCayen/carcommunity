@@ -773,8 +773,19 @@ final class ShellSmokeTests: XCTestCase {
             controls[4].tap()
             XCTAssertTrue(app.buttons[language == "sv" ? "Lämna konvojen" : "Leave the convoy"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.buttons[language == "sv" ? "Avsluta för alla" : "End for everyone"].exists)
-            app.buttons[language == "sv" ? "Avbryt" : "Cancel"].tap()
+            let cancel = app.buttons[language == "sv" ? "Avbryt" : "Cancel"]
+            if cancel.exists {
+                cancel.tap()
+            } else {
+                // Native confirmation popovers omit the cancel row: tapping
+                // outside dismisses them without invoking a convoy action.
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.2)).tap()
+            }
+            let leave = app.buttons[language == "sv" ? "Lämna konvojen" : "Leave the convoy"]
+            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: leave)
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
             XCTAssertTrue(live.exists)
+            XCTAssertTrue(controls[4].isHittable)
             app.terminate()
         }
     }
