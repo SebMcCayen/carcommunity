@@ -192,6 +192,7 @@
 		5D5497CB236ECCDC0A9A985D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 35ECF01C5EE3E57259D5C48F /* FirebaseStorage */; };
 		5E9122EC48616CC93350D027 /* StartDrivingSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D89EE517172EB9F0D769763 /* StartDrivingSelection.swift */; };
 		5EC79B2D0DA19E6286386B48 /* ChatLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C7744768F4983F116A875D8 /* ChatLogic.swift */; };
+		5F3B450CC807ADECC110B45D /* MessageReactions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAEA5B61B9916DF465DAF5A6 /* MessageReactions.swift */; };
 		5FA58398E128DF16EFBBCEBF /* AppStoreCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74337FF89D1F20ED590396E /* AppStoreCatalogTests.swift */; };
 		613B8194B7824CF9011547F0 /* FirebaseInstallations in Frameworks */ = {isa = PBXBuildFile; productRef = 11665018CFAB00488053E085 /* FirebaseInstallations */; };
 		61E605201BA06F0EBE8A6C4F /* FirebaseAccountDeletionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCC08B9374438D59BC02CDE /* FirebaseAccountDeletionRepository.swift */; };
@@ -302,6 +303,7 @@
 		A04698DDB616990EBF8DA27F /* InAppNavigationFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91669907EB5DEAC61B0BB0F0 /* InAppNavigationFactory.swift */; };
 		A1839396C02384C8278FFC9F /* MapLayerPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ADA4273944D1E94AC6D82A4 /* MapLayerPreferencesTests.swift */; };
 		A1EC039BBBF244273C309F5C /* RoadCameraMapViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A89D2BF559A556C118FD080D /* RoadCameraMapViews.swift */; };
+		A32288F494E184A0E8C0578C /* EmojiCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 4F1D0A2C3221165E32E0BA8B /* EmojiCatalog.json */; };
 		A338EDD44E0F569801232217 /* LiveSessionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B5AF2B1AB131008E6E8FD5E /* LiveSessionBar.swift */; };
 		A5219FCCDAEE57D0C931719D /* GarageCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B9C0DCCDA464441F249D46 /* GarageCoordinator.swift */; };
 		A5C59311A4AC26F6C7D465BA /* FirebaseNotificationSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E84AD4B95E57EDC67F3C61 /* FirebaseNotificationSettingsRepository.swift */; };
@@ -470,8 +472,6 @@
 		FF5DAD303A0C20F13A16B67D /* changelog.json in Resources */ = {isa = PBXBuildFile; fileRef = 18ACC38A3554DF9334B4815F /* changelog.json */; };
 		FFAF1EAA160AFCF84E155B6C /* EventAttendeesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B00397E45AB94249025E8C0 /* EventAttendeesSheet.swift */; };
 		FFC620D8B53E1BB6BFEBB181 /* EventChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B12FAC506B254D502CA6177 /* EventChatRepository.swift */; };
-		2DB43A83F1D406309A1B8E23 /* MessageReactions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5059F2E84DF76EA68EAA8F02 /* MessageReactions.swift */; };
-		C8CC72D0E9D4C8EF4D148C1F /* EmojiCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 5F368DB359671F9E6F6C012A /* EmojiCatalog.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -625,6 +625,7 @@
 		4B7C7EEAB4A601B3797DD71B /* LiveLocationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveLocationCoordinatorTests.swift; sourceTree = "<group>"; };
 		4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSurfaceTests.swift; sourceTree = "<group>"; };
 		4EF51B87F1C88EDC0119C55E /* DriveRecordingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveRecordingCoordinator.swift; sourceTree = "<group>"; };
+		4F1D0A2C3221165E32E0BA8B /* EmojiCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = EmojiCatalog.json; sourceTree = "<group>"; };
 		4F45BE07A84CADAD825221C0 /* FirebaseCrownHuntMapRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseCrownHuntMapRepository.swift; sourceTree = "<group>"; };
 		4F779A1367C735D28FE88719 /* AccountDeletionScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionScreen.swift; sourceTree = "<group>"; };
 		5026C637F0A0B82526882126 /* LiveSessionReadout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSessionReadout.swift; sourceTree = "<group>"; };
@@ -942,6 +943,7 @@
 		F8A45B9A270F9A89DDB0DB26 /* FirebaseVehiclesRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseVehiclesRepository.swift; sourceTree = "<group>"; };
 		F92F73E1EE66D82F0C0A1341 /* FirebaseNearbyWaveRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseNearbyWaveRepository.swift; sourceTree = "<group>"; };
 		F92FAF3F851B4E2C19E83CCD /* EventChatCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventChatCoordinator.swift; sourceTree = "<group>"; };
+		FAEA5B61B9916DF465DAF5A6 /* MessageReactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReactions.swift; sourceTree = "<group>"; };
 		FAF459D5FA59A9C35A4CA3BD /* BlockingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockingModels.swift; sourceTree = "<group>"; };
 		FB441023956278A385F340CC /* ProfilePointsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePointsSection.swift; sourceTree = "<group>"; };
 		FB923EB0F48961801B354686 /* ConvoyChatRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyChatRepository.swift; sourceTree = "<group>"; };
@@ -949,8 +951,6 @@
 		FEA57282CD5C314FBB90F9E5 /* PointsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsModels.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
 		FFB6A2C05BDF69FB106D0F24 /* SubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
-		5059F2E84DF76EA68EAA8F02 /* MessageReactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageReactions.swift; sourceTree = "<group>"; };
-		5F368DB359671F9E6F6C012A /* EmojiCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = EmojiCatalog.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1044,8 +1044,6 @@
 		158B8318E894A52E872B0AD9 /* Chat */ = {
 			isa = PBXGroup;
 			children = (
-				5F368DB359671F9E6F6C012A /* EmojiCatalog.json */,
-				5059F2E84DF76EA68EAA8F02 /* MessageReactions.swift */,
 				76DF6530C2C3AA39EF2D0495 /* ChannelChatCoordinator.swift */,
 				D11CDD124E35FCE223DE9DCB /* ChannelChatScreen.swift */,
 				82E603DFF92371FE42A37AC1 /* ChatColors.swift */,
@@ -1065,8 +1063,10 @@
 				ACC4A7A4AD67B47382B5BFD4 /* ConvoyChatScreen.swift */,
 				C9311888B6D5D08A6BDF51D9 /* ConvoyListCoordinator.swift */,
 				5C214A57C432C8F346B4DADD /* ConvoyListScreen.swift */,
+				4F1D0A2C3221165E32E0BA8B /* EmojiCatalog.json */,
 				2A566961D5CF0930D60F9A0E /* FirebaseCommunityChatRepository.swift */,
 				32991331F72A6E60E072A798 /* FirebaseConvoyChatRepository.swift */,
+				FAEA5B61B9916DF465DAF5A6 /* MessageReactions.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -1958,10 +1958,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C8CC72D0E9D4C8EF4D148C1F /* EmojiCatalog.json */,
 				5D52528DBD475FAC372ABBA0 /* AppStore.xcstrings in Resources */,
 				D8BF05C62ECB34F2AA5C4ADA /* Assets.xcassets in Resources */,
 				2E0B84011EAD087064F1C3FA /* ContentSafety.xcstrings in Resources */,
+				A32288F494E184A0E8C0578C /* EmojiCatalog.json in Resources */,
 				D82FBCB9FF439B2E1275434C /* InfoPlist.xcstrings in Resources */,
 				E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */,
 				93C55D774DE8ADB3773B041B /* PrivacyInfo.xcprivacy in Resources */,
@@ -2040,7 +2040,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2DB43A83F1D406309A1B8E23 /* MessageReactions.swift */,
 				CC7614CE72EA5A6B00F14FF4 /* AccountAccess.swift in Sources */,
 				91F36640DE0946C3FFE135EC /* AccountAccessRepository.swift in Sources */,
 				D1B7BD57517D10D95E1B826E /* AccountDeletionCoordinator.swift in Sources */,
@@ -2286,6 +2285,7 @@
 				0EEE001EB7EA82536E26BC68 /* MemberProfileRepository.swift in Sources */,
 				243B1F9F45B32CE5993A9BF8 /* MemberProfileScreen.swift in Sources */,
 				2DE84CDBF1D7FCFFF8AE2925 /* MembershipScreen.swift in Sources */,
+				5F3B450CC807ADECC110B45D /* MessageReactions.swift in Sources */,
 				019741D1421051BBD5C5A283 /* NearbyLiveCoordinator.swift in Sources */,
 				64A9BA56F2104F08DFA33183 /* NearbyLiveModels.swift in Sources */,
 				3C51DBE096C361EA21E9B7E4 /* NearbyLiveOverlay.swift in Sources */,
@@ -2613,14 +2613,14 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = NO;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.3;
+				MARKETING_VERSION = 0.1.4;
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kungsbackacarcommunity.app;
 				SDKROOT = iphoneos;
@@ -2669,7 +2669,7 @@
 				CODE_SIGN_ENTITLEMENTS = KCC/KCC.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CRASHLYTICS_COLLECTION_ENABLED = YES;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = KCC/Info.plist;
@@ -2677,7 +2677,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.3;
+				MARKETING_VERSION = 0.1.4;
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kungsbackacarcommunity.app;
 				SDKROOT = iphoneos;
