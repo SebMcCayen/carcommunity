@@ -445,8 +445,10 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH,
     0,
   );
+  const legacyMemberInvocationsPerMonth =
+    members * PER_MEMBER_PER_DAY.functionInvocations * DAYS_PER_MONTH;
   const memberInvocationsPerMonth = Math.max(
-    members * PER_MEMBER_PER_DAY.functionInvocations * DAYS_PER_MONTH,
+    legacyMemberInvocationsPerMonth,
     workloadResources.requests,
   );
   const invocationsPerMonth = scheduledInvocationsPerMonth + memberInvocationsPerMonth;
@@ -466,7 +468,7 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     0,
   );
   const memberGibSeconds = Math.max(
-    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * PER_MEMBER_MEMORY_GIB,
+    legacyMemberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * PER_MEMBER_MEMORY_GIB,
     workloadResources.gibSeconds,
   );
   const gibSecondsPerMonth = scheduledGibSeconds + memberGibSeconds;
@@ -486,7 +488,7 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     0,
   );
   const memberCpuSeconds = Math.max(
-    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * MEMBER_FUNCTION_VCPU,
+    legacyMemberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * MEMBER_FUNCTION_VCPU,
     workloadResources.cpuSeconds,
   );
   const cpuSecondsPerMonth = scheduledCpuSeconds + memberCpuSeconds;

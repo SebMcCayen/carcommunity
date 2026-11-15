@@ -10,7 +10,7 @@ import { estimateFinance } from './model';
 import { DAYS_PER_MONTH, FUNCTIONS, USD_TO_SEK } from './pricing';
 import { reportedBilling } from './reporting';
 import { WORKLOADS } from './workloads';
-import { CALLABLE_COST_CLASS } from './inventory';
+import { CALLABLE_COST_CLASS, SCHEDULED_JOBS } from './inventory';
 import { workloadOverridesSchema } from './settings-core';
 
 const now = new Date('2026-11-15T12:00:00Z');
@@ -71,6 +71,29 @@ describe('complete workload accounting', () => {
     expect(photo.resources.cpuSeconds).toBeCloseTo((50 * DAYS_PER_MONTH) / 30);
     expect(photo.resources.sentBytes).toBeCloseTo((1024 ** 3 * DAYS_PER_MONTH) / 30);
     expect(est.workloads.find((w) => w.id === 'roadCameras.catalog')!.source).toBe('assumption');
+  });
+  it('prices measured compute independently from high measured request volume', () => {
+    const data = {
+      ...usage,
+      functions: [{ ...usage.functions[0]!, requests: 10_000_000, billableSeconds: 50 }],
+    };
+    const est = estimateFinance({
+      ...input,
+      memberCount: 0,
+      usageEvidence: { state: 'ready', data, lastAttemptFailed: false },
+    });
+    const cpu = est.googleCloud.services.find((s) => s.driver.startsWith('Compute — vCPU'))!;
+    const memory = est.googleCloud.services.find((s) => s.driver.startsWith('Compute — memory'))!;
+    const scheduledCpu = SCHEDULED_JOBS.reduce(
+      (sum, job) => sum + job.runsPerDay * DAYS_PER_MONTH * job.avgSeconds * job.cpu,
+      0,
+    );
+    const scheduledMemory = SCHEDULED_JOBS.reduce(
+      (sum, job) => sum + job.runsPerDay * DAYS_PER_MONTH * job.avgSeconds * job.memoryGiB,
+      0,
+    );
+    expect(cpu.gross).toBeCloseTo(scheduledCpu + (50 * DAYS_PER_MONTH) / 30);
+    expect(memory.gross).toBeCloseTo(scheduledMemory + (50 * 0.25 * DAYS_PER_MONTH) / 30);
   });
   it('does not turn missing metric series into observed zero usage, but accepts a measured zero', () => {
     for (const requests of [null, 0]) {
