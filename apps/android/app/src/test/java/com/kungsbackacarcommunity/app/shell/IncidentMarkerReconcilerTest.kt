@@ -101,6 +101,8 @@ class IncidentMarkerReconcilerTest {
             iconRes = 5,
             glyphColorArgb = 6,
             reportedCleared = true,
+            groupCount = 4,
+            opposingDirections = true,
         )
 
         assertTrue(renderer.draw(listOf(changed)))

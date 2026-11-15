@@ -761,6 +761,9 @@ class DriveRecordingCoordinator(
      */
     fun recordedPoints(): List<RecordedPoint> = recorder?.snapshot() ?: emptyList()
 
+    /** Exact recorder suffix for the private ~1 km live map tail. */
+    fun recentRecordedPoints(): List<RecordedPoint> = recorder?.recentPoints(RESUMED_BREADCRUMB_MAX_POINTS) ?: emptyList()
+
     /** Explicitly discards the recording — nothing is stored. */
     fun discard() {
         recorder = null

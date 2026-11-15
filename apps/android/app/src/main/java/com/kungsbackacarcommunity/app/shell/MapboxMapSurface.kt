@@ -324,13 +324,19 @@ class MapboxMapSurface(
 
     // The private "past ~1 km" breadcrumb tail of the user's OWN travel, drawn
     // only while THIS user is live-sharing (see [BreadcrumbTrail] for the rolling
-    // window / jitter / jump rules). Fed from the device puck's position fixes
+    // window / jitter / jump rules). Fed from accepted recorder fixes when a
+    // recording owns it, otherwise from the device puck's position fixes,
     // and rendered client-side ONLY — it is never written to RTDB/Firestore nor
     // pushed across the [MapSurface] seam, so no other convoy member ever sees
     // it. Held on the surface (which outlives individual MapViews) so the tail
     // survives a MapView recreate mid-session and can be redrawn against the new
-    // style. Touched only on the main-thread position callback.
+    // style. Touched only on the main thread.
     private val breadcrumbTrail = BreadcrumbTrail()
+    private val recordedBreadcrumbFlow = MutableStateFlow<List<MapPoint>?>(null)
+
+    override fun setRecordedBreadcrumb(points: List<MapPoint>?) {
+        recordedBreadcrumbFlow.value = points?.toList()
+    }
 
     // A resumed drive's route (#849 follow-up), handed in via [seedBreadcrumb] to
     // RESTORE the visible tail after a process death, held until the surface is
@@ -759,6 +765,10 @@ class MapboxMapSurface(
      * callbacks, so it runs on the map's main thread like the rest of the breadcrumb path.
      */
     private fun maybeApplyBreadcrumbSeed() {
+        if (recordedBreadcrumbFlow.value != null) {
+            pendingBreadcrumbSeed = null
+            return
+        }
         val seed = pendingBreadcrumbSeed ?: return
         if (userMarkerFlow.value?.isLiveSharing != true) return
         // A tail already has live points — the resume window has passed; drop the
@@ -1563,6 +1573,15 @@ class MapboxMapSurface(
         // The caller's marker only carries live-sharing state now (its position
         // is the device puck): a green pulse signals sharing, blue otherwise.
         val marker by userMarkerFlow.collectAsState()
+        val recordedBreadcrumb by recordedBreadcrumbFlow.collectAsState()
+        LaunchedEffect(recordedBreadcrumb, marker?.isLiveSharing) {
+            if (marker?.isLiveSharing == true) {
+                breadcrumbTrail.setRecordedPoints(recordedBreadcrumb)
+                runCatching { redrawBreadcrumb() }
+            } else {
+                breadcrumbTrail.clear()
+            }
+        }
         // Recreate the position listener once; it just records the last fix so
         // recenter() can jump the camera to it.
         val positionListener =
@@ -1586,7 +1605,7 @@ class MapboxMapSurface(
                         // when the tail actually moved, so a stationary puck emitting a
                         // fix every frame triggers no redraw. Local-only: nothing here
                         // crosses the seam or is written anywhere shared.
-                        if (userMarkerFlow.value?.isLiveSharing == true) {
+                        if (userMarkerFlow.value?.isLiveSharing == true && recordedBreadcrumbFlow.value == null) {
                             val changed =
                                 breadcrumbTrail.add(
                                     MapPoint(longitude = point.longitude(), latitude = point.latitude()),

@@ -55,7 +55,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The full-width action row and its gap above the session dock. */
-val CONVOY_REACTION_CONTROLS_CLEARANCE = 56.dp + KccSpacing.s3
+val CONVOY_REACTION_CONTROLS_CLEARANCE = 56.dp
 
 /** Test tag on the convoy reaction button cluster. */
 const val CONVOY_REACTIONS_TAG = "convoy_reactions"
@@ -224,8 +224,7 @@ fun ConvoyReactionsHost(
             },
             modifier =
                 Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = KccSpacing.s3),
+                    .align(Alignment.BottomCenter),
         )
     }
 }

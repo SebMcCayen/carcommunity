@@ -3,7 +3,7 @@ import SwiftUI
 /// Map overlay for the transient reaction controls and incoming reaction pop.
 struct ConvoyReactionControls: View {
     static let buttonHeight: CGFloat = 56
-    static var controlsClearance: CGFloat { buttonHeight + KccSpacing.s3 }
+    static var controlsClearance: CGFloat { buttonHeight + KccSpacing.s1 }
 
     @Bindable var coordinator: ConvoyReactionCoordinator
     let followMeCoordinator: ConvoyFollowMeCoordinator?
@@ -42,7 +42,7 @@ struct ConvoyReactionControls: View {
                     .frame(maxWidth: 456)
                     .padding(.horizontal, KccSpacing.s3)
                 }
-                .padding(.bottom, bottomClearance + KccSpacing.s3)
+                .padding(.bottom, bottomClearance + KccSpacing.s1)
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: coordinator.incomingReaction?.id)

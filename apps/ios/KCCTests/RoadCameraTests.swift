@@ -22,6 +22,82 @@ final class RoadCameraTests: XCTestCase {
         XCTAssertEqual(locations[0].camera, se)
     }
 
+    func testOppositeSpeedCameraPairKeepsItsRealAnchorAndDirectionsAtHighZoom() {
+        let first = siteCamera("first", direction: 135, type: .speed)
+        let opposite = siteCamera("opposite", direction: 315, latitude: 57.4508, type: .speed)
+        let sites = RoadCameraLocation.group([opposite, first])
+        XCTAssertEqual(sites.count, 1)
+        XCTAssertEqual(sites, RoadCameraLocation.group([first, opposite]))
+        let groups = RoadCameraMapGroup.group(sites, zoom: 20)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertTrue(groups[0].opposingDirections)
+        XCTAssertEqual(groups[0].views, [first, opposite])
+        XCTAssertTrue(groups[0].views.contains(groups[0].camera))
+    }
+
+    func testProximityAloneNeverMakesUnverifiedSpeedCamerasAnOppositeDirectionSite() {
+        let first = siteCamera("a", direction: 135, type: .speed)
+        for other in [siteCamera("b", direction: 135, type: .speed),
+            siteCamera("b", direction: nil, type: .speed),
+            siteCamera("b", direction: 315, type: .speed, name: "Other road"),
+            siteCamera("b", direction: 315, latitude: 57.452, type: .speed)] {
+            XCTAssertEqual(RoadCameraLocation.group([first, other]).count, 2)
+        }
+    }
+
+    func testZoomGroupsPreserveAllCamerasAndKeepLayerTypesSeparate() {
+        let cameras = RoadCameraType.allCases.flatMap { type in
+            (0...3).map { i in siteCamera("\(type.rawValue)-\(i)", direction: 135,
+                latitude: 57.45 + Double(i) * 0.0001, type: type, name: "Site \(i)") }
+        }
+        let sites = RoadCameraLocation.group(cameras)
+        let groups = RoadCameraMapGroup.group(sites, zoom: 13)
+        XCTAssertEqual(groups.count, 3)
+        XCTAssertEqual(groups.map { $0.views.count }, [4, 4, 4])
+        XCTAssertEqual(groups.flatMap(\.views).map(\.id).sorted(), cameras.map(\.id).sorted())
+        XCTAssertTrue(groups.allSatisfy { Set($0.views.map(\.type)).count == 1 })
+        XCTAssertEqual(groups, RoadCameraMapGroup.group(Array(sites.reversed()), zoom: 13.9))
+        XCTAssertEqual(RoadCameraMapGroup.group(sites, zoom: 17).count, 12)
+    }
+
+    func testZoomGroupsCannotJoinProximityChainsAcrossGridCells() {
+        let sites = (0...2).map { i in RoadCameraLocation(views: [
+            siteCamera("\(i)", direction: 135, latitude: 57.45 + Double(i) * 0.002, name: "Site \(i)")]) }
+        let groups = RoadCameraMapGroup.group(sites, zoom: 13)
+        XCTAssertEqual(groups.map { $0.views.count }, [2, 1])
+        XCTAssertEqual(groups[0].camera, sites[0].camera)
+        XCTAssertFalse(groups[0].opposingDirections)
+        XCTAssertTrue(RoadCameraMapGroup.group([], zoom: 13).isEmpty)
+        XCTAssertEqual(groups, RoadCameraMapGroup.group(sites, zoom: 13.99))
+    }
+
+    func testVisibleGroupsCountBeforeTheDrawCapAndSelectingDoesNotFetchPhotos() async {
+        let upstream = CameraStub()
+        upstream.catalogCameras = (0..<300).map { i in
+            siteCamera("camera-\(i)", direction: 135, latitude: 57.45 + Double(i) * 0.000001,
+                type: .speed, name: "Site \(i)")
+        }
+        let coordinator = RoadCameraMapCoordinator(repository: upstream)
+        await coordinator.refresh(enabledTypes: [.speed])
+        let center = MapCameraSnapshot(latitude: 57.45, longitude: 12.09, zoom: 13, bearing: 0, pitch: 0)
+        let groups = coordinator.visibleGroups(center: center, radius: 15_000)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].views.count, 300)
+        XCTAssertFalse(groups[0].opposingDirections)
+        coordinator.selectGroup(groups[0])
+        XCTAssertEqual(coordinator.selectedViews.count, 300)
+        coordinator.selectDirection(groups[0].views.last!)
+        XCTAssertEqual(coordinator.selectedCamera?.id, groups[0].views.last?.id)
+        XCTAssertEqual(coordinator.selectedViews.count, 300)
+        let close = MapCameraSnapshot(latitude: 57.45, longitude: 12.09, zoom: 17, bearing: 0, pitch: 0)
+        XCTAssertEqual(coordinator.visibleGroups(center: close, radius: 15_000).count, 250)
+        XCTAssertEqual(upstream.catalogCalls, 1)
+        XCTAssertEqual(upstream.photoCalls, 0)
+        await coordinator.refresh(enabledTypes: [])
+        XCTAssertTrue(coordinator.visibleGroups(center: center, radius: 15_000).isEmpty)
+        XCTAssertNil(coordinator.selectedCamera)
+    }
+
     func testOnlyNearbyPhotoCamerasWithSameNameAndTypeShareAMarker() {
         let cameras = [siteCamera("a", direction: 135),
             siteCamera("b", direction: 315, name: " kungsbacka syd "),
@@ -30,7 +106,7 @@ final class RoadCameraTests: XCTestCase {
             siteCamera("traffic", direction: 135, type: .traffic),
             siteCamera("speed1", direction: 135, type: .speed),
             siteCamera("speed2", direction: 315, type: .speed)]
-        XCTAssertEqual(RoadCameraLocation.group(cameras).count, 6)
+        XCTAssertEqual(RoadCameraLocation.group(cameras).count, 5)
         XCTAssertEqual(RoadCameraLocation.group([
             siteCamera("c", direction: 135, latitude: 57.4506),
             siteCamera("b", direction: 135, latitude: 57.4503),

@@ -2453,7 +2453,11 @@
     "south": "Söder",
     "southWest": "Sydväst",
     "west": "Väster",
-    "northWest": "Nordväst"
+    "northWest": "Nordväst",
+    "groupCount": "%1$d kameror",
+    "bothDirections": "Fartkameror i båda riktningarna",
+    "zoomHint": "Zooma in för att se kamerornas platser.",
+    "showCameras": "Visa kamerorna"
   },
   "convoy.invitationFrom": "bjuder in till konvoj",
   "convoy.invitationJoin": "Gå med",

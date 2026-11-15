@@ -127,6 +127,8 @@ internal object IncidentMarkerLayer {
             discColorArgb = marker.colorArgb,
             glyphColorArgb = marker.glyphColorArgb,
             reportedCleared = marker.reportedCleared,
+            groupCount = marker.groupCount,
+            opposingDirections = marker.opposingDirections,
         )
 
     private fun registerImage(
@@ -145,6 +147,8 @@ internal object IncidentMarkerLayer {
                 discColorArgb = marker.colorArgb,
                 glyphColorArgb = marker.glyphColorArgb,
                 reportedCleared = marker.reportedCleared,
+                groupCount = marker.groupCount,
+                opposingDirections = marker.opposingDirections,
             ) ?: return@runCatching false
             style.addImage(imageId, bitmap)
             true

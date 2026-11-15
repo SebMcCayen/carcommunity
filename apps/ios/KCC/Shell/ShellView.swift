@@ -1412,7 +1412,12 @@ struct ShellView: View {
         case .camera(let id):
             if let coordinator = roadCameraCoordinator, let camera = coordinator.selectedCamera, camera.id == id {
                 MapReadingPanel(title: LocalizedStringKey(camera.type.titleKey), onClose: dismissMapReading) {
-                    RoadCameraDetailsContent(coordinator: coordinator, camera: camera)
+                    RoadCameraDetailsContent(coordinator: coordinator, camera: camera) {
+                        let zoom = (mapSurface.cameraSnapshot?.zoom ?? 13) + 2
+                        mapSurface.setBrowsingZoom(max(14, min(17, zoom)))
+                        mapSurface.centerOn(MapPoint(longitude: camera.longitude, latitude: camera.latitude))
+                        dismissMapReading()
+                    }
                 }
             }
         case .police(let id):

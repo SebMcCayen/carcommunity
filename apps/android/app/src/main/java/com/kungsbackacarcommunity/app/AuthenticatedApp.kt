@@ -3473,6 +3473,24 @@ fun AuthenticatedApp(
             val driveDeletedText = stringResource(R.string.savedDrives_driveDeleted)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
+            // Use the same accepted GPS fixes as History, rather than the map's
+            // independently sampled/animated puck, which can cut across a turn.
+            val recordedPointCount = (recordingState as? RecordingState.Recording)?.pointCount
+            DisposableEffect(mapSurface) {
+                onDispose { mapSurface.setRecordedBreadcrumb(null) }
+            }
+            LaunchedEffect(activeRecording, recordedPointCount) {
+                mapSurface.setRecordedBreadcrumb(
+                    if (recordedPointCount != null) {
+                        activeRecording?.recentRecordedPoints()?.map {
+                            MapPoint(longitude = it.longitude, latitude = it.latitude)
+                        }
+                    } else {
+                        null
+                    },
+                )
+            }
+
             // Uploads the recorded route.bin to Cloud Storage after drives-save
             // creates the drive doc (the callable returns the path but does not
             // write the file). Null in a config-less / CI build — the drive then
@@ -6792,6 +6810,12 @@ fun AuthenticatedApp(
                                 roadCameraLayers.selected(tappedIncidentId)?.let { camera ->
                                     com.kungsbackacarcommunity.app.roadcameras.RoadCameraDetailsSheet(
                                         camera, roadCameraLayers.repository, views = roadCameraLayers.viewsFor(camera),
+                                        onZoomIn = {
+                                            val zoom = (mapSurface.cameraSnapshot.value?.zoom ?: 13.0) + 2
+                                            mapSurface.setBrowsingZoom(zoom.coerceIn(14.0, 17.0))
+                                            mapSurface.centerOn(MapPoint(camera.longitude, camera.latitude))
+                                            mapSurface.consumeIncidentTap()
+                                        },
                                         onDismiss = mapSurface::consumeIncidentTap)
                                 }
                                 val openIncident = tappedIncident

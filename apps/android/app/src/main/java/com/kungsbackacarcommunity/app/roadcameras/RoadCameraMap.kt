@@ -70,6 +70,7 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
     var photoCamerasEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.Traffic)); private set
     var cameras by mutableStateOf(emptyList<RoadCamera>()); internal set
     private val locations by derivedStateOf { groupRoadCameraLocations(cameras) }
+    private var displayedGroups: List<RoadCameraMapGroup> = emptyList()
     var catalogFailed by mutableStateOf(false); internal set
     val anyEnabled get() = speedEnabled || photoCamerasEnabled
     fun enabled(type: RoadCameraType) = when (type) {
@@ -84,21 +85,32 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
         store.writeRoadCameraLayer(type, enabled)
     }
     /** Bound native annotation work; panning reuses the complete local catalog without a network read. */
-    fun markersNear(latitude: Double?, longitude: Double?): List<MapIncidentMarker> {
+    fun markersNear(latitude: Double?, longitude: Double?, zoom: Double = 17.0): List<MapIncidentMarker> {
         if (latitude == null || longitude == null) return emptyList()
         val longitudeScale = kotlin.math.cos(Math.toRadians(latitude))
-        return markers.map { marker ->
-            val north = (marker.latitude - latitude) * 111_000
-            val east = (marker.longitude - longitude) * 111_000 * longitudeScale
-            marker to (north * north + east * east)
-        }.filter { it.second <= 50_000.0 * 50_000.0 }.sortedBy { it.second }.take(250).map { it.first }
+        fun distance(camera: RoadCamera): Double {
+            val north = (camera.latitude - latitude) * 111_000
+            val east = (camera.longitude - longitude) * 111_000 * longitudeScale
+            return north * north + east * east
+        }
+        val nearby = locations.filter { enabled(it.camera.type) && distance(it.camera) <= 50_000.0 * 50_000.0 }
+        // Group before the draw cap so counts include every nearby source camera.
+        displayedGroups = groupRoadCameraMarkers(nearby, zoom).sortedWith(
+            compareBy<RoadCameraMapGroup> { distance(it.camera) }.thenBy { it.camera.id }).take(250)
+        return displayedGroups.map { group ->
+            val camera = group.camera
+            MapIncidentMarker(ROAD_CAMERA_MARKER_PREFIX + camera.id, camera.longitude, camera.latitude,
+                cameraColor(camera.type), cameraGlyph(camera.type), cameraGlyphColor(camera.type),
+                groupCount = group.views.size, opposingDirections = group.opposingDirections)
+        }
     }
     val markers: List<MapIncidentMarker> get() = locations.map { it.camera }.filter { enabled(it.type) }.map {
         MapIncidentMarker(ROAD_CAMERA_MARKER_PREFIX + it.id, it.longitude, it.latitude,
             cameraColor(it.type), cameraGlyph(it.type), cameraGlyphColor(it.type))
     }
     fun viewsFor(camera: RoadCamera): List<RoadCamera> =
-        locations.firstOrNull { location -> location.views.any { it.id == camera.id } }?.views ?: listOf(camera)
+        displayedGroups.firstOrNull { it.camera.id == camera.id }?.views
+            ?: locations.firstOrNull { location -> location.views.any { it.id == camera.id } }?.views ?: listOf(camera)
 
     fun selected(markerId: String?): RoadCamera? {
         val id = markerId?.takeIf { it.startsWith(ROAD_CAMERA_MARKER_PREFIX) }?.removePrefix(ROAD_CAMERA_MARKER_PREFIX)
@@ -154,17 +166,17 @@ fun RoadCameraBadge(type: RoadCameraType) {
 
 @Composable
 fun RoadCameraDetailsSheet(camera: RoadCamera, repository: RoadCameraRepository?,
-    views: List<RoadCamera> = listOf(camera), onDismiss: () -> Unit,
+    views: List<RoadCamera> = listOf(camera), onZoomIn: (() -> Unit)? = null, onDismiss: () -> Unit,
 ) {
     var selectedId by remember(camera.id) { mutableStateOf(camera.id) }
     val selected = views.firstOrNull { it.id == selectedId } ?: camera
-    RoadCameraViewDetailsSheet(selected, repository, views, { selectedId = it.id }, onDismiss)
+    RoadCameraViewDetailsSheet(selected, repository, views, { selectedId = it.id }, onZoomIn, onDismiss)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoadCameraViewDetailsSheet(camera: RoadCamera, repository: RoadCameraRepository?,
-    views: List<RoadCamera>, onSelect: (RoadCamera) -> Unit, onDismiss: () -> Unit,
+    views: List<RoadCamera>, onSelect: (RoadCamera) -> Unit, onZoomIn: (() -> Unit)?, onDismiss: () -> Unit,
 ) {
     var photo by remember(camera.id) { mutableStateOf<RoadCameraPhoto?>(null) }
     var loading by remember(camera.id) { mutableStateOf(camera.type != RoadCameraType.Speed) }
@@ -197,11 +209,24 @@ private fun RoadCameraViewDetailsSheet(camera: RoadCamera, repository: RoadCamer
         leadingContent = { RoadCameraBadge(camera.type) }, modifier = Modifier.testTag("road_camera_details")) {
         Text(camera.name, style = MaterialTheme.typography.titleMedium)
         if (views.size > 1) {
+            Text(stringResource(R.string.roadCameras_groupCount, views.size), style = MaterialTheme.typography.titleSmall)
+            if (views.size == 2 && camera.type == RoadCameraType.Speed && groupRoadCameraLocations(views).size == 1) {
+                Text(stringResource(R.string.roadCameras_bothDirections))
+            }
+            Text(stringResource(R.string.roadCameras_zoomHint), style = MaterialTheme.typography.bodySmall)
+            if (onZoomIn != null && groupRoadCameraLocations(views).size > 1) {
+                TextButton(onClick = onZoomIn, modifier = Modifier.testTag("road_camera_zoom_group")) {
+                    Text(stringResource(R.string.roadCameras_showCameras))
+                }
+            }
             Text(stringResource(R.string.roadCameras_chooseDirection), style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 views.forEachIndexed { index, view ->
                     FilterChip(selected = camera.id == view.id, onClick = { if (camera.id != view.id) onSelect(view) },
-                        label = { Text(cameraViewLabel(view, views, index)) },
+                        label = {
+                            val label = cameraViewLabel(view, views, index)
+                            Text(if (views.any { it.name != view.name }) "${view.name} · $label" else label)
+                        },
                         modifier = Modifier.testTag("road_camera_direction_${view.id}"))
                 }
             }

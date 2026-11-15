@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
+import android.graphics.Typeface
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
@@ -69,9 +70,12 @@ internal object IncidentMarkerBitmaps {
         discColorArgb: Int,
         glyphColorArgb: Int,
         reportedCleared: Boolean = false,
+        groupCount: Int = 1,
+        opposingDirections: Boolean = false,
     ): String =
         "kcc-incident-$iconRes-$discColorArgb-$glyphColorArgb" +
-            if (reportedCleared) "-cleared" else ""
+            (if (reportedCleared) "-cleared" else "") +
+            (if (groupCount > 1) "-group-$groupCount-$opposingDirections" else "")
 
     /**
      * Rasterises one marker. Returns null if the drawable cannot be inflated, so
@@ -84,7 +88,10 @@ internal object IncidentMarkerBitmaps {
         discColorArgb: Int,
         glyphColorArgb: Int,
         reportedCleared: Boolean = false,
+        groupCount: Int = 1,
+        opposingDirections: Boolean = false,
     ): Bitmap? {
+        if (groupCount > 1) return createGroup(context, iconRes, discColorArgb, groupCount, opposingDirections)
         val density = context.resources.displayMetrics.density
         fun px(dp: Float) = dp * density
 
@@ -179,4 +186,42 @@ internal object IncidentMarkerBitmaps {
      * bar is 45 degrees whatever size the badge is in pixels.
      */
     private val sqrtTwo = sqrt(2f)
+
+    /** White capsule, source glyph, count and native opposing arrows for a verified pair. */
+    private fun createGroup(context: Context, @DrawableRes iconRes: Int, color: Int,
+        count: Int, opposing: Boolean,
+    ): Bitmap? {
+        val density = context.resources.displayMetrics.density
+        val height = 36f * density
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = 14f * density
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        val text = count.toString()
+        val width = ceil((if (opposing) 74f else 40f) * density + paint.measureText(text)).toInt()
+        val bitmap = createBitmap(width, ceil(height).toInt())
+        val canvas = Canvas(bitmap)
+        paint.color = IncidentMarkerStyle.RING_DARK
+        canvas.drawRoundRect(0f, 0f, width.toFloat(), height, height / 2, height / 2, paint)
+        paint.color = android.graphics.Color.WHITE
+        canvas.drawRoundRect(density, density, width - density, height - density, height / 2, height / 2, paint)
+        // Preserve the established category color while keeping gold readable on white.
+        val tint = if (color == 0xFFEAB54B.toInt()) 0xFF040211.toInt() else color
+        fun glyph(resource: Int, x: Float, size: Float): Boolean {
+            val drawable = ContextCompat.getDrawable(context, resource)?.mutate() ?: return false
+            drawable.setTint(tint)
+            val top = (height - size) / 2
+            drawable.setBounds(x.roundToInt(), top.roundToInt(), (x + size).roundToInt(), (top + size).roundToInt())
+            drawable.draw(canvas)
+            return true
+        }
+        var x = 8f * density
+        if (opposing) { glyph(android.R.drawable.arrow_down_float, x, 14f * density); x += 16f * density }
+        if (!glyph(iconRes, x, 22f * density)) return null
+        x += 26f * density
+        if (opposing) { glyph(android.R.drawable.arrow_up_float, x, 14f * density); x += 16f * density }
+        paint.color = 0xFF040211.toInt()
+        canvas.drawText(text, x, height / 2 - (paint.ascent() + paint.descent()) / 2, paint)
+        return bitmap
+    }
 }

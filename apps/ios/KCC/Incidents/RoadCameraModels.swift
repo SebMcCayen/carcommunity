@@ -58,7 +58,7 @@ struct RoadCamera: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
-/// One map marker per named photo-camera site. Speed cameras remain individual.
+/// A named photo-camera site or a verified pair of opposite-facing speed cameras.
 struct RoadCameraLocation: Equatable, Sendable {
     let views: [RoadCamera]
     var camera: RoadCamera { views[0] }
@@ -73,10 +73,13 @@ struct RoadCameraLocation: Equatable, Sendable {
             var groups: [[RoadCamera]] = []
             // Stable anchors avoid catalog-order differences and proximity chains.
             for camera in cameras.sorted(by: { $0.id < $1.id }) {
-                let index = camera.type == .speed ? nil : groups.firstIndex {
+                let index = groups.firstIndex {
                     let anchor = $0[0]
                     let north = (camera.latitude - anchor.latitude) * 111_000
                     let east = (camera.longitude - anchor.longitude) * 111_000 * cos(anchor.latitude * .pi / 180)
+                    if camera.type == .speed {
+                        return $0.count == 1 && hypot(north, east) <= 150 && anchor.opposes(camera)
+                    }
                     return hypot(north, east) <= 50
                 }
                 if let index { groups[index].append(camera) }
@@ -94,7 +97,57 @@ struct RoadCameraLocation: Equatable, Sendable {
     }
 }
 
+struct RoadCameraMapGroup: Equatable, Identifiable, Sendable {
+    let sites: [RoadCameraLocation]
+    // Keep the marker at a real camera rather than a centroid across a road or lawn.
+    var camera: RoadCamera { sites[0].camera }
+    var id: String { camera.id }
+    var views: [RoadCamera] { sites.flatMap(\.views) }
+    var opposingDirections: Bool {
+        sites.count == 1 && camera.type == .speed && sites[0].views.count == 2
+            && sites[0].views[0].opposes(sites[0].views[1])
+    }
+
+    static func group(_ sites: [RoadCameraLocation], zoom: Double) -> [RoadCameraMapGroup] {
+        let bucket = max(0, min(22, floor(zoom.isFinite ? zoom : 14)))
+        let ordered = sites.sorted { $0.camera.id < $1.camera.id }
+        if bucket >= 17 { return ordered.map { RoadCameraMapGroup(sites: [$0]) } }
+        guard let latitude = ordered.first?.camera.latitude else { return [] }
+        let longitudeScale = max(0.01, cos(latitude * .pi / 180))
+        let radius = max(1, min(10_000, 64 * 78_271.516964 * longitudeScale / pow(2, bucket)))
+        struct Cell: Hashable { let type: RoadCameraType; let x: Int; let y: Int }
+        var cells: [Cell: [Int]] = [:]
+        var groups: [[RoadCameraLocation]] = []
+        for site in ordered {
+            let camera = site.camera
+            let x = Int(floor(camera.longitude * 111_000 * longitudeScale / radius))
+            let y = Int(floor(camera.latitude * 111_000 / radius))
+            var candidates: [Int] = []
+            for dx in -1...1 { for dy in -1...1 {
+                candidates += cells[Cell(type: camera.type, x: x + dx, y: y + dy)] ?? []
+            } }
+            let index = candidates.filter { candidate in
+                let anchor = groups[candidate][0].camera
+                let north = (camera.latitude - anchor.latitude) * 111_000
+                let east = (camera.longitude - anchor.longitude) * 111_000 * longitudeScale
+                return hypot(north, east) <= radius
+            }.min()
+            if let index { groups[index].append(site) }
+            else {
+                cells[Cell(type: camera.type, x: x, y: y), default: []].append(groups.count)
+                groups.append([site])
+            }
+        }
+        return groups.map { RoadCameraMapGroup(sites: $0) }
+    }
+}
+
 extension RoadCamera {
+    func opposes(_ other: RoadCamera) -> Bool {
+        guard let a = validDirection, let b = other.validDirection else { return false }
+        let difference = abs(a - b).truncatingRemainder(dividingBy: 360)
+        return min(difference, 360 - difference) >= 135
+    }
     var validDirection: Double? {
         guard let direction, direction.isFinite, (0...360).contains(direction) else { return nil }
         return direction.truncatingRemainder(dividingBy: 360)

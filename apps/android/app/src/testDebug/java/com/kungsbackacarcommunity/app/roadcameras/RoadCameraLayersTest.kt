@@ -27,6 +27,24 @@ import org.robolectric.annotation.Config
 class RoadCameraLayersTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun zoomingGroupsBeforeTheDrawCapAndKeepsEveryDirectionSelectable() {
+        compose.activity.getSharedPreferences("map_layers_preference", Context.MODE_PRIVATE).edit().clear().commit()
+        val state = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
+        state.cameras = (0..299).map { i ->
+            RoadCamera("camera-$i", RoadCameraType.Speed, "Site $i", 57.45 + i * 0.000001, 12.09, 135.0)
+        }
+        state.setEnabled(RoadCameraType.Speed, true)
+        val groups = state.markersNear(57.45, 12.09, 13.0)
+        assertEquals(1, groups.size)
+        assertEquals(300, groups.single().groupCount)
+        assertFalse(groups.single().opposingDirections)
+        assertEquals(300, state.viewsFor(state.selected(groups.single().id)!!).size)
+        assertEquals(250, state.markersNear(57.45, 12.09, 17.0).size)
+        state.setEnabled(RoadCameraType.Speed, false)
+        assertTrue(state.markersNear(57.45, 12.09, 13.0).isEmpty())
+        assertNull(state.selected(groups.single().id))
+    }
+
     @Test fun disabledLayersDoNotFetchAndEnablingOnlyLoadsTheCatalog() {
         compose.activity.getSharedPreferences("map_layers_preference", Context.MODE_PRIVATE).edit().clear().commit()
         val catalogs = java.util.concurrent.atomic.AtomicInteger()

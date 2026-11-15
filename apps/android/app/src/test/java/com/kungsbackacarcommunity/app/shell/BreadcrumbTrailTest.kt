@@ -17,6 +17,56 @@ import org.junit.Test
  */
 class BreadcrumbTrailTest {
 
+    @Test
+    fun `recorded corner replaces the puck shortcut and keeps fixes under the jitter floor`() {
+        val trail = BreadcrumbTrail()
+        val approach = MapPoint(longitude = 12.0, latitude = 57.0)
+        val corner = MapPoint(longitude = 12.0, latitude = 57.00003)
+        val exit = MapPoint(longitude = 12.0005, latitude = 57.00003)
+        trail.add(approach)
+        trail.add(exit)
+
+        val recorded = listOf(approach, corner, exit)
+        assertTrue(trail.setRecordedPoints(recorded))
+        assertEquals(recorded, trail.points())
+        assertFalse(trail.add(MapPoint(longitude = 12.001, latitude = 57.001)))
+        assertEquals(recorded, trail.points())
+    }
+
+    @Test
+    fun `a recorder waiting for its first fix blocks puck geometry until released`() {
+        val trail = BreadcrumbTrail()
+        trail.setRecordedPoints(emptyList())
+        assertFalse(trail.add(pointAtStep(0)))
+        assertTrue(trail.isEmpty())
+        trail.setRecordedPoints(null)
+        assertTrue(trail.add(pointAtStep(1)))
+        assertEquals(listOf(pointAtStep(1)), trail.points())
+    }
+
+    @Test
+    fun `recorded tail survives a sharing restart without joining the previous fallback`() {
+        val trail = BreadcrumbTrail()
+        val recorded = listOf(pointAtStep(0), pointAtStep(1))
+        trail.setRecordedPoints(recorded)
+        trail.clear()
+        trail.setRecordedPoints(recorded)
+        assertEquals(recorded, trail.points())
+        trail.setRecordedPoints(null)
+        assertTrue(trail.isEmpty())
+        trail.add(pointAtStep(9))
+        assertEquals(listOf(pointAtStep(9)), trail.points())
+    }
+
+    @Test
+    fun `recorded routes retain only the newest distance window`() {
+        val trail = BreadcrumbTrail(windowMeters = 1_000.0)
+        val recorded = (0..30).map(::pointAtStep)
+        trail.setRecordedPoints(recorded)
+        assertEquals(recorded.takeLast(10), trail.points())
+        assertFalse(trail.setRecordedPoints(recorded))
+    }
+
     /** ~111.2 m per 0.001 deg latitude — the step used to build predictable paths. */
     private val stepDeg = 0.001
     private val stepMeters = 111.2

@@ -186,6 +186,8 @@ data class MapIncidentMarker(
     @DrawableRes val iconRes: Int,
     val glyphColorArgb: Int,
     val reportedCleared: Boolean = false,
+    val groupCount: Int = 1,
+    val opposingDirections: Boolean = false,
 )
 
 /**
@@ -850,6 +852,9 @@ interface MapSurface : MapProjection {
      */
     fun seedBreadcrumb(points: List<MapPoint>)
 
+    /** Accepted recorder fixes for the private live tail; null enables puck fallback. */
+    fun setRecordedBreadcrumb(points: List<MapPoint>?)
+
     /**
      * Draw (or clear, with null / empty) the SHARED convoy "Follow me" LEADER
      * TRAIL — the line of where the current trail leader has recently driven,
@@ -1257,6 +1262,13 @@ class StubMapSurface(
         // can be asserted off-device. Mirror the real surface's empty-list no-op.
         if (points.isEmpty()) return
         seededBreadcrumbFlow.value = points
+    }
+
+    private val recordedBreadcrumbFlow = MutableStateFlow<List<MapPoint>?>(null)
+    val recordedBreadcrumb: StateFlow<List<MapPoint>?> = recordedBreadcrumbFlow.asStateFlow()
+
+    override fun setRecordedBreadcrumb(points: List<MapPoint>?) {
+        recordedBreadcrumbFlow.value = points?.toList()
     }
 
     private val followMeTrailFlow = MutableStateFlow<List<MapPoint>?>(null)

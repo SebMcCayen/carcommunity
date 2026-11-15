@@ -12,6 +12,7 @@ final class RoadCameraMapCoordinator {
     private(set) var locations: [RoadCameraLocation] = []
     private(set) var enabledTypes = Set<RoadCameraType>()
     private(set) var selectedCamera: RoadCamera?
+    private(set) var selectedGroup: RoadCameraMapGroup?
     private(set) var photo: RoadCameraPhoto?
     private(set) var photoLoading = false
     private(set) var photoErrorKey: String?
@@ -50,27 +51,30 @@ final class RoadCameraMapCoordinator {
     }
 
     func visibleCameras(center: MapCameraSnapshot?, radius: Double?) -> [RoadCamera] {
+        visibleGroups(center: center, radius: radius).map(\.camera)
+    }
+
+    func visibleGroups(center: MapCameraSnapshot?, radius: Double?) -> [RoadCameraMapGroup] {
         guard let center else { return [] }
-        let distance = max(500, min(radius ?? 15_000, 50_000))
-        let latitudeSpan = distance / 111_000
+        // Same bounded local area as Android. Group before the 250-marker cap.
         let longitudeScale = cos(center.latitude * .pi / 180)
-        let longitudeSpan = latitudeSpan / max(0.1, longitudeScale)
-        let representatives: [RoadCamera] = locations.map(\.camera)
-        let nearby: [RoadCamera] = representatives.filter { camera in
-            enabledTypes.contains(camera.type)
-                && abs(camera.latitude - center.latitude) <= latitudeSpan
-                && abs(camera.longitude - center.longitude) <= longitudeSpan
+        let nearby: [RoadCameraLocation] = locations.filter { site in
+            let camera = site.camera
+            let north = (camera.latitude - center.latitude) * 111_000
+            let east = (camera.longitude - center.longitude) * 111_000 * longitudeScale
+            return enabledTypes.contains(camera.type) && hypot(north, east) <= 50_000
         }
-        let ordered: [RoadCamera] = nearby.sorted { lhs, rhs in
-            let lhsDistance = hypot(lhs.latitude - center.latitude, (lhs.longitude - center.longitude) * longitudeScale)
-            let rhsDistance = hypot(rhs.latitude - center.latitude, (rhs.longitude - center.longitude) * longitudeScale)
-            return lhsDistance < rhsDistance
+        let ordered = RoadCameraMapGroup.group(nearby, zoom: center.zoom).sorted { lhs, rhs in
+            let lhsDistance = hypot(lhs.camera.latitude - center.latitude, (lhs.camera.longitude - center.longitude) * longitudeScale)
+            let rhsDistance = hypot(rhs.camera.latitude - center.latitude, (rhs.camera.longitude - center.longitude) * longitudeScale)
+            return lhsDistance == rhsDistance ? lhs.id < rhs.id : lhsDistance < rhsDistance
         }
         return Array(ordered.prefix(250))
     }
 
     var selectedViews: [RoadCamera] {
         guard let selectedCamera else { return [] }
+        if let selectedGroup { return selectedGroup.views }
         return locations.first { $0.views.contains { $0.id == selectedCamera.id } }?.views ?? [selectedCamera]
     }
 
@@ -81,6 +85,7 @@ final class RoadCameraMapCoordinator {
 
     func select(_ camera: RoadCamera) {
         guard enabledTypes.contains(camera.type) else { return }
+        if selectedGroup?.views.contains(where: { $0.id == camera.id }) != true { selectedGroup = nil }
         selectionGeneration += 1
         selectedCamera = camera
         photo = nil
@@ -88,9 +93,16 @@ final class RoadCameraMapCoordinator {
         photoLoading = false
     }
 
+    func selectGroup(_ group: RoadCameraMapGroup) {
+        guard enabledTypes.contains(group.camera.type) else { return }
+        selectedGroup = group
+        select(group.camera)
+    }
+
     func dismiss() {
         selectionGeneration += 1
         selectedCamera = nil
+        selectedGroup = nil
         photo = nil
         photoErrorKey = nil
         photoLoading = false
@@ -132,17 +144,18 @@ struct RoadCameraMapOverlay: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                ForEach(coordinator.visibleCameras(center: surface.cameraSnapshot, radius: surface.visibleRadiusMeters())) { camera in
+                ForEach(coordinator.visibleGroups(center: surface.cameraSnapshot, radius: surface.visibleRadiusMeters())) { group in
+                    let camera = group.camera
                     if let point = surface.screenPositionFor(latitude: camera.latitude, longitude: camera.longitude),
                        point.trustworthy, point.x >= -30, point.y >= -30,
                        point.x <= Double(geometry.size.width + 30), point.y <= Double(geometry.size.height + 30) {
-                        Button { onSelect(camera) } label: {
-                            IncidentMarkerBadge(marker: camera.marker)
+                        Button { coordinator.selectGroup(group); onSelect(camera) } label: {
+                            RoadCameraGroupBadge(group: group)
                         }
                         .buttonStyle(.plain)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
-                        .accessibilityLabel(Text(LocalizedStringKey(camera.type.titleKey)) + Text(", " + camera.name))
+                        .accessibilityLabel(cameraAccessibilityLabel(group))
                         .accessibilityIdentifier("map.roadCamera." + camera.id)
                         .position(x: CGFloat(point.x), y: CGFloat(point.y))
                     }
@@ -151,16 +164,65 @@ struct RoadCameraMapOverlay: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
     }
+
+    private func cameraAccessibilityLabel(_ group: RoadCameraMapGroup) -> Text {
+        var label = NSLocalizedString(group.camera.type.titleKey, comment: "") + ", " + group.camera.name
+        if group.views.count > 1 {
+            label += ", " + String(format: NSLocalizedString("roadCameras.groupCount", comment: ""), group.views.count)
+        }
+        if group.opposingDirections { label += ", " + NSLocalizedString("roadCameras.bothDirections", comment: "") }
+        return Text(label)
+    }
+}
+
+struct RoadCameraGroupBadge: View {
+    let group: RoadCameraMapGroup
+
+    var body: some View {
+        if group.views.count == 1 {
+            IncidentMarkerBadge(marker: group.camera.marker)
+        } else {
+            HStack(spacing: 4) {
+                if group.opposingDirections { Image(systemName: "arrow.down") }
+                Group {
+                    if let asset = group.camera.type.assetName {
+                        Image(asset).renderingMode(.template).resizable().scaledToFit()
+                    } else {
+                        Image(systemName: group.camera.type.symbol).resizable().scaledToFit()
+                    }
+                }.frame(width: 22, height: 22)
+                if group.opposingDirections { Image(systemName: "arrow.up") }
+                Text(group.views.count.formatted()).monospacedDigit()
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Color(argb: group.camera.type == .speed ? 0xFF040211 : group.camera.type.color))
+            .padding(.horizontal, 8).frame(height: 36)
+            .background(.white, in: Capsule())
+            .overlay { Capsule().strokeBorder(Color(argb: 0xFF040211), lineWidth: 1) }
+            .accessibilityHidden(true)
+        }
+    }
 }
 
 struct RoadCameraDetailsContent: View {
     @Bindable var coordinator: RoadCameraMapCoordinator
     let camera: RoadCamera
+    var onZoomIn: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
             Text(camera.name).font(.headline)
             if coordinator.selectedViews.count > 1 {
+                Text(String(format: NSLocalizedString("roadCameras.groupCount", comment: ""), coordinator.selectedViews.count))
+                    .font(.subheadline.weight(.semibold))
+                if coordinator.selectedGroup?.opposingDirections == true {
+                    Text("roadCameras.bothDirections")
+                }
+                Text("roadCameras.zoomHint").font(.footnote).foregroundStyle(KccTheme.secondary)
+                if let onZoomIn, (coordinator.selectedGroup?.sites.count ?? 1) > 1 {
+                    Button("roadCameras.showCameras", action: onZoomIn).frame(minHeight: 44)
+                        .accessibilityIdentifier("roadCamera.zoomGroup")
+                }
                 Text("roadCameras.chooseDirection").font(.subheadline)
                 ViewThatFits(in: .horizontal) {
                     directionButtons(horizontal: true)
@@ -199,7 +261,7 @@ struct RoadCameraDetailsContent: View {
                 Button { coordinator.selectDirection(view) } label: {
                     HStack {
                         if view.id == camera.id { Image(systemName: "checkmark") }
-                        Text(view.viewLabel(in: coordinator.selectedViews))
+                        Text(directionLabel(view))
                     }
                     .padding(.horizontal, KccSpacing.s2).frame(minHeight: 44)
                 }
@@ -209,6 +271,11 @@ struct RoadCameraDetailsContent: View {
                 .accessibilityIdentifier("roadCamera.direction." + view.id)
             }
         }
+    }
+
+    private func directionLabel(_ camera: RoadCamera) -> String {
+        let label = camera.viewLabel(in: coordinator.selectedViews)
+        return coordinator.selectedViews.contains { $0.name != camera.name } ? camera.name + " · " + label : label
     }
 
     private func photoTimeLabel(_ timestamp: String) -> String {
