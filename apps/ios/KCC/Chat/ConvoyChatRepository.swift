@@ -19,6 +19,9 @@ protocol ConvoyChatRepository: AnyObject, Sendable {
     /// chronological. Android: `observeMessages`.
     func observeMessages(convoyId: String) -> AsyncStream<ChannelMessagesState>
 
+    /// Bounded unread count for the map dock. Never marks the channel read.
+    func observeUnread(convoyId: String, uid: String) -> AsyncStream<Int>
+
     /// An older page of `convoyId` before the `before` ISO cursor
     /// (`convoyChat-list`). Android: `loadOlder`.
     func loadOlder(convoyId: String, before: String) async -> ChannelOlderResult
@@ -49,4 +52,10 @@ protocol ConvoyChatRepository: AnyObject, Sendable {
 
     /// The signed-in user's uid, or nil with no session.
     func currentUserId() -> String?
+}
+
+extension ConvoyChatRepository {
+    func observeUnread(convoyId: String, uid: String) -> AsyncStream<Int> {
+        AsyncStream { $0.yield(0); $0.finish() }
+    }
 }

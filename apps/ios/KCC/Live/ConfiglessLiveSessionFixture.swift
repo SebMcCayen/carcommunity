@@ -127,4 +127,70 @@ struct ConfiglessNearbyLiveMarker: View {
         }
     }
 }
+
+/// Exercises the real dock and channel composition without Firebase or GPS.
+enum ConfiglessConvoyDockFixture {
+    static var isEnabled: Bool {
+        ConfiglessLiveSessionFixture.isEnabled
+            && ProcessInfo.processInfo.arguments.contains("-KCCUITestConvoyDock")
+    }
+    static let chat = ConfiglessConvoyDockChatRepository()
+    static var convoy: ConvoyItem {
+        let members = (0..<3).map { index in
+            ConvoyMember(uid: index == 0 ? ConfiglessLiveSessionFixture.selfUid : "fixture-convoy-\(index)",
+                displayName: "Convoy driver \(index)", role: index == 0 ? .owner : .member, inviteStatus: .accepted)
+        }
+        return ConvoyItem(convoyId: "fixture-convoy", title: "Dock test convoy", status: .active,
+            members: members, viewer: ConvoyViewer(inviteStatus: .accepted, role: .owner), createdAt: Date())
+    }
+}
+
+final class ConfiglessConvoyDockRepository: ConvoyManagementRepository, Sendable {
+    func list() async -> ConvoyManagementListResult {
+        .loaded(ConvoyManagementSnapshot(convoys: [ConfiglessConvoyDockFixture.convoy],
+            pendingInvites: [], isExhaustive: true))
+    }
+    func respond(convoyId: String, action: ConvoyAction) async -> ConvoyRespondResult { .failed(.generic) }
+    func lifecycle(convoyId: String, action: ConvoyLifecycleAction) async -> ConvoyLifecycleResult { .failed(.generic) }
+    func invite(convoyId: String, inviteeUids: [String]) async -> ConvoyInviteMutationResult { .failed(.generic) }
+}
+
+actor ConfiglessConvoyDockChatRepository: ConvoyChatRepository {
+    private var unread = 10
+    private var streams: [UUID: AsyncStream<Int>.Continuation] = [:]
+    nonisolated func currentUserId() -> String? { ConfiglessLiveSessionFixture.selfUid }
+    func listConvoys() async -> ConvoyListState { .loaded([]) }
+    nonisolated func observeUnread(convoyId: String, uid: String) -> AsyncStream<Int> {
+        AsyncStream { continuation in
+            let token = UUID()
+            Task { await self.attach(continuation, token: token) }
+            continuation.onTermination = { _ in Task { await self.detach(token) } }
+        }
+    }
+    private func attach(_ continuation: AsyncStream<Int>.Continuation, token: UUID) {
+        streams[token] = continuation
+        continuation.yield(unread)
+    }
+    private func detach(_ token: UUID) { streams[token] = nil }
+    nonisolated func observeMessages(convoyId: String) -> AsyncStream<ChannelMessagesState> {
+        AsyncStream { continuation in
+            let message = ChannelMessage(id: "fixture-convoy-message", senderUid: "fixture-convoy-1",
+                text: "Message for \(convoyId)", senderDisplayName: "Convoy driver 1", createdAt: Date())
+            continuation.yield(.loaded([message]))
+        }
+    }
+    func markRead(convoyId: String) async {
+        guard convoyId == ConfiglessConvoyDockFixture.convoy.convoyId else { return }
+        unread = 0
+        for stream in streams.values { stream.yield(unread) }
+    }
+    func loadOlder(convoyId: String, before: String) async -> ChannelOlderResult {
+        .loaded(ChannelMessagesPage(messages: [], nextBefore: nil, hasMore: false))
+    }
+    func post(convoyId: String, text: String, clientId: String?, replyToMessageId: String?) async -> ChannelSendResult {
+        .failed(.generic)
+    }
+    func report(convoyId: String, messageId: String, reason: ChatReportReason) async -> ChannelReportResult { .failed }
+    func avatarDownloadURL(for avatarPath: String) async -> URL? { nil }
+}
 #endif

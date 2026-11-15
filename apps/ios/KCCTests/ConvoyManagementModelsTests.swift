@@ -3,6 +3,33 @@ import XCTest
 @testable import KCC
 
 final class ConvoyManagementModelsTests: XCTestCase {
+    func testUnreadBadgeMatchesAndroidDisplayCap() {
+        XCTAssertNil(ConvoyBarLogic.unreadBadgeLabel(-1))
+        XCTAssertNil(ConvoyBarLogic.unreadBadgeLabel(0))
+        XCTAssertEqual(ConvoyBarLogic.unreadBadgeLabel(1), "1")
+        XCTAssertEqual(ConvoyBarLogic.unreadBadgeLabel(9), "9")
+        XCTAssertEqual(ConvoyBarLogic.unreadBadgeLabel(10), "9+")
+        XCTAssertEqual(ConvoyBarLogic.unreadBadgeLabel(Int.max), "9+")
+    }
+
+    func testDockUnreadCountWaitsForMarkerAndUpdatesWithoutReadingTheChat() async {
+        let stream = AsyncStream<Int>.makeStream()
+        let counter = ConvoyUnreadCounter(uid: "self", continuation: stream.continuation)
+        let instant = Date(timeIntervalSince1970: 100)
+        let other = ChannelMessage(id: "other", senderUid: "other", text: "Hello", createdAt: instant)
+        let own = ChannelMessage(id: "own", senderUid: "self", text: "Hi", createdAt: instant)
+        let undated = ChannelMessage(id: "undated", senderUid: "other", text: "Old message")
+        counter.updateMessages([other, own, undated]) // no speculative badge before marker
+        counter.updateMarker(nil) // never read: only the dated message from another user
+        counter.updateMarker(instant) // reading the channel clears it
+        counter.updateMarker(nil)
+        counter.updateMessages([]) // permission loss / block removes the badge
+        stream.continuation.finish()
+        var counts: [Int] = []
+        for await count in stream.stream { counts.append(count) }
+        XCTAssertEqual(counts, [1, 0, 1, 0])
+    }
+
     private final class RetryLatestRepository: LiveLocationRepository, @unchecked Sendable {
         private(set) var latestSubscriptionCount = 0
         let marker: LiveMarker

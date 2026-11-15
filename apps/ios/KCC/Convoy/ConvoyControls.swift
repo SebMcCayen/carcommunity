@@ -23,7 +23,6 @@ private struct ConvoySheetTarget: Identifiable {
 
 struct ConvoyStatusBar: View {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var coordinator: ConvoyManagementCoordinator
     let convoy: ConvoyItem
     let friendsCoordinator: FriendsCoordinator?
@@ -31,11 +30,15 @@ struct ConvoyStatusBar: View {
     let mapSurface: StubMapSurface
     let liveLocationEnabled: Bool
     let viewerUid: String?
+    var chat: ConvoyListCoordinator? = nil
+    var chatRepliesEnabled = ChatFeatureFlags.chatRepliesDefault
     var onOpenMemberProfile: ((String, String?) -> Void)? = nil
 
     @State private var memberTarget: ConvoySheetTarget?
     @State private var inviteTarget: ConvoySheetTarget?
     @State private var exitTarget: ConvoyExitTarget?
+    @State private var chatTarget: ConvoySheetTarget?
+    @State private var unreadChatCount = 0
 
     private var working: Bool {
         coordinator.busyConvoyIds.contains(convoy.convoyId)
@@ -43,29 +46,51 @@ struct ConvoyStatusBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
-            HStack(spacing: KccSpacing.s2) {
+            ConvoyControlLayout {
                 Button { memberTarget = ConvoySheetTarget(convoy) } label: {
-                    Group {
-                        if dynamicTypeSize.isAccessibilitySize { Image(systemName: "person.3.fill") }
-                        else { Label(memberCount, systemImage: "person.3.fill").lineLimit(1) }
+                    HStack(spacing: KccSpacing.s1) {
+                        Image(systemName: "person.2.fill").font(.system(size: 20)).foregroundStyle(KccTheme.driver)
+                        Text(convoy.acceptedMemberCount.formatted()).font(.subheadline.weight(.semibold))
+                            .foregroundStyle(KccTheme.text)
                     }
+                    .fixedSize()
                     .frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(memberCount)
-
-                Spacer(minLength: KccSpacing.s2)
+                .accessibilityIdentifier("convoy.bar.members")
 
                 if liveLocationEnabled {
                     Button {
                         awareness.focusMode = awareness.focusMode == .me ? .convoy : .me
                     } label: {
-                        Image(systemName: awareness.focusMode == .convoy ? "person.3.fill" : "person.3")
+                        Image(systemName: awareness.focusMode == .convoy ? "person.3.fill" : "viewfinder")
+                            .foregroundStyle(awareness.focusMode == .convoy ? KccTheme.driver : KccTheme.secondary)
                             .frame(width: 48, height: 48).contentShape(Rectangle())
                     }
                     .accessibilityLabel(Text(
                         awareness.focusMode == .convoy ? "convoy.barFocusConvoy" : "convoy.barFocusMe"
                     ))
+                    .accessibilityIdentifier("convoy.bar.focus")
+                }
+
+                if chat != nil {
+                    Button { chatTarget = ConvoySheetTarget(convoy) } label: {
+                        Image(systemName: "bubble.left.fill")
+                            .frame(width: 48, height: 48).contentShape(Rectangle())
+                            .overlay(alignment: .topTrailing) {
+                                if let badge = ConvoyBarLogic.unreadBadgeLabel(unreadChatCount) {
+                                    Text(badge).font(.system(size: 11, weight: .semibold))
+                                        .padding(.horizontal, 4).padding(.vertical, 1)
+                                        .foregroundStyle(.white)
+                                        .background(KccPalette.errorRed, in: Capsule())
+                                        .padding(KccSpacing.s1)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                    }
+                    .accessibilityLabel(ConvoyBarLogic.chatAccessibilityLabel(unreadChatCount))
+                    .accessibilityIdentifier("convoy.bar.chat")
                 }
 
                 Button { inviteTarget = ConvoySheetTarget(convoy) } label: {
@@ -73,19 +98,23 @@ struct ConvoyStatusBar: View {
                         .frame(width: 48, height: 48).contentShape(Rectangle())
                 }
                 .disabled(working || friendsCoordinator == nil)
-                .accessibilityLabel(Text("convoy.barInvite"))
+                .foregroundStyle(KccTheme.secondary.opacity(working || friendsCoordinator == nil ? 0.38 : 1))
+                .accessibilityLabel(Text(friendsCoordinator == nil ? "convoy.barInviteUnavailable" : "convoy.barInvite"))
+                .accessibilityIdentifier("convoy.bar.invite")
 
                 Button {
                     exitTarget = ConvoyExitTarget(convoyId: convoy.convoyId, choice: exitChoice)
                 } label: {
                     Group {
                         if working { ProgressView().controlSize(.small) }
-                        else { Image(systemName: convoy.viewerIsOwner ? "stop.circle" : "rectangle.portrait.and.arrow.right") }
+                        else { Image(systemName: exitChoice == .leaveOnly ? "rectangle.portrait.and.arrow.right" : "stop.circle.fill") }
                     }
                     .frame(width: 48, height: 48).contentShape(Rectangle())
                 }
                 .disabled(working)
+                .foregroundStyle(working ? KccTheme.secondary.opacity(0.38) : KccPalette.errorRed)
                 .accessibilityLabel(Text(exitLabel))
+                .accessibilityIdentifier("convoy.bar.exit")
             }
 
             if let error = coordinator.actionError(for: convoy.convoyId) {
@@ -104,13 +133,20 @@ struct ConvoyStatusBar: View {
                 }
             }
         }
-        .font(.system(size: KccTypeScale.bodySm, weight: .semibold))
-        .padding(.horizontal, KccSpacing.s4)
-        .padding(.vertical, KccSpacing.s3)
-        .foregroundStyle(KccTheme.text)
-        .background(KccTheme.overlay, in: RoundedRectangle(cornerRadius: KccRadius.lg))
-        .overlay { RoundedRectangle(cornerRadius: KccRadius.lg).strokeBorder(KccTheme.border).allowsHitTesting(false) }
-        .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
+        .font(.system(size: 24))
+        .buttonStyle(.plain)
+        .padding(.leading, KccSpacing.s4)
+        .padding(.trailing, KccSpacing.s2)
+        .foregroundStyle(KccTheme.secondary)
+        .background(KccTheme.overlay, in: RoundedRectangle(cornerRadius: KccRadius.full))
+        .overlay { RoundedRectangle(cornerRadius: KccRadius.full).strokeBorder(KccTheme.border).allowsHitTesting(false) }
+        .shadow(color: .black.opacity(0.14), radius: 3, y: 3)
+        .sheet(item: $chatTarget) { target in
+            if let chat {
+                ConvoyDockChatSheet(list: chat, target: target, chatRepliesEnabled: chatRepliesEnabled,
+                    onOpenMemberProfile: onOpenMemberProfile)
+            }
+        }
         .sheet(item: $memberTarget) { target in
             LiveConvoyMembersSheet(
                 coordinator: coordinator,
@@ -160,6 +196,14 @@ struct ConvoyStatusBar: View {
             guard scenePhase == .active else { return }
             await coordinator.observeConvoy(id: convoy.convoyId)
         }
+        .task(id: "\(convoy.convoyId)-\(viewerUid ?? "")-\(chat != nil)-\(String(describing: scenePhase))") {
+            unreadChatCount = 0
+            guard scenePhase == .active, let chat, let viewerUid else { return }
+            for await count in chat.observeUnread(convoyId: convoy.convoyId, uid: viewerUid) {
+                guard !Task.isCancelled else { return }
+                unreadChatCount = count
+            }
+        }
     }
 
     private var exitChoice: ConvoyExitChoice {
@@ -180,7 +224,8 @@ struct ConvoyStatusBar: View {
         switch exitChoice {
         case .leaveOrEnd: "convoy.barExit"
         case .endOnly: "convoy.barEnd"
-        case .leaveOnly, .leaveEndsConvoy: "convoy.barLeave"
+        case .leaveOnly: "convoy.barLeave"
+        case .leaveEndsConvoy: "convoy.barLeaveEnds"
         }
     }
 
@@ -206,6 +251,77 @@ struct ConvoyStatusBar: View {
         guard let target = exitTarget else { return }
         exitTarget = nil
         Task { await coordinator.runLifecycle(convoyId: target.convoyId, action: action) }
+    }
+}
+
+/// Android's SpaceBetween flow row: preserve button order and 48pt targets,
+/// wrapping only when the numeric member count and controls cannot fit.
+private struct ConvoyControlLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let proposed = proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        let width = proposed ?? subviews.reduce(0) { $0 + $1.sizeThatFits(.unspecified).width }
+        return CGSize(width: width, height: frames(width: width, subviews: subviews).map(\.maxY).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (index, frame) in frames(width: bounds.width, subviews: subviews).enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    private func frames(width: CGFloat, subviews: Subviews) -> [CGRect] {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        var rows: [[Int]] = [], used: CGFloat = 0
+        for index in sizes.indices {
+            if rows.isEmpty || used + sizes[index].width > width {
+                rows.append([]); used = 0
+            }
+            rows[rows.count - 1].append(index)
+            used += sizes[index].width
+        }
+        var result = Array(repeating: CGRect.zero, count: sizes.count)
+        var y: CGFloat = 0
+        for row in rows {
+            let height = row.map { sizes[$0].height }.max() ?? 0
+            let gap = row.count > 1
+                ? max(0, width - row.reduce(0) { $0 + sizes[$1].width }) / CGFloat(row.count - 1) : 0
+            var x: CGFloat = 0
+            for index in row {
+                result[index] = CGRect(origin: CGPoint(x: x, y: y + (height - sizes[index].height) / 2), size: sizes[index])
+                x += sizes[index].width + gap
+            }
+            y += height + KccSpacing.s1
+        }
+        return result
+    }
+}
+
+private struct ConvoyDockChatSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var coordinator: ChannelChatCoordinator
+    let target: ConvoySheetTarget
+    let onOpenMemberProfile: ((String, String?) -> Void)?
+
+    init(list: ConvoyListCoordinator, target: ConvoySheetTarget, chatRepliesEnabled: Bool,
+         onOpenMemberProfile: ((String, String?) -> Void)?) {
+        self.target = target
+        self.onOpenMemberProfile = onOpenMemberProfile
+        _coordinator = State(initialValue: list.makeChatCoordinator(convoyId: target.id,
+            chatRepliesEnabled: chatRepliesEnabled))
+    }
+
+    var body: some View {
+        NavigationStack {
+            ConvoyChatScreen(coordinator: coordinator, convoyTitle: target.initial.title,
+                onViewProfile: onOpenMemberProfile.map { open in
+                    { uid, name in dismiss(); open(uid, name) }
+                })
+        }
+        .environment(\.chatReadingActive, scenePhase == .active)
+        .tint(KccChatColors.readingAccent)
+        .kccDismissibleSheet()
     }
 }
 

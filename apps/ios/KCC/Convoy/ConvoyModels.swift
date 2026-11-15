@@ -240,6 +240,19 @@ enum ConvoyExitChoice: Equatable, Sendable {
 }
 
 enum ConvoyBarLogic {
+    static let unreadDisplayMax = 9
+
+    static func unreadBadgeLabel(_ count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return count > unreadDisplayMax ? "\(unreadDisplayMax)+" : String(count)
+    }
+
+    static func chatAccessibilityLabel(_ count: Int) -> String {
+        guard count > 0 else { return String(localized: "convoy.barChat") }
+        let key = count > unreadDisplayMax ? "convoy.barChatUnreadMany" : "convoy.barChatUnread"
+        return String.localizedStringWithFormat(NSLocalizedString(key, comment: ""), min(count, unreadDisplayMax))
+    }
+
     static let minimumRemainingMembers = 2
     static let maximumConvoySize = 25
     static let maximumInviteBatchSize = 25

@@ -741,6 +741,70 @@ final class ShellSmokeTests: XCTestCase {
         app.terminate()
     }
 
+    func testConvoyDockOrderControlsAndChatMatchAndroid() {
+        for (language, largeText, theme) in [("sv", false, "Light"), ("en", true, "Dark")] {
+            let app = launch(language: language, largeText: largeText, theme: theme,
+                liveFixture: true, convoyDockFixture: true)
+            let live = app.buttons["map.session.bar"]
+            let keys = ["members", "focus", "chat", "invite", "exit"]
+            let controls = keys.map { app.buttons["convoy.bar.\($0)"] }
+            for control in controls { XCTAssertTrue(control.waitForExistence(timeout: 15)) }
+            let frames = controls.map(\.frame)
+            for (index, frame) in frames.enumerated() {
+                // AX frame subtraction can represent 48pt as 47.999999999999986.
+                // Allow only floating-point noise, not a smaller touch target.
+                XCTAssertGreaterThanOrEqual(frame.width, 48 - 0.000001)
+                XCTAssertGreaterThanOrEqual(frame.height, 48 - 0.000001)
+                XCTAssertGreaterThanOrEqual(frame.minY, live.frame.maxY + 3)
+                XCTAssertLessThanOrEqual(frame.maxY, app.buttons["shell.tab.create"].frame.minY)
+                XCTAssertTrue(app.frame.contains(frame))
+                if index > 0 {
+                    XCTAssertLessThanOrEqual(frames[index - 1].maxX, frame.minX + 1)
+                    XCTAssertEqual(frame.midY, frames[0].midY, accuracy: 1)
+                }
+            }
+            XCTAssertTrue(controls[0].staticTexts["3"].exists, "Keep the numeric member count at large text sizes")
+            if !largeText { XCTAssertEqual(frames[0].height, 48, accuracy: 1) }
+            let focusLabel = controls[1].label
+            controls[1].tap()
+            XCTAssertNotEqual(controls[1].label, focusLabel)
+            controls[1].tap()
+            XCTAssertEqual(controls[1].label, focusLabel)
+            let unread = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "9"), object: controls[2])
+            XCTAssertEqual(XCTWaiter.wait(for: [unread], timeout: 10), .completed)
+            chatProof(app, name: "convoy-dock-\(language)-\(theme)")
+
+            controls[0].tap()
+            XCTAssertTrue(app.staticTexts["Convoy driver 1"].waitForExistence(timeout: 10))
+            dismissSheet(app, title: language == "sv" ? "I den här konvojen" : "In this convoy")
+            controls[2].tap()
+            XCTAssertTrue(app.navigationBars["Dock test convoy"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["Message for fixture-convoy"].waitForExistence(timeout: 10),
+                "The dock must open the active convoy directly")
+            dismissSheet(app, title: "Dock test convoy")
+            let read = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@",
+                language == "sv" ? "Konvojchatt" : "Convoy chat"), object: controls[2])
+            XCTAssertEqual(XCTWaiter.wait(for: [read], timeout: 10), .completed)
+            controls[4].tap()
+            XCTAssertTrue(app.buttons[language == "sv" ? "Lämna konvojen" : "Leave the convoy"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons[language == "sv" ? "Avsluta för alla" : "End for everyone"].exists)
+            let cancel = app.buttons[language == "sv" ? "Avbryt" : "Cancel"]
+            if cancel.exists {
+                cancel.tap()
+            } else {
+                // Native confirmation popovers omit the cancel row: tapping
+                // outside dismisses them without invoking a convoy action.
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.2)).tap()
+            }
+            let leave = app.buttons[language == "sv" ? "Lämna konvojen" : "Leave the convoy"]
+            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: leave)
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+            XCTAssertTrue(live.exists)
+            XCTAssertTrue(controls[4].isHittable)
+            app.terminate()
+        }
+    }
+
     func testChatBackLiveMetricsProfileAndStopMatchAndroid() {
         for largeText in [false, true] {
             let app = launch(language: "en", largeText: largeText,
@@ -1642,7 +1706,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(sheetBar.exists, "Dismissal must remove the sheet before using the screen behind it")
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatKeyboardFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatKeyboardFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false, convoyDockFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -1655,6 +1719,7 @@ final class ShellSmokeTests: XCTestCase {
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
         if rejectMaps { app.launchArguments += ["-KCCUITestNavigationFailure"] }
         if liveFixture { app.launchArguments += ["-KCCUITestLiveSession"] }
+        if convoyDockFixture { app.launchArguments += ["-KCCUITestConvoyDock"] }
         if !markerPoints.isEmpty {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]
         }

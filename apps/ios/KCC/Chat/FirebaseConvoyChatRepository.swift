@@ -61,6 +61,39 @@ final class FirebaseConvoyChatRepository: ConvoyChatRepository, @unchecked Senda
         }
     }
 
+    func observeUnread(convoyId: String, uid: String) -> AsyncStream<Int> {
+        guard !convoyId.isEmpty, currentUserId() == uid else {
+            return AsyncStream { $0.yield(0); $0.finish() }
+        }
+        // Same bound as Android: ten messages distinguish 0...9 from 9+.
+        let query = firestore.collection(Self.convoyChatsCollection).document(convoyId)
+            .collection(Self.messagesCollection).order(by: Self.createdAtField, descending: true)
+            .limit(to: ConvoyBarLogic.unreadDisplayMax + 1)
+        let blockDocument = firestore.collection(ChatFirestore.blockVisibilityCollection).document(uid)
+        let privateDocument = firestore.collection("userPrivate").document(uid)
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let counter = ConvoyUnreadCounter(uid: uid, continuation: continuation)
+            let messages = ChannelMessagesListener.stream(messagesQuery: query, blockVisibilityDocument: blockDocument)
+            let task = Task {
+                for await state in messages {
+                    guard !Task.isCancelled else { break }
+                    if case .loaded(let window) = state { counter.updateMessages(window) }
+                }
+            }
+            let marker = privateDocument.addSnapshotListener { snapshot, error in
+                if let error, ChatFirestore.isPermissionDenied(error) {
+                    counter.updateMessages([])
+                    return
+                }
+                guard error == nil || snapshot != nil else { return }
+                let markers = snapshot?.get("convoyChatLastReadAt") as? [String: Any]
+                counter.updateMarker((markers?[convoyId] as? Timestamp)?.dateValue())
+            }
+            let box = ChatListenerBox(registrations: [marker])
+            continuation.onTermination = { _ in task.cancel(); box.removeAll() }
+        }
+    }
+
     func post(
         convoyId: String,
         text: String,
@@ -151,5 +184,39 @@ final class FirebaseConvoyChatRepository: ConvoyChatRepository, @unchecked Senda
         let repository = FirebaseConvoyChatRepository(firestore: firestore, functions: functions, storage: Storage.storage())
         cached = repository
         return repository
+    }
+}
+
+/// Firestore callbacks and the message stream can arrive on different executors.
+/// Wait for both initial values and retain the marker through transient failures.
+final class ConvoyUnreadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private let uid: String
+    private let continuation: AsyncStream<Int>.Continuation
+    private var messages: [ChannelMessage]?
+    private var marker: Date?
+    private var hasMarker = false
+
+    init(uid: String, continuation: AsyncStream<Int>.Continuation) {
+        self.uid = uid
+        self.continuation = continuation
+    }
+
+    func updateMessages(_ window: [ChannelMessage]) {
+        lock.lock(); defer { lock.unlock() }
+        messages = window
+        emitLocked()
+    }
+
+    func updateMarker(_ value: Date?) {
+        lock.lock(); defer { lock.unlock() }
+        marker = value
+        hasMarker = true
+        emitLocked()
+    }
+
+    private func emitLocked() {
+        guard hasMarker, let messages else { return }
+        continuation.yield(ChannelThread.unreadCount(window: messages, callerUid: uid, lastReadAt: marker))
     }
 }
