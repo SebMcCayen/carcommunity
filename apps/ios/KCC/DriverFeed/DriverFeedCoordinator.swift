@@ -16,6 +16,7 @@ final class DriverFeedCoordinator {
     private let repository: (any DriverFeedRepository)?
     private let uid: String?
     @ObservationIgnored nonisolated(unsafe) private var task: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var avatarResolutions: [String: Task<URL?, Never>] = [:]
     private var generation = 0
     private(set) var state = DriverFeedState()
 
@@ -24,10 +25,26 @@ final class DriverFeedCoordinator {
         self.uid = uid
     }
 
-    deinit { task?.cancel() }
+    deinit {
+        task?.cancel()
+        avatarResolutions.values.forEach { $0.cancel() }
+    }
+
+    /// Visible rows share one Storage resolution per path for this account session.
+    func avatarURL(for path: String?) async -> URL? {
+        guard let path, let repository else { return nil }
+        if let existing = avatarResolutions[path] { return await existing.value }
+        let resolution = Task { await repository.avatarDownloadURL(for: path) }
+        avatarResolutions[path] = resolution
+        return await resolution.value
+    }
     func open(_ id: String) { reset(selected: id) }
     func back() { reset(selected: nil) }
-    func refresh() { reset(selected: state.selectedId) }
+    func refresh() {
+        avatarResolutions.values.forEach { $0.cancel() }
+        avatarResolutions.removeAll()
+        reset(selected: state.selectedId)
+    }
     func invalidate() {
         task?.cancel()
         generation += 1
@@ -48,6 +65,8 @@ final class DriverFeedCoordinator {
     }
 
     func stop() {
+        avatarResolutions.values.forEach { $0.cancel() }
+        avatarResolutions.removeAll()
         pause()
         state = DriverFeedState()
     }

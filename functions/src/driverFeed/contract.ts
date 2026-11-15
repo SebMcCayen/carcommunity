@@ -24,6 +24,7 @@ export interface Comment {
   authorUid: string;
   authorName: string;
   authorHandle: string;
+  authorAvatarPath: string | null;
   text: string;
   createdAtMillis: number;
 }

@@ -103,11 +103,35 @@ describe('Driver read bridge guards and payload', () => {
     store.docs.get(`driverThreads/${THREAD}`)!.privateField = 'must not escape';
     const page = await reader.list(request());
     expect(page.posts).toEqual([{
-      id: THREAD, authorUid: AUTHOR, authorName: 'Canonical name', authorHandle: 'driver_handle',
+      id: THREAD, authorUid: AUTHOR, authorName: 'Canonical name', authorHandle: 'driver_handle', authorAvatarPath: null,
       text: 'Actual content', createdAtMillis: 1_700_000_000_000, mediaUrls: [], likeCount: 2, replyCount: 3,
     }]);
     expect(store.writes).toEqual([`driverRateLimits/${VIEWER}_nativeFeedRead`]);
   });
+  it('returns current canonical avatars in feed, detail and comments without trusting content copies', async () => {
+    const { store, reader } = setup();
+    const path = `profileImages/${AUTHOR}/current.jpg`;
+    store.docs.get(`users/${AUTHOR}`)!.avatarPath = path;
+    store.docs.get(`driverUsers/${AUTHOR}`)!.avatarPath = `profileImages/${AUTHOR}/driver.jpg`;
+    store.docs.get(`driverThreads/${THREAD}`)!.authorAvatarPath = `profileImages/${AUTHOR}/stale.jpg`;
+    store.docs.set(`driverThreads/${THREAD}/replies/reply_0001`, content());
+    expect((await reader.list(request())).posts[0]!.authorAvatarPath).toBe(path);
+    const detail = await reader.detail(request({ threadId: THREAD }));
+    expect(detail.post.authorAvatarPath).toBe(path);
+    expect(detail.comments[0]!.authorAvatarPath).toBe(path);
+    // The existing author join is reused for both the parent and reply.
+    expect(store.reads.filter((p) => p === `users/${AUTHOR}`)).toHaveLength(2);
+    store.docs.get(`users/${AUTHOR}`)!.avatarPath = `profileImages/${AUTHOR}/updated.jpg`;
+    expect((await reader.list(request())).posts[0]!.authorAvatarPath).toBe(`profileImages/${AUTHOR}/updated.jpg`);
+  });
+  it.each([null, '', 42, 'https://example.com/avatar.jpg', `profileImages/${VIEWER}/other.jpg`,
+    `profileImages/${AUTHOR}/`, `profileImages/${AUTHOR}/${'x'.repeat(500)}`])(
+    'keeps content readable with a null avatar for invalid profile path %s', async (avatarPath) => {
+      const { store, reader } = setup();
+      store.docs.get(`users/${AUTHOR}`)!.avatarPath = avatarPath;
+      expect((await reader.list(request())).posts[0]!.authorAvatarPath).toBeNull();
+    },
+  );
   it.each<[string, string, Data | undefined, string]>([
     ['canonical missing', 'users', undefined, 'canonical-onboarding-required'],
     ['canonical onboarding', 'users', { displayName: 'Name' }, 'canonical-onboarding-required'],

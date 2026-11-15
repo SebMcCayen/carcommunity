@@ -126,9 +126,13 @@ final class ShellSmokeTests: XCTestCase {
             // during each drag can reposition it before the event is injected.
             let appFrame = app.frame
             let origin = app.coordinate(withNormalizedOffset: .zero)
-            let lower = origin.withOffset(CGVector(dx: threadFrame.midX - appFrame.minX,
+            // Message rows own long-press menus. A slow drag starting in a
+            // large message can open that menu and consume later scrolls.
+            // Use the scroll view's padding gutter, outside the message rows.
+            let scrollX = threadFrame.minX + 6 - appFrame.minX
+            let lower = origin.withOffset(CGVector(dx: scrollX,
                 dy: threadFrame.minY + visibleHeight * 0.8 - appFrame.minY))
-            let upper = origin.withOffset(CGVector(dx: threadFrame.midX - appFrame.minX,
+            let upper = origin.withOffset(CGVector(dx: scrollX,
                 dy: threadFrame.minY + visibleHeight * 0.25 - appFrame.minY))
             let toggle = app.buttons["community-group-toggle-fixture-31"]
             XCTAssertTrue(toggle.waitForExistence(timeout: 15))
