@@ -83,6 +83,20 @@ export interface ScheduledJob {
  */
 export const REPOSITORY_SCHEDULED_JOBS: ScheduledJob[] = [
   {
+    id: 'finance-captureDaily',
+    source: 'finance/capture.ts:captureDaily',
+    label: 'Finance usage and billing aggregates',
+    schedule: '30 5 * * *',
+    runsPerDay: 1,
+    readsPerRun: 2,
+    writesPerRun: 2,
+    deletesPerRun: 0,
+    avgSeconds: 10,
+    cpu: CPU_SCHEDULED,
+    memoryGiB: 0.25,
+    note: 'Two fixed aggregate documents, daily provider reads when configured. BigQuery query capped at 100 MiB; query/storage charges appear in reported billing. No user-level logs or per-request writes.',
+  },
+  {
     id: 'chatReactionLifecycle-cleanup',
     source: 'chatReactions/lifecycle.ts:cleanup',
     label: 'Deleted-message reaction cleanup',
@@ -94,7 +108,7 @@ export const REPOSITORY_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 0.5,
     cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
-    note: 'Idle baseline, not a measured busy-run estimate. A pass handles at most five jobs with fifty rows each; active cleanup adds bounded record/parent reads, aggregate updates and deletes. Reaction activity and cleanup frequency are explicitly uncosted until measured.',
+    note: 'Idle baseline, not a measured busy-run estimate. A pass handles at most five jobs with fifty rows each; active cleanup adds bounded record/parent reads, aggregate updates and deletes. Active cleanup is covered by a separate adjustable workload profile; its activity frequency remains assumed until measured.',
   },
   {
     id: 'roadCameras-sync',
@@ -108,7 +122,7 @@ export const REPOSITORY_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 30,
     cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
-    note: 'Estimated 4,500 camera records scanned daily; changed-only writes plus a bounded public snapshot. Two metadata requests, no image polling. Photo callables are capped at 128 MiB/day of encoded responses globally; catalog responses at 100/day and 2 MiB each. Camera-specific variable usage needs telemetry.',
+    note: 'Estimated 4,500 camera records scanned daily; changed-only writes plus a bounded public snapshot. Two metadata requests, no image polling. Photo callables are capped at 128 MiB/day of encoded responses globally; catalog responses at 100/day and 2 MiB each. Camera-specific variable usage is covered by explicit workloads and optional Monitoring.',
   },
   {
     id: 'incidents-syncTrafikverket',
@@ -583,7 +597,7 @@ export const DRIVER_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 0.344,
     cpu: 1,
     memoryGiB: 0.25,
-    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queue database mutations use a separate adjustable fallback profile; per-task work is still estimated.',
   },
   {
     id: 'driver-processAccountDeletions',
@@ -597,7 +611,7 @@ export const DRIVER_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 3.883,
     cpu: 1,
     memoryGiB: 0.25,
-    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queue database mutations use a separate adjustable fallback profile; per-task work is still estimated.',
   },
   {
     id: 'driver-cleanupExpiredDataExports',
@@ -611,7 +625,7 @@ export const DRIVER_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 3.573,
     cpu: 1,
     memoryGiB: 0.25,
-    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queue database mutations use a separate adjustable fallback profile; per-task work is still estimated.',
   },
   {
     id: 'driver-maintainClubEvents',
@@ -625,7 +639,7 @@ export const DRIVER_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 0.66,
     cpu: 1,
     memoryGiB: 0.25,
-    note: 'Driver codebase; verified 2026-11-12 (UTC). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+    note: 'Driver codebase; verified 2026-11-12 (UTC). Idle-queue read baseline; seven-day observed billable instance time. Queue database mutations use a separate adjustable fallback profile; per-task work is still estimated.',
   },
   {
     id: 'driver-clubsMaintenance',
@@ -639,7 +653,7 @@ export const DRIVER_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 0.115,
     cpu: 1,
     memoryGiB: 0.25,
-    note: 'Driver codebase; verified 2026-11-12 (UTC). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+    note: 'Driver codebase; verified 2026-11-12 (UTC). Idle-queue read baseline; seven-day observed billable instance time. Queue database mutations use a separate adjustable fallback profile; per-task work is still estimated.',
   },
   {
     id: 'driver-processDataExports',
@@ -653,7 +667,7 @@ export const DRIVER_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 0.478,
     cpu: 1,
     memoryGiB: 0.25,
-    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queued mutations are not estimated.',
+    note: 'Driver codebase; verified 2026-11-12 (Europe/Stockholm). Idle-queue read baseline; seven-day observed billable instance time. Queue database mutations use a separate adjustable fallback profile; per-task work is still estimated.',
   },
 ];
 
@@ -675,6 +689,8 @@ export type CallableCostClass =
   | 'admin-rare'
   /** No metered cost of its own (pure validation / returns quickly, trivial). */
   | 'free'
+  /** Explicit measured/fallback usage profile in workloads.ts. */
+  | 'explicit-workload'
   /** Not yet costed — HAS NO DRIVER ESTIMATE. The board flags these. */
   | 'uncosted';
 
@@ -686,20 +702,18 @@ export type CallableCostClass =
  * exactly how a newly-added function surfaces instead of silently costing zero.
  */
 export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
-  'chatReactions.set': 'uncosted',
-  'chatReactions.getMine': 'uncosted',
-  // Bounded author/block joins are documented in contracts/driver-feed/read-api.md.
-  // The existing per-member assumptions do not yet model Driver page frequency;
-  // expose that gap on Finance rather than silently counting these reads as free.
-  'driverFeed.list': 'uncosted',
-  'driverFeed.detail': 'uncosted',
+  'chatReactions.set': 'explicit-workload',
+  'chatReactions.getMine': 'explicit-workload',
+  // Explicit page-frequency and authorization/join budgets live in workloads.ts.
+  'driverFeed.list': 'explicit-workload',
+  'driverFeed.detail': 'explicit-workload',
+  'roadCameras.catalog': 'explicit-workload',
+  'roadCameras.photo': 'explicit-workload',
   // Free club feature, member-driven (not a paid-tier gate): bounded canonical/
   // CC authority reads and one personal record. Calendar-domain issue writes
   // at most two docs + one old-locator delete; revoke one update + one delete.
   // The shared authority wrapper retains its projection/mirror initialization.
   // The separate provider HTTP feed's bounded reads are documented in its README.
-  'roadCameras.catalog': 'uncosted',
-  'roadCameras.photo': 'uncosted',
   'clubCalendar.manage': 'variable-member',
   'auth.completeOnboarding': 'variable-member',
   'auth.recordLogin': 'variable-member',
@@ -815,7 +829,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'feedback.reportIssue': 'variable-member',
   'feedback.interactWithIssue': 'variable-member',
   'errors.reportClientError': 'variable-member',
-  'account.getAccess': 'uncosted', // Startup, foreground and server invalidation; estimate from telemetry.
+  'account.getAccess': 'explicit-workload', // Startup, foreground and server invalidation; estimate from telemetry.
   'admin.listMemberHistory': 'admin-rare',
   'admin.listPublicReports': 'admin-rare',
   'admin.listMemberMessages': 'admin-rare',
@@ -828,7 +842,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'admin.getAccessTarget': 'admin-rare',
   'admin.updateAccess': 'admin-rare',
   'admin.listAccessBlocks': 'admin-rare',
-  'account.listWarnings': 'uncosted', // Profile signal refresh + bounded active-warning pages; estimate after telemetry.
+  'account.listWarnings': 'explicit-workload', // Profile signal refresh + bounded active-warning pages; estimate after telemetry.
   'account.deleteAccount': 'variable-member',
   'subscription.grantEntitlement': 'admin-rare',
   'groupDrive.join': 'variable-member',
@@ -894,6 +908,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   // The finance board's own callables — an admin opens the board a few times a
   // day and edits the recurring-costs list rarely.
   'finance.estimate': 'admin-rare',
+  'finance.updateWorkloadAssumptions': 'admin-rare',
   'finance.addRecurringCost': 'admin-rare',
   'finance.updateRecurringCost': 'admin-rare',
   'finance.deleteRecurringCost': 'admin-rare',

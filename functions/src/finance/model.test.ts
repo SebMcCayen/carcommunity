@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { DAYS_PER_MONTH, FIRESTORE, FUNCTIONS, RTDB, STORAGE, MAPBOX, USD_TO_SEK } from './pricing';
 import {
   FALLBACK_MEMBER_COUNT,
+  CAMERA_AND_FINANCE_DOCUMENT_BYTES,
   NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
   NAV_USING_FRACTION,
   TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN,
@@ -99,7 +100,10 @@ describe('estimateFinance — Firestore writes / free tier / Trafikverket', () =
     );
     expect(importer?.readsPerMonth).toBe(deviations * 48 * DAYS_PER_MONTH);
     const storage = line(est.googleCloud.services, 'Cloud Firestore', 'Stored data');
-    expect(storage.gross).toBeCloseTo((deviations * 2_000) / 1024 ** 3, 12);
+    expect(storage.gross).toBeCloseTo(
+      (deviations * 2_000 + CAMERA_AND_FINANCE_DOCUMENT_BYTES) / 1024 ** 3,
+      12,
+    );
   });
 });
 
@@ -470,22 +474,8 @@ describe('resolveMemberCount', () => {
 });
 
 describe('uncosted / unknown function surfacing', () => {
-  // These are intentionally visible gaps: existing per-member assumptions
-  // have no Driver page-frequency input. Camera catalog opens and photo views
-  // also need telemetry-based variable estimates; server quotas bound their
-  // exposure, but must not disguise missing usage estimates as zero cost.
-  // Keep the exact list guarded so any
-  // further uncosted addition still requires an explicit decision.
-  const pendingDriverEstimates = [
-    'account.getAccess',
-    'account.listWarnings',
-    'chatReactions.getMine',
-    'chatReactions.set',
-    'driverFeed.detail',
-    'driverFeed.list',
-    'roadCameras.catalog',
-    'roadCameras.photo',
-  ];
+  // Explicit workloads now cover all previously pending callable estimates.
+  const pendingDriverEstimates: string[] = [];
   it('only explicitly reviewed pending estimates remain uncosted', () => {
     expect(uncostedCallables()).toEqual(pendingDriverEstimates);
   });

@@ -1,32 +1,8 @@
-/**
- * finance.estimate — admin callable (contracts/functions/functions.json).
- *
- * Deployed via the `finance` export group as `finance-estimate`.
- *
- * ON-DEMAND, NOT SCHEDULED (a deliberate choice)
- * ----------------------------------------------
- * The board's numbers are a pure function of the price table, the assumptions,
- * the function inventory and the CURRENT member count. Nothing here needs
- * history, so there is no reason to pay for a scheduled write to snapshot it —
- * and a finance page that itself quietly added a daily Firestore write would be
- * a small irony. So this is computed on demand when an admin opens the page:
- * one admin-gated callable and two cheap reads — the latest metrics/{date}
- * snapshot for the live member count, and the `financeRecurringCosts`
- * collection for the operator-entered recurring costs. This callable runs on
- * the Admin SDK and is gated by `requireAdminActor` (Security Rules apply to
- * client SDKs, not to these server reads). After the reads the model runs in
- * memory. No scheduled write, so the board adds no recurring Firestore cost.
- *
- * NOTE: `financeRecurringCosts` is added by this PR. Its rules allow admin
- * client READS but DENY all client writes (`allow write: if false`); every
- * mutation goes through the audited CRUD callables, so the audit trail can't
- * be bypassed. The estimate merely reads the collection here.
- *
- * ⚠️ Everything MODELLED is a MODEL ESTIMATE, not the real bill (the
- * recurring costs are operator-entered actuals). The page shows the banner and
- * the link to the Google Cloud billing console.
- */
+/** Admin-gated model + two bounded daily evidence snapshots; no provider I/O on page load. */
 
+import { SETTINGS_COLLECTION, workloadOverridesSchema } from './settings-core';
+import { FINANCE_SNAPSHOTS_COLLECTION, readEvidence, usageSchema, billingSchema } from './evidence';
+import { Timestamp } from 'firebase-admin/firestore';
 import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -47,6 +23,7 @@ import {
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  minInstances: 0,
   maxInstances: MAX_INSTANCES_ADMIN,
   cpu: CPU_ADMIN,
   concurrency: 1,
@@ -137,13 +114,30 @@ async function readRecurringCosts(): Promise<RecurringCostEntry[]> {
 export const estimate = onCall(CALLABLE_OPTS, async (request): Promise<FinanceEstimate> => {
   await requireAdminActor(request);
 
-  const [{ totalUsers, date }, recurringCosts] = await Promise.all([
+  const now = new Date();
+  const [{ totalUsers, date }, recurringCosts, evidence] = await Promise.all([
     readLatestMemberCount(),
     readRecurringCosts(),
+    db
+      .getAll(
+        db.collection(FINANCE_SNAPSHOTS_COLLECTION).doc('usage'),
+        db.collection(FINANCE_SNAPSHOTS_COLLECTION).doc('billing'),
+        db.collection(SETTINGS_COLLECTION).doc('workloads'),
+      )
+      .catch(() => null),
   ]);
   const member = resolveMemberCount(totalUsers, date);
 
   return estimateFinance({
+    now,
+    assumptionsUpdatedAtMs:
+      evidence?.[2]?.get('updatedAt') instanceof Timestamp
+        ? evidence[2].get('updatedAt').toMillis()
+        : null,
+    workloadOverrides:
+      workloadOverridesSchema.safeParse(evidence?.[2]?.get('overrides')).data ?? [],
+    usageEvidence: readEvidence(usageSchema, evidence?.[0]?.data(), now.getTime()),
+    billingEvidence: readEvidence(billingSchema, evidence?.[1]?.data(), now.getTime()),
     memberCount: member.count,
     memberCountSource: member.source,
     memberCountAsOf: member.asOf,

@@ -214,6 +214,8 @@ import { confirm as confirmPolice, dispute as disputePolice } from './police/ver
 import { onReportDeleted as onPoliceReportDeleted } from './police/onDeleted';
 import { captureDaily as metricsCaptureDaily } from './metrics/scheduled';
 import { estimate as financeEstimate } from './finance/estimate';
+import { captureDaily as financeCaptureDaily } from './finance/capture';
+import { updateWorkloadAssumptions as financeUpdateWorkloadAssumptions } from './finance/settings';
 import {
   addRecurringCost as financeAddRecurringCost,
   updateRecurringCost as financeUpdateRecurringCost,
@@ -1574,8 +1576,9 @@ export const metrics = {
  * half tracks community growth, applies each service's free tier, and returns a
  * Google Cloud subtotal, a separate Mapbox estimate, and a separate
  * RECURRING-COSTS section. Every modelled figure is a MODEL ESTIMATE, not the
- * real bill — the admin page carries that banner and links to the billing
- * console. No scheduled write (and so no added cost) — see finance/estimate.ts.
+ * real bill. Daily server-only Monitoring/Billing aggregates are imported by
+ * finance.captureDaily; the page separates these from estimates and discloses
+ * missing/stale evidence. See finance/estimate.ts and finance/capture.ts.
  *
  * The recurring-costs section is DATA-BACKED: admins add/update/delete
  * operator-entered actuals (Claude, tooling, domains …) via the three audited
@@ -1584,6 +1587,8 @@ export const metrics = {
  * / finance-deleteRecurringCost (functions/src/finance/recurringCosts.ts).
  */
 export const finance = {
+  captureDaily: financeCaptureDaily,
+  updateWorkloadAssumptions: financeUpdateWorkloadAssumptions,
   estimate: financeEstimate,
   addRecurringCost: financeAddRecurringCost,
   updateRecurringCost: financeUpdateRecurringCost,

@@ -10,6 +10,8 @@ import {
   type FinanceEstimate,
   type ServiceLine,
 } from '@/features/finance';
+import { CostCoverage } from './CostCoverage';
+import { translate } from '@/i18n';
 import { CompositionBars, ProjectionChart } from './charts';
 import { RecurringCostsSection } from './RecurringCostsSection';
 import styles from './page.module.css';
@@ -24,9 +26,7 @@ function HonestyBanner() {
         ⚠
       </span>
       <div className={styles.bannerBody}>
-        <strong>Estimated from a cost model — not your actual bill.</strong> Every figure here is
-        computed from the code plus a maintained price table, not read from Google Cloud. For the
-        invoiced amount see the{' '}
+        {translate('sv', 'financeCoverage.banner')}{' '}
         <a className={styles.bannerLink} href={GCP_BILLING_URL} target="_blank" rel="noreferrer">
           Google Cloud billing console
         </a>
@@ -327,6 +327,8 @@ export default function FinancePage() {
             </div>
           </section>
 
+          <CostCoverage est={est} onSaved={reload} />
+
           {/* Google Cloud detail */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Google Cloud — service breakdown</h2>
@@ -412,6 +414,7 @@ export default function FinancePage() {
           {/* Recurring costs — operator-entered actuals (admin CRUD) */}
           <RecurringCostsSection usdToSek={est.fx.usdToSek} onChanged={reload} />
 
+          <p className={styles.sectionNote}>{translate('sv', 'financeCoverage.projectionHelp')}</p>
           {/* Function inventory / uncosted flag */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Function inventory</h2>

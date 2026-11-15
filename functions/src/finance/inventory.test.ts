@@ -45,7 +45,13 @@ describe('CALLABLE_COST_CLASS mirrors the callable registry', () => {
   });
 
   it('every classification is a known cost class', () => {
-    const valid = new Set(['variable-member', 'admin-rare', 'free', 'uncosted']);
+    const valid = new Set([
+      'variable-member',
+      'admin-rare',
+      'free',
+      'explicit-workload',
+      'uncosted',
+    ]);
     for (const cls of Object.values(CALLABLE_COST_CLASS)) {
       expect(valid.has(cls)).toBe(true);
     }

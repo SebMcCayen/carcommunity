@@ -40,6 +40,7 @@ import {
 } from './pricing';
 import {
   ADMIN_WEB_MAP_LOADS_PER_MONTH,
+  CAMERA_AND_FINANCE_DOCUMENT_BYTES,
   FALLBACK_MEMBER_COUNT,
   FIRESTORE_TTL_DELETES_PER_DAY,
   FUNCTION_INTERNET_EGRESS_BYTES_PER_MONTH,
@@ -67,6 +68,11 @@ import {
   uncostedCallables,
   type ScheduledJob,
 } from './inventory';
+
+import { buildWorkloads, sumWorkloads, type WorkloadLine, type Resources } from './workloads';
+import { DAY_MS, type Evidence, type UsageEvidence, type BillingEvidence } from './evidence';
+import type { WorkloadOverride } from './settings-core';
+import { reportedBilling, type ReportedBilling } from './reporting';
 
 // --- Compute-time assumptions kept local (clearly labelled, not buried) ------
 
@@ -214,6 +220,12 @@ export interface ProjectionPoint {
 /** The full estimate the board renders. */
 export interface FinanceEstimate {
   generatedAtMs: number;
+  workloads: WorkloadLine[];
+  assumptionsUpdatedAtMs: number | null;
+  usageEvidence: Evidence<UsageEvidence>;
+  reportedBilling: ReportedBilling;
+  /** Model allocation only; sums with workloads to the modelled cloud total. */
+  otherModelledSekPerMonth: number;
   /** USD→SEK rate the whole board converted through. */
   fx: { usdToSek: number; capturedOn: string };
   /** Live member count the variable model used, and where it came from. */
@@ -272,6 +284,10 @@ export interface FinanceEstimate {
 /** Input to the estimator (the caller supplies the live member count). */
 export interface EstimateInput {
   memberCount: number;
+  usageEvidence?: Evidence<UsageEvidence>;
+  billingEvidence?: Evidence<BillingEvidence>;
+  workloadOverrides?: WorkloadOverride[];
+  assumptionsUpdatedAtMs?: number | null;
   memberCountSource: MemberCountSource;
   /** The snapshot date the count came from, or null on fallback. */
   memberCountAsOf: string | null;
@@ -319,6 +335,26 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
   const now = input.now ?? new Date();
   const members = Math.max(0, Math.floor(input.memberCount));
 
+  let usageEvidence: Evidence<UsageEvidence> = input.usageEvidence ?? {
+    state: 'not-configured',
+    data: null,
+    lastAttemptFailed: false,
+  };
+  if (
+    usageEvidence.state === 'ready' &&
+    usageEvidence.data &&
+    (usageEvidence.data.endMs > now.getTime() ||
+      now.getTime() - usageEvidence.data.endMs > 3 * DAY_MS)
+  ) {
+    usageEvidence = { ...usageEvidence, state: 'stale' };
+  }
+  const usableUsage = usageEvidence.state === 'ready' ? usageEvidence.data : null;
+  const workloads = buildWorkloads(members, usableUsage, input.workloadOverrides);
+  const workloadResources = sumWorkloads(workloads);
+
+  // Explicit drivers occupy the existing member envelope before increasing it.
+  // This avoids adding the same calls/reads/egress twice to a broad legacy guess.
+  // Unknown remaining activity is a visible residual, never claimed as measured.
   // ---- Firestore: gross PER DAY across committed + variable ----------------
   const committedWritesPerDay = SCHEDULED_JOBS.reduce(
     (sum, j) => sum + writesPerRun(j) * j.runsPerDay,
@@ -336,9 +372,18 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
   const trafikverketRunsPerDay = trafikverketJob?.runsPerDay ?? 0;
   const trafikverketWritesPerDay = TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN * trafikverketRunsPerDay;
 
-  const variableWritesPerDay = members * PER_MEMBER_PER_DAY.firestoreWrites;
-  const variableReadsPerDay = members * PER_MEMBER_PER_DAY.firestoreReads;
-  const variableDeletesPerDay = members * PER_MEMBER_PER_DAY.firestoreDeletes;
+  const variableWritesPerDay = Math.max(
+    members * PER_MEMBER_PER_DAY.firestoreWrites,
+    workloadResources.writes / DAYS_PER_MONTH,
+  );
+  const variableReadsPerDay = Math.max(
+    members * PER_MEMBER_PER_DAY.firestoreReads,
+    workloadResources.reads / DAYS_PER_MONTH,
+  );
+  const variableDeletesPerDay = Math.max(
+    members * PER_MEMBER_PER_DAY.firestoreDeletes,
+    workloadResources.deletes / DAYS_PER_MONTH,
+  );
 
   const grossWritesPerDay = committedWritesPerDay + variableWritesPerDay;
   const grossReadsPerDay = committedReadsPerDay + variableReadsPerDay;
@@ -400,8 +445,12 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH,
     0,
   );
-  const memberInvocationsPerMonth =
+  const legacyMemberInvocationsPerMonth =
     members * PER_MEMBER_PER_DAY.functionInvocations * DAYS_PER_MONTH;
+  const memberInvocationsPerMonth = Math.max(
+    legacyMemberInvocationsPerMonth,
+    workloadResources.requests,
+  );
   const invocationsPerMonth = scheduledInvocationsPerMonth + memberInvocationsPerMonth;
   const invocationsLine = monthlyLine(
     'Cloud Functions',
@@ -418,8 +467,10 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH * j.avgSeconds * j.memoryGiB,
     0,
   );
-  const memberGibSeconds =
-    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * PER_MEMBER_MEMORY_GIB;
+  const memberGibSeconds = Math.max(
+    legacyMemberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * PER_MEMBER_MEMORY_GIB,
+    workloadResources.gibSeconds,
+  );
   const gibSecondsPerMonth = scheduledGibSeconds + memberGibSeconds;
   const gibSecondsLine = monthlyLine(
     'Cloud Functions',
@@ -436,8 +487,10 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH * j.avgSeconds * j.cpu,
     0,
   );
-  const memberCpuSeconds =
-    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * MEMBER_FUNCTION_VCPU;
+  const memberCpuSeconds = Math.max(
+    legacyMemberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * MEMBER_FUNCTION_VCPU,
+    workloadResources.cpuSeconds,
+  );
   const cpuSecondsPerMonth = scheduledCpuSeconds + memberCpuSeconds;
   const cpuSecondsLine = monthlyLine(
     'Cloud Functions',
@@ -453,11 +506,11 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     'Cloud Functions',
     'Internet data transfer (Europe)',
     'GiB / month',
-    FUNCTION_INTERNET_EGRESS_BYTES_PER_MONTH / BYTES_PER_GIB,
+    Math.max(FUNCTION_INTERNET_EGRESS_BYTES_PER_MONTH, workloadResources.sentBytes) / BYTES_PER_GIB,
     FUNCTIONS.free.egressGiBPerMonth,
     FUNCTIONS.egressGiBUsd,
-    true,
-    'Dated 1.2 GiB/month usage estimate; the North America transfer allowance does not cover Belgium.',
+    workloadResources.sentBytes <= FUNCTION_INTERNET_EGRESS_BYTES_PER_MONTH,
+    'Maximum of the dated 1.2 GiB/month baseline and explicit workload traffic. Network bytes are an egress proxy, not billed bytes; Billing is authoritative.',
   );
 
   // ---- Realtime Database (live location) -----------------------------------
@@ -651,6 +704,32 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     note: j.note,
   })).sort((a, b) => b.writesPerMonth - a.writesPerMonth);
 
+  // Proportional allocation AFTER shared allowances. These amounts explain
+  // the service subtotal, and are never added a second time to that subtotal.
+  const allocations: [keyof Resources, ServiceLine, number][] = [
+    ['reads', readsLine, 1],
+    ['writes', writesLine, 1],
+    ['deletes', deletesLine, 1],
+    ['requests', invocationsLine, 1],
+    ['cpuSeconds', cpuSecondsLine, 1],
+    ['gibSeconds', gibSecondsLine, 1],
+    ['sentBytes', functionEgressLine, 1 / BYTES_PER_GIB],
+  ];
+  for (const workload of workloads) {
+    workload.sekPerMonth = allocations.reduce(
+      (sum, [key, line, conversion]) =>
+        sum +
+        (line.gross > 0
+          ? (line.sekPerMonth * workload.resources[key] * conversion) / line.gross
+          : 0),
+      0,
+    );
+  }
+  const otherModelledSekPerMonth = Math.max(
+    0,
+    googleCloudTotal - workloads.reduce((sum, w) => sum + w.sekPerMonth, 0),
+  );
+
   // ---- Mapbox (separate vendor) — MOBILE SDK billing (MAU + trips) ----------
   // The app is a mobile app, so the basemap is billed by Monthly Active Users
   // (≈ the active-member count) and turn-by-turn navigation is billed by Nav
@@ -680,7 +759,10 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
         .filter((m) => m >= 0)
         .sort((a, b) => a - b)
         .map((m) => {
-          const point = estimateFinance({ ...input, memberCount: m, now }, false);
+          const point = estimateFinance(
+            { ...input, usageEvidence: undefined, memberCount: m, now },
+            false,
+          );
           return {
             members: m,
             googleCloudSekPerMonth: point.googleCloud.totalSekPerMonth,
@@ -693,6 +775,11 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
 
   return {
     generatedAtMs: now.getTime(),
+    workloads,
+    assumptionsUpdatedAtMs: input.assumptionsUpdatedAtMs ?? null,
+    usageEvidence,
+    reportedBilling: reportedBilling(input.billingEvidence, now, googleCloudTotal),
+    otherModelledSekPerMonth,
     fx: { usdToSek: USD_TO_SEK, capturedOn: USD_TO_SEK_CAPTURED_ON },
     member: {
       count: members,
@@ -735,7 +822,10 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
 function estimateFirestoreStorageGiB(members: number): number {
   const incidentsBytes = TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN * 2_000; // ~2 KB/incident doc
   const perMemberBytes = 200_000; // ~200 KB of docs per member (profile, garage, drives…)
-  return (incidentsBytes + members * perMemberBytes) / BYTES_PER_GIB;
+  // 4,500 private camera rows plus two public generations and aggregate finance snapshots.
+  return (
+    (incidentsBytes + CAMERA_AND_FINANCE_DOCUMENT_BYTES + members * perMemberBytes) / BYTES_PER_GIB
+  );
 }
 
 /**
