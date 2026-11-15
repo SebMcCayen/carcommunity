@@ -2,6 +2,26 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 71,
+      "versionName": "1.1.16",
+      "releaseDate": "2026-11-15",
+      "highlights": [
+        "Förstora kamerabilder till helskärm och välj kamerariktning",
+        "Trafik- och väglagskameror samlas i ett gemensamt kartlager",
+        "Tydligare knappar för snabba reaktioner i konvojen"
+      ],
+      "changes": [
+        "Tryck på en trafik- eller väglagskamerabild för att visa den i helskärm",
+        "Kameror på samma plats grupperas så att du kan välja riktning när flera vyer finns, även under navigation",
+        "Trafik- och väglagskameror visas i ett gemensamt kartlager. Fasta fartkameror har kvar sitt eget lager",
+        "Förbättrad hämtning av Trafikverkets kamerabilder och stabilare kameraikoner när du zoomar eller flyttar kartan",
+        "Tydligare ikoner för väglagskameror och fartkameror",
+        "Konvojens snabbreaktioner visas som rektangulära ikonknappar med tydligare återkoppling när du behöver vänta innan nästa reaktion",
+        "Författarnas profilbilder visas vid Driver-inlägg och fliken i chatten heter nu Driver",
+        "Förbättrad visning av placeringar i topplistan så att platsnumret hålls på en rad"
+      ]
+    },
+    {
       "versionCode": 70,
       "versionName": "1.1.15",
       "releaseDate": "2026-11-14",
