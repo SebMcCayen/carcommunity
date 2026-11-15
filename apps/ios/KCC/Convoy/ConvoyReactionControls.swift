@@ -138,7 +138,7 @@ struct ConvoyReactionButtonFace: View {
                     // reaction glyph at accessibility text sizes. The native
                     // small spinner is 20pt; reserve a 12pt corner footprint.
                     .dynamicTypeSize(.large)
-                    .scaleEffect(0.6)
+                    .scaleEffect(CGFloat(0.6))
                     .frame(width: 12, height: 12)
                     .tint(accent)
                     .padding(6)
