@@ -32,7 +32,7 @@ struct NearbyWaveButton: View {
                     .transition(.scale.combined(with: .opacity))
                 }
             }
-            .frame(height: visible ? 48 + KccSpacing.s3 : 0, alignment: .top)
+            .frame(height: visible ? 48 + KccSpacing.s3 : 0, alignment: .bottom)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: visible)
             .onChange(of: range, initial: true) { _, range in
                 if let range { coordinator.reconcile(range) }

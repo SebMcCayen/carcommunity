@@ -1473,10 +1473,11 @@ struct ShellView: View {
 
     private var mapCommunicationControls: some View {
         VStack(spacing: 0) {
+            mapToolButtons
+            // Keep the tools fixed when the nearby-wave control appears.
             if nearbyWaveUid != nil, groupDriveMapUids.isEmpty, let nearbyWaveCoordinator {
                 NearbyWaveButton(coordinator: nearbyWaveCoordinator, rangeAt: nearbyWaveRange(at:))
             }
-            mapToolButtons
         }
         .font(.system(size: 20, weight: .semibold))
         .padding(.horizontal, KccSpacing.s4)
