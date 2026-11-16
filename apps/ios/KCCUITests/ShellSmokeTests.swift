@@ -1096,6 +1096,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertGreaterThan(layers.frame.midX, app.frame.midX)
         XCTAssertGreaterThan(compass.frame.minY, layers.frame.maxY)
         XCTAssertEqual(compass.value as? String, "NorthUp")
+        XCTAssertEqual(compass.label, "North up")
         for mode in ["CourseUp", "NorthUp"] {
             compass.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -1106,6 +1107,7 @@ final class ShellSmokeTests: XCTestCase {
                 chatProof(app, name: "compass-\(mode)-center-tap-failure", tree: true)
             }
             XCTAssertEqual(result, .completed, "One tap at the center of Compass must switch to \(mode)")
+            XCTAssertEqual(compass.label, mode == "NorthUp" ? "North up" : "Follow your direction")
         }
         layers.tap()
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))

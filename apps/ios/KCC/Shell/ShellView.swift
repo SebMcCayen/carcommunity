@@ -1502,21 +1502,9 @@ struct ShellView: View {
                 (mapLayerPreferences.mapModeOverride != nil &&
                  mapLayerPreferences.mapModeOverride != (colorScheme == .dark ? .night : .day)))
                 .accessibilityIdentifier("shell.mapLayers")
-            Button {
-                let next = mapSurface.compassMode.toggled()
-                mapSurface.setCompassMode(next)
-            } label: {
-                Image(systemName: "location.north.line")
-                    .rotationEffect(.degrees(-mapSurface.bearing))
-                    .frame(width: 48, height: 48)
-                    .kccMapControl()
-                    .contentShape(.interaction, Rectangle())
+            MapCompassButton(mode: mapSurface.compassMode, bearing: mapSurface.bearing) {
+                mapSurface.setCompassMode($0)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(mapSurface.compassMode == .northUp
-                ? "shell.compassCourseUp" : "shell.compassNorthUp"))
-            .accessibilityIdentifier("shell.compass")
-            .accessibilityValue(mapSurface.compassMode.rawValue)
 
             if let coordinator = crownHuntComposition?.perkMapCoordinator, coordinator.isAvailable {
                 CrownPerkMapControl(coordinator: coordinator)
