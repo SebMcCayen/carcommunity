@@ -2121,6 +2121,9 @@
     <string name="whatsNew_release014Build15Convoy">Tydligare konvojkontroller och reaktionsknappar med bättre stöd för stora textstorlekar.</string>
     <string name="whatsNew_release014Build15Cameras">Trafik- och väglagskameror delar kartlager. Kameror på samma plats grupperas med val av riktning och uppdaterade ikoner.</string>
     <string name="whatsNew_release014Build15Driver">Driver-fliken har ett kortare namn och inläggen visar rätt profilbilder för författarna.</string>
+    <string name="whatsNew_release015Build16Highlight">Förbättrad kameravisning på kartan och tätare konvojkontroller.</string>
+    <string name="whatsNew_release015Build16Cameras">Kameragrupper anpassas efter kartans zoom. Motriktade fartkameror kan visas tillsammans, och vald kamera bevaras när grupperingen ändras.</string>
+    <string name="whatsNew_release015Build16Convoy">Mindre avstånd mellan konvojens reaktionsknappar och övriga kontroller på kartan.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>
