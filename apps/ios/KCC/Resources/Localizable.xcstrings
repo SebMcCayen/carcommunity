@@ -39288,6 +39288,57 @@
         }
       }
     },
+    "whatsNew.release015Build16Cameras": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameragrupper anpassas efter kartans zoom. Motriktade fartkameror kan visas tillsammans, och vald kamera bevaras när grupperingen ändras."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera groups adapt to map zoom. Opposite-facing speed cameras can appear together, and the selected camera is preserved when grouping changes."
+          }
+        }
+      }
+    },
+    "whatsNew.release015Build16Convoy": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mindre avstånd mellan konvojens reaktionsknappar och övriga kontroller på kartan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Less space between convoy reaction buttons and the other map controls."
+          }
+        }
+      }
+    },
+    "whatsNew.release015Build16Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Förbättrad kameravisning på kartan och tätare konvojkontroller."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improved camera views on the map and more compact convoy controls."
+          }
+        }
+      }
+    },
     "whatsNew.title": {
       "extractionState": "manual",
       "localizations": {
