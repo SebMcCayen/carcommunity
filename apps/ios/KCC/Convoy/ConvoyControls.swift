@@ -407,6 +407,9 @@ struct ConvoyMapAwarenessOverlay: View {
     let imageURLs: [String: URL]
     let projection: MapProjection
     var onSelect: ((String) -> Void)? = nil
+    var clubBadges: LiveClubBadgeCoordinator? = nil
+    var badgeViewerID: String? = nil
+    var onDrawnUIDsChanged: (Set<String>) -> Void = { _ in }
 
     var body: some View {
         GeometryReader { geometry in
@@ -427,8 +430,12 @@ struct ConvoyMapAwarenessOverlay: View {
                             .position(x: placement.point.x, y: placement.point.y)
                     }
                 }
+                .onChange(of: Set(placements.onScreen.map(\.id)), initial: true) { _, uids in
+                    onDrawnUIDsChanged(uids)
+                }
             }
         }
+        .onDisappear { onDrawnUIDsChanged([]) }
         .allowsHitTesting(onSelect != nil)
         .accessibilityElement(children: .contain)
     }
@@ -465,10 +472,10 @@ struct ConvoyMapAwarenessOverlay: View {
                 .background(KccTheme.overlay, in: Capsule())
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String.localizedStringWithFormat(
+        .accessibilityLabel([String.localizedStringWithFormat(
             NSLocalizedString("convoy.awarenessMemberOnMap", comment: "Convoy member on map"),
             spokenName(member)
-        ))
+        ), clubBadge(member)?.accessibilityLabel].compactMap { $0 }.joined(separator: ", "))
     }
 
     private func edgeChip(_ placement: ConvoyOffScreenPlacement) -> some View {
@@ -494,22 +501,11 @@ struct ConvoyMapAwarenessOverlay: View {
     @ViewBuilder
     private func memberPhoto(_ member: ConvoyMemberPosition) -> some View {
         let url = member.imagePath.flatMap { imageURLs[$0] }
-        ZStack {
-            Circle().fill(KccTheme.driver)
-            if let url {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Image(systemName: "car.side.fill").foregroundStyle(KccTheme.onDriver)
-                }
-            } else {
-                Image(systemName: "car.side.fill").foregroundStyle(KccTheme.onDriver)
-            }
-        }
-        .font(.system(size: 18, weight: .semibold))
-        .frame(width: 38, height: 38)
-        .clipShape(Circle())
-        .overlay(Circle().stroke(KccTheme.driver, lineWidth: 2))
+        LiveCarPhotoBadge(imageURL: url, badge: clubBadge(member), diameter: 38)
+    }
+
+    private func clubBadge(_ member: ConvoyMemberPosition) -> LiveClubBadge? {
+        clubBadges?.badge(for: member.uid, viewerID: badgeViewerID)
     }
 
     private func spokenName(_ member: ConvoyMemberPosition) -> String {
