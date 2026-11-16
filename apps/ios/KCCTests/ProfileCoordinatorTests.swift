@@ -274,8 +274,10 @@ final class ProfileCoordinatorTests: XCTestCase {
         repository.emit(.failed(code: "UNAVAILABLE"))
         await wait { coordinator.state == .failed(code: "UNAVAILABLE") }
         XCTAssertEqual(coordinator.avatarURL, Self.avatarURL)
-        XCTAssertEqual(coordinator.clubBadge, badge)
+        XCTAssertNil(coordinator.clubBadge)
 
+        repository.emit(.loaded(joined))
+        await wait { coordinator.clubBadge == badge }
         repository.emit(.loaded(Self.profileWithAvatar()))
         await wait { coordinator.state == .loaded(Self.profileWithAvatar()) }
         XCTAssertNil(coordinator.clubBadge)

@@ -51,8 +51,11 @@ final class ProfileCoordinator {
     /// The resolved avatar download URL, nil while unresolved / when the
     /// profile has no avatar / when resolution failed (placeholder renders).
     private(set) var avatarURL: URL?
-    /// Keep the last public affiliation on transient errors, clear on a loaded removal.
-    private(set) var clubBadge: ClubBadge?
+    /// Derive affiliation from the same observable snapshot as Android; no duplicate state.
+    var clubBadge: ClubBadge? {
+        guard case .loaded(let profile) = state else { return nil }
+        return profile?.clubBadge
+    }
     /// The avatarPath ``avatarURL`` was last resolved for, so an unchanged
     /// path across snapshots (every profile update re-emits the whole doc)
     /// never re-pays the download-URL round-trip — the concern Android's
@@ -64,10 +67,6 @@ final class ProfileCoordinator {
     ///   - repository: nil when Firebase is not configured in this build.
     ///   - uid: the signed-in member's uid; nil when there is no session
     ///     (the screen should not be reachable then, but never crash).
-    // Swift 6.3.3 crashes in PerfInliner when cloning this observable initializer
-    // into RootView.authenticatedContent in optimized builds. Keep this one-time
-    // session construction out of the caller; retain optimization everywhere else.
-    @inline(never)
     init(repository: UserProfileRepository?, uid: String?) {
         self.repository = repository
         self.uid = uid
@@ -116,7 +115,6 @@ final class ProfileCoordinator {
                 hasVerifiedOnboarding = true
             }
             state = .loaded(profile)
-            clubBadge = profile?.clubBadge
             resolveAvatarIfNeeded(profile?.avatarPath)
         }
     }
