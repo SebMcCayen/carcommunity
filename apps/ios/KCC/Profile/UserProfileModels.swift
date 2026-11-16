@@ -113,7 +113,7 @@ struct ClubBadge: Equatable, Sendable {
               name == name.trimmingCharacters(in: .whitespacesAndNewlines),
               (3...60).contains(name.utf16.count),
               !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              name.rangeOfCharacter(from: .controlCharacters) == nil,
+              !name.unicodeScalars.contains(where: { $0.value <= 0x1f || (0x7f...0x9f).contains($0.value) }),
               fields["logoUrl"] == nil || fields["logoUrl"] is NSNull || fields["logoUrl"] is String
         else { return nil }
         return Self(clubId: id, clubName: name,

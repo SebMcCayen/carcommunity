@@ -58,11 +58,12 @@ final class UserProfileModelsTests: XCTestCase {
             XCTAssertNil(ClubBadge.fromField(badgeFields(name: name)))
         }
         for id in ["a", "club", String(repeating: "a", count: 128)] {
-            for name in ["abc", String(repeating: "a", count: 60), String(repeating: "😀", count: 30), "🚗x"] {
+            for name in ["abc", String(repeating: "a", count: 60), String(repeating: "😀", count: 30), "🚗x", "👨‍👩‍👧‍👦 Cars"] {
                 XCTAssertNotNil(ClubBadge.fromField(badgeFields(id: id, name: name)))
             }
         }
         XCTAssertEqual(ClubBadge.fromField(badgeFields(name: "Östra   Klubben"))?.initials, "ÖK")
+        XCTAssertEqual(ClubBadge.fromField(badgeFields(name: "👨‍👩‍👧‍👦 Cars"))?.initials, "👨C")
     }
 
     func testUnsafeClubImagesKeepInitialsAsOnAndroid() throws {
