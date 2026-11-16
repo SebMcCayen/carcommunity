@@ -430,7 +430,7 @@ struct ConvoyMapAwarenessOverlay: View {
                             .position(x: placement.point.x, y: placement.point.y)
                     }
                 }
-                .onChange(of: Set(placements.onScreen.map(\.id)), initial: true) { _, uids in
+                .onChange(of: Set(placements.onScreen.map(\.id) + placements.offScreen.map(\.id)), initial: true) { _, uids in
                     onDrawnUIDsChanged(uids)
                 }
             }
@@ -494,8 +494,14 @@ struct ConvoyMapAwarenessOverlay: View {
                     .background(KccTheme.driver, in: Capsule())
             }
         }
+        .overlay(alignment: .bottom) {
+            if let badge = clubBadge(placement.member) {
+                LiveClubBadgeView(badge: badge).offset(y: 2).accessibilityHidden(true)
+            }
+        }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(directionDescription(placement))
+        .accessibilityLabel([directionDescription(placement), clubBadge(placement.member)?.accessibilityLabel]
+            .compactMap { $0 }.joined(separator: ", "))
     }
 
     @ViewBuilder
