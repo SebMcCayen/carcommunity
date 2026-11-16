@@ -3505,6 +3505,7 @@ fun AuthenticatedApp(
                             bearingDegrees = it.bearingDegrees,
                             speedMps = it.speedMps,
                             bearingAccuracyDegrees = it.bearingAccuracyDegrees,
+                            pointCount = requireNotNull(recordedPointCount),
                         )
                     },
                 )
