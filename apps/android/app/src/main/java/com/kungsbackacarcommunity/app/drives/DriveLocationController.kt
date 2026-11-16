@@ -12,7 +12,6 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.kungsbackacarcommunity.app.location.BackgroundLocation
 
 /**
  * The GPS source contract the drive recorders drive: begin streaming fixes to a
@@ -43,8 +42,7 @@ interface DriveLocationSource {
 /**
  * In-screen (foreground) GPS source for drive recording (Phase 12 slice 12,
  * write side). Wraps a [FusedLocationProviderClient] and streams fixes to a
- * callback while the record screen is active. Reuses the fused-location
- * cadence constants from slice 6's [BackgroundLocation].
+ * callback at a two-second cadence so the accepted fixes also drive the live map.
  *
  * This controller is the in-screen GPS source: its updates run only while the
  * screen holds it. Recording is NOT limited to the foreground, though — while
@@ -116,6 +114,7 @@ class DriveLocationController private constructor(
                                 receivedAtMillis = receiptMillis,
                                 accuracyMeters = if (fix.hasAccuracy()) fix.accuracy.toDouble() else null,
                                 speedMps = if (fix.hasSpeed()) fix.speed.toDouble() else null,
+                                bearingDegrees = if (fix.hasBearing()) fix.bearing.toDouble() else null,
                             ),
                         )
                     }
@@ -124,9 +123,9 @@ class DriveLocationController private constructor(
         val request =
             LocationRequest.Builder(
                 Priority.PRIORITY_HIGH_ACCURACY,
-                BackgroundLocation.UPDATE_INTERVAL_MS,
+                UPDATE_INTERVAL_MS,
             )
-                .setMinUpdateIntervalMillis(BackgroundLocation.MIN_UPDATE_INTERVAL_MS)
+                .setMinUpdateIntervalMillis(UPDATE_INTERVAL_MS)
                 .build()
         return try {
             callback = cb
@@ -153,6 +152,10 @@ class DriveLocationController private constructor(
     }
 
     companion object {
+        // At most 10,801 points over a six-hour live session, below the 20k
+        // recorder capacity. The puck no longer has its own faster GPS stream.
+        internal const val UPDATE_INTERVAL_MS = 2_000L
+
         /**
          * Guards ONLY on Google Play services location being available; returns
          * null when it is not.

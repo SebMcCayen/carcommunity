@@ -457,6 +457,7 @@ import com.kungsbackacarcommunity.app.police.PoliceVerifyOutcome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPlaceRequest
 import com.kungsbackacarcommunity.app.shell.MapPoint
+import com.kungsbackacarcommunity.app.shell.MapRecordingPosition
 import com.kungsbackacarcommunity.app.shell.MapProjection
 import com.kungsbackacarcommunity.app.shell.MapQueryViewport
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -3481,8 +3482,8 @@ fun AuthenticatedApp(
             val driveDeletedText = stringResource(R.string.savedDrives_driveDeleted)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
-            // Use the same accepted GPS fixes as History, rather than the map's
-            // independently sampled/animated puck, which can cut across a turn.
+            // The puck and tail share the recorder's accepted fixes. A restored
+            // route can draw immediately, but cannot supply a current position.
             val recordedPointCount = (recordingState as? RecordingState.Recording)?.pointCount
             DisposableEffect(mapSurface) {
                 onDispose { mapSurface.setRecordedBreadcrumb(null) }
@@ -3495,6 +3496,14 @@ fun AuthenticatedApp(
                         }
                     } else {
                         null
+                    },
+                    position = activeRecording?.latestAcceptedSample?.takeIf { recordedPointCount != null }?.let {
+                        MapRecordingPosition(
+                            point = MapPoint(longitude = it.longitude, latitude = it.latitude),
+                            elapsedRealtimeMs = it.elapsedRealtimeMs,
+                            accuracyMeters = requireNotNull(it.accuracyMeters),
+                            bearingDegrees = it.bearingDegrees,
+                        )
                     },
                 )
             }
