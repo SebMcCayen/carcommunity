@@ -64,6 +64,10 @@ final class ProfileCoordinator {
     ///   - repository: nil when Firebase is not configured in this build.
     ///   - uid: the signed-in member's uid; nil when there is no session
     ///     (the screen should not be reachable then, but never crash).
+    // Swift 6.3.3 crashes in PerfInliner when cloning this observable initializer
+    // into RootView.authenticatedContent in optimized builds. Keep this one-time
+    // session construction out of the caller; retain optimization everywhere else.
+    @inline(never)
     init(repository: UserProfileRepository?, uid: String?) {
         self.repository = repository
         self.uid = uid
