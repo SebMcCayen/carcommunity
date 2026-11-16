@@ -981,6 +981,14 @@ fun AuthenticatedApp(
         }
 
         AuthedDestination.Main -> {
+            // Both map-bar and detail exits must fence the independent convoy-end
+            // listener before dispatching their callable.
+            val convoyRepository = remember(uid, convoyRepository) {
+                convoyRepository?.let { com.kungsbackacarcommunity.app.convoy.LocalConvoyExitRepository(it) }
+            }
+            val localConvoyExits by (convoyRepository?.localExits
+                ?: flowOf(com.kungsbackacarcommunity.app.convoy.LocalConvoyExits()))
+                .collectAsState(initial = com.kungsbackacarcommunity.app.convoy.LocalConvoyExits())
             // One-time first-login welcome flow. Shown ONCE after profile
             // creation, on the first reach of the Main experience, and never
             // again for a returning user. "Seen" is persisted device-locally per
@@ -3562,6 +3570,8 @@ fun AuthenticatedApp(
                 sessionLoad = liveSessionLoad,
                 sharing = isSharing,
                 userEndedSession = userEndedSession,
+                localConvoyExit = liveSession?.convoyId in localConvoyExits.completed,
+                pendingConvoyExit = liveSession?.convoyId in localConvoyExits.pending,
                 coordinator = liveLocationCoordinator,
                 canStartSingle = canShareLive,
                 now = nowMillis,
@@ -3696,7 +3706,7 @@ fun AuthenticatedApp(
                     val reason =
                         savePromptReason(
                             convoyAutoStarted = liveSession?.convoyAutoStarted == true,
-                            userEndedSession = userEndedSession,
+                            userEndedSession = userEndedSession || liveSession?.convoyId in localConvoyExits.completed,
                             endedByExpiry = endedByExpiry,
                         )
                     // The end binding holds this path while the confirmed convoy
