@@ -20,6 +20,20 @@ trusted anchor. Route epoch timestamps are derived from the monotonic sample
 clock within a run, with a fresh anchor after restoration. Ordinary map,
 navigation, crown and live-publishing streams keep their own policies.
 
+During Android Live recording, the map's own-location puck and yellow trail
+both use the recorder's accepted fixes. The recording request runs every two
+seconds (including its minimum interval), keeping a six-hour session below the
+20,000-point limit. The puck uses the exact 2D route vertex without interpolation
+across bends; its course and accuracy come from that same accepted sample.
+The independent Mapbox device provider is detached for this period, and queued
+callbacks from old registrations cannot overwrite the recording position.
+Restored geometry redraws the trail but never supplies a current location.
+Until a fresh accepted fix arrives, or once the last fix is over 15 seconds old,
+the puck is hidden rather than falling back to unrelated device fixes. Map
+recreation and tab returns replay only fresh positions. Ending recording restores
+the ordinary device provider. This changes neither the shared-position publishing
+policy nor historical drive data.
+
 iOS's dedicated session provider already applies `SessionLocationFilter` to
 both live sharing and recording. The recording event stream now exposes typed
 rejection decisions to the recorder while keeping the same stationary,

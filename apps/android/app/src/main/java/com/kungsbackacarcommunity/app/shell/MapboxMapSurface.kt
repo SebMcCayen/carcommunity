@@ -93,6 +93,7 @@ import com.mapbox.maps.plugin.gestures.OnShoveListener
 import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener
+import com.mapbox.maps.plugin.locationcomponent.DefaultLocationProvider
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
@@ -332,10 +333,24 @@ class MapboxMapSurface(
     // survives a MapView recreate mid-session and can be redrawn against the new
     // style. Touched only on the main thread.
     private val breadcrumbTrail = BreadcrumbTrail()
-    private val recordedBreadcrumbFlow = MutableStateFlow<List<MapPoint>?>(null)
+    private val recordedBreadcrumbFlow = MutableStateFlow<RecordedMapBreadcrumb?>(null)
+    private var puckLocationProvider: RecordingPuckLocationProvider? = null
 
-    override fun setRecordedBreadcrumb(points: List<MapPoint>?) {
-        recordedBreadcrumbFlow.value = points?.toList()
+    override fun setRecordedBreadcrumb(points: List<MapPoint>?, position: MapRecordingPosition?) {
+        recordedBreadcrumbFlow.value = points?.let { RecordedMapBreadcrumb(it.toList(), position) }
+        syncRecordingLocation()
+    }
+
+    private fun syncRecordingLocation() {
+        val provider = puckLocationProvider ?: return
+        val recording = recordedBreadcrumbFlow.value.takeIf { userMarkerFlow.value?.isLiveSharing == true }
+        provider.update(recording = recording != null, position = recording?.position)
+        val map = mapViewRef ?: return
+        if (map.mapboxMap.style == null) return
+        val enabled = surfaceActive && provider.canDisplayLocation
+        if (map.location.enabled != enabled) {
+            map.location.updateSettings { this.enabled = enabled }
+        }
     }
 
     // A resumed drive's route (#849 follow-up), handed in via [seedBreadcrumb] to
@@ -1101,9 +1116,10 @@ class MapboxMapSurface(
         // first-fix auto-centre still fires off this refresh. A no-op until the
         // map is composed; wrapped defensively like every other native call.
         val map = mapViewRef ?: return
+        syncRecordingLocation()
         runCatching {
             map.location.updateSettings {
-                enabled = true
+                enabled = surfaceActive && puckLocationProvider?.canDisplayLocation != false
                 pulsingEnabled = true
                 pulsingColor = pulseColorFor(userMarkerFlow.value)
                 // Re-assert course-bearing computation so the heading listener keeps
@@ -1576,11 +1592,18 @@ class MapboxMapSurface(
         val recordedBreadcrumb by recordedBreadcrumbFlow.collectAsState()
         LaunchedEffect(recordedBreadcrumb, marker?.isLiveSharing) {
             if (marker?.isLiveSharing == true) {
-                breadcrumbTrail.setRecordedPoints(recordedBreadcrumb)
+                breadcrumbTrail.setRecordedPoints(recordedBreadcrumb?.points)
                 runCatching { redrawBreadcrumb() }
             } else {
                 breadcrumbTrail.clear()
             }
+            // Expire a lost GPS fix without switching back to an independent
+            // device position while the recorder still owns the live session.
+            do {
+                syncRecordingLocation()
+                if (recordedBreadcrumb == null || marker?.isLiveSharing != true) break
+                delay(1_000L)
+            } while (isActive)
         }
         // Recreate the position listener once; it just records the last fix so
         // recenter() can jump the camera to it.
@@ -1774,6 +1797,14 @@ class MapboxMapSurface(
                 appContext = context.applicationContext
                 MapView(context, MapInitOptions(context, styleUri = null)).apply {
                     mapViewRef = this
+                    val provider = RecordingPuckLocationProvider(
+                        DefaultLocationProvider(context),
+                        SystemClock::elapsedRealtime,
+                    )
+                    puckLocationProvider = provider
+                    val recording = recordedBreadcrumbFlow.value.takeIf { userMarkerFlow.value?.isLiveSharing == true }
+                    provider.update(recording = recording != null, position = recording?.position)
+                    location.setLocationProvider(provider)
                     // The surface now genuinely exists and is on screen — from
                     // here on, "the map is not rendering" is a statement worth
                     // making. Feature-health only; see the class KDoc.
@@ -2190,7 +2221,7 @@ class MapboxMapSurface(
                         // hidden without error.
                         runCatching {
                             location.updateSettings {
-                                enabled = true
+                                enabled = surfaceActive && puckLocationProvider?.canDisplayLocation != false
                                 pulsingEnabled = true
                                 // This runs asynchronously when the style finishes
                                 // loading — not at composition — and loadStateFlow
@@ -2230,6 +2261,7 @@ class MapboxMapSurface(
                 }
             },
             update = { mapView ->
+                syncRecordingLocation()
                 // Apply the current traffic toggle once the style is present.
                 runCatching {
                     mapView.mapboxMap.style?.let { applyTrafficVisibility(it, trafficOn) }
@@ -2311,6 +2343,7 @@ class MapboxMapSurface(
                 // recreated map shows the plain dot again until its own first
                 // heading arrives, rather than an arrow left pointing north.
                 puckBearingArrowShown = false
+                puckLocationProvider = null
                 cameraChangeListener?.let { l ->
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
                 }

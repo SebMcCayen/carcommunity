@@ -124,6 +124,10 @@ class DriveRecordingCoordinator(
     private val pendingJournalPoints = ArrayList<RecordedPoint>()
     private var quality = DriveRecordingQuality()
 
+    /** Current-boot accepted fix only; restored route points are never a live position. */
+    var latestAcceptedSample: DriveLocationSample? = null
+        private set
+
     val recordingDiagnostics: DriveRecordingDiagnostics get() = quality.diagnostics
 
     /** Wall-clock of the last journal flush, for the time-based flush trigger. */
@@ -304,7 +308,9 @@ class DriveRecordingCoordinator(
             maybeFlushJournal(force = false)
             return
         }
-        onRecordedPoint(recorder, point, recorder.addPoint(point))
+        val accepted = recorder.addPoint(point)
+        if (accepted) latestAcceptedSample = sample
+        onRecordedPoint(recorder, point, accepted)
     }
 
     private fun onRecordedPoint(recorder: DriveRecorder, point: RecordedPoint, accepted: Boolean) {

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.drives
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -70,6 +71,8 @@ class DriveRecordingRestoreTest {
 
         // The resumed route is exposed for the host to re-seed the map tail…
         assertEquals(persisted, c.resumedRoutePoints)
+        // Historical geometry restores the tail, never the current location puck.
+        assertNull(c.latestAcceptedSample)
         // …and the resume — with its restored point count — is logged.
         assertEquals(listOf("resumed:$session:3"), log.events)
     }

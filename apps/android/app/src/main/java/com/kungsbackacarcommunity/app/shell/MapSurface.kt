@@ -129,6 +129,19 @@ data class MapPoint(
     val latitude: Double,
 )
 
+/** An accepted current-boot recorder fix; never reconstructed from saved route geometry. */
+data class MapRecordingPosition(
+    val point: MapPoint,
+    val elapsedRealtimeMs: Long,
+    val accuracyMeters: Double,
+    val bearingDegrees: Double? = null,
+)
+
+internal data class RecordedMapBreadcrumb(
+    val points: List<MapPoint>,
+    val position: MapRecordingPosition?,
+)
+
 /**
  * A destination + the route line to draw for it. Owned by the shell (kept free
  * of the navigation package's types) so the [MapSurface] seam stays
@@ -852,8 +865,12 @@ interface MapSurface : MapProjection {
      */
     fun seedBreadcrumb(points: List<MapPoint>)
 
-    /** Accepted recorder fixes for the private live tail; null enables puck fallback. */
-    fun setRecordedBreadcrumb(points: List<MapPoint>?)
+    /**
+     * Accepted recorder geometry and current fix for BOTH the live tail and puck.
+     * Null points restore the device provider; an empty list owns the puck while
+     * waiting for the first accepted fix. Historical points alone cannot locate it.
+     */
+    fun setRecordedBreadcrumb(points: List<MapPoint>?, position: MapRecordingPosition? = null)
 
     /**
      * Draw (or clear, with null / empty) the SHARED convoy "Follow me" LEADER
@@ -1267,7 +1284,7 @@ class StubMapSurface(
     private val recordedBreadcrumbFlow = MutableStateFlow<List<MapPoint>?>(null)
     val recordedBreadcrumb: StateFlow<List<MapPoint>?> = recordedBreadcrumbFlow.asStateFlow()
 
-    override fun setRecordedBreadcrumb(points: List<MapPoint>?) {
+    override fun setRecordedBreadcrumb(points: List<MapPoint>?, position: MapRecordingPosition?) {
         recordedBreadcrumbFlow.value = points?.toList()
     }
 
