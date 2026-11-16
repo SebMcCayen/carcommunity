@@ -135,6 +135,10 @@ data class MapRecordingPosition(
     val elapsedRealtimeMs: Long,
     val accuracyMeters: Double,
     val bearingDegrees: Double? = null,
+    val speedMps: Double? = null,
+    val bearingAccuracyDegrees: Double? = null,
+    /** Global accepted vertex ordinal; lets display motion retain corners across batches and tail trimming. */
+    val pointCount: Int = 0,
 )
 
 internal data class RecordedMapBreadcrumb(

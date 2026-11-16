@@ -21,6 +21,7 @@ class RecordingPuckLocationProviderTest {
         elapsedRealtimeMs = now,
         accuracyMeters = 5.0,
         bearingDegrees = 90.0,
+        speedMps = 10.0,
     )
 
     @Test
@@ -39,7 +40,10 @@ class RecordingPuckLocationProviderTest {
         assertEquals(Point.fromLngLat(first.point.longitude, first.point.latitude), consumer.points.last())
         assertEquals(listOf(90.0), consumer.bearings)
         assertEquals(listOf(5.0), consumer.accuracies)
+        assertEquals(listOf("bearing", "position"), consumer.events.takeLast(2))
+        assertTrue(consumer.immediateBearing)
 
+        now += 2_000L
         val bend = position(longitude = 12.081, latitude = 57.481)
         provider.update(recording = true, bend)
         assertEquals(Point.fromLngLat(bend.point.longitude, bend.point.latitude), consumer.points.last())
@@ -81,6 +85,7 @@ class RecordingPuckLocationProviderTest {
         val nextMap = Consumer()
         provider.registerLocationConsumer(nextMap)
         assertEquals(consumer.points, nextMap.points)
+        now += 2_000L
         provider.update(recording = true, position(longitude = 12.082))
         assertEquals(1, consumer.points.size)
         assertEquals(2, nextMap.points.size)
@@ -126,22 +131,169 @@ class RecordingPuckLocationProviderTest {
         assertTrue(device.consumers.isEmpty())
     }
 
+    @Test
+    fun `missing course during straight driving recovers from accepted movement and replays on recreation`() {
+        provider.registerLocationConsumer(consumer)
+        provider.update(recording = true, position().copy(bearingDegrees = 0.0))
+        now += 2_000L
+        provider.update(recording = true, position(longitude = 12.0805).copy(bearingDegrees = null))
+        assertEquals(90.0, consumer.bearings.last(), 0.01)
+        assertEquals(listOf("bearing", "position"), consumer.events.takeLast(2))
+
+        val recreatedMap = Consumer()
+        provider.registerLocationConsumer(recreatedMap)
+        assertEquals(consumer.bearings.last(), recreatedMap.bearings.single(), 0.0)
+
+        provider.update(recording = false, position = null)
+        provider.update(recording = true, position().copy(bearingDegrees = null))
+        val nextSession = Consumer()
+        provider.registerLocationConsumer(nextSession)
+        assertTrue(nextSession.bearings.isEmpty())
+    }
+
+    @Test
+    fun `presentation frames move smoothly and expose the matching trail before native callbacks`() {
+        val first = position().copy(pointCount = 1)
+        val last = first.copy(
+            point = MapPoint(first.point.longitude + 0.0004, first.point.latitude),
+            elapsedRealtimeMs = now + 2_000L,
+            pointCount = 2,
+        )
+        val observedTips = mutableListOf<MapPoint?>()
+        val callbackConsumer = Consumer { observedTips.add(provider.renderedFrame?.trail?.lastOrNull()) }
+        provider.registerLocationConsumer(callbackConsumer)
+        provider.update(true, first, listOf(first.point))
+        now += 2_000L
+        provider.update(true, last, listOf(first.point, last.point))
+        // A newly accepted target does not teleport either visible element.
+        assertEquals(first.point.longitude, callbackConsumer.points.last().longitude(), 0.0)
+
+        now += 1_000L
+        assertTrue(provider.advance())
+        val halfway = callbackConsumer.points.last()
+        assertEquals((first.point.longitude + last.point.longitude) / 2, halfway.longitude(), 0.000001)
+        assertEquals(MapPoint(halfway.longitude(), halfway.latitude()), observedTips.last())
+        assertTrue(callbackConsumer.immediatePosition) // Only the shared clock interpolates.
+
+        now += 1_000L
+        assertFalse(provider.advance())
+        assertEquals(last.point, observedTips.last())
+        assertEquals(last.point.longitude, callbackConsumer.points.last().longitude(), 0.0)
+        assertEquals(2, callbackConsumer.accuracies.size) // GPS cadence, not display cadence.
+        val emitted = callbackConsumer.points.size
+        now += 5_000L
+        assertFalse(provider.advance())
+        assertEquals(emitted, callbackConsumer.points.size) // No motion beyond the GPS target.
+    }
+
+    @Test
+    fun `timer updates and native re-registration do not restart presentation motion`() {
+        val first = position().copy(pointCount = 1)
+        provider.update(true, first, listOf(first.point))
+        provider.registerLocationConsumer(consumer)
+        now += 2_000L
+        val next = position(longitude = first.point.longitude + 0.0004).copy(pointCount = 2)
+        val route = listOf(first.point, next.point)
+        provider.update(true, next, route)
+        now += 1_000L
+        provider.advance()
+        provider.update(true, next, route)
+        val reattached = Consumer()
+        provider.registerLocationConsumer(reattached)
+        assertEquals(consumer.points.last(), reattached.points.last())
+        now += 1_000L
+        assertFalse(provider.advance())
+        assertEquals(next.point.longitude, reattached.points.last().longitude(), 0.0)
+
+        provider.update(false, null)
+        val count = reattached.points.size
+        now += 1_000L
+        assertFalse(provider.advance())
+        assertEquals(count, reattached.points.size)
+    }
+
+    @Test
+    fun `a recreated map starts with the whole accepted prefix and its current fresh head`() {
+        val route = listOf(
+            MapPoint(12.08, 57.48),
+            MapPoint(12.08, 57.4801),
+            MapPoint(12.0802, 57.4801),
+        )
+        val fix = position().copy(point = route.last(), pointCount = 3)
+        provider.update(true, fix, route)
+        provider.registerLocationConsumer(consumer)
+        assertEquals(route, provider.renderedFrame?.trail)
+        assertEquals(fix.point.longitude, consumer.points.single().longitude(), 0.0)
+        assertFalse(provider.advance())
+    }
+
+    @Test
+    fun `unregistering during a bearing callback fences the remaining recording callbacks`() {
+        provider.update(true, position())
+        lateinit var released: Consumer
+        released = Consumer(onBearing = { provider.unRegisterLocationConsumer(released) })
+        provider.registerLocationConsumer(released)
+        assertTrue(released.points.isEmpty())
+        assertTrue(released.accuracies.isEmpty())
+    }
+
+    @Test
+    fun `ending recording during a bearing callback fences the old recording position`() {
+        provider.update(true, position())
+        val stopped = Consumer(onBearing = { provider.update(false, null) })
+        provider.registerLocationConsumer(stopped)
+        assertTrue(stopped.points.isEmpty())
+        assertTrue(stopped.accuracies.isEmpty())
+        assertEquals(1, device.consumers.size)
+    }
+
+    @Test
+    fun `a reentrant newer fix cannot be followed by an older frame for either consumer`() {
+        var replace = true
+        val newer = position(longitude = 12.082).copy(elapsedRealtimeMs = now + 2_000L)
+        val replacing = Consumer(onBearing = {
+            if (replace) {
+                replace = false
+                now += 2_000L
+                provider.update(true, newer)
+            }
+        })
+        provider.registerLocationConsumer(replacing)
+        provider.registerLocationConsumer(consumer)
+        provider.update(true, position())
+        val expected = listOf(Point.fromLngLat(newer.point.longitude, newer.point.latitude))
+        assertEquals(expected, replacing.points)
+        assertEquals(expected, consumer.points)
+    }
+
     private class DeviceProvider : LocationProvider {
         val consumers = mutableSetOf<LocationConsumer>()
         override fun registerLocationConsumer(locationConsumer: LocationConsumer) { consumers.add(locationConsumer) }
         override fun unRegisterLocationConsumer(locationConsumer: LocationConsumer) { consumers.remove(locationConsumer) }
     }
 
-    private class Consumer : LocationConsumer {
+    private class Consumer(
+        private val onBearing: (() -> Unit)? = null,
+        private val onPosition: () -> Unit = {},
+    ) : LocationConsumer {
         val points = mutableListOf<Point>()
         val bearings = mutableListOf<Double>()
         val accuracies = mutableListOf<Double>()
+        val events = mutableListOf<String>()
         var immediatePosition = false
+        var immediateBearing = false
         override fun onLocationUpdated(vararg location: Point, options: (ValueAnimator.() -> Unit)?) {
+            events.add("position")
             points.addAll(location)
             immediatePosition = options != null
+            onPosition()
         }
-        override fun onBearingUpdated(vararg bearing: Double, options: (ValueAnimator.() -> Unit)?) { bearings.addAll(bearing.toList()) }
+        override fun onBearingUpdated(vararg bearing: Double, options: (ValueAnimator.() -> Unit)?) {
+            events.add("bearing")
+            bearings.addAll(bearing.toList())
+            immediateBearing = options != null
+            onBearing?.invoke()
+        }
         override fun onHorizontalAccuracyRadiusUpdated(vararg radius: Double, options: (ValueAnimator.() -> Unit)?) { accuracies.addAll(radius.toList()) }
         override fun onPuckLocationAnimatorDefaultOptionsUpdated(options: ValueAnimator.() -> Unit) = Unit
         override fun onPuckBearingAnimatorDefaultOptionsUpdated(options: ValueAnimator.() -> Unit) = Unit

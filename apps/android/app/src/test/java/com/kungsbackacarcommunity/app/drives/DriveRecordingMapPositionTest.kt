@@ -17,7 +17,9 @@ class DriveRecordingMapPositionTest {
         receivedElapsedRealtimeMs = elapsed,
         receivedAtMillis = 1_800_000_000_000L + elapsed,
         accuracyMeters = 5.0,
+        speedMps = 10.0,
         bearingDegrees = 42.0,
+        bearingAccuracyDegrees = 5.0,
     )
 
     @Test

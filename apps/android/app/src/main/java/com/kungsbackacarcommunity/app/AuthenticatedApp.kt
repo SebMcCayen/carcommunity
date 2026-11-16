@@ -3503,6 +3503,9 @@ fun AuthenticatedApp(
                             elapsedRealtimeMs = it.elapsedRealtimeMs,
                             accuracyMeters = requireNotNull(it.accuracyMeters),
                             bearingDegrees = it.bearingDegrees,
+                            speedMps = it.speedMps,
+                            bearingAccuracyDegrees = it.bearingAccuracyDegrees,
+                            pointCount = requireNotNull(recordedPointCount),
                         )
                     },
                 )

@@ -335,21 +335,63 @@ class MapboxMapSurface(
     private val breadcrumbTrail = BreadcrumbTrail()
     private val recordedBreadcrumbFlow = MutableStateFlow<RecordedMapBreadcrumb?>(null)
     private var puckLocationProvider: RecordingPuckLocationProvider? = null
+    private var recordingOwnsBreadcrumb = false
+    private var lastPersistedRecordingPosition: MapRecordingPosition? = null
+    private var lastRenderedBreadcrumbPoints: List<MapPoint>? = null
+    private var breadcrumbRenderVisible: Boolean? = null
+    // Only accepted prefix vertices are cached. The interpolated endpoint is
+    // converted separately, so a long animation cannot accumulate frame points.
+    private val breadcrumbGeoPoints = LinkedHashMap<MapPoint, Point>()
 
     override fun setRecordedBreadcrumb(points: List<MapPoint>?, position: MapRecordingPosition?) {
         recordedBreadcrumbFlow.value = points?.let { RecordedMapBreadcrumb(it.toList(), position) }
         syncRecordingLocation()
     }
 
-    private fun syncRecordingLocation() {
-        val provider = puckLocationProvider ?: return
+    private fun syncRecordingLocation(): Boolean {
+        val provider = puckLocationProvider ?: return false
         val recording = recordedBreadcrumbFlow.value.takeIf { userMarkerFlow.value?.isLiveSharing == true }
-        provider.update(recording = recording != null, position = recording?.position)
-        val map = mapViewRef ?: return
-        if (map.mapboxMap.style == null) return
+        val changedBreadcrumbOwner = recordingOwnsBreadcrumb != (recording != null)
+        if (changedBreadcrumbOwner) {
+            recordingOwnsBreadcrumb = recording != null
+            breadcrumbTrail.clear()
+            breadcrumbGeoPoints.clear()
+        }
+        if (recording == null) {
+            lastPersistedRecordingPosition = null
+        } else {
+            val accepted = recording.position?.takeIf {
+                SystemClock.elapsedRealtime() - it.elapsedRealtimeMs in 0L..RecordingPuckLocationProvider.MAX_FIX_AGE_MS
+            }
+            if (accepted != null && accepted != lastPersistedRecordingPosition) {
+                persistLastKnownLocation(Point.fromLngLat(accepted.point.longitude, accepted.point.latitude))
+                lastPersistedRecordingPosition = accepted
+            }
+        }
+        provider.update(recording = recording != null, position = recording?.position, points = recording?.points.orEmpty())
+        val animating = surfaceActive && provider.advance()
+        renderRecordingBreadcrumb()
+        if (recording == null && changedBreadcrumbOwner) redrawBreadcrumb()
+        val map = mapViewRef ?: return animating
+        if (map.mapboxMap.style == null) return animating
         val enabled = surfaceActive && provider.canDisplayLocation
         if (map.location.enabled != enabled) {
             map.location.updateSettings { this.enabled = enabled }
+        }
+        return animating
+    }
+
+    private fun renderRecordingBreadcrumb() {
+        if (!surfaceActive) return
+        val recording = recordedBreadcrumbFlow.value?.takeIf { userMarkerFlow.value?.isLiveSharing == true } ?: return
+        // A restored route may draw before the first fresh fix. Once motion has
+        // started, expose only the accepted prefix ending at this frame's puck.
+        val frame = puckLocationProvider?.renderedFrame
+        if (frame != null) {
+            drawBreadcrumbPoints(frame.trail)
+        } else {
+            breadcrumbTrail.setRecordedPoints(recording.points)
+            drawBreadcrumbPoints(breadcrumbTrail.points())
         }
     }
 
@@ -1248,6 +1290,7 @@ class MapboxMapSurface(
         val map = mapViewRef ?: return
         if (active) {
             refreshLocationComponent()
+            if (userMarkerFlow.value?.isLiveSharing == true) redrawBreadcrumb() else clearBreadcrumbRender()
         } else {
             // Cancel any pending idle-return so a timer armed just before the
             // user left the tab can't ease the camera while the map is covered.
@@ -1591,18 +1634,17 @@ class MapboxMapSurface(
         val marker by userMarkerFlow.collectAsState()
         val recordedBreadcrumb by recordedBreadcrumbFlow.collectAsState()
         LaunchedEffect(recordedBreadcrumb, marker?.isLiveSharing) {
-            if (marker?.isLiveSharing == true) {
-                breadcrumbTrail.setRecordedPoints(recordedBreadcrumb?.points)
-                runCatching { redrawBreadcrumb() }
-            } else {
+            if (marker?.isLiveSharing != true) {
                 breadcrumbTrail.clear()
             }
             // Expire a lost GPS fix without switching back to an independent
             // device position while the recorder still owns the live session.
             do {
-                syncRecordingLocation()
+                val animating = syncRecordingLocation()
                 if (recordedBreadcrumb == null || marker?.isLiveSharing != true) break
-                delay(1_000L)
+                // Follow the display clock while moving. Once settled, only the
+                // existing freshness timer remains; never extrapolate past GPS.
+                if (animating) withFrameNanos { } else delay(1_000L)
             } while (isActive)
         }
         // Recreate the position listener once; it just records the last fix so
@@ -1619,7 +1661,11 @@ class MapboxMapSurface(
                         // Cache this fix for the next map open (see
                         // [persistLastKnownLocation]). Before the follow gate so
                         // it keeps refreshing even when the user has panned away.
-                        persistLastKnownLocation(point)
+                        // Recording frames are synthetic presentation positions;
+                        // syncRecordingLocation persists each accepted GPS fix once.
+                        if (recordedBreadcrumbFlow.value == null || userMarkerFlow.value?.isLiveSharing != true) {
+                            persistLastKnownLocation(point)
+                        }
                         // Private breadcrumb tail: record the user's OWN path while —
                         // and only while — they are live-sharing. Done BEFORE the
                         // camera-follow gate below so the tail keeps growing even when
@@ -1628,12 +1674,15 @@ class MapboxMapSurface(
                         // when the tail actually moved, so a stationary puck emitting a
                         // fix every frame triggers no redraw. Local-only: nothing here
                         // crosses the seam or is written anywhere shared.
-                        if (userMarkerFlow.value?.isLiveSharing == true && recordedBreadcrumbFlow.value == null) {
-                            val changed =
-                                breadcrumbTrail.add(
+                        if (userMarkerFlow.value?.isLiveSharing == true) {
+                            if (recordedBreadcrumbFlow.value != null) {
+                                renderRecordingBreadcrumb()
+                            } else {
+                                val changed = breadcrumbTrail.add(
                                     MapPoint(longitude = point.longitude(), latitude = point.latitude()),
                                 )
-                            if (changed) runCatching { redrawBreadcrumb() }
+                                if (changed) runCatching { redrawBreadcrumb() }
+                            }
                         }
                         // "Camera follows me": while following (and no route overlay
                         // owns the camera), keep the camera centred on the puck as the
@@ -1803,7 +1852,7 @@ class MapboxMapSurface(
                     )
                     puckLocationProvider = provider
                     val recording = recordedBreadcrumbFlow.value.takeIf { userMarkerFlow.value?.isLiveSharing == true }
-                    provider.update(recording = recording != null, position = recording?.position)
+                    provider.update(recording = recording != null, position = recording?.position, points = recording?.points.orEmpty())
                     location.setLocationProvider(provider)
                     // The surface now genuinely exists and is on screen — from
                     // here on, "the map is not rendering" is a statement worth
@@ -2003,6 +2052,7 @@ class MapboxMapSurface(
                     )
                     onBasemapLoaded = Style.OnStyleLoaded { style ->
                         if (mapViewRef !== this || style.styleURI != basemapFlow.value.styleUri) return@OnStyleLoaded
+                        resetBreadcrumbRenderCache()
                         loadStateFlow.value = MapLoadState.Loaded
                         // Apply the current day/night light preset (read the flow
                         // directly — this runs async at style-load, not at
@@ -2344,6 +2394,7 @@ class MapboxMapSurface(
                 // heading arrives, rather than an arrow left pointing north.
                 puckBearingArrowShown = false
                 puckLocationProvider = null
+                resetBreadcrumbRenderCache()
                 cameraChangeListener?.let { l ->
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
                 }
@@ -3055,40 +3106,76 @@ class MapboxMapSurface(
     }
 
     /**
-     * Redraw the private breadcrumb tail from the current [breadcrumbTrail]. Sets
-     * the GeoJSON line geometry (oldest→newest) and shows the layer when there
-     * are at least two points to draw; otherwise clears it. A no-op until the
-     * style + source exist (style loaded). Native calls are wrapped so a partial
-     * draw degrades to no tail rather than crashing.
+     * Redraw the private breadcrumb from the recording's presentation frame,
+     * or the fallback [breadcrumbTrail] when no recorder owns it. A no-op until
+     * the active map's style/source exist. Duplicate frame callbacks share the
+     * cached draw, and settled prefixes reuse their GeoJSON coordinate objects.
      *
      * On-device only: the annotation/GL render runs on a token-provisioned map,
      * so the actual line + gradient are verified on device, not in CI.
      */
     private fun redrawBreadcrumb() {
+        if (userMarkerFlow.value?.isLiveSharing == true && recordedBreadcrumbFlow.value != null) {
+            renderRecordingBreadcrumb()
+        } else {
+            drawBreadcrumbPoints(breadcrumbTrail.points())
+        }
+    }
+
+    private fun drawBreadcrumbPoints(points: List<MapPoint>) {
+        if (!surfaceActive) return
         val style = mapViewRef?.mapboxMap?.style ?: return
         val source = style.getSourceAs<GeoJsonSource>(BREADCRUMB_SOURCE_ID) ?: return
-        val pts = breadcrumbTrail.points()
-        if (pts.size < 2) {
-            runCatching { source.featureCollection(FeatureCollection.fromFeatures(emptyList())) }
-            runCatching { setBreadcrumbVisible(style, false) }
-            return
+        val previous = lastRenderedBreadcrumbPoints
+        // The position callback and sync can observe the same immutable frame.
+        // A changed tip rejects equality in O(1) before comparing the prefix.
+        val unchanged = previous === points || (previous != null && previous.size == points.size &&
+            previous.lastOrNull() == points.lastOrNull() && previous == points)
+        if (!unchanged) {
+            runCatching {
+                if (points.size < 2) {
+                    source.featureCollection(FeatureCollection.fromFeatures(emptyList()))
+                } else {
+                    val coordinates = points.mapIndexed { index, point ->
+                        if (index == points.lastIndex) {
+                            Point.fromLngLat(point.longitude, point.latitude)
+                        } else {
+                            breadcrumbGeoPoints[point] ?: Point.fromLngLat(point.longitude, point.latitude).also {
+                                if (breadcrumbGeoPoints.size >= MAX_BREADCRUMB_CACHED_POINTS) {
+                                    val oldest = breadcrumbGeoPoints.keys.iterator()
+                                    oldest.next()
+                                    oldest.remove()
+                                }
+                                breadcrumbGeoPoints[point] = it
+                            }
+                        }
+                    }
+                    source.geometry(LineString.fromLngLats(coordinates))
+                }
+            }.onSuccess { lastRenderedBreadcrumbPoints = points }
         }
-        runCatching {
-            source.geometry(
-                LineString.fromLngLats(pts.map { Point.fromLngLat(it.longitude, it.latitude) }),
-            )
+        val visible = points.size >= 2
+        if (breadcrumbRenderVisible != visible) {
+            runCatching {
+                val casing = style.getLayerAs<LineLayer>(BREADCRUMB_CASING_LAYER_ID) ?: return@runCatching
+                val core = style.getLayerAs<LineLayer>(BREADCRUMB_LAYER_ID) ?: return@runCatching
+                val visibility = if (visible) Visibility.VISIBLE else Visibility.NONE
+                casing.visibility(visibility)
+                core.visibility(visibility)
+                breadcrumbRenderVisible = visible
+            }
         }
-        runCatching { setBreadcrumbVisible(style, true) }
     }
 
     /** Wipe the breadcrumb line off the map (empty geometry + hidden layer). */
     private fun clearBreadcrumbRender() {
-        val style = mapViewRef?.mapboxMap?.style ?: return
-        runCatching {
-            style.getSourceAs<GeoJsonSource>(BREADCRUMB_SOURCE_ID)
-                ?.featureCollection(FeatureCollection.fromFeatures(emptyList()))
-        }
-        runCatching { setBreadcrumbVisible(style, false) }
+        drawBreadcrumbPoints(emptyList())
+    }
+
+    private fun resetBreadcrumbRenderCache() {
+        lastRenderedBreadcrumbPoints = null
+        breadcrumbRenderVisible = null
+        breadcrumbGeoPoints.clear()
     }
 
     /**
@@ -3389,6 +3476,7 @@ class MapboxMapSurface(
         // Own ids (never shared with the route line, traffic, or incident
         // layers) so the tail can never fight them for a source/layer.
         const val BREADCRUMB_SOURCE_ID = "kcc-breadcrumb-source"
+        private const val MAX_BREADCRUMB_CACHED_POINTS = 3_000
         const val BREADCRUMB_LAYER_ID = "kcc-breadcrumb-layer"
         const val BREADCRUMB_CASING_LAYER_ID = "kcc-breadcrumb-casing-layer"
         const val BREADCRUMB_LINE_WIDTH = 6.0

@@ -47,7 +47,8 @@ class BreadcrumbTrail(
     private var recordedSource: List<MapPoint>? = null
 
     /**
-     * Prefer accepted recorder fixes over the animated map puck. An empty list
+     * Prefer the recording's display prefix (accepted vertices plus its current
+     * interpolated endpoint) over an independent map puck. An empty list
      * still owns the trail: no puck segment may invent a route before GPS arrives.
      * Null releases ownership and starts a fresh fallback tail.
      */

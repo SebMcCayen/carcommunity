@@ -15,6 +15,7 @@ data class DriveLocationSample(
     val accuracyMeters: Double?,
     val speedMps: Double? = null,
     val bearingDegrees: Double? = null,
+    val bearingAccuracyDegrees: Double? = null,
 )
 
 /** Coordinate-free, bounded counters. Same wire shape as iOS and the save callable. */
