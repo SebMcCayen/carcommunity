@@ -1,5 +1,31 @@
 import SwiftUI
 
+/// Mirrors Android's CompassCircleControl: a rotating compass rose for north-up,
+/// a fixed navigation arrow for course-up, and the same neutral surface in both.
+struct MapCompassButton: View {
+    let mode: MapCompassMode
+    let bearing: Double
+    let onModeChange: (MapCompassMode) -> Void
+
+    var body: some View {
+        Button {
+            onModeChange(mode.toggled())
+        } label: {
+            Image(systemName: mode == .northUp ? "safari.fill" : "location.north.fill")
+                .rotationEffect(.degrees(mode == .northUp ? -bearing : 0))
+                .frame(width: 48, height: 48)
+                .kccMapControl()
+                .contentShape(.interaction, Rectangle())
+        }
+        .font(.system(size: 20, weight: .semibold))
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(mode == .northUp
+            ? "shell.compassNorthUp" : "shell.compassCourseUp"))
+        .accessibilityIdentifier("shell.compass")
+        .accessibilityValue(mode.rawValue)
+    }
+}
+
 /// Accessible map-layers control for the map home. The sheet remains useful in
 /// config-less builds because it updates the same observable surface stub; a
 /// configured Mapbox renderer applies those commands immediately.

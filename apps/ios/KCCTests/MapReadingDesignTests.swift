@@ -5,6 +5,32 @@ import XCTest
 
 @MainActor
 final class MapReadingDesignTests: XCTestCase {
+    func testCompassModesAreVisuallyDistinctAndOnlyNorthRotates() throws {
+        for scheme in [ColorScheme.light, .dark] {
+            func render(_ mode: MapCompassMode, bearing: Double) throws -> Data {
+                let button = MapCompassButton(mode: mode, bearing: bearing, onModeChange: { _ in })
+                    .environment(\.colorScheme, scheme)
+                    .environment(\.dynamicTypeSize, .accessibility5)
+                let size = measure(button, width: 48, size: .accessibility5, language: "sv")
+                XCTAssertEqual(size.width, 48, accuracy: 1)
+                XCTAssertEqual(size.height, 48, accuracy: 1)
+                let renderer = ImageRenderer(content: button.padding(8))
+                renderer.scale = 2
+                let image = try XCTUnwrap(renderer.uiImage)
+                let attachment = XCTAttachment(image: image)
+                attachment.name = "compass-\(mode.rawValue)-\(Int(bearing))-\(scheme)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                return try XCTUnwrap(image.pngData())
+            }
+            let north = try render(.northUp, bearing: 0)
+            let course = try render(.courseUp, bearing: 0)
+            XCTAssertNotEqual(north, course, "The mode must be visible even while facing north or stationary")
+            XCTAssertNotEqual(north, try render(.northUp, bearing: 90), "The compass must keep pointing north")
+            XCTAssertEqual(course, try render(.courseUp, bearing: 90), "The course arrow must stay screen-up")
+        }
+    }
+
     func testActiveSessionControlsFitNarrowWidthAtLargestTextSize() {
         for width: CGFloat in [288, 358, 398] {
             for language in ["sv", "en"] {
