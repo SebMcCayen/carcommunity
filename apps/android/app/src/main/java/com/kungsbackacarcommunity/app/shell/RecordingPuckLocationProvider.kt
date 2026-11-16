@@ -19,6 +19,8 @@ internal class RecordingPuckLocationProvider(
     private val deviceConsumers = mutableMapOf<LocationConsumer, LocationConsumer>()
     private var recording = false
     private var position: MapRecordingPosition? = null
+    private var courseBearing = RecordingCourseBearing()
+    private var recordingBearing: Double? = null
 
     val canDisplayLocation: Boolean
         get() = !recording || fresh(position) != null
@@ -29,6 +31,13 @@ internal class RecordingPuckLocationProvider(
         val next = if (recording) fresh(position) else null
         val changedPosition = this.position != next
         this.position = next
+        if (changedSource) {
+            courseBearing = RecordingCourseBearing()
+            recordingBearing = null
+        }
+        if (recording && next != null && (changedSource || changedPosition)) {
+            recordingBearing = courseBearing.update(next)
+        }
         if (changedSource) {
             if (recording) {
                 val old = deviceConsumers.values.toList()
@@ -63,13 +72,13 @@ internal class RecordingPuckLocationProvider(
     }
 
     private fun emit(consumer: LocationConsumer, fix: MapRecordingPosition) {
+        // Position snaps to the route vertex, so its course must be current too:
+        // apply it first, without the device provider's inherited animation lag.
+        recordingBearing?.let { consumer.onBearingUpdated(it, options = { duration = 0L }) }
         // Use the exact 2D route vertex. Interpolating between sparse fixes cuts
         // across bends and leaves the dot behind the already-updated route head.
         consumer.onLocationUpdated(Point.fromLngLat(fix.point.longitude, fix.point.latitude), options = { duration = 0L })
         consumer.onHorizontalAccuracyRadiusUpdated(fix.accuracyMeters)
-        fix.bearingDegrees?.takeIf { it.isFinite() && it in 0.0..360.0 }?.let {
-            consumer.onBearingUpdated(it)
-        }
     }
 
     private fun registerDeviceConsumer(consumer: LocationConsumer) {

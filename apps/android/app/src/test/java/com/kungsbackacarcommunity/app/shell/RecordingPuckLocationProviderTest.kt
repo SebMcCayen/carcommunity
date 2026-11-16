@@ -21,6 +21,7 @@ class RecordingPuckLocationProviderTest {
         elapsedRealtimeMs = now,
         accuracyMeters = 5.0,
         bearingDegrees = 90.0,
+        speedMps = 10.0,
     )
 
     @Test
@@ -39,6 +40,8 @@ class RecordingPuckLocationProviderTest {
         assertEquals(Point.fromLngLat(first.point.longitude, first.point.latitude), consumer.points.last())
         assertEquals(listOf(90.0), consumer.bearings)
         assertEquals(listOf(5.0), consumer.accuracies)
+        assertEquals(listOf("bearing", "position"), consumer.events.takeLast(2))
+        assertTrue(consumer.immediateBearing)
 
         val bend = position(longitude = 12.081, latitude = 57.481)
         provider.update(recording = true, bend)
@@ -126,6 +129,26 @@ class RecordingPuckLocationProviderTest {
         assertTrue(device.consumers.isEmpty())
     }
 
+    @Test
+    fun `missing course during straight driving recovers from accepted movement and replays on recreation`() {
+        provider.registerLocationConsumer(consumer)
+        provider.update(recording = true, position().copy(bearingDegrees = 0.0))
+        now += 2_000L
+        provider.update(recording = true, position(longitude = 12.0805).copy(bearingDegrees = null))
+        assertEquals(90.0, consumer.bearings.last(), 0.01)
+        assertEquals(listOf("bearing", "position"), consumer.events.takeLast(2))
+
+        val recreatedMap = Consumer()
+        provider.registerLocationConsumer(recreatedMap)
+        assertEquals(consumer.bearings.last(), recreatedMap.bearings.single(), 0.0)
+
+        provider.update(recording = false, position = null)
+        provider.update(recording = true, position().copy(bearingDegrees = null))
+        val nextSession = Consumer()
+        provider.registerLocationConsumer(nextSession)
+        assertTrue(nextSession.bearings.isEmpty())
+    }
+
     private class DeviceProvider : LocationProvider {
         val consumers = mutableSetOf<LocationConsumer>()
         override fun registerLocationConsumer(locationConsumer: LocationConsumer) { consumers.add(locationConsumer) }
@@ -136,12 +159,19 @@ class RecordingPuckLocationProviderTest {
         val points = mutableListOf<Point>()
         val bearings = mutableListOf<Double>()
         val accuracies = mutableListOf<Double>()
+        val events = mutableListOf<String>()
         var immediatePosition = false
+        var immediateBearing = false
         override fun onLocationUpdated(vararg location: Point, options: (ValueAnimator.() -> Unit)?) {
+            events.add("position")
             points.addAll(location)
             immediatePosition = options != null
         }
-        override fun onBearingUpdated(vararg bearing: Double, options: (ValueAnimator.() -> Unit)?) { bearings.addAll(bearing.toList()) }
+        override fun onBearingUpdated(vararg bearing: Double, options: (ValueAnimator.() -> Unit)?) {
+            events.add("bearing")
+            bearings.addAll(bearing.toList())
+            immediateBearing = options != null
+        }
         override fun onHorizontalAccuracyRadiusUpdated(vararg radius: Double, options: (ValueAnimator.() -> Unit)?) { accuracies.addAll(radius.toList()) }
         override fun onPuckLocationAnimatorDefaultOptionsUpdated(options: ValueAnimator.() -> Unit) = Unit
         override fun onPuckBearingAnimatorDefaultOptionsUpdated(options: ValueAnimator.() -> Unit) = Unit

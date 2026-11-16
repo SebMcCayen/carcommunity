@@ -135,6 +135,8 @@ data class MapRecordingPosition(
     val elapsedRealtimeMs: Long,
     val accuracyMeters: Double,
     val bearingDegrees: Double? = null,
+    val speedMps: Double? = null,
+    val bearingAccuracyDegrees: Double? = null,
 )
 
 internal data class RecordedMapBreadcrumb(

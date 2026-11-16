@@ -87,9 +87,9 @@ class DriveLocationController private constructor(
      * a first fix, or a provider that could not derive it). It is passed through
      * rather than derived from successive positions on purpose: the platform
      * value comes from the GNSS Doppler shift where available and is far steadier
-     * than a position delta. It feeds only the live-session bar's readout — it is
-     * never recorded into the drive (see [DriveRecorder], which stores positions
-     * and timestamps and nothing else).
+     * than a position delta. It feeds the live-session bar and the map's course
+     * confidence gate. Speed and bearing metadata are never recorded into the
+     * saved drive, which stores positions and timestamps.
      */
     override fun start(
         onFix: (DriveLocationSample) -> Unit,
@@ -115,6 +115,7 @@ class DriveLocationController private constructor(
                                 accuracyMeters = if (fix.hasAccuracy()) fix.accuracy.toDouble() else null,
                                 speedMps = if (fix.hasSpeed()) fix.speed.toDouble() else null,
                                 bearingDegrees = if (fix.hasBearing()) fix.bearing.toDouble() else null,
+                                bearingAccuracyDegrees = if (fix.hasBearingAccuracy()) fix.bearingAccuracyDegrees.toDouble() else null,
                             ),
                         )
                     }
