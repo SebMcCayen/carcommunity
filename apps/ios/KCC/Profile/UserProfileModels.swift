@@ -93,10 +93,21 @@ enum UserProfileSnapshot: Equatable, Sendable {
 }
 
 /// Same read-only public projection and image allowlist as Android's ClubBadge.
-struct ClubBadge: Equatable, Sendable {
+/// Immutable reference storage keeps the profile state's enum payload small.
+final class ClubBadge: Equatable, Sendable {
     let clubId: String
     let clubName: String
     let logoURL: URL?
+
+    private init(clubId: String, clubName: String, logoURL: URL?) {
+        self.clubId = clubId
+        self.clubName = clubName
+        self.logoURL = logoURL
+    }
+
+    static func == (lhs: ClubBadge, rhs: ClubBadge) -> Bool {
+        lhs.clubId == rhs.clubId && lhs.clubName == rhs.clubName && lhs.logoURL == rhs.logoURL
+    }
 
     var initials: String {
         let letters = clubName.split(whereSeparator: { $0.isWhitespace }).prefix(2)

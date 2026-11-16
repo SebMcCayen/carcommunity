@@ -14,10 +14,6 @@ struct AuthenticatedExperience: View {
     @State private var onboarding: OnboardingCoordinator
     @State private var signOutFailed = false
 
-    // Swift 6.3.3 crashes optimizing RootView.authenticatedContent when this
-    // State/coordinator construction is inlined into its separate access branches.
-    // Keep construction as an optimized call, preserving all Release test gates.
-    @inline(never)
     init(
         uid: String,
         displayName: String?,

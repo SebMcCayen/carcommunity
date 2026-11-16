@@ -70,7 +70,10 @@ final class ProfileCoordinator {
     init(repository: UserProfileRepository?, uid: String?) {
         self.repository = repository
         self.uid = uid
-        self.state = (repository == nil || uid == nil) ? .unavailable : .loading
+        self.state = .loading
+        if repository == nil || uid == nil {
+            self.state = .unavailable
+        }
     }
 
     deinit {
