@@ -118,6 +118,9 @@ struct ShellView: View {
     @State private var convoyManagementCoordinator: ConvoyManagementCoordinator?
     @State private var convoyAwareness = ConvoyAwarenessCoordinator()
     @State private var nearbyLive = NearbyLiveCoordinator()
+    @State private var liveClubBadges = LiveClubBadgeCoordinator()
+    @State private var nearbyDrawnUIDs = Set<String>()
+    @State private var convoyDrawnUIDs = Set<String>()
     @State private var nearbyWaveCoordinator: NearbyWaveCoordinator?
     @State private var groupDriveMapUids: [String] = []
     @State private var convoyReactionCoordinator: ConvoyReactionCoordinator?
@@ -903,16 +906,28 @@ struct ShellView: View {
                     members: convoyAwareness.visibleMembers,
                     imageURLs: convoyAwareness.imageURLs,
                     projection: mapSurface,
-                    onSelect: { uid in selectMapReading(.convoyMember(uid)) }
+                    onSelect: { uid in selectMapReading(.convoyMember(uid)) },
+                    clubBadges: liveClubBadges,
+                    badgeViewerID: liveClubBadgeViewerID,
+                    onDrawnUIDsChanged: { convoyDrawnUIDs = $0 }
                 )
                 NearbyLiveOverlay(
                     coordinator: nearbyLive,
                     projection: mapSurface,
-                    onSelect: { uid in selectMapReading(.nearby(uid)) }
+                    onSelect: { uid in selectMapReading(.nearby(uid)) },
+                    clubBadges: liveClubBadges,
+                    badgeViewerID: liveClubBadgeViewerID,
+                    onDrawnUIDsChanged: { nearbyDrawnUIDs = $0 }
                 )
             }
         }
 
+        .task(id: liveClubBadgeRosterKey) {
+            liveClubBadges.setRoster(
+                viewerID: liveClubBadgeViewerID,
+                drawnUIDs: nearbyDrawnUIDs.union(convoyDrawnUIDs))
+        }
+        .onDisappear { liveClubBadges.stop() }
         .eraseToAnyView()
     }
 
@@ -3124,6 +3139,15 @@ struct ShellView: View {
         if ConfiglessLiveSessionFixture.isEnabled { return true }
         #endif
         return crownHuntComposition?.flags.liveLocationEnabled == true
+    }
+
+    private var liveClubBadgeViewerID: String? {
+        guard liveLocationFeatureEnabled, foregroundMapWorkActive else { return nil }
+        return signedInUid
+    }
+
+    private var liveClubBadgeRosterKey: String {
+        "\(liveClubBadgeViewerID ?? "")|\(nearbyDrawnUIDs.union(convoyDrawnUIDs).sorted().joined(separator: ","))"
     }
 
     private var memberProfileViewerUid: String? {

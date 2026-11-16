@@ -201,6 +201,8 @@
 		637A0A34BDC8DD05C8B8F59A /* ConvoyManagementCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E353AB6F42BBA8A274D432D /* ConvoyManagementCoordinatorTests.swift */; };
 		648030729FB86F41505441A8 /* Changelog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EE77CDC57411F491C270EBF /* Changelog.swift */; };
 		64A9BA56F2104F08DFA33183 /* NearbyLiveModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4F12F49825BF49BD345CDA /* NearbyLiveModels.swift */; };
+		5DB5F8892884E223AF7B0D8B /* FirebaseLiveClubBadgeRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80109FB7AB2E43FA5003E2B6 /* FirebaseLiveClubBadgeRepository.swift */; };
+		664A479C2371BD47BDFF328B /* LiveClubBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2499E3E5FEF5624CC9FB9F /* LiveClubBadge.swift */; };
 		655A7B2A431DF80D027B92D5 /* NearbyWaveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F2C42A29821EEE6C11018E /* NearbyWaveCoordinator.swift */; };
 		65984384B971FD9C9145E83A /* BillboardsFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F5071AB8BF4C8701FB4332B /* BillboardsFeatureTests.swift */; };
 		66EB6EF4C235924BE3147D88 /* MapReadingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF97AFE9E6EE7D02B1CC6563 /* MapReadingPanel.swift */; };
@@ -216,6 +218,7 @@
 		6C25F552799AC5E993EA18E2 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */; };
 		6CA3AF8728CAD4B7A010EEA6 /* ChatColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E603DFF92371FE42A37AC1 /* ChatColors.swift */; };
 		6D514EC45A75E05AD2F5E5A2 /* NearbyLiveFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F762C496C5728450E0CC33F2 /* NearbyLiveFeatureTests.swift */; };
+		E72011B0EFC7A5AEEADA31CF /* LiveClubBadgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65959A20204CA1DD455CB700 /* LiveClubBadgeTests.swift */; };
 		6D653074C83AD139C001A226 /* ShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00786BDC5D7D80DF3558096D /* ShellView.swift */; };
 		6DF6D362858891EFACD75FF3 /* SubscriptionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892C54F1219D58B545728A6E /* SubscriptionModels.swift */; };
 		6FE38C25DC74566BE55EE9F5 /* FeedbackRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D3F538846AA195D43958263 /* FeedbackRepository.swift */; };
@@ -860,6 +863,8 @@
 		CBEA02F100F50B1530E6E18B /* PointsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsRepository.swift; sourceTree = "<group>"; };
 		CC1041BEC42960AF7CBB0908 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		CC4F12F49825BF49BD345CDA /* NearbyLiveModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyLiveModels.swift; sourceTree = "<group>"; };
+		80109FB7AB2E43FA5003E2B6 /* FirebaseLiveClubBadgeRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseLiveClubBadgeRepository.swift; sourceTree = "<group>"; };
+		0B2499E3E5FEF5624CC9FB9F /* LiveClubBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveClubBadge.swift; sourceTree = "<group>"; };
 		CDEB2AB98D1A071F70D7F572 /* ConfiglessMapMarkerFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfiglessMapMarkerFixture.swift; sourceTree = "<group>"; };
 		CEE267B626CBCA7F0EE420C2 /* AppAccessSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAccessSession.swift; sourceTree = "<group>"; };
 		CF465D5E8668C38571889BC0 /* EventsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModels.swift; sourceTree = "<group>"; };
@@ -940,6 +945,7 @@
 		F5FA8341E686035216B94BB9 /* PrivacySettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsModels.swift; sourceTree = "<group>"; };
 		F6B9AE47D4530123DF717BA9 /* PerkShopCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerkShopCoordinator.swift; sourceTree = "<group>"; };
 		F762C496C5728450E0CC33F2 /* NearbyLiveFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyLiveFeatureTests.swift; sourceTree = "<group>"; };
+		65959A20204CA1DD455CB700 /* LiveClubBadgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveClubBadgeTests.swift; sourceTree = "<group>"; };
 		F8A45B9A270F9A89DDB0DB26 /* FirebaseVehiclesRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseVehiclesRepository.swift; sourceTree = "<group>"; };
 		F92F73E1EE66D82F0C0A1341 /* FirebaseNearbyWaveRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseNearbyWaveRepository.swift; sourceTree = "<group>"; };
 		F92FAF3F851B4E2C19E83CCD /* EventChatCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventChatCoordinator.swift; sourceTree = "<group>"; };
@@ -1313,6 +1319,8 @@
 				5026C637F0A0B82526882126 /* LiveSessionReadout.swift */,
 				9435A5A10072BF22FE5DC583 /* NearbyLiveCoordinator.swift */,
 				CC4F12F49825BF49BD345CDA /* NearbyLiveModels.swift */,
+				80109FB7AB2E43FA5003E2B6 /* FirebaseLiveClubBadgeRepository.swift */,
+				0B2499E3E5FEF5624CC9FB9F /* LiveClubBadge.swift */,
 				A974073221EF611F67E2134F /* NearbyLiveOverlay.swift */,
 				3DD6520A57347F9A43D53A91 /* NearbyWaveControls.swift */,
 				B2F2C42A29821EEE6C11018E /* NearbyWaveCoordinator.swift */,
@@ -1778,6 +1786,7 @@
 				339AC2225A858A0A63925EAA /* MemberProfileTests.swift */,
 				40690ABCD24B3901D9E12733 /* MemberStatsDesignTests.swift */,
 				F762C496C5728450E0CC33F2 /* NearbyLiveFeatureTests.swift */,
+				65959A20204CA1DD455CB700 /* LiveClubBadgeTests.swift */,
 				54D5F8B04B9C85C46DD6D7A1 /* NearbyWaveTests.swift */,
 				D428524F6ED0F4ABB123FFD9 /* NotificationSettingsCoordinatorTests.swift */,
 				9E00DF3B5AA069BE90D841A5 /* NotificationsInboxCoordinatorTests.swift */,
@@ -2288,6 +2297,8 @@
 				5F3B450CC807ADECC110B45D /* MessageReactions.swift in Sources */,
 				019741D1421051BBD5C5A283 /* NearbyLiveCoordinator.swift in Sources */,
 				64A9BA56F2104F08DFA33183 /* NearbyLiveModels.swift in Sources */,
+				5DB5F8892884E223AF7B0D8B /* FirebaseLiveClubBadgeRepository.swift in Sources */,
+				664A479C2371BD47BDFF328B /* LiveClubBadge.swift in Sources */,
 				3C51DBE096C361EA21E9B7E4 /* NearbyLiveOverlay.swift in Sources */,
 				12E0F6BE363A947555A9E73A /* NearbyWaveControls.swift in Sources */,
 				655A7B2A431DF80D027B92D5 /* NearbyWaveCoordinator.swift in Sources */,
@@ -2455,6 +2466,7 @@
 				ADC0CD75C1DAF1B20D09D325 /* MemberProfileTests.swift in Sources */,
 				C7E93B370F325C4FA190FF70 /* MemberStatsDesignTests.swift in Sources */,
 				6D514EC45A75E05AD2F5E5A2 /* NearbyLiveFeatureTests.swift in Sources */,
+				E72011B0EFC7A5AEEADA31CF /* LiveClubBadgeTests.swift in Sources */,
 				9C616566A151E7B3098A0795 /* NearbyWaveTests.swift in Sources */,
 				B075E9733318E7DC6C200459 /* NotificationSettingsCoordinatorTests.swift in Sources */,
 				99D2C59C5DB4A6E50213D5C3 /* NotificationsInboxCoordinatorTests.swift in Sources */,

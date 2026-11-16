@@ -7,13 +7,17 @@ struct NearbyLiveOverlay: View {
     @Bindable var coordinator: NearbyLiveCoordinator
     let projection: any MapProjection
     let onSelect: (String) -> Void
+    var clubBadges: LiveClubBadgeCoordinator? = nil
+    var badgeViewerID: String? = nil
+    var onDrawnUIDsChanged: (Set<String>) -> Void = { _ in }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
             TimelineView(.periodic(from: .now, by: 30)) { context in
+                let placements = visible(size: geometry.size, now: context.date)
                 ZStack {
-                    ForEach(visible(size: geometry.size, now: context.date)) { item in
+                    ForEach(placements) { item in
                         Button {
                             onSelect(item.marker.uid)
                         } label: {
@@ -22,16 +26,20 @@ struct NearbyLiveOverlay: View {
                         .buttonStyle(.plain)
                         .frame(minWidth: 48, minHeight: 48)
                         .contentShape(Rectangle())
-                        .accessibilityLabel(String.localizedStringWithFormat(
+                        .accessibilityLabel([String.localizedStringWithFormat(
                             NSLocalizedString("nearby.liveSharerOnMap", comment: "Nearby live sharer"),
                             spokenName(item.marker)
-                        ))
+                        ), clubBadge(item.marker)?.accessibilityLabel].compactMap { $0 }.joined(separator: ", "))
                         .position(x: item.point.x, y: item.point.y)
                     }
+                }
+                .onChange(of: Set(placements.map(\.id)), initial: true) { _, uids in
+                    onDrawnUIDsChanged(uids)
                 }
                 .animation(reduceMotion ? nil : .linear(duration: 1.2), value: coordinator.positions)
             }
         }
+        .onDisappear { onDrawnUIDsChanged([]) }
         .accessibilityElement(children: .contain)
     }
 
@@ -56,23 +64,12 @@ struct NearbyLiveOverlay: View {
 
     private func markerChip(_ marker: LiveMarker) -> some View {
         let url = marker.imagePath.flatMap { coordinator.imageURLs[$0] }
-        return ZStack {
-            Circle().fill(KccTheme.driver)
-            if let url {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Image(systemName: "car.side.fill").foregroundStyle(KccTheme.onDriver)
-                }
-            } else {
-                Image(systemName: "car.side.fill").foregroundStyle(KccTheme.onDriver)
-            }
-        }
-        .font(.system(size: 18, weight: .semibold))
-        .frame(width: 40, height: 40)
-        .clipShape(Circle())
-        .overlay(Circle().stroke(KccTheme.driver, lineWidth: 2))
+        return LiveCarPhotoBadge(imageURL: url, badge: clubBadge(marker))
         .shadow(radius: 2, y: 1)
+    }
+
+    private func clubBadge(_ marker: LiveMarker) -> LiveClubBadge? {
+        clubBadges?.badge(for: marker.uid, viewerID: badgeViewerID)
     }
 
     private func spokenName(_ marker: LiveMarker) -> String {
