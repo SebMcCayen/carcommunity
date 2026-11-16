@@ -196,8 +196,8 @@ android {
         applicationId = "com.kungsbackacarcommunity.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 73
-        versionName = "1.1.18"
+        versionCode = 74
+        versionName = "1.1.19"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
