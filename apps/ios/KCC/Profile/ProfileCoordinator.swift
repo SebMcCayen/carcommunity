@@ -51,6 +51,8 @@ final class ProfileCoordinator {
     /// The resolved avatar download URL, nil while unresolved / when the
     /// profile has no avatar / when resolution failed (placeholder renders).
     private(set) var avatarURL: URL?
+    /// Keep the last public affiliation on transient errors, clear on a loaded removal.
+    private(set) var clubBadge: ClubBadge?
     /// The avatarPath ``avatarURL`` was last resolved for, so an unchanged
     /// path across snapshots (every profile update re-emits the whole doc)
     /// never re-pays the download-URL round-trip — the concern Android's
@@ -110,6 +112,7 @@ final class ProfileCoordinator {
                 hasVerifiedOnboarding = true
             }
             state = .loaded(profile)
+            clubBadge = profile?.clubBadge
             resolveAvatarIfNeeded(profile?.avatarPath)
         }
     }

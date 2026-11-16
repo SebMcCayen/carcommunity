@@ -258,6 +258,43 @@ final class ProfileCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.state, .loaded(Self.profile))
     }
 
+    @MainActor
+    func testMapIdentityUpdatesAvatarAndClubThenClearsOnMembershipLoss() async throws {
+        let repository = FakeUserProfileRepository()
+        repository.script([.loaded(Self.profile)])
+        repository.scriptAvatarURL(Self.avatarURL, for: Self.avatarPath)
+        let coordinator = ProfileCoordinator(repository: repository, uid: "uid-1")
+        coordinator.start()
+        await wait { coordinator.state == .loaded(Self.profile) }
+        let badge = try XCTUnwrap(ClubBadge.fromField(["clubId": "club", "clubName": "Östra Klubben"]))
+        let joined = UserProfile(displayName: "Sebbe", bio: nil, avatarPath: Self.avatarPath, clubBadge: badge)
+        repository.emit(.loaded(joined))
+        await wait { coordinator.avatarURL == Self.avatarURL && coordinator.clubBadge == badge }
+
+        repository.emit(.failed(code: "UNAVAILABLE"))
+        await wait { coordinator.state == .failed(code: "UNAVAILABLE") }
+        XCTAssertEqual(coordinator.avatarURL, Self.avatarURL)
+        XCTAssertEqual(coordinator.clubBadge, badge)
+
+        repository.emit(.loaded(Self.profileWithAvatar()))
+        await wait { coordinator.state == .loaded(Self.profileWithAvatar()) }
+        XCTAssertNil(coordinator.clubBadge)
+        XCTAssertEqual(coordinator.avatarURL, Self.avatarURL)
+        XCTAssertEqual(repository.avatarResolveCount, 1)
+        repository.emit(.loaded(nil))
+        await wait { coordinator.state == .loaded(nil) }
+        XCTAssertNil(coordinator.avatarURL)
+        XCTAssertNil(coordinator.clubBadge)
+        XCTAssertEqual(repository.subscribeCount, 1)
+    }
+
+    @MainActor
+    func testNewIdentityCannotInheritMapIdentity() {
+        let coordinator = ProfileCoordinator(repository: nil, uid: "another-member")
+        XCTAssertNil(coordinator.avatarURL)
+        XCTAssertNil(coordinator.clubBadge)
+    }
+
     // MARK: - avatar resolution
 
     @MainActor

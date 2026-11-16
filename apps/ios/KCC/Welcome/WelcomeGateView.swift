@@ -7,6 +7,7 @@ struct WelcomeGateView: View {
     let featureFlags: FeatureFlags
     let diagnostics: IOSDiagnosticsComposition
     let store: WelcomeStoring
+    let profile: ProfileCoordinator?
     @State private var seen: Bool
     @State private var initialRoute: ShellRoute?
 
@@ -16,7 +17,8 @@ struct WelcomeGateView: View {
         access: AccountAccess,
         featureFlags: FeatureFlags,
         diagnostics: IOSDiagnosticsComposition,
-        store: WelcomeStoring = WelcomeStore()
+        store: WelcomeStoring = WelcomeStore(),
+        profile: ProfileCoordinator? = nil
     ) {
         self.uid = uid
         self.session = session
@@ -24,6 +26,7 @@ struct WelcomeGateView: View {
         self.featureFlags = featureFlags
         self.diagnostics = diagnostics
         self.store = store
+        self.profile = profile
         _seen = State(initialValue: store.hasSeenWelcome(uid: uid))
         _initialRoute = State(initialValue: nil)
     }
@@ -36,6 +39,7 @@ struct WelcomeGateView: View {
                 access: access,
                 featureFlags: featureFlags,
                 diagnostics: diagnostics,
+                profile: profile,
                 initialRoute: initialRoute,
                 initialTab: initialTab
             )

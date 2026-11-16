@@ -46,6 +46,61 @@ final class MapReadingDesignTests: XCTestCase {
         XCTAssertGreaterThan(large.height, normal.height)
     }
 
+    func testMapProfileAvatarAndClubLogoRenderInFixedAccessibleControl() throws {
+        let badge = try XCTUnwrap(ClubBadge.fromField(["clubId": "club", "clubName": "Östra Klubben"]))
+        func solid(_ color: UIColor) -> Image {
+            Image(uiImage: UIGraphicsImageRenderer(size: CGSize(width: 60, height: 40)).image { context in
+                color.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 60, height: 40))
+            })
+        }
+        for scheme: ColorScheme in [.light, .dark] {
+            for language in ["sv", "en"] {
+                let content = MapProfileAvatarContent(avatar: solid(.red), clubBadge: badge,
+                    clubLogo: solid(.green), signedIn: true)
+                let size = measure(content, width: 48, size: .accessibility5, language: language)
+                XCTAssertEqual(size.width, 48, accuracy: 0.1)
+                XCTAssertEqual(size.height, 48, accuracy: 0.1)
+                let renderer = ImageRenderer(content: content.padding(4)
+                    .environment(\.colorScheme, scheme)
+                    .environment(\.dynamicTypeSize, .accessibility5)
+                    .environment(\.locale, Locale(identifier: language)))
+                renderer.scale = 1
+                let image = try XCTUnwrap(renderer.uiImage)
+                XCTAssertEqual(image.size, CGSize(width: 56, height: 56))
+                let pixels = try rgba(image)
+                // The wide photo fills the circular face; the logo remains above it at top-left.
+                XCTAssertEqual(pixels[(28 * 56 + 28) * 4], 255)
+                XCTAssertEqual(pixels[(28 * 56 + 28) * 4 + 1], 0)
+                XCTAssertEqual(pixels[(14 * 56 + 14) * 4 + 1], 255)
+                XCTAssertEqual(pixels[(14 * 56 + 14) * 4], 0)
+                let attachment = XCTAttachment(image: image)
+                attachment.name = "Map profile and club logo \(scheme) \(language)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+            }
+        }
+        for badgeValue in [nil, badge] {
+            let content = MapProfileAvatarContent(avatar: nil, clubBadge: badgeValue,
+                                                 clubLogo: nil, signedIn: true)
+            let size = measure(content, width: 48, size: .accessibility5, language: "sv")
+            XCTAssertEqual(size.width, 48, accuracy: 0.1)
+            XCTAssertEqual(size.height, 48, accuracy: 0.1)
+        }
+    }
+
+    private func rgba(_ image: UIImage) throws -> [UInt8] {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        var bytes = [UInt8](repeating: 0, count: cgImage.width * cgImage.height * 4)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: cgImage.width,
+                height: cgImage.height, bitsPerComponent: 8, bytesPerRow: cgImage.width * 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: CGFloat(cgImage.width), height: CGFloat(cgImage.height)))
+        }
+        return bytes
+    }
+
     private func measure<Content: View>(
         _ content: Content, width: CGFloat, size: DynamicTypeSize, language: String
     ) -> CGSize {
