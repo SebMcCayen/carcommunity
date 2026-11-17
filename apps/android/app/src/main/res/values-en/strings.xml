@@ -2124,6 +2124,11 @@
     <string name="whatsNew_release015Build16Highlight">Improved camera views on the map and more compact convoy controls.</string>
     <string name="whatsNew_release015Build16Cameras">Camera groups adapt to map zoom. Opposite-facing speed cameras can appear together, and the selected camera is preserved when grouping changes.</string>
     <string name="whatsNew_release015Build16Convoy">Less space between convoy reaction buttons and the other map controls.</string>
+    <string name="whatsNew_release016Build17Highlight">Clearer profiles, clubs and controls on the map.</string>
+    <string name="whatsNew_release016Build17Profile">Your profile photo and club logo now appear in the map profile menu and update when your profile changes.</string>
+    <string name="whatsNew_release016Build17Clubs">Club logos appear on live drivers and convoy edge indicators when club information is available.</string>
+    <string name="whatsNew_release016Build17Compass">The compass button shows whether the map follows north or your direction of travel.</string>
+    <string name="whatsNew_release016Build17Wave">The wave button sits below the map tools so they stay in place when it appears.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

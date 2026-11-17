@@ -2274,7 +2274,12 @@
     "release014Build15Driver": "The Driver tab has a shorter name and posts display the correct author avatars.",
     "release015Build16Highlight": "Improved camera views on the map and more compact convoy controls.",
     "release015Build16Cameras": "Camera groups adapt to map zoom. Opposite-facing speed cameras can appear together, and the selected camera is preserved when grouping changes.",
-    "release015Build16Convoy": "Less space between convoy reaction buttons and the other map controls."
+    "release015Build16Convoy": "Less space between convoy reaction buttons and the other map controls.",
+    "release016Build17Highlight": "Clearer profiles, clubs and controls on the map.",
+    "release016Build17Profile": "Your profile photo and club logo now appear in the map profile menu and update when your profile changes.",
+    "release016Build17Clubs": "Club logos appear on live drivers and convoy edge indicators when club information is available.",
+    "release016Build17Compass": "The compass button shows whether the map follows north or your direction of travel.",
+    "release016Build17Wave": "The wave button sits below the map tools so they stay in place when it appears."
   },
   "driver": {
     "feed": {
