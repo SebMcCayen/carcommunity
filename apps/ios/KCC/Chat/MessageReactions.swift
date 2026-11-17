@@ -128,6 +128,7 @@ final class MessageReactionStore {
     private var authHandle: AuthStateDidChangeListenerHandle?
     private var refresh: Task<Void, Never>?
     private var pending: (id: String, emoji: String?, version: Int, operation: String)?
+    private var pendingPresentation: (id: String, counts: [String: Int], choice: MessageReactionChoice)?
     private var recorded: Set<String> = []
     init(room: MessageReactionRoom, uid: String, sessionIsCurrent: (() -> Bool)? = nil,
          readOverride: (([String]) async throws -> [String: MessageReactionChoice])? = nil,
@@ -177,7 +178,7 @@ final class MessageReactionStore {
         enabled = false; dismiss(); own = [:]; revisions = [:]
         sourceCounts = sourceCounts.filter { visible[$0.key] != nil }
         sourceRevisions = sourceRevisions.filter { sourceCounts[$0.key] != nil }
-        visible = sourceCounts; confirmedCounts = [:]; busy = false; pending = nil
+        visible = sourceCounts; confirmedCounts = [:]; busy = false; pending = nil; pendingPresentation = nil
         history.forget(room)
     }
     func dismiss() { selectedID = nil; picker = false; failed = false }
@@ -188,8 +189,9 @@ final class MessageReactionStore {
         sourceCounts[id] = counts
         if changed { nextSourceRevision += 1; sourceRevisions[id] = nextSourceRevision }
         // Listener echoes must not erase an in-flight optimistic reaction.
-        if busy, pending?.id == id {
-            if visible[id] == nil { visible[id] = counts }
+        if busy, let presentation = pendingPresentation, presentation.id == id {
+            visible[id] = presentation.counts
+            own[id] = presentation.choice
             return
         }
         if let confirmed = confirmedCounts[id], !changed, counts != confirmed { return }
@@ -269,14 +271,17 @@ final class MessageReactionStore {
             optimistic[previous] = count > 0 ? count : nil
         }
         if let desired { optimistic[desired] = (optimistic[desired] ?? 0) + 1 }
+        let optimisticChoice = MessageReactionChoice(emojiID: desired, version: before.version)
+        pendingPresentation = (id, optimistic, optimisticChoice)
         visible[id] = optimistic
-        own[id] = MessageReactionChoice(emojiID: desired, version: before.version)
+        own[id] = optimisticChoice
         dismiss()
         Task {
             guard generation == epoch, current else { return }
             defer {
                 if generation == epoch {
                     if visible[id] == nil { sourceCounts[id] = nil; sourceRevisions[id] = nil; revisions[id] = nil }
+                    pendingPresentation = nil
                     busy = false; request()
                 }
             }

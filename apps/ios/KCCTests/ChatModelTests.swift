@@ -571,20 +571,33 @@ final class MessageReactionOptimisticTests: XCTestCase {
         XCTAssertEqual(subject.own["m"]?.emojiID, "2764-fe0f")
         subject.stop(); subject.history.clear()
     }
-    func testUnmountedRowCanRegisterWhileMutationIsPending() async {
-        let remote = Remote()
-        let subject = makeStore(remote)
-        subject.register("m", counts: [:])
-        subject.own["m"] = MessageReactionChoice(emojiID: nil, version: 1)
-        subject.select("m"); subject.choose("1f44d")
-        subject.unregister("m"); subject.register("m", counts: [:])
-        await waitUntil { remote.mutation != nil }
-        remote.resolve("1f44d", counts: ["1f44d": 1])
-        await waitUntil { !subject.busy }
-        subject.select("m")
-        XCTAssertEqual(subject.selectedID, "m")
-        XCTAssertEqual(subject.displayedCounts("m", fallback: [:]), ["1f44d": 1])
-        subject.stop(); subject.history.clear()
+    func testRemountedRowPreservesPendingAddChangeAndRemovalBeforeResponse() async {
+        let cases: [(String?, String?, [String: Int], [String: Int])] = [
+            (nil, "1f44d", [:], ["1f44d": 1]),
+            ("1f44d", "2764-fe0f", ["1f44d": 2], ["1f44d": 1, "2764-fe0f": 1]),
+            ("1f44d", "1f44d", ["1f44d": 1], [:])
+        ]
+        for (before, tapped, initial, expected) in cases {
+            let remote = Remote()
+            let subject = makeStore(remote)
+            subject.register("m", counts: initial)
+            subject.own["m"] = MessageReactionChoice(emojiID: before, version: 1)
+            subject.select("m"); subject.picker = true; subject.choose(tapped)
+            subject.unregister("m"); subject.register("m", counts: initial)
+            XCTAssertEqual(subject.displayedCounts("m", fallback: initial), expected)
+            XCTAssertNotNil(subject.own["m"])
+            XCTAssertEqual(subject.own["m"]?.emojiID, before == tapped ? nil : tapped)
+            XCTAssertNil(subject.selectedID)
+            XCTAssertFalse(subject.picker)
+            XCTAssertTrue(subject.busy)
+            await waitUntil { remote.mutation != nil }
+            remote.resolve(before == tapped ? nil : tapped, counts: expected)
+            await waitUntil { !subject.busy }
+            subject.select("m")
+            XCTAssertEqual(subject.selectedID, "m")
+            XCTAssertEqual(subject.displayedCounts("m", fallback: initial), expected)
+            subject.stop(); subject.history.clear()
+        }
     }
     func testStoppedSessionIgnoresLateMutationResponse() async {
         let remote = Remote()
