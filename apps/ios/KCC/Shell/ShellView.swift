@@ -919,6 +919,7 @@ struct ShellView: View {
             }
         }
 
+        .environment(\.mapPresentationActive, mapSurface.isActive && mapHomeChromeVisible)
         .task(id: liveClubBadgeRosterKey) {
             liveClubBadges.setRoster(
                 viewerID: liveClubBadgeViewerID,

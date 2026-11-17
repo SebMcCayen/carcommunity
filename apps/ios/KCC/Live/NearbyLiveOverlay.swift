@@ -253,22 +253,23 @@ struct LiveDriverMapOverlay: View {
                     // This child only draws offscreen arrows. Photo Buttons
                     // below own selection; empty map space belongs to Mapbox.
                     .allowsHitTesting(false)
-                Canvas { context, _ in
-                    for item in plan.placed {
-                        for segment in item.lines {
-                            var path = Path()
-                            path.move(to: CGPoint(x: segment.start.x, y: segment.start.y))
-                            path.addLine(to: CGPoint(x: segment.end.x, y: segment.end.y))
-                            context.stroke(path, with: .color(KccTheme.text), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                        }
-                        if item.showAnchor {
-                            let rect = CGRect(x: item.anchor.x - 3, y: item.anchor.y - 3, width: 6, height: 6)
-                            context.fill(Path(ellipseIn: rect), with: .color(KccTheme.driver))
-                            context.stroke(Path(ellipseIn: rect), with: .color(KccTheme.text), lineWidth: 1)
-                        }
-                    }
-                }.allowsHitTesting(false).accessibilityHidden(true)
-                ForEach(plan.placed) { item in
+                MapPresenceLayer(items: Dictionary(uniqueKeysWithValues: plan.placed.map { ($0.uid, $0) }),
+                    allowed: Set(originals.keys), placements: Dictionary(uniqueKeysWithValues: plan.placed.map { ($0.uid, $0.slot) })) { presence in
+                    let item = presence.value
+                    ZStack {
+                        Canvas { context, _ in
+                            for segment in item.lines {
+                                var path = Path()
+                                path.move(to: CGPoint(x: segment.start.x, y: segment.start.y))
+                                path.addLine(to: CGPoint(x: segment.end.x, y: segment.end.y))
+                                context.stroke(path, with: .color(KccTheme.text), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                            }
+                            if item.showAnchor {
+                                let rect = CGRect(x: item.anchor.x - 3, y: item.anchor.y - 3, width: 6, height: 6)
+                                context.fill(Path(ellipseIn: rect), with: .color(KccTheme.driver))
+                                context.stroke(Path(ellipseIn: rect), with: .color(KccTheme.text), lineWidth: 1)
+                            }
+                        }.allowsHitTesting(false).accessibilityHidden(true)
                     if let member = originals[item.uid] {
                         Button { onSelect(item.uid, convoyUIDs.contains(item.uid)) } label: {
                             LiveCarPhotoBadge(imageURL: member.imagePath.flatMap {
@@ -283,6 +284,7 @@ struct LiveDriverMapOverlay: View {
                         .position(x: item.photo.x, y: item.photo.y)
                     }
                 }
+                    }
             }
             .onChange(of: [photoUIDs, convoyUIDs, arrowUIDs], initial: true) { _, _ in
                 onConvoyDrawn(photoUIDs.intersection(convoyUIDs).union(arrowUIDs).intersection(Set(originals.keys)))

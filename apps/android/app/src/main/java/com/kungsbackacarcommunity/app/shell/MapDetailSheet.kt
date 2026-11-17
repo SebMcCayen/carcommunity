@@ -51,6 +51,15 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import kotlin.math.roundToInt
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,18 +118,47 @@ private fun DockedMapSheetContent(
     closeContentDescription: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    BackHandler(onBack = onDismiss)
+    val opacity = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    var closing by remember { mutableStateOf(false) }
+    var exit by remember { mutableStateOf<Job?>(null) }
+    DisposableEffect(onDismiss) {
+        // A replacement panel must never be closed by the previous panel's task.
+        onDispose { exit?.cancel(); closing = false }
+    }
+    LaunchedEffect(onDismiss) {
+        if (exit != null && !closing) opacity.snapTo(1f)
+    }
+    LaunchedEffect(Unit) {
+        if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            opacity.snapTo(0f); opacity.animateTo(1f, tween(200))
+        }
+    }
+    val dismissWithFade: () -> Unit = {
+        if (!closing) {
+            closing = true
+            exit = scope.launch {
+                if (android.animation.ValueAnimator.areAnimatorsEnabled()) opacity.animateTo(0f, tween(200))
+                onDismiss()
+            }
+        }
+    }
+    BackHandler(onBack = dismissWithFade)
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val threshold = with(LocalDensity.current) { 72.dp.toPx() }
-    BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+    BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().imePadding()
+        .graphicsLayer { alpha = opacity.value }
+        .then(if (!closing) Modifier else Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
+            awaitPointerEventScope { while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() } }
+        })) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f))
-            .pointerInput(onDismiss) { detectTapGestures { onDismiss() } }.clearAndSetSemantics {})
+            .pointerInput(onDismiss) { detectTapGestures { dismissWithFade() } }.clearAndSetSemantics {})
         Surface(
             modifier = modifier.align(Alignment.BottomCenter).widthIn(max = 600.dp).fillMaxWidth()
                 .heightIn(max = maxHeight * 0.88f)
                 .offset { IntOffset(0, dragOffset.roundToInt()) }
                 .pointerInput(Unit) { detectTapGestures {} }
-                .semantics { paneTitle = title; isTraversalGroup = true; dismiss { onDismiss(); true } },
+                .semantics { paneTitle = title; isTraversalGroup = true; dismiss { dismissWithFade(); true } },
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             color = LocalKccMapColors.current.overlay,
             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -131,7 +169,7 @@ private fun DockedMapSheetContent(
                 state = rememberDraggableState { dragOffset = (dragOffset + it).coerceAtLeast(0f) },
                 orientation = Orientation.Vertical,
                 onDragStopped = { velocity ->
-                    if (dragOffset > threshold || velocity > 1600f) onDismiss()
+                    if (dragOffset > threshold || velocity > 1600f) dismissWithFade()
                     dragOffset = 0f
                 },
             )) {
@@ -145,7 +183,7 @@ private fun DockedMapSheetContent(
             ) {
                 leadingContent?.invoke()
                 Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = onDismiss) {
+                IconButton(onClick = dismissWithFade, enabled = !closing) {
                     Icon(Icons.Filled.Close, contentDescription = closeContentDescription)
                 }
             }

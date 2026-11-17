@@ -33,6 +33,7 @@ class CrownAnnotationClickTest {
     @Test
     fun `tapping a crown opens that crown and no navigate prompt`() {
         val surface = MapboxMapSurface()
+        surface.setCrownMarkers(listOf(MapCrownMarker("spawn-42", 12.0, 57.0, 0, 1, 0, null)))
         surface.crownIdsByAnnotation["annotation-1"] = "spawn-42"
 
         dispatchTap(surface, "annotation-1")
@@ -68,7 +69,9 @@ class CrownAnnotationClickTest {
         val surface = MapboxMapSurface()
         // Same annotation id in both managers: entirely possible, because each
         // manager numbers its own annotations.
+        surface.setCrownMarkers(listOf(MapCrownMarker("spawn-42", 12.0, 57.0, 0, 1, 0, null)))
         surface.crownIdsByAnnotation["1"] = "spawn-42"
+        surface.setIncidentMarkers(listOf(MapIncidentMarker("incident-7", 12.0, 57.0, 0, 1, 0)))
         surface.incidentIdsByAnnotation["1"] = "incident-7"
 
         surface.onCrownAnnotationClicked("1")
@@ -85,6 +88,7 @@ class CrownAnnotationClickTest {
     @Test
     fun `consuming a crown tap lets the same crown be tapped again`() {
         val surface = MapboxMapSurface()
+        surface.setCrownMarkers(listOf(MapCrownMarker("spawn-1", 12.0, 57.0, 0, 1, 0, null)))
         surface.crownIdsByAnnotation["a"] = "spawn-1"
 
         surface.onCrownAnnotationClicked("a")

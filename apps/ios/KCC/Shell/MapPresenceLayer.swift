@@ -1,5 +1,13 @@
 import SwiftUI
 
+private struct MapPresentationActiveKey: EnvironmentKey { static let defaultValue = true }
+extension EnvironmentValues {
+    var mapPresentationActive: Bool {
+        get { self[MapPresentationActiveKey.self] }
+        set { self[MapPresentationActiveKey.self] = newValue }
+    }
+}
+
 struct MapPresentItem<Value> {
     let id: String
     let value: Value
@@ -69,10 +77,11 @@ struct MapPresenceLayer<Value: Equatable, Content: View>: View {
     var retainRemovedPublicItems = false
     @ViewBuilder let content: (MapPresentItem<Value>) -> Content
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.mapPresentationActive) private var mapActive
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentation = MapPresencePresentation<Value>()
 
-    private var enabled: Bool { active && scenePhase == .active }
+    private var enabled: Bool { active && mapActive && scenePhase == .active }
     private var permitted: Set<String> { allowed ?? Set(items.keys) }
     var body: some View {
         ZStack {

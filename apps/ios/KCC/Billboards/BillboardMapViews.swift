@@ -8,7 +8,9 @@ struct BillboardMapOverlay: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-                ForEach(coordinator.markers, id: \.id) { marker in
+                MapPresenceLayer(items: Dictionary(uniqueKeysWithValues: coordinator.markers.map { ($0.id, $0) }),
+                    retainRemovedPublicItems: true) { present in
+                    let marker = present.value
                     if let point = projection.screenPositionFor(
                         latitude: marker.latitude,
                         longitude: marker.longitude

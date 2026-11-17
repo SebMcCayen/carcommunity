@@ -21,6 +21,13 @@ struct MapDensityOverlay: View {
     @State private var bucket = 14
     @State private var groups: [MapDensityGroup] = []
 
+    private struct Visual: Equatable {
+        let group: MapDensityGroup
+        let entry: MapDensityContentItem
+        let projected: MapScreenPoint
+        let position: MapDensityScreenPoint
+        let slot: Int
+    }
     private struct Input: Equatable { let items: [MapDensityItem]; let bucket: Int }
 
     var body: some View {
@@ -29,15 +36,12 @@ struct MapDensityOverlay: View {
                 let entries = entries(at: timeline.date)
                 let lookup = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
                 let input = Input(items: entries.map(\.item), bucket: bucket)
-                ZStack {
-                    ForEach(groups) { group in
-                        if let entry = lookup[group.anchor.id],
-                           let projected = surface.screenPositionFor(latitude: group.anchor.latitude, longitude: group.anchor.longitude),
-                           projected.trustworthy,
-                           projected.x >= -48, projected.y >= -48,
-                           projected.x <= Double(geometry.size.width + 48), projected.y <= Double(geometry.size.height + 48) {
-                            marker(group, entry: entry, lookup: lookup, projected: projected, size: geometry.size)
-                        }
+                let visuals = visuals(lookup: lookup, size: geometry.size)
+                MapPresenceLayer(items: visuals, placements: visuals.mapValues(\.slot), retainRemovedPublicItems: true) { present in
+                    let value = present.value
+                    ZStack {
+                        marker(value.group, entry: value.entry, lookup: lookup, projected: value.projected,
+                            position: value.position)
                     }
                 }
                 .onChange(of: input, initial: true) { _, value in
@@ -50,14 +54,29 @@ struct MapDensityOverlay: View {
         }
     }
 
-    @ViewBuilder private func marker(_ group: MapDensityGroup, entry: MapDensityContentItem,
-        lookup: [String: MapDensityContentItem], projected: MapScreenPoint, size: CGSize) -> some View {
-        let anchor = MapDensityScreenPoint(x: projected.x, y: projected.y)
+    private func visuals(lookup: [String: MapDensityContentItem], size: CGSize) -> [String: Visual] {
         let own = surface.renderedOwnPoint.flatMap {
             surface.screenPositionFor(latitude: $0.latitude, longitude: $0.longitude)
         }.flatMap { $0.trustworthy ? MapDensityScreenPoint(x: $0.x, y: $0.y) : nil }
-        let position = group.count > 1 ? MapDensityPolicy.badgePosition(anchor: anchor, own: own,
-            width: Double(size.width), height: Double(size.height)) : anchor
+        return Dictionary(uniqueKeysWithValues: groups.compactMap { group in
+            guard let entry = lookup[group.anchor.id],
+                let projected = surface.screenPositionFor(latitude: group.anchor.latitude, longitude: group.anchor.longitude),
+                projected.trustworthy, projected.x >= -48, projected.y >= -48,
+                projected.x <= Double(size.width + 48), projected.y <= Double(size.height + 48) else { return nil }
+            let anchor = MapDensityScreenPoint(x: projected.x, y: projected.y)
+            let position = group.count > 1 ? MapDensityPolicy.badgePosition(anchor: anchor, own: own,
+                width: Double(size.width), height: Double(size.height)) : anchor
+            let slot: Int
+            if position != anchor, let own {
+                slot = 1 + Int(((atan2(position.y-own.y, position.x-own.x) * 180 / .pi + 360) / 45).rounded()) % 8
+            } else { slot = 0 }
+            return (group.id, Visual(group: group, entry: entry, projected: projected, position: position, slot: slot))
+        })
+    }
+
+    @ViewBuilder private func marker(_ group: MapDensityGroup, entry: MapDensityContentItem,
+        lookup: [String: MapDensityContentItem], projected: MapScreenPoint, position: MapDensityScreenPoint) -> some View {
+        let anchor = MapDensityScreenPoint(x: projected.x, y: projected.y)
         if position != anchor {
             Path { path in
                 path.move(to: CGPoint(x: anchor.x, y: anchor.y))
