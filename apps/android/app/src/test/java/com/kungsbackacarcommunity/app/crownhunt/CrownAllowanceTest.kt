@@ -9,6 +9,16 @@ class CrownAllowanceTest {
     private val payload = mapOf("cap" to 2250, "remaining" to 0, "resetsAt" to "2026-03-29T22:00:00Z")
 
     @Test
+    fun optionalReceiptAmounts_preserveIntegersAndRejectTruncationOrFabrication() {
+        for (value in listOf(0, 7L, 207.0, Int.MAX_VALUE)) {
+            assertEquals((value as Number).toInt(), crownReceiptInteger(value))
+        }
+        for (value in listOf(null, true, "7", -1, 0.5, Double.NaN, Double.POSITIVE_INFINITY, Int.MAX_VALUE.toLong() + 1)) {
+            assertNull(crownReceiptInteger(value))
+        }
+    }
+
+    @Test
     fun parsesServerAllowanceIncludingDstReset() {
         assertEquals(CrownAllowance(2250, 0, Instant.parse("2026-03-29T22:00:00Z")), CrownAllowance.fromWire(payload))
         assertEquals(3000, CrownAllowance.fromWire(payload + ("cap" to 3000))?.cap)

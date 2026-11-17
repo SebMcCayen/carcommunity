@@ -69,13 +69,11 @@ object CrownSpawnMessages {
         when (state) {
             CrownCollectState.Ready -> null
             is CrownCollectState.TooFar -> R.string.crownHunt_spawnMoveCloser
-            CrownCollectState.Moving -> null // The button carries the stop instruction.
+            CrownCollectState.Moving -> null // The readable collection status carries the stop instruction.
             CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPosition
             // WaitingForSignal and Confirming are not refusals: nothing has gone
-            // wrong and the member need only stay put. The BUTTON carries their
-            // line ("waiting for a better GPS signal" / "confirming you're
-            // stopped") via [collectActionLabelRes], so there is no separate
-            // headline to print above the distance — the same choice Ready makes.
+            // wrong and the member need only stay put. CrownCollectStatus carries
+            // their line outside the disabled button via [collectActionLabelRes].
             CrownCollectState.WaitingForSignal -> null
             is CrownCollectState.Confirming -> null
             CrownCollectState.FeatureOff -> R.string.crownHunt_spawnResultFeatureDisabled
@@ -96,7 +94,7 @@ object CrownSpawnMessages {
             CrownCollectState.Ready -> null
             is CrownCollectState.TooFar -> R.string.crownHunt_spawnMoveCloserDetail
             // Folded into the confirming wait (see [refusalTitleRes]): no detail
-            // paragraph, the button carries the "confirming you're stopped" line.
+            // paragraph, the readable status carries the confirming instruction.
             CrownCollectState.Moving -> null
             CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPositionDetail
             // The waiting/confirming line lives on the button, not in a detail
@@ -106,7 +104,7 @@ object CrownSpawnMessages {
             CrownCollectState.FeatureOff -> null
         }
 
-    /** The action names the user's next step, without claiming a moving car has stopped. */
+    /** Short instruction beside Collect, without claiming a moving car has stopped. */
     @StringRes
     fun collectActionLabelRes(state: CrownCollectState, collecting: Boolean): Int =
         when {

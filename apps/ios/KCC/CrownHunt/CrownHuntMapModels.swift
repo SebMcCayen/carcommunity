@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 enum CrownMapTarget: Equatable, Sendable, Identifiable {
     case point(CrownMapPoint)
@@ -90,17 +91,64 @@ struct CrownSpawn: Equatable, Sendable, Identifiable {
     }
 }
 
+enum CrownReceiptMetadata {
+    static func integer(_ raw: Any?) -> Int? {
+        guard let number = raw as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let value = number.doubleValue
+        guard value.isFinite, value >= 0, value <= Double(Int32.max), value.rounded() == value else { return nil }
+        return Int(value)
+    }
+}
+
+/// Optional collection-time snapshot; never used to authorize collection locally.
+struct CrownAllowance: Equatable, Sendable {
+    let cap: Int
+    let remaining: Int
+    let resetsAt: Date
+
+    static func fromWire(_ value: Any?) -> CrownAllowance? {
+        guard let data = value as? [String: Any] else { return nil }
+        guard let cap = CrownReceiptMetadata.integer(data["cap"]), [2250, 3000].contains(cap),
+              let remaining = CrownReceiptMetadata.integer(data["remaining"]), remaining <= cap,
+              let rawReset = data["resetsAt"] as? String else { return nil }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let fractional = parser.date(from: rawReset)
+        parser.formatOptions = [.withInternetDateTime]
+        guard let reset = fractional ?? parser.date(from: rawReset) else { return nil }
+        return CrownAllowance(cap: cap, remaining: remaining, resetsAt: reset)
+    }
+}
+
 struct CrownSpawnClaimOutcome: Equatable, Sendable {
     let result: CrownSpawnClaimResult
     let pointsAwarded: Int?
     let newBalance: Int?
     let rarity: CrownRarity?
+    let allowance: CrownAllowance?
+
+    init(result: CrownSpawnClaimResult, pointsAwarded: Int?, newBalance: Int?, rarity: CrownRarity?, allowance: CrownAllowance? = nil) {
+        self.result = result
+        self.pointsAwarded = pointsAwarded
+        self.newBalance = newBalance
+        self.rarity = rarity
+        self.allowance = allowance
+    }
 }
 
 struct CrownPointClaimOutcome: Equatable, Sendable {
     let result: CrownHuntClaimResult
     let pointsAwarded: Int?
     let newBalance: Int?
+    let allowance: CrownAllowance?
+
+    init(result: CrownHuntClaimResult, pointsAwarded: Int?, newBalance: Int?, allowance: CrownAllowance? = nil) {
+        self.result = result
+        self.pointsAwarded = pointsAwarded
+        self.newBalance = newBalance
+        self.allowance = allowance
+    }
 }
 
 enum CrownMarkerStyle {

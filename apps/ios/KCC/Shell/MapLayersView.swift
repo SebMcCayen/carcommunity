@@ -19,10 +19,11 @@ struct MapCompassButton: View {
         }
         .font(.system(size: 20, weight: .semibold))
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(mode == .northUp
-            ? "shell.compassNorthUp" : "shell.compassCourseUp"))
+        .accessibilityLabel(Text(LocalizedStringKey(mode == .northUp
+            ? "shell.compassSwitchToCourse" : "shell.compassSwitchToNorth")))
         .accessibilityIdentifier("shell.compass")
-        .accessibilityValue(mode.rawValue)
+        .accessibilityValue(Text(LocalizedStringKey(mode == .northUp
+            ? "shell.compassNorthUp" : "shell.compassCourseUp")))
     }
 }
 

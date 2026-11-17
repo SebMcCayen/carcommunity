@@ -98,8 +98,9 @@ final class FirebaseCrownHuntMapRepository: CrownHuntMapRepository, @unchecked S
         }
         return CrownPointClaimOutcome(
             result: result,
-            pointsAwarded: (data["pointsAwarded"] as? NSNumber)?.intValue,
-            newBalance: (data["newBalance"] as? NSNumber)?.intValue
+            pointsAwarded: CrownReceiptMetadata.integer(data["pointsAwarded"]),
+            newBalance: CrownReceiptMetadata.integer(data["newBalance"]),
+            allowance: CrownAllowance.fromWire(data["allowance"])
         )
     }
 
@@ -120,9 +121,10 @@ final class FirebaseCrownHuntMapRepository: CrownHuntMapRepository, @unchecked S
         }
         return CrownSpawnClaimOutcome(
             result: result,
-            pointsAwarded: (data["pointsAwarded"] as? NSNumber)?.intValue,
-            newBalance: (data["newBalance"] as? NSNumber)?.intValue,
-            rarity: CrownRarity.fromWire(data["rarity"] as? String)
+            pointsAwarded: CrownReceiptMetadata.integer(data["pointsAwarded"]),
+            newBalance: CrownReceiptMetadata.integer(data["newBalance"]),
+            rarity: CrownRarity.fromWire(data["rarity"] as? String),
+            allowance: CrownAllowance.fromWire(data["allowance"])
         )
     }
 

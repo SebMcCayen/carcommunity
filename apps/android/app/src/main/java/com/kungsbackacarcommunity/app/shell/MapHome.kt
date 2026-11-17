@@ -1653,6 +1653,7 @@ internal fun CompassCircleControl(
     onModeChange: (MapCompassMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val modeDescription = stringResource(if (compassMode == MapCompassMode.NorthUp) R.string.shell_compassNorthUp else R.string.shell_compassCourseUp)
     CircleControl(
         icon =
             when (compassMode) {
@@ -1662,8 +1663,8 @@ internal fun CompassCircleControl(
         contentDescription =
             stringResource(
                 when (compassMode) {
-                    MapCompassMode.NorthUp -> R.string.shell_compassNorthUp
-                    MapCompassMode.CourseUp -> R.string.shell_compassCourseUp
+                    MapCompassMode.NorthUp -> R.string.shell_compassSwitchToCourse
+                    MapCompassMode.CourseUp -> R.string.shell_compassSwitchToNorth
                 },
             ),
         // A tap flips to the OTHER mode (the pure [MapCompassMode.toggled], so the
@@ -1676,7 +1677,7 @@ internal fun CompassCircleControl(
                 MapCompassMode.NorthUp -> -bearing
                 MapCompassMode.CourseUp -> 0f
             },
-        modifier = modifier,
+        modifier = modifier.semantics { stateDescription = modeDescription },
     )
 }
 

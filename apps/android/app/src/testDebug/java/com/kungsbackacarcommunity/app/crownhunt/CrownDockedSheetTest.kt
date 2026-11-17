@@ -1,5 +1,12 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -65,8 +72,36 @@ class CrownDockedSheetTest {
             }
         }
         compose.onNodeWithText(str(R.string.crownHunt_spawnResultAwardedPoints, 7)).assertDoesNotExist()
-        compose.onNodeWithText(str(R.string.crownHunt_serverConfirmed)).assertDoesNotExist()
+        compose.onNodeWithText(str(R.string.crownHunt_kpValue, 207)).assertDoesNotExist()
         compose.onNodeWithTag(CROWN_POINT_COLLECT_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun waitingInstruction_isReadableOutsideDisabledCollect_andUpdatesWithoutReopening() {
+        val state = mutableStateOf<CrownCollectState>(CrownCollectState.Moving)
+        val status = mutableStateOf<CrownClaimStatus>(CrownClaimStatus.Idle)
+        compose.setContent {
+            KccTheme {
+                CrownSpawnPopup(CrownSpawn("test", 57.0, 12.0, CrownRarity.COMMON, 10, 75.0, null),
+                    state.value, status.value, 10.0, {}, {}, {})
+            }
+        }
+        val action = compose.onNodeWithTag(CROWN_SPAWN_COLLECT_TAG)
+        val instruction = compose.onNodeWithTag(CROWN_SPAWN_STATUS_TAG)
+        action.performScrollTo().assertIsNotEnabled().assert(hasText(str(R.string.crownHunt_spawnCollect)))
+        instruction.assertIsEnabled().assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(hasText(str(R.string.crownHunt_spawnStopFirst)))
+        compose.runOnIdle { state.value = CrownCollectState.Confirming(4) }
+        instruction.assert(hasText(str(R.string.crownHunt_spawnConfirming)))
+        compose.runOnIdle { state.value = CrownCollectState.Confirming(1) }
+        instruction.assert(hasText(str(R.string.crownHunt_spawnConfirming))) // No per-second announcement.
+        compose.runOnIdle { state.value = CrownCollectState.Ready }
+        instruction.assert(hasText(str(R.string.crownHunt_spawnReadyToCollect)))
+        action.assertIsEnabled()
+        compose.runOnIdle { status.value = CrownClaimStatus.Collecting }
+        instruction.assert(hasText(str(R.string.crownHunt_spawnCollecting)))
+        action.assertIsNotEnabled().assert(hasText(str(R.string.crownHunt_spawnCollect)))
     }
 
     @Test
