@@ -560,7 +560,10 @@ fun MapHome(
                 (rect.left - chromeOrigin.x).toDouble(), (rect.top - chromeOrigin.y).toDouble(),
                 (rect.right - chromeOrigin.x).toDouble(), (rect.bottom - chromeOrigin.y).toDouble())
         }
-        CompositionLocalProvider(com.kungsbackacarcommunity.app.live.LocalDriverPhotoExclusions provides driverExclusions) {
+        CompositionLocalProvider(
+            com.kungsbackacarcommunity.app.live.LocalDriverPhotoExclusions provides driverExclusions,
+            LocalMapPresentationActive provides !covered,
+        ) {
             convoyOverlay?.invoke()
             nearbyOverlay?.invoke()
         }

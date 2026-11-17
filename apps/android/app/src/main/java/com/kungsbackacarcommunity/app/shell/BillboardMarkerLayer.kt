@@ -4,6 +4,7 @@ import android.content.Context
 import com.mapbox.geojson.Point
 import com.mapbox.maps.Style
 import com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 
@@ -60,6 +61,8 @@ internal object BillboardMarkerLayer {
         markers: List<MapBillboardMarker>,
         registeredImages: MutableSet<String>,
         idsByAnnotation: MutableMap<String, String>,
+        annotations: MapAnnotationReconciler<MapBillboardMarker, PointAnnotation>,
+        opacityById: Map<String, Double> = emptyMap(),
     ): Boolean {
         val imageId = BillboardMarkerBitmaps.imageId()
         var complete = true
@@ -81,30 +84,19 @@ internal object BillboardMarkerLayer {
                     runCatching { style.addImage(imageId, bitmap) }.isSuccess
             if (added) registeredImages.add(imageId) else complete = false
         }
-        runCatching { manager.deleteAll() }
+        complete = annotations.reconcile(markers,
+            prepare = { imageId in registeredImages },
+            create = { marker -> manager.create(PointAnnotationOptions()
+                .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                .withIconImage(imageId).withIconOpacity(opacityById[marker.id] ?: 1.0)
+                .withIconAnchor(IconAnchor.BOTTOM)) },
+            update = { annotation, marker ->
+                annotation.point = Point.fromLngLat(marker.longitude, marker.latitude)
+                annotation.iconImage = imageId
+                manager.update(annotation)
+            }, delete = { manager.delete(it) }) && complete
         idsByAnnotation.clear()
-        // Nothing to draw if the image never made it onto the style: the
-        // annotations would reference a name the style does not know and render
-        // as nothing at all.
-        if (imageId !in registeredImages) return false
-        for (marker in markers) {
-            runCatching {
-                val annotation =
-                    manager.create(
-                        PointAnnotationOptions()
-                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                            .withIconImage(imageId)
-                            // BOTTOM, unlike every other layer on this map: this
-                            // marker is a plaque standing on a post, so the
-                            // post's foot is the coordinate. Centring it would
-                            // bury the location under the plaque and throw away
-                            // half of what makes the shape distinguishable from
-                            // the three disc layers (see BillboardMarkerStyle).
-                            .withIconAnchor(IconAnchor.BOTTOM),
-                    )
-                idsByAnnotation[annotation.id] = marker.id
-            }
-        }
+        annotations.forEachAnnotation { id, annotation -> idsByAnnotation[annotation.id] = id }
         return complete
     }
 
