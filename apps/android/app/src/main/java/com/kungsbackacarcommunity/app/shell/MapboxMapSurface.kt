@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
@@ -18,6 +19,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
@@ -269,6 +271,10 @@ class MapboxMapSurface(
     private val followController = CameraFollowController()
     private var followScope: CoroutineScope? = null
     private var idleReturnJob: Job? = null
+    private val cameraResume = MapCameraResumePolicy()
+    private var cameraReturnJob: Job? = null
+    private var cameraReturnGeneration = 0L
+    private var sceneResumed = false
 
     // Camera-manipulation gesture listeners, held so they can be detached in
     // onRelease. Any of pan/zoom/rotate/tilt counts as the user taking over the
@@ -1286,6 +1292,7 @@ class MapboxMapSurface(
         // not rendering is not a defect and the render watchdog must not accrue
         // time (see the watchdog loop in [Content]).
         surfaceActive = active
+        updateCameraVisibility()
         val map = mapViewRef ?: return
         if (active) {
             refreshLocationComponent()
@@ -1302,6 +1309,65 @@ class MapboxMapSurface(
                 }
             }
         }
+    }
+
+    /** One return transition owns the camera; normal puck tracking stays immediate. */
+    private fun updateCameraVisibility() {
+        val visible = surfaceActive && sceneResumed
+        cameraResume.visibilityChanged(visible, followController.shouldTrack(routeOverlayFlow.value != null) && convoyFitPoints == null,
+            lastPoint?.let { MapPoint(it.longitude(), it.latitude()) })
+        if (!visible) {
+            cameraReturnJob?.cancel()
+            cameraReturnJob = null
+            idleReturnJob?.cancel()
+            idleReturnJob = null
+            lastBearing = mapViewRef?.mapboxMap?.cameraState?.bearing ?: 0.0
+            runCatching { mapViewRef?.camera?.cancelAllAnimators() }
+        }
+    }
+
+    private fun returnCameraIfNeeded(point: Point): Boolean {
+        val recorded = recordedBreadcrumbFlow.value?.position
+        val now = SystemClock.elapsedRealtime()
+        val fresh = if (recordedBreadcrumbFlow.value != null) recorded != null && now - recorded.elapsedRealtimeMs in 0L..MapCameraResumePolicy.MAX_FIX_AGE_MS else true
+        val coordinate = MapPoint(point.longitude(), point.latitude())
+        if (!cameraResume.takeReturn(coordinate, fresh)) return cameraResume.pending || cameraReturnJob?.isActive == true
+        val map = mapViewRef ?: return false
+        val scope = followScope ?: return false
+        val firstFix = !centeredOnFirstFix
+        if (firstFix) {
+            // A cold open reveals the location locally, never flies across a world overview.
+            map.mapboxMap.setCamera(cameraOptions { center(point); zoom((browsingZoom - 1).coerceAtLeast(1.0)) })
+            centeredOnFirstFix = true
+        }
+        val start = map.mapboxMap.cameraState
+        val startTime = now
+        val duration = if (ValueAnimator.areAnimatorsEnabled()) MapCameraResumePolicy.RETURN_DURATION_MS else 0L
+        runCatching { map.camera.cancelAllAnimators() }
+        cameraReturnJob?.cancel()
+        val generation = ++cameraReturnGeneration
+        cameraReturnJob = scope.launch {
+            try {
+                do {
+                    if (!surfaceActive || !sceneResumed || convoyFitPoints != null ||
+                        !followController.shouldTrack(routeOverlayFlow.value != null)) break
+                    val fraction = if (duration == 0L) 1.0 else ((SystemClock.elapsedRealtime() - startTime).toDouble() / duration).coerceIn(0.0, 1.0)
+                    val eased = fraction * fraction * (3 - 2 * fraction)
+                    val target = lastPoint ?: point
+                    val longitudeDelta = (target.longitude() - start.center.longitude() + 540) % 360 - 180
+                    map.mapboxMap.setCamera(cameraOptions {
+                        center(Point.fromLngLat(start.center.longitude() + longitudeDelta * eased,
+                            start.center.latitude() + (target.latitude() - start.center.latitude()) * eased))
+                        if (firstFix) { zoom(start.zoom + (browsingZoom - start.zoom) * eased); pitch(start.pitch + (this@MapboxMapSurface.pitch - start.pitch) * eased) }
+                        bearing(MapCameraResumePolicy.bearingBetween(start.bearing,
+                            CompassCamera.followBearing(compassMode, lastBearing), eased))
+                    })
+                    if (fraction >= 1.0) break
+                    withFrameNanos { }
+                } while (isActive)
+            } finally { if (cameraReturnGeneration == generation) cameraReturnJob = null }
+        }
+        return true
     }
 
     override fun recenter() = userRequestedRecenter(resetBearingToNorth = false)
@@ -1347,6 +1413,9 @@ class MapboxMapSurface(
      * bearing differs, and that difference is the single parameter.
      */
     private fun userRequestedRecenter(resetBearingToNorth: Boolean) {
+        if (lastPoint != null) cameraResume.cancel()
+        cameraReturnJob?.cancel()
+        cameraReturnJob = null
         followController.onRecenterRequested()
         idleReturnJob?.cancel()
         idleReturnJob = null
@@ -1473,6 +1542,10 @@ class MapboxMapSurface(
      * (gesture callbacks).
      */
     private fun onUserGestureBegin() {
+        cameraResume.cancel()
+        cameraReturnJob?.cancel()
+        cameraReturnJob = null
+        runCatching { mapViewRef?.camera?.cancelAllAnimators() }
         followController.onGestureBegin()
         idleReturnJob?.cancel()
         idleReturnJob = null
@@ -1552,7 +1625,24 @@ class MapboxMapSurface(
         // the CURRENT owner on every tick rather than the one it captured —
         // otherwise it would gate reporting on a stale, permanently-DESTROYED
         // lifecycle and either suppress every report or mislabel `foreground`.
-        val healthLifecycle by rememberUpdatedState(LocalLifecycleOwner.current)
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val healthLifecycle by rememberUpdatedState(lifecycleOwner)
+        DisposableEffect(lifecycleOwner) {
+            sceneResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            updateCameraVisibility()
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME || event == Lifecycle.Event.ON_PAUSE) {
+                    sceneResumed = event == Lifecycle.Event.ON_RESUME
+                    updateCameraVisibility()
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                sceneResumed = false
+                updateCameraVisibility()
+            }
+        }
         DisposableEffect(health) {
             healthReporter = health
             onDispose { healthReporter = null }
@@ -1692,6 +1782,9 @@ class MapboxMapSurface(
                             return@OnIndicatorPositionChangedListener
                         }
                         val map = mapViewRef ?: return@OnIndicatorPositionChangedListener
+                        if (!surfaceActive || !sceneResumed) return@OnIndicatorPositionChangedListener
+                        cameraResume.position(MapPoint(point.longitude(), point.latitude()), SystemClock.elapsedRealtime(), recordedBreadcrumbFlow.value?.position?.speedMps)
+                        if (convoyFitPoints == null && returnCameraIfNeeded(point)) return@OnIndicatorPositionChangedListener
                         // "Keep the whole convoy in view" replaces the follow TARGET,
                         // not the follow MACHINERY: same gate above, same listener,
                         // just a different thing to frame. Own movement still drives
@@ -1781,6 +1874,9 @@ class MapboxMapSurface(
                     // native state, so a re-fired bearing callback stacked on top of
                     // one already running is dropped (see [guardIndicator]).
                     guardIndicator {
+                        if (!surfaceActive || !sceneResumed || !cameraResume.acceptsCourse(SystemClock.elapsedRealtime())) {
+                            return@OnIndicatorBearingChangedListener
+                        }
                         lastBearing = heading
                         // First real heading of this map: give the dot its arrow.
                         //
@@ -1805,7 +1901,7 @@ class MapboxMapSurface(
                         // A convoy fit deliberately keeps the user's current bearing
                         // while framing the group (see applyConvoyFit), so don't spin
                         // the map out from under it here.
-                        if (convoyFitPoints != null) return@OnIndicatorBearingChangedListener
+                        if (convoyFitPoints != null || cameraResume.pending || cameraReturnJob?.isActive == true) return@OnIndicatorBearingChangedListener
                         val map = mapViewRef ?: return@OnIndicatorBearingChangedListener
                         // Rotate in place: only the bearing is set, so centre/zoom/
                         // pitch stay exactly as the position listener maintains them.
@@ -2387,6 +2483,9 @@ class MapboxMapSurface(
                 // not rotate to an old bearing before its first fresh fix. The
                 // compass MODE itself is a preference and deliberately kept across
                 // the recreate — the fresh map's listeners re-apply it.
+                cameraResume.cancel()
+                cameraReturnJob?.cancel()
+                cameraReturnJob = null
                 lastBearing = 0.0
                 // …and with the heading goes the arrow that visualised it: a
                 // recreated map shows the plain dot again until its own first

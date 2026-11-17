@@ -85,6 +85,32 @@ struct MapHomeCameraTarget: Equatable {
 /// Pixel projection remains observable on MapSurface for accurate marker motion.
 @MainActor
 final class MapHomeCameraRuntime {
+    private(set) var cameraReturnToken: UUID?
+    private var cameraReturnTask: Task<Void, Never>?
+    var cameraReturnActive: Bool { cameraReturnToken != nil }
+
+    func beginCameraReturn() -> UUID {
+        cancelCameraReturn()
+        let token = UUID()
+        cameraReturnToken = token
+        return token
+    }
+
+    func retainCameraReturn(_ task: Task<Void, Never>) { cameraReturnTask = task }
+
+    func finishCameraReturn(_ token: UUID) -> Bool {
+        guard cameraReturnToken == token else { return false }
+        cameraReturnToken = nil
+        cameraReturnTask = nil
+        return true
+    }
+
+    func cancelCameraReturn() {
+        cameraReturnTask?.cancel()
+        cameraReturnTask = nil
+        cameraReturnToken = nil
+    }
+
     private(set) var canonicalTarget: MapHomeCameraTarget?
     private var programmaticTokens: Set<UUID> = []
     private var programmaticTasks: [UUID: Task<Void, Never>] = [:]
@@ -157,6 +183,7 @@ final class MapHomeCameraRuntime {
     }
 
     func cancelAll() {
+        cancelCameraReturn()
         cancelIdleReturn()
         for task in programmaticTasks.values { task.cancel() }
         programmaticTasks.removeAll()
@@ -594,6 +621,7 @@ struct MapHomeView: View {
 @MainActor
 private struct MapboxStandardMap: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onLoaded: @MainActor () -> Void
     let onFullFrameRendered: @MainActor () -> Void
     let onLoadingError: @MainActor (FeatureHealthKind) -> Void
@@ -617,6 +645,8 @@ private struct MapboxStandardMap: View {
     @State private var cameraRuntime = MapHomeCameraRuntime()
     @State private var rendererAttached = false
     @State private var isVisible = false
+    @State private var cameraResume = MapCameraResumePolicy()
+    @State private var stableCourse: Double?
 
     init(
         accessToken: String,
@@ -775,6 +805,8 @@ private struct MapboxStandardMap: View {
                     // A gesture can interrupt an in-flight programmatic animation.
                     // Always suspend now; idle return waits for its token to clear.
                     startupCamera.cancel()
+                    cameraResume.cancel()
+                    cameraRuntime.cancelCameraReturn()
                     if !meFollowEnabled { compassFollowRequested = false }
                     cameraRuntime.setTarget(nil)
                     guard meFollowEnabled else { return }
@@ -812,10 +844,12 @@ private struct MapboxStandardMap: View {
             .onChange(of: surface.compassMode) { _, _ in
                 guard surfaceActive else { return }
                 startupCamera.cancel()
+                cameraResume.cancel()
+                cameraRuntime.cancelCameraReturn()
                 compassFollowRequested = true
                 cameraRuntime.setTarget(nil)
                 surface.suspendConvoyFitForInteraction()
-                meFollowSuspended = true
+                meFollowSuspended = false
                 cameraRuntime.cancelIdleReturn()
                 applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
             }
@@ -825,18 +859,21 @@ private struct MapboxStandardMap: View {
             .ignoresSafeArea(edges: .top)
         }
         .task(id: MapHomeMeFollowPolicy.subscriptionKey(
-            surfaceActive: surfaceActive,
-            enabled: meFollowEnabled,
+            surfaceActive: surfaceActive && scenePhase == .active,
+            enabled: meFollowEnabled || compassFollowRequested,
             authorization: locationAuthorization,
             locationProvider: locationProvider
         )) {
             guard MapHomeMeFollowPolicy.shouldConsumeFixes(
-                surfaceActive: surfaceActive,
-                followEnabled: meFollowEnabled,
+                surfaceActive: surfaceActive && scenePhase == .active,
+                followEnabled: meFollowEnabled || compassFollowRequested,
                 authorization: locationAuthorization
             ) else { return }
             for await fix in locationProvider.fixes() {
                 if Task.isCancelled { return }
+                guard MapCameraResumePolicy.isFresh(fixAt: fix.timestamp, now: Date()) else { continue }
+                if consumeCameraReturnFix(fix) { continue }
+                cameraResume.recordFix(at: fix.timestamp)
                 let update = MapHomeMeFollowPolicy.ingestFix(
                     fix,
                     followEnabled: meFollowEnabled,
@@ -856,6 +893,8 @@ private struct MapboxStandardMap: View {
                 startOwnLocationIfNeeded()
                 if !authorization.isAuthorized, compassFollowRequested {
                     startupCamera.cancel()
+                    cameraResume.cancel()
+                    cameraRuntime.cancelCameraReturn()
                     compassFollowRequested = false
                     // Stop the explicit follow viewport when consent is lost.
                     performProgrammaticViewportChange { viewport = .idle }
@@ -943,6 +982,8 @@ private struct MapboxStandardMap: View {
                 }
                 if enabled {
                     startupCamera.cancel()
+                    cameraResume.cancel()
+                    cameraRuntime.cancelCameraReturn()
                     compassFollowRequested = false
                 }
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
@@ -1017,6 +1058,8 @@ private struct MapboxStandardMap: View {
             center: { point in
                 let wasWaitingForInitialLocation = startupCamera.pending
                 startupCamera.cancel()
+                cameraResume.cancel()
+                cameraRuntime.cancelCameraReturn()
                 compassFollowRequested = false
                 if meFollowEnabled.wrappedValue {
                     meFollowSuspended.wrappedValue = true
@@ -1047,7 +1090,7 @@ private struct MapboxStandardMap: View {
                 // Keep the neutral overview pending consent, and keep native
                 // puck ownership after style reloads instead of replacing it
                 // with a fixed camera at the renderer's preceding coordinate.
-                if startupCamera.pending { return }
+                if startupCamera.pending || cameraResume.pending || cameraRuntime.cameraReturnActive { return }
                 if startupCamera.following {
                     if isVisible, surfaceActive, scenePhase == .active,
                        locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
@@ -1083,17 +1126,22 @@ private struct MapboxStandardMap: View {
     }
 
     private func updateOwnLocationForVisibility() {
-        guard surfaceActive, scenePhase == .active, isVisible, mapReady else {
-            cameraRuntime.cancelIdleReturn()
-            if compassFollowRequested {
-                performProgrammaticViewportChange { viewport = .idle }
-            }
+        let visible = surfaceActive && scenePhase == .active && isVisible && mapReady
+        let following = (compassFollowRequested || meFollowEnabled) && !meFollowSuspended &&
+            !surface.convoyFocusEnabled && surface.routeOverlay == nil
+        cameraResume.visibilityChanged(visible: visible, following: following)
+        guard visible else {
+            stableCourse = surface.cameraSnapshot?.bearing
+            if compassFollowRequested { performProgrammaticViewportChange { viewport = .idle } }
+            cameraRuntime.cancelAll()
             return
         }
-        if compassFollowRequested, locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
-            applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
-        } else {
-            startOwnLocationIfNeeded()
+        if !cameraResume.pending {
+            if compassFollowRequested, locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
+                applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
+            } else {
+                startOwnLocationIfNeeded()
+            }
         }
         // A covered/inactive scene cancels its timer. A selected destination
         // has already released startup/compass ownership, so it needs a new
@@ -1108,10 +1156,54 @@ private struct MapboxStandardMap: View {
                 active: isVisible && surfaceActive && scenePhase == .active,
                 rendererReady: mapReady
               ) else { return }
-        // Use the SDK's existing local puck-follow path. This neither starts
-        // live sharing nor adds another app location stream/permission prompt.
+        // Wait for one current fix before arming follow. No cached native course
+        // is allowed to spin the camera while location is being reacquired.
         compassFollowRequested = true
-        applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
+        cameraResume.requestReturn()
+    }
+
+    /// The return is a one-shot camera owner. Subsequent fixes update its latest
+    /// target/heading, but never restart its duration or delay ordinary driving.
+    private func consumeCameraReturnFix(_ fix: LocationFix) -> Bool {
+        guard compassFollowRequested, !meFollowSuspended, !surface.convoyFocusEnabled,
+              surface.routeOverlay == nil, surfaceActive, scenePhase == .active else { return false }
+        let previousCourse = stableCourse ?? surface.cameraSnapshot?.bearing ?? 0
+        stableCourse = MapCameraResumePolicy.course(
+            heading: fix.headingDegrees, speed: fix.speedMetersPerSecond,
+            speedAccuracy: fix.speedAccuracyMetersPerSecond, holding: previousCourse)
+        latestOwnPoint = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+        let shouldReturn = cameraResume.takeReturn(fixAt: fix.timestamp, now: Date())
+        cameraResume.recordFix(at: fix.timestamp)
+        if shouldReturn {
+            let token = cameraRuntime.beginCameraReturn()
+            let snapshot = surface.cameraSnapshot
+            let duration = reduceMotion ? 0 : MapCameraResumePolicy.duration
+            let targetBearing = surface.compassMode == .northUp ? 0 : (stableCourse ?? previousCourse)
+            // A neutral world overview is not a place to fly from on first launch.
+            if snapshot == nil || (snapshot?.zoom ?? 0) < 3 {
+                viewport = .camera(center: .init(latitude: fix.latitude, longitude: fix.longitude),
+                    zoom: max(1, surface.browsingZoom - 1), bearing: targetBearing, pitch: 0)
+            }
+            applyCameraTarget(MapHomeCameraTarget(latitude: fix.latitude, longitude: fix.longitude,
+                zoom: snapshot.map { $0.zoom >= 3 ? $0.zoom : surface.browsingZoom } ?? surface.browsingZoom,
+                bearing: MapCameraResumePolicy.shortestBearing(from: snapshot?.bearing ?? targetBearing, to: targetBearing),
+                pitch: surface.is3D ? 45 : 0), duration: duration, viewport: $viewport)
+            let task = Task { @MainActor in
+                if duration > 0 { do { try await Task.sleep(for: .seconds(duration)) } catch { return } }
+                guard !Task.isCancelled, cameraRuntime.finishCameraReturn(token),
+                      isVisible, surfaceActive, scenePhase == .active, compassFollowRequested,
+                      !meFollowSuspended, !surface.convoyFocusEnabled, surface.routeOverlay == nil else { return }
+                // Handoff without starting another animated return.
+                setCompassFollow(viewport: $viewport, snapshot: surface.cameraSnapshot)
+            }
+            cameraRuntime.retainCameraReturn(task)
+            return true
+        }
+        if cameraResume.pending || cameraRuntime.cameraReturnActive { return true }
+        if stableCourse != previousCourse {
+            setCompassFollow(viewport: $viewport, snapshot: surface.cameraSnapshot)
+        }
+        return true
     }
 
     private func applyCameraTarget(
@@ -1121,7 +1213,7 @@ private struct MapboxStandardMap: View {
     ) {
         cameraRuntime.setTarget(target)
         performProgrammaticViewportChange {
-            withViewportAnimation(.easeInOut(duration: duration)) {
+            withViewportAnimation(.easeInOut(duration: reduceMotion ? 0 : duration)) {
                 viewport.wrappedValue = .camera(
                     center: CLLocationCoordinate2D(
                         latitude: target.latitude,
@@ -1208,20 +1300,16 @@ private struct MapboxStandardMap: View {
     }
 
     /// The same retained Mapbox viewport owns this user-requested transition.
-    /// No permission request, extra location subscription, or live sharing is
-    /// started by toggling orientation. Without consent only north is reset.
+    /// Uses the visible map's shared fix demand; never requests permission or
+    /// starts live sharing. Without consent only north is reset.
     private func applyCompassViewport(
         viewport: Binding<Viewport>,
         snapshot: MapCameraSnapshot?
     ) {
         if locationAuthorization.isAuthorized {
             performProgrammaticViewportChange {
-                withViewportAnimation(.easeInOut(duration: 0.5)) {
-                    viewport.wrappedValue = .followPuck(
-                        zoom: CGFloat(surface.browsingZoom),
-                        bearing: surface.compassMode == .northUp ? .constant(0) : .course,
-                        pitch: surface.is3D ? 45 : 0
-                    )
+                withViewportAnimation(.easeInOut(duration: reduceMotion ? 0 : 0.5)) {
+                    setCompassFollow(viewport: viewport, snapshot: snapshot)
                 }
             }
         } else if let snapshot {
@@ -1237,6 +1325,14 @@ private struct MapboxStandardMap: View {
                 viewport: viewport
             )
         }
+    }
+
+    private func setCompassFollow(viewport: Binding<Viewport>, snapshot: MapCameraSnapshot?) {
+        let heading = surface.compassMode == .northUp ? 0 : (stableCourse ?? snapshot?.bearing ?? 0)
+        viewport.wrappedValue = .followPuck(
+            zoom: CGFloat(snapshot?.zoom ?? surface.browsingZoom),
+            bearing: .constant(heading),
+            pitch: surface.is3D ? 45 : 0)
     }
 
     private func meFollowCamera(
