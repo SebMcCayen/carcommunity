@@ -2989,7 +2989,7 @@ fun AuthenticatedApp(
                         // and one noisy sample can never falsely block a stationary
                         // member.
                         speedMetersPerSecond =
-                            CrownCollectGate.movementSpeedMps(crownCurrentFix, crownPreviousFix),
+                            CrownCollectGate.liveMovementSpeedMps(crownCurrentFix, crownPreviousFix, crownLatestFix),
                         collectRadiusMeters =
                             openCrown?.collectRadiusMeters
                                 ?: CrownSpawnLimits.COLLECT_RADIUS_METERS,

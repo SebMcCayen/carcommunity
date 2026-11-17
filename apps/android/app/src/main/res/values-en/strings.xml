@@ -1252,7 +1252,7 @@
     <string name="crownHunt_rewardLabel">Reward: {points} CP</string>
     <string name="crownHunt_pointCollectHint">Collect this crown when you are standing at its spot.</string>
     <string name="crownHunt_safetyStop">Stop safely before collecting the reward.</string>
-    <string name="crownHunt_safetySlowOnly">Crown Hunt may only be used when you are stationary or moving very slowly.</string>
+    <string name="crownHunt_safetySlowOnly">Collect crowns only after stopping somewhere safe.</string>
     <string name="crownHunt_movingTooFast">You are moving too fast to collect.</string>
     <string name="crownHunt_tooFarAway">You are too far from the location.</string>
     <string name="crownHunt_alreadyClaimed">You have already collected this reward.</string>
@@ -1317,12 +1317,12 @@
     <string name="crownHunt_spawnReadyToCollect">Within reach – you can collect this crown.</string>
     <string name="crownHunt_spawnProximityLabel">Get closer</string>
     <string name="crownHunt_spawnProximityRemaining">%1$s to go</string>
-    <string name="crownHunt_spawnStopFirst">Stop the car first</string>
+    <string name="crownHunt_spawnStopFirst">Stop safely to collect</string>
     <string name="crownHunt_spawnStopFirstDetail">Crowns can only be collected when you are parked. Park somewhere safe, then collect — there is no rush and no timer.</string>
     <string name="crownHunt_spawnNoPosition">Waiting for your position</string>
     <string name="crownHunt_spawnNoPositionDetail">Stay put for a few seconds so we can confirm you are standing still.</string>
-    <string name="crownHunt_spawnConfirming">Confirming you\'re stopped…</string>
-    <string name="crownHunt_spawnConfirmingSeconds">Confirming you\'re stopped… (%1$d s)</string>
+    <string name="crownHunt_spawnConfirming">Stay still a moment…</string>
+    <string name="crownHunt_spawnConfirmingSeconds">Stay still a moment… (%1$d s)</string>
     <string name="crownHunt_spawnWaitingForSignal">Waiting for a better GPS signal…</string>
     <string name="crownHunt_spawnResultAwarded">The crown is yours!</string>
     <string name="crownHunt_spawnResultAwardedPoints">+%1$d CP</string>
@@ -1438,7 +1438,7 @@
     <string name="crownHunt_instrIntroTitle">What is Crown Hunt?</string>
     <string name="crownHunt_instrIntroBody">Crown Hunt is a hunt for crowns that appear on the map around the area. Drive near a crown, stop, and collect it to earn Crown Points (CP), climb the leaderboard and unlock Crown Hunter ranks.</string>
     <string name="crownHunt_instrCollectTitle">How to collect a crown</string>
-    <string name="crownHunt_instrCollectBody">1. Drive near a crown on the map.\n2. Stop or slow right down – you can collect a crown while stationary or moving very slowly. Never drive carelessly to reach one.\n3. Tap the crown, then tap Collect. The app quickly confirms you\'re stopped before the crown is yours – there\'s no timer, so take your time.\nKeep an eye on the map as you drive and you\'ll see crowns appear around you.</string>
+    <string name="crownHunt_instrCollectBody">1. Drive near a crown on the map.\n2. Stop somewhere safe before collecting. Never collect while the car is rolling.\n3. Tap the crown and leave its card open. Collect becomes available after you have stayed still a moment. There is no rush.\nKeep your attention on traffic while driving.</string>
     <string name="crownHunt_instrRaritiesTitle">Crowns come in different rarities</string>
     <string name="crownHunt_instrRaritiesIntro">Crowns come in four rarities. The rarer the crown, the more points it\'s worth.</string>
     <string name="crownHunt_instrRarityCommonBody">The most common of all and worth the fewest points. Several members can each collect the same crown.</string>

@@ -430,7 +430,8 @@ struct CrownCollectFeedback: View {
                 Label("crownHunt.pointCollectRangeHint", systemImage: "figure.walk")
             }
         case .waitingForSignal: Label("crownHunt.spawnWaitingForSignal", systemImage: "location.circle")
-        case .confirming, .moving: Label("crownHunt.spawnConfirming", systemImage: "hand.raised")
+        case .confirming: Label("crownHunt.spawnConfirming", systemImage: "hand.raised")
+        case .moving: Label("crownHunt.spawnStopFirst", systemImage: "hand.raised")
         case .featureOff: Label("crownHunt.spawnResultFeatureDisabled", systemImage: "crown")
         }
     }

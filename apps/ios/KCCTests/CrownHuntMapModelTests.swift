@@ -135,10 +135,10 @@ final class CrownHuntMapModelTests: XCTestCase {
         let spawn = makeSpawn()
         var tracker = CrownFixTracker()
         tracker.record(fix(at: now.addingTimeInterval(-3)))
-        tracker.record(fix(at: now))
+        tracker.record(fix(at: now.addingTimeInterval(-5)))
         XCTAssertNil(tracker.proof(for: spawn, now: now))
 
-        tracker.record(fix(at: now.addingTimeInterval(-5)))
+        tracker.record(fix(at: now))
         let proof = tracker.proof(for: spawn, now: now)
         XCTAssertNotNil(proof)
         XCTAssertGreaterThanOrEqual(
@@ -336,6 +336,50 @@ final class CrownHuntMapModelTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(10))
         }
         XCTFail("Perk state did not update")
+    }
+
+    func testSlowRollingAndNewDepartureCannotUseAnOldParkedProof() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        let previous = fix(at: now.addingTimeInterval(-4))
+        let current = fix(at: now)
+        let proof = CrownFixPair(previous: previous, current: current)
+        let moved = LocationFix.of(latitude: current.latitude + 2 / 111195.0,
+                                   longitude: current.longitude, timestamp: now.addingTimeInterval(2),
+                                   accuracyMeters: 5, speedMetersPerSecond: 1)!
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: current, proof: proof,
+                                                enabled: true, now: now), .ready)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: moved, proof: proof,
+                                                enabled: true, now: moved.timestamp), .moving)
+        var tracker = CrownFixTracker()
+        tracker.record(previous)
+        tracker.record(current)
+        tracker.record(moved)
+        tracker.record(LocationFix.of(latitude: current.latitude + 4 / 111195.0,
+                                      longitude: current.longitude, timestamp: now.addingTimeInterval(4),
+                                      accuracyMeters: 5, speedMetersPerSecond: 1)!)
+        XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(4)))
+    }
+
+    func testOpenCrownGateAdvancesWithoutReselectionAndToleratesStationaryNoise() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        var tracker = CrownFixTracker()
+        tracker.record(fix(at: now))
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: now),
+                                                proof: tracker.proof(for: spawn, now: now),
+                                                enabled: true, now: now), .confirming)
+        tracker.record(LocationFix.of(latitude: spawn.latitude + 0.5 / 111195.0,
+                                      longitude: spawn.longitude, timestamp: now.addingTimeInterval(2),
+                                      accuracyMeters: 5, speedMetersPerSecond: 6)!)
+        tracker.record(fix(at: now.addingTimeInterval(4)))
+        let later = now.addingTimeInterval(4)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: later),
+                                                proof: tracker.proof(for: spawn, now: later),
+                                                enabled: true, now: later), .ready)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: later),
+                                                proof: tracker.proof(for: spawn, now: later),
+                                                enabled: true, now: later.addingTimeInterval(11)), .noPosition)
     }
 
     private func makeSpawn() -> CrownSpawn {

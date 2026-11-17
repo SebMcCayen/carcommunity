@@ -50,9 +50,10 @@ describe('crown-hunt-geo (legacy port + deliberate safety deviations)', () => {
     expect(isPositionFresh('not-a-date', nowMs)).toBe(false);
   });
 
-  it('allows claims only at walking pace; missing speed is safe, invalid is NOT', () => {
-    expect(isSpeedSafe(1.4)).toBe(true);
-    expect(isSpeedSafe(1.5)).toBe(false);
+  it('uses near-stationary tolerance; missing speed is safe, invalid is NOT', () => {
+    expect(isSpeedSafe(0.5)).toBe(true);
+    expect(isSpeedSafe(0.5001)).toBe(false);
+    expect(isSpeedSafe(1.0)).toBe(false);
     expect(isSpeedSafe(null)).toBe(true);
     expect(isSpeedSafe(undefined)).toBe(true);
     // Deliberate deviation from legacy: a negative/non-finite speed is
@@ -110,7 +111,10 @@ describe('crown-hunt-geo (legacy port + deliberate safety deviations)', () => {
         const effective = effectiveGeofenceRadiusMeters(radius, accuracy);
         expect(effective).toBeGreaterThanOrEqual(radius);
         expect(effective).toBeLessThanOrEqual(
-          Math.min(radius + MAX_GEOFENCE_ACCURACY_METERS * 0.5, radius * MAX_EFFECTIVE_GEOFENCE_MULTIPLIER),
+          Math.min(
+            radius + MAX_GEOFENCE_ACCURACY_METERS * 0.5,
+            radius * MAX_EFFECTIVE_GEOFENCE_MULTIPLIER,
+          ),
         );
       }
     }

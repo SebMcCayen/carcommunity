@@ -25,10 +25,10 @@
  * you return to; spawns are opportunities you catch.)
  *
  * STATIONARY, NOT JUST SLOW. `submitClaim` checks one reported speed against
- * 1.4 m/s. That is a single number the client chose. Here a claim must carry
+ * 0.5 m/s. That is a single number the client chose. Here a claim must carry
  * TWO position fixes, and the server checks that both are inside the radius,
- * that they are 4–300 s apart, that both reported speeds are ≤ 2.0 m/s, AND
- * that the speed it DERIVES from the two coordinates itself is ≤ 2.0 m/s. The
+ * that they are 4–12 s apart, that sustained reported motion is ≤ 0.5 m/s, AND
+ * that the speed it DERIVES from the two coordinates itself is ≤ 0.5 m/s. The
  * derived check is the one that cannot be talked out of.
  *
  * A failed stationary check is a PLAIN REFUSAL with its own result code and a
@@ -75,6 +75,7 @@ import { CROWN_HUNT_FLAG_KEY } from './crownhunt-core';
 import {
   CROWN_SPAWN_FLAG_KEY,
   MAX_DAILY_SPAWN_CLAIMS,
+  MAX_SPAWN_POSITION_AGE_SECONDS,
   evaluateStationaryCollection,
   getSpawnClaimMessage,
   parseClaimSpawnInput,
@@ -359,7 +360,11 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
 
   // 6. Freshness of the CURRENT fix (the previous one is allowed to be older —
   // that is the whole point of a dwell window; MAX_DWELL_SECONDS bounds it).
-  const positionStale = !isPositionFresh(input.recordedAt, now.getTime());
+  const positionStale = !isPositionFresh(
+    input.recordedAt,
+    now.getTime(),
+    MAX_SPAWN_POSITION_AGE_SECONDS,
+  );
   if (positionStale) {
     logRejection('position_too_old', { accuracyMeters: input.accuracyMeters ?? null });
     const existing = await recordAttempt(scopedKey, {

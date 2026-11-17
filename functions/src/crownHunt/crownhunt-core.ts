@@ -57,8 +57,8 @@ export const MIN_REWARD_POINTS = 1;
 export const MAX_REWARD_POINTS = 1_000;
 export const MAX_TITLE_LENGTH = 100;
 export const MAX_DESCRIPTION_LENGTH = 500;
-/** Walking pace (~5 km/h): claiming is only allowed when safely stopped. */
-export const MAX_CLAIM_SPEED_MPS = 1.4;
+/** Near-stationary GPS tolerance, shared with automatic crowns (0.5 m/s). */
+export const MAX_CLAIM_SPEED_MPS = 0.5;
 export const MAX_POSITION_AGE_SECONDS = 60;
 /**
  * Largest horizontal GPS accuracy a claim may even REPORT (meters). Real
@@ -174,10 +174,7 @@ const pointFieldsSchema = z.object({
   // stored-field caps.
   latitude: z.number(),
   longitude: z.number(),
-  geofenceRadiusMeters: z
-    .number()
-    .min(MIN_GEOFENCE_RADIUS_METERS)
-    .max(MAX_GEOFENCE_RADIUS_METERS),
+  geofenceRadiusMeters: z.number().min(MIN_GEOFENCE_RADIUS_METERS).max(MAX_GEOFENCE_RADIUS_METERS),
   rewardPoints: z.number().int().min(MIN_REWARD_POINTS).max(MAX_REWARD_POINTS),
   repeatRule: z.enum(CROWN_HUNT_REPEAT_RULES),
   // Distinct-collector cap. null = unlimited (default, best for events); a
@@ -266,7 +263,11 @@ export function parseCreatePointInput(data: unknown): ParseResult<CreatePointInp
 }
 
 export function parseUpdatePointInput(data: unknown): ParseResult<UpdatePointInput> {
-  return parse(updatePointInputSchema, data, 'Expected { pointId } plus updatePointRequest fields.');
+  return parse(
+    updatePointInputSchema,
+    data,
+    'Expected { pointId } plus updatePointRequest fields.',
+  );
 }
 
 export function parseActivatePointInput(data: unknown): ParseResult<ActivatePointInput> {
@@ -289,9 +290,7 @@ export function parseDeletePointInput(data: unknown): ParseResult<DeletePointInp
 // Guards (legacy validatePointFields extras + availability windows)
 // ---------------------------------------------------------------------------
 
-export type GuardResult =
-  | { ok: true }
-  | { ok: false; code: 'invalid-argument'; message: string };
+export type GuardResult = { ok: true } | { ok: false; code: 'invalid-argument'; message: string };
 
 /** Coordinates + availability-window ordering (legacy validatePointFields). */
 export function guardPointFields(fields: {

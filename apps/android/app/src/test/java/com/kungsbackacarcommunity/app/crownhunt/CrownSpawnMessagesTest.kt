@@ -205,49 +205,19 @@ class CrownSpawnMessagesTest {
         assertNotEquals(tooFar, CrownSpawnMessages.refusalTitleRes(CrownCollectState.Moving))
     }
 
-    /**
-     * Fix 2: in range, [CrownCollectState.Moving] (speed still settling to a stop)
-     * folds into the SAME calm confirming presentation as [CrownCollectState.Confirming]
-     * rather than flashing the old blunt "stop the car first". So it carries NO
-     * refusal headline and NO detail — the button alone says "confirming you're
-     * stopped…". The two are one wait seen at two moments; a member must not see a
-     * countdown on one approach to a crown and "stop the car first" on the next.
-     */
     @Test
-    fun movingInRangeFoldsIntoTheConfirmingWaitAndShowsNoStopFirstHeadline() {
-        assertNull(
-            "Moving must no longer show the 'stop the car first' headline",
-            CrownSpawnMessages.refusalTitleRes(CrownCollectState.Moving),
+    fun movingAndConfirmingHaveDifferentActionableLabels() {
+        assertEquals(
+            R.string.crownHunt_spawnStopFirst,
+            CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Moving, collecting = false),
         )
-        assertNull(
-            "Moving must show no refusal detail — the button carries the confirming line",
-            CrownSpawnMessages.refusalDetailRes(CrownCollectState.Moving),
-        )
-    }
-
-    /**
-     * The folded [CrownCollectState.Moving] button reads as the INDETERMINATE
-     * confirming label — the same argument-free "confirming you're stopped…" as
-     * [CrownCollectState.Confirming], never the numeric "(N s)" variant (a settling
-     * speed has no defined seconds-remaining) and never the old "stop the car first".
-     * In-flight still wins: one press is one call.
-     */
-    @Test
-    fun movingCollectButtonReadsAsIndeterminateConfirmingNotStopFirst() {
         assertEquals(
             R.string.crownHunt_spawnConfirming,
-            CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Moving, collecting = false),
-        )
-        // Same experience as the dwell-confirming wait — the whole point of Fix 2.
-        assertEquals(
-            "Moving and Confirming must present the same confirming button label",
             CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Confirming(3), collecting = false),
-            CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Moving, collecting = false),
         )
-        // Not the numeric-seconds resource — Moving is the indeterminate form.
         assertNotEquals(
-            R.string.crownHunt_spawnConfirmingSeconds,
             CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Moving, collecting = false),
+            CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Confirming(3), collecting = false),
         )
         assertEquals(
             R.string.crownHunt_spawnCollecting,
