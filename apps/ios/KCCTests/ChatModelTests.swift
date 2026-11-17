@@ -442,3 +442,163 @@ final class MessageReactionModelTests: XCTestCase {
         first.clear(); second.clear()
     }
 }
+
+
+@MainActor
+final class MessageReactionOptimisticTests: XCTestCase {
+    @MainActor private final class Remote {
+        var mutation: CheckedContinuation<MessageReactionConfirmation, any Error>?
+        var read: CheckedContinuation<[String: MessageReactionChoice], any Error>?
+        var operation: String?
+        func set(_ id: String, emoji: String?, version: Int, operation: String) async throws -> MessageReactionConfirmation {
+            self.operation = operation
+            return try await withCheckedThrowingContinuation { mutation = $0 }
+        }
+        func get(_ ids: [String]) async throws -> [String: MessageReactionChoice] {
+            try await withCheckedThrowingContinuation { read = $0 }
+        }
+        func resolve(_ emoji: String?, counts: [String: Int]) {
+            mutation?.resume(returning: MessageReactionConfirmation(choice: MessageReactionChoice(emojiID: emoji, version: 2), counts: counts))
+            mutation = nil
+        }
+    }
+    private func makeStore(_ remote: Remote) -> MessageReactionStore {
+        let store = MessageReactionStore(room: MessageReactionRoom(scope: "community", roomID: "test"), uid: UUID().uuidString,
+            sessionIsCurrent: { true }, readOverride: { try await remote.get($0) },
+            setOverride: { try await remote.set($0, emoji: $1, version: $2, operation: $3) })
+        store.enabled = true
+        return store
+    }
+    private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
+        for _ in 0..<500 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Timed out waiting for reaction request", file: file, line: line)
+    }
+    func testAddChangeAndRemovalAppearBeforeServerCompletes() async {
+        let cases: [(String?, String?, [String: Int], [String: Int])] = [
+            (nil, "1f44d", [:], ["1f44d": 1]),
+            ("1f44d", "2764-fe0f", ["1f44d": 2], ["1f44d": 1, "2764-fe0f": 1]),
+            ("1f44d", "1f44d", ["1f44d": 1], [:])
+        ]
+        for (before, tapped, initial, expected) in cases {
+            let remote = Remote()
+            let subject = makeStore(remote)
+            subject.register("m", counts: initial)
+            subject.own["m"] = MessageReactionChoice(emojiID: before, version: 1)
+            subject.select("m"); subject.picker = true; subject.choose(tapped)
+            XCTAssertEqual(subject.displayedCounts("m", fallback: initial), expected)
+            XCTAssertEqual(subject.own["m"]?.emojiID, before == tapped ? nil : tapped)
+            XCTAssertNil(subject.selectedID)
+            XCTAssertFalse(subject.picker)
+            XCTAssertTrue(subject.busy)
+            // An old listener snapshot must not undo the optimistic value.
+            subject.register("m", counts: initial)
+            XCTAssertEqual(subject.displayedCounts("m", fallback: initial), expected)
+            await waitUntil { remote.mutation != nil }
+            remote.resolve(before == tapped ? nil : tapped, counts: expected)
+            await waitUntil { !subject.busy }
+            XCTAssertEqual(subject.displayedCounts("m", fallback: initial), expected)
+            // The old snapshot may repeat after acknowledgment.
+            subject.register("m", counts: initial)
+            XCTAssertEqual(subject.displayedCounts("m", fallback: initial), expected)
+            subject.register("m", counts: expected)
+            XCTAssertEqual(subject.own["m"]?.emojiID, before == tapped ? nil : tapped)
+            subject.stop(); subject.history.clear()
+        }
+    }
+    func testRejectedReactionRollsBackLatestSnapshotAndReopensRetry() async {
+        let remote = Remote()
+        let subject = makeStore(remote)
+        subject.register("m", counts: ["1f44d": 1])
+        subject.own["m"] = MessageReactionChoice(emojiID: nil, version: 1)
+        subject.select("m"); subject.choose("2764-fe0f")
+        subject.register("m", counts: ["1f44d": 3])
+        await waitUntil { remote.mutation != nil }
+        remote.mutation?.resume(throwing: NSError(domain: "transport", code: -1)); remote.mutation = nil
+        await waitUntil { !subject.busy }
+        XCTAssertEqual(subject.displayedCounts("m", fallback: [:]), ["1f44d": 3])
+        XCTAssertNil(subject.own["m"])
+        XCTAssertEqual(subject.selectedID, "m")
+        XCTAssertTrue(subject.failed)
+        subject.stop(); subject.history.clear()
+    }
+    func testLateOwnReadCannotReplaceOptimisticOrConfirmedChoice() async {
+        let remote = Remote()
+        let store = makeStore(remote)
+        store.register("m", counts: [:])
+        await waitUntil { remote.read != nil }
+        store.own["m"] = MessageReactionChoice(emojiID: nil, version: 1)
+        store.select("m"); store.choose("1f44d")
+        remote.read?.resume(returning: ["m": MessageReactionChoice(emojiID: nil, version: 1)]); remote.read = nil
+        await waitUntil { remote.mutation != nil }
+        XCTAssertEqual(store.own["m"]?.emojiID, "1f44d")
+        remote.resolve("1f44d", counts: ["1f44d": 1])
+        await waitUntil { !store.busy }
+        XCTAssertEqual(store.own["m"]?.emojiID, "1f44d")
+        // A coalesced snapshot can skip the response's exact count map.
+        store.register("m", counts: ["1f44d": 4])
+        XCTAssertEqual(store.displayedCounts("m", fallback: [:]), ["1f44d": 4])
+        store.stop(); store.history.clear()
+    }
+    func testListenerAdvancingBeforeResponseKeepsNewestAggregate() async {
+        let remote = Remote()
+        let subject = makeStore(remote)
+        subject.register("m", counts: [:])
+        subject.own["m"] = MessageReactionChoice(emojiID: nil, version: 1)
+        subject.select("m"); subject.choose("1f44d")
+        subject.register("m", counts: ["1f44d": 4])
+        await waitUntil { remote.mutation != nil }
+        remote.resolve("1f44d", counts: ["1f44d": 1])
+        await waitUntil { !subject.busy }
+        XCTAssertEqual(subject.displayedCounts("m", fallback: [:]), ["1f44d": 4])
+        XCTAssertEqual(subject.own["m"]?.emojiID, "1f44d")
+        subject.stop(); subject.history.clear()
+    }
+    func testListenerReturningToOriginalCountsStillWinsOverOlderResponse() async {
+        let remote = Remote()
+        let subject = makeStore(remote)
+        subject.register("m", counts: ["2764-fe0f": 1])
+        subject.own["m"] = MessageReactionChoice(emojiID: nil, version: 1)
+        subject.select("m"); subject.choose("2764-fe0f")
+        subject.register("m", counts: ["2764-fe0f": 2])
+        subject.register("m", counts: ["2764-fe0f": 1])
+        await waitUntil { remote.mutation != nil }
+        remote.resolve("2764-fe0f", counts: ["2764-fe0f": 2])
+        await waitUntil { !subject.busy }
+        XCTAssertEqual(subject.displayedCounts("m", fallback: [:]), ["2764-fe0f": 1])
+        XCTAssertEqual(subject.own["m"]?.emojiID, "2764-fe0f")
+        subject.stop(); subject.history.clear()
+    }
+    func testUnmountedRowCanRegisterWhileMutationIsPending() async {
+        let remote = Remote()
+        let subject = makeStore(remote)
+        subject.register("m", counts: [:])
+        subject.own["m"] = MessageReactionChoice(emojiID: nil, version: 1)
+        subject.select("m"); subject.choose("1f44d")
+        subject.unregister("m"); subject.register("m", counts: [:])
+        await waitUntil { remote.mutation != nil }
+        remote.resolve("1f44d", counts: ["1f44d": 1])
+        await waitUntil { !subject.busy }
+        subject.select("m")
+        XCTAssertEqual(subject.selectedID, "m")
+        XCTAssertEqual(subject.displayedCounts("m", fallback: [:]), ["1f44d": 1])
+        subject.stop(); subject.history.clear()
+    }
+    func testStoppedSessionIgnoresLateMutationResponse() async {
+        let remote = Remote()
+        let store = makeStore(remote)
+        store.register("m", counts: [:])
+        store.own["m"] = MessageReactionChoice(emojiID: nil, version: 1)
+        store.select("m"); store.choose("1f44d")
+        await waitUntil { remote.mutation != nil }
+        store.stop()
+        remote.resolve("1f44d", counts: ["1f44d": 1])
+        await Task.yield()
+        XCTAssertEqual(store.displayedCounts("m", fallback: [:]), [:])
+        XCTAssertTrue(store.own.isEmpty)
+        XCTAssertTrue(store.history.usage.isEmpty)
+        store.history.clear()
+    }
+}
