@@ -112,6 +112,9 @@ fun ConvoyMapAwarenessOverlay(
     focusFitActive: Boolean = false,
     appearances: Map<String, LiveMarkerAppearance> = emptyMap(),
     onDrawnUidsChanged: (Set<String>) -> Unit = {},
+    presentedMembers: List<ConvoyMemberPosition>? = null,
+    showOnScreenPhotos: Boolean = true,
+    suppressedArrowUids: Set<String> = emptySet(),
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
@@ -129,7 +132,7 @@ fun ConvoyMapAwarenessOverlay(
     // survive the frames on which the Box bails out early (no camera yet, empty
     // viewport during a resize). Remembering it past a conditional return inside
     // the Box would reset every marker to a standing start each time.
-    val smoothedMembers = rememberSmoothedMembers(members = members, nowMillis = nowMillis)
+    val smoothedMembers = presentedMembers ?: rememberSmoothedMembers(members = members, nowMillis = nowMillis)
 
     Box(
         modifier =
@@ -262,10 +265,11 @@ fun ConvoyMapAwarenessOverlay(
         }
 
         ReportDrawnLiveMarkerUids(
-            (placements.onScreen.map { it.member.uid } + placements.offScreen.map { it.member.uid }).toSet(),
+            ((if (showOnScreenPhotos) placements.onScreen.map { it.member.uid } else emptyList()) +
+                placements.offScreen.filter { it.member.uid !in suppressedArrowUids }.map { it.member.uid }).toSet(),
             onDrawnUidsChanged,
         )
-        placements.onScreen.forEach { placement ->
+        if (showOnScreenPhotos) placements.onScreen.forEach { placement ->
             ConvoyMemberChip(
                 member = placement.member,
                 appearance = appearances[placement.member.uid] ?: LiveMarkerAppearance(),
@@ -282,7 +286,7 @@ fun ConvoyMapAwarenessOverlay(
             )
         }
 
-        placements.offScreen.forEach { placement ->
+        placements.offScreen.filter { it.member.uid !in suppressedArrowUids }.forEach { placement ->
             ConvoyMemberChip(
                 member = placement.member,
                 appearance = appearances[placement.member.uid] ?: LiveMarkerAppearance(),

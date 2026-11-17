@@ -4756,7 +4756,7 @@ fun AuthenticatedApp(
                 // Keyed on uid (like the other auth-scoped state here) so an
                 // in-process account switch resets it — a popup must never carry
                 // over from the previous user's tap.
-                var selectedLiveSharer by remember(uid) { mutableStateOf<LiveMarker?>(null) }
+                var selectedLiveSharerUid by remember(uid) { mutableStateOf<String?>(null) }
                 // Reads a tapped sharer's public Crown Points for the popup — the
                 // same rules-gated `pointsLedger/{uid}.balance` read the profile
                 // headline uses. Null in a config-less / CI build; the popup then
@@ -5020,76 +5020,39 @@ fun AuthenticatedApp(
                 // Declared here rather than beside the convoy roster above so all
                 // THREE overlay slots read the one [liveLayerPlan] and cannot
                 // disagree about who is on the map.
-                val convoyOverlaySlot: (@Composable () -> Unit)? =
-                    if (liveLayerPlan.convoy) {
-                        {
-                            ConvoyMapAwarenessOverlay(
-                                mapSurface = mapSurface,
-                                members = convoyMemberPositions,
-                                focusFitActive = convoyFitActive,
-                                appearances = markerAppearances,
-                                onDrawnUidsChanged = { drawnMarkerSources["map-convoy"] = it },
-                            )
-                        }
-                    } else {
-                        null
+                // One shared layout prevents photos in separate layers from
+                // colliding. Tap targets are uids, re-resolved against CURRENT
+                // authorized RTDB rosters rather than a displayed old snapshot.
+                val photoConvoy = convoyMemberPositions.filter { it.uid in convoyLiveUids }
+                val photoNearby = nearbyLiveMarkers.filter { it.uid in nearbyUids }
+                val authorizedPhotoMarkers = (convoyMarkers.filterNotNull().filter { it.uid in convoyLiveUids } + photoNearby)
+                    .associateBy { it.uid }
+                val currentPhotoMarkers by androidx.compose.runtime.rememberUpdatedState(authorizedPhotoMarkers)
+                val onDriverPhotoTap: (String) -> Unit = { tappedUid ->
+                    if (tappedUid in currentPhotoMarkers) selectedLiveSharerUid = tappedUid
+                }
+                val convoyOverlaySlot: (@Composable () -> Unit)? = if (liveLayerPlan.any) {
+                    {
+                        com.kungsbackacarcommunity.app.live.LiveDriverMapOverlay(
+                            mapSurface = mapSurface, convoy = photoConvoy, nearby = photoNearby,
+                            onDriverTap = onDriverPhotoTap, appearances = markerAppearances,
+                            focusFitActive = convoyFitActive,
+                            onConvoyDrawn = { drawnMarkerSources["map-convoy"] = it },
+                            onNearbyDrawn = { drawnMarkerSources["map-nearby"] = it },
+                        )
                     }
-
-                // Composes nothing at all unless somebody nearby is actually
-                // sharing (and visible), so an empty neighbourhood adds no layer.
-                val nearbyOverlaySlot: (@Composable () -> Unit)? =
-                    if (liveLayerPlan.nearby) {
-                        {
-                            NearbyLiveOverlay(
-                                mapSurface = mapSurface,
-                                sharers = nearbyLiveMarkers,
-                                onSharerTap = { selectedLiveSharer = it },
-                                appearances = markerAppearances,
-                                onDrawnUidsChanged = { drawnMarkerSources["map-nearby"] = it },
-                            )
-                        }
-                    } else {
-                        null
+                } else null
+                val nearbyOverlaySlot: (@Composable () -> Unit)? = null
+                val liveMembersOverlaySlot: (@Composable (MapProjection) -> Unit)? = if (liveLayerPlan.any) {
+                    { projection ->
+                        com.kungsbackacarcommunity.app.live.LiveDriverMapOverlay(
+                            mapSurface = projection, convoy = photoConvoy, nearby = photoNearby,
+                            onDriverTap = onDriverPhotoTap, appearances = markerAppearances,
+                            onConvoyDrawn = { drawnMarkerSources["navigation-convoy"] = it },
+                            onNearbyDrawn = { drawnMarkerSources["navigation-nearby"] = it },
+                        )
                     }
-
-                // The SAME live-member layers the map home draws, but bound to
-                // whatever map is asking rather than to the shell surface. That
-                // binding is the whole fix for "I couldn't see other people
-                // sharing their live location in Navigation": turn-by-turn owns a
-                // second, Navigation-SDK MapView, and every marker above was
-                // projected against `mapSurface`, which is stood down the moment
-                // navigation starts — so there was simply nothing drawing them.
-                //
-                // Deliberately the same values (`convoyMemberPositions`,
-                // `nearbyLiveMarkers`), the same per-uid RTDB listeners already
-                // open above, and therefore the same entitlement gating: this
-                // opens no second subscription and grants no visibility the map
-                // home does not already have.
-                val liveMembersOverlaySlot: (@Composable (MapProjection) -> Unit)? =
-                    if (liveLayerPlan.any) {
-                        { projection ->
-                            if (liveLayerPlan.convoy) {
-                                ConvoyMapAwarenessOverlay(
-                                    mapSurface = projection,
-                                    members = convoyMemberPositions,
-                                    focusFitActive = convoyFitActive,
-                                    appearances = markerAppearances,
-                                    onDrawnUidsChanged = { drawnMarkerSources["navigation-convoy"] = it },
-                                )
-                            }
-                            if (liveLayerPlan.nearby) {
-                                NearbyLiveOverlay(
-                                    mapSurface = projection,
-                                    sharers = nearbyLiveMarkers,
-                                    onSharerTap = { selectedLiveSharer = it },
-                                    appearances = markerAppearances,
-                                    onDrawnUidsChanged = { drawnMarkerSources["navigation-nearby"] = it },
-                                )
-                            }
-                        }
-                    } else {
-                        null
-                    }
+                } else null
 
                 // The profile sub-menu popup for a tapped live sharer. A Popup is
                 // its own window, so it draws over whichever map slot is showing
@@ -5098,7 +5061,10 @@ fun AuthenticatedApp(
                 val liveSharerClubRepository = remember(context, uid) {
                     com.kungsbackacarcommunity.app.clubs.FirebaseClubRepository.createIfAvailable(context, uid)
                 }
-                selectedLiveSharer?.let { sharer -> key(sharer.uid) {
+                LaunchedEffect(selectedLiveSharerUid, authorizedPhotoMarkers.keys) {
+                    if (selectedLiveSharerUid?.let { it !in authorizedPhotoMarkers } == true) selectedLiveSharerUid = null
+                }
+                selectedLiveSharerUid?.let(authorizedPhotoMarkers::get)?.let { sharer -> key(sharer.uid) {
                     LiveSharerPopup(
                         sharer = sharer,
                         pointsRepository = liveSharerPointsRepository,
@@ -5109,7 +5075,7 @@ fun AuthenticatedApp(
                         },
                         onVisitProfile =
                             if (memberProfileRepository != null) openMemberProfile else null,
-                        onDismiss = { selectedLiveSharer = null },
+                        onDismiss = { selectedLiveSharerUid = null },
                     )
                 } }
 
