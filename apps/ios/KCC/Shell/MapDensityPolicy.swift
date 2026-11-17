@@ -1,5 +1,7 @@
 import Foundation
 
+struct MapDensityScreenPoint: Equatable { let x: Double; let y: Double }
+
 struct MapDensityItem: Equatable, Identifiable {
     let id: String
     let latitude: Double
@@ -10,8 +12,8 @@ struct MapDensityItem: Equatable, Identifiable {
 }
 struct MapDensityGroup: Identifiable, Equatable {
     let members: [MapDensityItem]
-    var anchor: MapDensityItem { members[0] }
-    var id: String { anchor.id }
+    var anchor: MapDensityItem { members.first(where: \.selected) ?? members[0] }
+    var id: String { members.map(\.id).min()! }
     var count: Int { members.reduce(0) { $0 + max(1, $1.count) } }
     var critical: Bool { members.contains(where: \.critical) }
     var selected: Bool { members.contains(where: \.selected) }
@@ -31,6 +33,15 @@ struct MapDensityZoom {
 /// Android parity: fixed world-pixel radius, real anchors, no source ids discarded.
 enum MapDensityPolicy {
     static let radiusPixels = 56.0
+    static func badgePosition(anchor: MapDensityScreenPoint, own: MapDensityScreenPoint?, width: Double, height: Double) -> MapDensityScreenPoint {
+        guard let own, hypot(anchor.x - own.x, anchor.y - own.y) < 44 else { return anchor }
+        let candidates = (0...7).map { index in
+            let angle = Double(-45 + index * 45) * .pi / 180
+            return MapDensityScreenPoint(x: own.x + cos(angle) * 44, y: own.y + sin(angle) * 44)
+        }.filter { $0.x >= 24 && $0.x <= width - 24 && $0.y >= 24 && $0.y <= height - 24 && hypot($0.x - anchor.x, $0.y - anchor.y) <= 88 }
+        return candidates.min { hypot($0.x - anchor.x, $0.y - anchor.y) < hypot($1.x - anchor.x, $1.y - anchor.y) } ?? anchor
+    }
+
     static func groups(_ items: [MapDensityItem], zoomBucket: Int) -> [MapDensityGroup] {
         let size = 512 * pow(2, Double(max(0, min(22, zoomBucket))))
         struct Cell: Hashable { let x: Int; let y: Int }
@@ -38,8 +49,7 @@ enum MapDensityPolicy {
         var anchors: [(Double, Double)] = []
         var cells: [Cell: [Int]] = [:]
         var seen: Set<String> = []
-        let ordered = items.filter { seen.insert($0.id).inserted }.sorted {
-            if $0.selected != $1.selected { return $0.selected }
+        let ordered = items.filter { $0.latitude.isFinite && $0.longitude.isFinite && (-90...90).contains($0.latitude) && (-180...180).contains($0.longitude) && seen.insert($0.id).inserted }.sorted {
             if $0.critical != $1.critical { return $0.critical }
             return $0.id < $1.id
         }

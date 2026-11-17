@@ -288,6 +288,8 @@ class MapboxMapSurface(
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
+    private val renderedOwnPointFlow = MutableStateFlow<MapPoint?>(null)
+    override val renderedOwnPoint: StateFlow<MapPoint?> = renderedOwnPointFlow.asStateFlow()
 
     // How the map is oriented while following (see [MapCompassMode]) — the
     // compass control's two modes. north-up pins the camera bearing at 0;
@@ -377,6 +379,7 @@ class MapboxMapSurface(
         }
         provider.update(recording = recording != null, position = recording?.position, points = recording?.points.orEmpty())
         val animating = surfaceActive && provider.advance()
+        if (!provider.canDisplayLocation) renderedOwnPointFlow.value = null
         renderRecordingBreadcrumb()
         if (recording == null && changedBreadcrumbOwner) redrawBreadcrumb()
         val map = mapViewRef ?: return animating
@@ -1178,6 +1181,7 @@ class MapboxMapSurface(
         // map is composed; wrapped defensively like every other native call.
         val map = mapViewRef ?: return
         syncRecordingLocation()
+        if (!hasMapLocationPermission() || puckLocationProvider?.canDisplayLocation == false) renderedOwnPointFlow.value = null
         runCatching {
             map.location.updateSettings {
                 enabled = surfaceActive && puckLocationProvider?.canDisplayLocation != false
@@ -1324,11 +1328,19 @@ class MapboxMapSurface(
     }
 
     /** One return transition owns the camera; normal puck tracking stays immediate. */
+    private fun hasMapLocationPermission(): Boolean {
+        val context = appContext ?: return false
+        return listOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION).any {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     private fun updateCameraVisibility() {
         val visible = surfaceActive && sceneResumed
         cameraResume.visibilityChanged(visible, followController.shouldTrack(routeOverlayFlow.value != null) && convoyFitPoints == null,
             puckLocationProvider?.cameraSourceFix?.sequence)
         if (!visible) {
+            renderedOwnPointFlow.value = null
             cameraReturnJob?.cancel()
             cameraReturnJob = null
             idleReturnJob?.cancel()
@@ -1761,6 +1773,7 @@ class MapboxMapSurface(
                     // re-entered from inside itself (see [guardIndicator]).
                     guardIndicator {
                         lastPoint = point
+                        renderedOwnPointFlow.value = if (surfaceActive && sceneResumed && hasMapLocationPermission()) MapPoint(point.longitude(), point.latitude()) else null
                         // Cache this fix for the next map open (see
                         // [persistLastKnownLocation]). Before the follow gate so
                         // it keeps refreshing even when the user has panned away.
@@ -2508,6 +2521,7 @@ class MapboxMapSurface(
                 // heading arrives, rather than an arrow left pointing north.
                 puckBearingArrowShown = false
                 puckLocationProvider = null
+                renderedOwnPointFlow.value = null
                 resetBreadcrumbRenderCache()
                 cameraChangeListener?.let { l ->
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }

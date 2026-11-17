@@ -990,8 +990,8 @@ private struct MapboxStandardMap: View {
             locationProvider: locationProvider
         )) {
             guard surfaceActive, scenePhase == .active, isVisible, mapReady,
-                  locationAuthorization.isAuthorized else { ownMotion.stop(); return }
-            defer { ownMotion.stop() }
+                  locationAuthorization.isAuthorized else { ownMotion.stop(); surface.updateRenderedOwnPoint(nil); return }
+            defer { ownMotion.stop(); surface.updateRenderedOwnPoint(nil) }
             for await fix in locationProvider.fixes() {
                 if Task.isCancelled { return }
                 guard MapCameraResumePolicy.isFresh(fixAt: fix.timestamp, now: Date()) else { continue }
@@ -1252,6 +1252,7 @@ private struct MapboxStandardMap: View {
             !surface.convoyFocusEnabled && surface.routeOverlay == nil
         cameraResume.visibilityChanged(visible: visible, following: following)
         guard visible else {
+            surface.updateRenderedOwnPoint(nil)
             stableCourse = surface.cameraSnapshot?.bearing
             if compassFollowRequested { performProgrammaticViewportChange { viewport = .idle } }
             cameraRuntime.cancelAll()
@@ -1454,6 +1455,7 @@ private struct MapboxStandardMap: View {
 
     private func applyPresentedOwnFrame(_ point: DriverMotionPoint, viewport: Binding<Viewport>) {
         latestOwnPoint = MapPoint(longitude: point.longitude, latitude: point.latitude)
+        surface.updateRenderedOwnPoint(isVisible && surfaceActive && scenePhase == .active && locationAuthorization.isAuthorized ? latestOwnPoint : nil)
         guard isVisible, surfaceActive, scenePhase == .active, locationAuthorization.isAuthorized,
               !cameraResume.pending, !cameraRuntime.cameraReturnActive,
               !meFollowSuspended, !surface.convoyFocusEnabled, surface.routeOverlay == nil,

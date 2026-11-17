@@ -16,10 +16,7 @@ object CrownZoomThinning {
     /** Whether [zoom] is far enough out that the crown layer should thin. */
     fun isZoomedOut(zoom: Double): Boolean = zoom < DECLUTTER_ZOOM
 
-    /**
-     * The spawns to draw at the current zoom: all of them when not [zoomedOut],
-     * else only the [KEEP_WHEN_ZOOMED_OUT] tiers.
-     */
+    /** Keep every rarity available to the cross-type density groups at every zoom. */
     @Suppress("UNUSED_PARAMETER")
     fun visibleSpawns(spawns: List<CrownSpawn>, zoomedOut: Boolean): List<CrownSpawn> =
         spawns

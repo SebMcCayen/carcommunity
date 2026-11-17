@@ -74,6 +74,7 @@ struct ShellView: View {
     @State private var navSearchOpen = false
     @AccessibilityFocusState private var searchLauncherFocused: Bool
     @State private var mapReadingSelection: MapReadingSelection?
+    @State private var densityReadingItems: [MapDensityContentItem] = []
     @State private var mapDockHeight: CGFloat = 0
     @State private var mapSessionHeight: CGFloat = 0
     @State private var invitationFooterHeight: CGFloat = 0
@@ -526,6 +527,7 @@ struct ShellView: View {
     private var shellReadingInteractions: AnyView {
         shellBaseInteractions
         .onChange(of: mapReadingSelection) { _, selection in
+            if case .densityGroup = selection {} else { densityReadingItems = [] }
             if case .camera = selection {} else { roadCameraCoordinator?.dismiss() }
             centerMapReading(selection)
         }
@@ -871,32 +873,17 @@ struct ShellView: View {
                 ConfiglessDriveSaveProbe(state: driveRecordingCoordinator?.state)
             }
             #endif
-            if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
-                CrownHuntMapOverlay(
-                    coordinator: crownMapCoordinator,
-                    projection: mapSurface,
-                    mapMode: mapSurface.mapMode
-                )
-            }
+            MapDensityOverlay(surface: mapSurface, incidents: incidentMapCoordinator,
+                cameras: roadCameraCoordinator, crowns: crownHuntComposition?.mapCoordinator,
+                onSelect: selectDensityItem, onGroup: { items in
+                    densityReadingItems = items
+                    selectMapReading(.densityGroup)
+                })
             if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
                 CrownPerkMapOverlay(
                     coordinator: perkMapCoordinator,
                     projection: mapSurface,
                     ownFix: crownHuntComposition?.mapCoordinator?.latestFix
-                )
-            }
-            if let roadCameraCoordinator {
-                RoadCameraMapOverlay(coordinator: roadCameraCoordinator, surface: mapSurface) { camera in
-                    clearIncidentSelection()
-                    roadCameraCoordinator.select(camera)
-                    selectMapReading(.camera(camera.id))
-                }
-            }
-            if let incidentMapCoordinator {
-                IncidentMapOverlay(
-                    coordinator: incidentMapCoordinator,
-                    projection: mapSurface,
-                    onSelect: { id in selectMapReading(.incident(id)) }
                 )
             }
             if let billboardsCoordinator {
@@ -1373,6 +1360,10 @@ struct ShellView: View {
 
     @ViewBuilder private func mapReadingPanel(_ selection: MapReadingSelection) -> some View {
         switch selection {
+        case .densityGroup:
+            MapReadingPanel(title: "mapDensity.title", onClose: dismissMapReading, docksToBottom: true) {
+                MapDensityGroupContents(entries: currentDensityReadingItems, mapMode: mapSurface.mapMode, onSelect: selectDensityItem)
+            }
         case .stopLive:
             MapReadingPanel(title: "shell.liveTitle", onClose: dismissMapReading, docksToBottom: true) {
                 LiveSessionStopContent(busy: pendingSessionCommand != nil || liveLocationCoordinator?.actionStatus == .working) {
@@ -1464,6 +1455,45 @@ struct ShellView: View {
         }
     }
 
+    /// Re-resolve the open group against current sources; removed/expired rows cannot open stale details.
+    private var currentDensityReadingItems: [MapDensityContentItem] {
+        let incidentIDs = Set(incidentMapCoordinator.map {
+            IncidentLayerPresentation.markers(enabled: $0.trafficAlertsEnabled,
+                incidents: $0.visibleIncidents, policeReports: $0.policeReports).map(\.id)
+        } ?? [])
+        let crownIDs = Set(crownHuntComposition?.mapCoordinator?.markers.filter { !$0.collectedByYou }.map(\.id) ?? [])
+        let cameraIDs = Set(roadCameraCoordinator?.cameras.filter {
+            roadCameraCoordinator?.enabledTypes.contains($0.type) == true
+        }.map(\.id) ?? [])
+        return densityReadingItems.filter { entry in
+            if let incident = entry.incident { return incidentIDs.contains(incident.id) }
+            if let crown = entry.crown { return crownIDs.contains(crown.id) }
+            if let camera = entry.camera { return camera.views.contains { cameraIDs.contains($0.id) } }
+            return false
+        }
+    }
+
+    private func selectDensityItem(_ entry: MapDensityContentItem) {
+        if let marker = entry.incident, let coordinator = incidentMapCoordinator {
+            let current = IncidentLayerPresentation.markers(enabled: coordinator.trafficAlertsEnabled,
+                incidents: coordinator.visibleIncidents, policeReports: coordinator.policeReports)
+            guard current.contains(where: { $0.id == marker.id }) else { return }
+            coordinator.selectMarker(id: marker.id)
+            selectMapReading(.incident(marker.id))
+        } else if let group = entry.camera, let coordinator = roadCameraCoordinator {
+            let catalog = Dictionary(uniqueKeysWithValues: coordinator.cameras.map { ($0.id, $0) })
+            let retained = group.views.compactMap { catalog[$0.id] }.filter { coordinator.enabledTypes.contains($0.type) }
+            guard !retained.isEmpty else { return }
+            let current = RoadCameraMapGroup(sites: RoadCameraLocation.group(retained))
+            clearIncidentSelection()
+            coordinator.selectGroup(current)
+            selectMapReading(.camera(current.camera.id))
+        } else if let marker = entry.crown, let coordinator = crownHuntComposition?.mapCoordinator {
+            guard coordinator.markers.contains(where: { $0.id == marker.id && !$0.collectedByYou }) else { return }
+            coordinator.select(markerId: marker.id)
+        }
+    }
+
     private func selectMapReading(_ selection: MapReadingSelection) {
         if case .camera = selection {} else { roadCameraCoordinator?.dismiss() }
         // The marker coordinator still owns authorization, freshness and actions.
@@ -1472,6 +1502,7 @@ struct ShellView: View {
         if case .incident = selection, let pin = incidentMapCoordinator?.selectedPolice {
             mapReadingSelection = .police(pin.id)
         } else { mapReadingSelection = selection }
+        if case .densityGroup = selection { clearIncidentSelection() }
         if case .savedPlaces = selection { clearIncidentSelection() }
         if case .stopLive = selection { clearIncidentSelection() }
         if case .nearby = selection { clearIncidentSelection() }

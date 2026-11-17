@@ -45,6 +45,18 @@ class RoadCameraLayersTest {
         assertNull(state.selected(groups.single().id))
     }
 
+    @Test fun coordinatedDensityRetainsEverySiteInsteadOfApplyingTheLegacyDrawCap() {
+        val state = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
+        state.cameras = (0..299).map { i ->
+            RoadCamera("camera-$i", RoadCameraType.Speed, "Site $i", 57.45 + i * 0.000001, 12.09, 135.0)
+        }
+        state.setEnabled(RoadCameraType.Speed, true)
+        val markers = state.markersNear(57.45, 12.09, 13.0, coordinatedDensity = true)
+        assertEquals(300, markers.size)
+        assertEquals(state.cameras.map { ROAD_CAMERA_MARKER_PREFIX + it.id }.toSet(), markers.map { it.id }.toSet())
+        markers.forEach { marker -> assertEquals(1, state.viewsFor(state.selected(marker.id)!!).size) }
+    }
+
     @Test fun disabledLayersDoNotFetchAndEnablingOnlyLoadsTheCatalog() {
         compose.activity.getSharedPreferences("map_layers_preference", Context.MODE_PRIVATE).edit().clear().commit()
         val catalogs = java.util.concurrent.atomic.AtomicInteger()

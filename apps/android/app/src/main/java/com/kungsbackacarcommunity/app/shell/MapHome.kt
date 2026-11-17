@@ -450,7 +450,7 @@ fun MapHome(
     val roadCameraLayers = com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current
     val roadCameraViewport by mapSurface.cameraSnapshot.collectAsState()
     val roadCameraMarkers = roadCameraLayers?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude,
-        roadCameraViewport?.zoom ?: 17.0).orEmpty()
+        roadCameraViewport?.zoom ?: 17.0, coordinatedDensity = true).orEmpty()
     val densityIncidents = (if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers
 
     // Push the community event pins onto the surface whenever they change (or the
@@ -546,7 +546,7 @@ fun MapHome(
         // at the BOTTOM of the chrome stack: it belongs to the map, so every
         // control composed below this point draws over it rather than being
         // covered by a car photo pinned to a screen edge.
-        MapDensityOverlay(mapSurface, densityIncidents)
+        MapDensityOverlay(mapSurface, densityIncidents, covered)
         convoyOverlay?.invoke()
 
         // Nearby-public live sharers (discovered via live.listNearby), on the

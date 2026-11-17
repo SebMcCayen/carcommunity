@@ -39,15 +39,14 @@ class CrownZoomThinningTest {
     }
 
     @Test
-    fun `zoomed out keeps only rare and legendary`() {
+    fun `zoomed out retains every rarity for accessible density groups`() {
         val kept = CrownZoomThinning.visibleSpawns(all, zoomedOut = true)
-        assertEquals(listOf("r", "l"), kept.map { it.id })
-        assertTrue(kept.all { it.rarity in CrownZoomThinning.KEEP_WHEN_ZOOMED_OUT })
+        assertEquals(all, kept)
     }
 
     @Test
-    fun `zoomed out with no high tiers hides everything`() {
+    fun `common crowns remain accessible when zoomed out`() {
         val onlyCommons = listOf(spawn("c1", CrownRarity.COMMON), spawn("c2", CrownRarity.UNCOMMON))
-        assertTrue(CrownZoomThinning.visibleSpawns(onlyCommons, zoomedOut = true).isEmpty())
+        assertEquals(onlyCommons, CrownZoomThinning.visibleSpawns(onlyCommons, zoomedOut = true))
     }
 }

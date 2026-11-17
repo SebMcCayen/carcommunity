@@ -422,7 +422,12 @@ data class MapPlaceRequest(
  * (the member's main-car photo), same smoothing — draw on the navigation map
  * too, rather than a second look-alike representation being invented for it.
  */
+private val EMPTY_RENDERED_OWN_POINT: StateFlow<MapPoint?> = MutableStateFlow<MapPoint?>(null).asStateFlow()
+
 interface MapProjection {
+    /** Actual rendered local puck; independent of camera following/manual pan. */
+    val renderedOwnPoint: StateFlow<MapPoint?> get() = EMPTY_RENDERED_OWN_POINT
+
     /**
      * Where the camera currently is, or null before the map has one.
      *

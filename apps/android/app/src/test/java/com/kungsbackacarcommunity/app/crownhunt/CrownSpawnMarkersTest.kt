@@ -203,7 +203,7 @@ class CrownSpawnMarkersTest {
             spawns, visible, collected, zoomedOut = zoomedOut, glyphRes = { 1 },
         )
         assertTrue(markers(false, false).isEmpty())
-        assertEquals(listOf("legendary"), markers(true, true).map { it.id })
+        assertEquals(listOf("common", "uncommon", "legendary"), markers(true, true).map { it.id })
         assertEquals(listOf("common", "uncommon", "legendary"), markers(true, false).map { it.id })
         assertEquals(4, spawns.size)
         assertEquals(setOf("rare"), collected)
