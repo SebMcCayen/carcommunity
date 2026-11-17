@@ -39,11 +39,12 @@ SV/EN membership ring description comes from the shared localization contract.
 
 ## Validation and design QA status
 
-- PASS: Android production Kotlin compilation and initial focused geometry,
-  smoothing, arrow and live-layer unit suite.
+- PASS: Android production Kotlin compilation and 70 focused unit tests: geometry
+  (13), smoothing (25), arrows (26), live layers (6). Debug APK and instrumentation
+  APK assemble successfully.
 - PASS: iOS read-only source preflight and 67 Python script tests.
-- Pending: final expanded regression run and Android synthetic component capture
-  (normal, dense, edge/manual-pan, exact UID tap and offscreen convoy arrow).
+- Pending: Android synthetic component capture (normal, dense, edge/manual-pan,
+  exact UID tap and offscreen convoy arrow). Fixture compilation is complete.
 - Pending: native iOS compiler/XCTest CI and simulator visual review. Linux has
   no Xcode; source checks are not native execution evidence.
 - Pending: real-map driving/frame-time verification on physical devices. The
