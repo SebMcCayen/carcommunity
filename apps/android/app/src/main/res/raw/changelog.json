@@ -5,9 +5,7 @@
       "versionCode": 76,
       "versionName": "1.1.21",
       "releaseDate": "2026-11-17",
-      "highlights": [
-        "Stabilare positionsmarkör på Live-kartan"
-      ],
+      "highlights": ["Stabilare positionsmarkör på Live-kartan"],
       "changes": [
         "Positionsmarkören på Live-kartan återställs inte längre vid vanliga uppdateringar av skärmen"
       ]
