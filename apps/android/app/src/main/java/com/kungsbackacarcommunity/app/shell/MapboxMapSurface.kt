@@ -96,6 +96,7 @@ import com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListene
 import com.mapbox.maps.plugin.locationcomponent.DefaultLocationProvider
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
+import com.mapbox.maps.plugin.locationcomponent.generated.LocationComponentSettingsInterface
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
 import com.kungsbackacarcommunity.app.crownhunt.CrownAnimationPhase
@@ -375,9 +376,9 @@ class MapboxMapSurface(
         val map = mapViewRef ?: return animating
         if (map.mapboxMap.style == null) return animating
         val enabled = surfaceActive && provider.canDisplayLocation
-        if (map.location.enabled != enabled) {
-            map.location.updateSettings { this.enabled = enabled }
-        }
+        // The SDK property setter is already guarded and applies one real change.
+        // updateSettings would also apply the entire settings object afterwards.
+        map.location.enabled = enabled
         return animating
     }
 
@@ -1242,9 +1243,7 @@ class MapboxMapSurface(
                 markShown = { puckBearingArrowShown = true },
                 markNotShown = { puckBearingArrowShown = false },
                 applySwap = {
-                    map.location.updateSettings {
-                        locationPuck = createDefault2DPuck(withBearing = true)
-                    }
+                    map.location.locationPuck = createDefault2DPuck(withBearing = true)
                 },
             )
         }
@@ -2355,7 +2354,7 @@ class MapboxMapSurface(
                 runCatching { applyBillboardMarkersIfChanged(billboards) }
                 // Reflect live-sharing on the puck: green pulse while sharing.
                 runCatching {
-                    mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
+                    applyPuckPulseColor(mapView.location, pulseColorFor(marker))
                 }
                 // Breadcrumb tail lifecycle: it starts when a live session starts
                 // (built up by the position listener) and CLEARS when the session
@@ -3766,6 +3765,15 @@ internal fun applyPuckBearingArrowOnce(
     if (isShown()) return
     markShown()
     runCatching { applySwap() }.onFailure { markNotShown() }
+}
+
+/**
+ * Called on ordinary recompositions. Mapbox's bulk updateSettings always
+ * rebuilds the puck layer, even for identical settings; the property setter
+ * checks equality first and leaves an unchanged puck and its animations alone.
+ */
+internal fun applyPuckPulseColor(settings: LocationComponentSettingsInterface, color: Int) {
+    settings.pulsingColor = color
 }
 
 /**

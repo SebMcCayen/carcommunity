@@ -23,8 +23,10 @@ navigation, crown and live-publishing streams keep their own policies.
 During Android Live recording, the map's own-location puck and yellow trail
 both use the recorder's accepted fixes. The recording request runs every two
 seconds (including its minimum interval), keeping a six-hour session below the
-20,000-point limit. The puck uses the exact 2D route vertex without interpolation
-across bends; its course and accuracy come from that same accepted sample.
+20,000-point limit. A shared presentation clock moves the puck, camera and
+visible trail tip along accepted 2D route vertices, preserving intermediate bends.
+Its course and accuracy come from accepted samples. Presentation frames never
+feed back into recorded or published positions.
 The independent Mapbox device provider is detached for this period, and queued
 callbacks from old registrations cannot overwrite the recording position.
 Restored geometry redraws the trail but never supplies a current location.
@@ -33,6 +35,14 @@ the puck is hidden rather than falling back to unrelated device fixes. Map
 recreation and tab returns replay only fresh positions. Ending recording restores
 the ordinary device provider. This changes neither the shared-position publishing
 policy nor historical drive data.
+
+Ordinary presentation updates use the Mapbox SDK's equality-guarded property
+setters. Bulk `updateSettings` recreates the puck layer even when the values are
+unchanged, so it must not run on every screen recomposition. The Live pulse keeps
+running between actual state changes. Style initialization and permission refresh
+retain their explicit settings initialization; the first course arrow still uses
+the existing re-entrancy guard. SDK setter regression tests run under Robolectric
+and in the native Android instrumentation suite.
 
 iOS's dedicated session provider already applies `SessionLocationFilter` to
 both live sharing and recording. The recording event stream now exposes typed
