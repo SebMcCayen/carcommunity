@@ -39,6 +39,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     private var authContinuations: [UUID: AsyncStream<LocationAuthorization>.Continuation] = [:]
     private var fixContinuations: [UUID: AsyncStream<LocationFix>.Continuation] = [:]
     private var recordingContinuations: [UUID: AsyncStream<RecordingLocationEvent>.Continuation] = [:]
+    private var crownContinuations: [UUID: AsyncStream<LocationFix>.Continuation] = [:]
 
     /// `backgroundEnabled` is reserved for providers owned by an explicit,
     /// time-bounded drive/live session. It uses Apple's visible blue
@@ -103,6 +104,20 @@ final class CoreLocationProvider: NSObject, LocationProvider {
         }
     }
 
+    func crownCollectionFixes() -> AsyncStream<LocationFix> {
+        AsyncStream { continuation in
+            let id = UUID()
+            crownContinuations[id] = continuation
+            reconcileUpdates()
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in
+                    self?.crownContinuations[id] = nil
+                    self?.reconcileUpdates()
+                }
+            }
+        }
+    }
+
     func recordingEvents() -> AsyncStream<RecordingLocationEvent> {
         AsyncStream { continuation in
             let id = UUID()
@@ -125,6 +140,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     /// Whether `startUpdatingLocation()` has been issued without a matching
     /// stop — so start/stop are only ever sent on a real transition.
     private var updatesRunning = false
+    private var crownDemandRunning = false
 
     /// The ONE place the hardware is started or stopped, recomputed from the
     /// two inputs that may change independently: positioning runs exactly
@@ -142,8 +158,21 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     /// "stop sharing when a drive ends" structural: the feature's stream
     /// teardown IS the GPS stop.
     private func reconcileUpdates() {
-        let shouldRun = (!fixContinuations.isEmpty || !recordingContinuations.isEmpty) && authorization.isAuthorized
-        guard shouldRun != updatesRunning else { return }
+        // Crown demand is short-lived. Restore normal automatic pauses as soon
+        // as its card/nearby evidence burst ends; driving demand stays unchanged.
+        let crownDemand = !crownContinuations.isEmpty
+        let resumingCrownDemand = crownDemand && !crownDemandRunning
+        crownDemandRunning = crownDemand
+        manager.pausesLocationUpdatesAutomatically = !filtersSessionMotion && !crownDemand
+        if crownDemand { manager.distanceFilter = kCLDistanceFilterNone }
+        let shouldRun = (!fixContinuations.isEmpty || !recordingContinuations.isEmpty || !crownContinuations.isEmpty)
+            && authorization.isAuthorized
+        guard shouldRun != updatesRunning else {
+            // Reassert once when a bounded crown burst begins: Core Location
+            // may have automatically paused the ordinary stationary map stream.
+            if shouldRun && resumingCrownDemand { manager.startUpdatingLocation() }
+            return
+        }
         updatesRunning = shouldRun
         motionFilter = SessionLocationFilter()
         if shouldRun {
@@ -204,7 +233,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     private func deliver(_ fixes: [LocationFix?]) {
         // Re-check authorization after the delegate's hop to the main actor.
         guard authorization.isAuthorized,
-              !fixContinuations.isEmpty || !recordingContinuations.isEmpty else { return }
+              !fixContinuations.isEmpty || !recordingContinuations.isEmpty || !crownContinuations.isEmpty else { return }
         for raw in fixes {
             let decision: RecordingLocationDecision
             if let raw {
@@ -218,6 +247,7 @@ final class CoreLocationProvider: NSObject, LocationProvider {
             for sink in recordingContinuations.values { sink.yield(event) }
             if let fix = decision.fix {
                 for sink in fixContinuations.values { sink.yield(fix) }
+                for sink in crownContinuations.values { sink.yield(fix) }
             }
         }
     }

@@ -102,6 +102,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -192,6 +193,7 @@ import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationReposit
 import com.kungsbackacarcommunity.app.crownhunt.ClaimCoordinate
 import com.kungsbackacarcommunity.app.crownhunt.CrownClaimStatus
 import com.kungsbackacarcommunity.app.crownhunt.CrownCollectGate
+import com.kungsbackacarcommunity.app.crownhunt.CrownCollectState
 import com.kungsbackacarcommunity.app.crownhunt.CrownCollectSignalTracker
 import com.kungsbackacarcommunity.app.crownhunt.CrownFix
 import com.kungsbackacarcommunity.app.crownhunt.CrownFixTracker
@@ -205,6 +207,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointCollectionPresentation
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointMarkers
 import com.kungsbackacarcommunity.app.crownhunt.CrownProofSelection
+import com.kungsbackacarcommunity.app.crownhunt.rememberCrownReadiness
 import com.kungsbackacarcommunity.app.crownhunt.CrownRange
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntStatsRepository
 import com.kungsbackacarcommunity.app.crownhunt.FirebasePerkDrainEventRepository
@@ -553,38 +556,6 @@ private const val MAX_NEARBY_LIVE_MARKERS = 50
  * whether the settle is even worth a callable.
  */
 private const val INCIDENT_CAMERA_IDLE_DEBOUNCE_MS = 500L
-
-/**
- * How often a fresh position fix is taken WHILE a Kronjakt crown popup is open.
- *
- * `crownHunt.claimSpawn` needs two fixes at least
- * [com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits.MIN_DWELL_SECONDS]
- * (4 s) apart and derives its own speed from the pair, so a single sample can
- * never satisfy it. 2 s means a usable pair exists a couple of seconds after the
- * server's own minimum — as fast as the rule permits, and no faster.
- *
- * Deliberately scoped to the OPEN POPUP and nothing else: this is a
- * high-accuracy GPS read, and running it for the whole session (or in the
- * background) to keep a Collect button warm would be a real battery cost for a
- * feature the user is not currently looking at.
- */
-private const val CROWN_FIX_INTERVAL_MS = 2_000L
-
-/**
- * How often the dwell tracker is PRE-WARMED with a fresh fix while the member is
- * near a collectable crown but has not opened one yet.
- *
- * A touch SLOWER than the open-popup claim cadence ([CROWN_FIX_INTERVAL_MS], 2 s):
- * pre-warming is not racing a countdown, it only has to land two fixes past
- * [com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits.MIN_DWELL_SECONDS]
- * apart before the member taps, so the Collect button is live the moment the
- * popup opens instead of after the old "tap, tap, then it works" wait. The loop
- * STOPS the instant a proof partner has aged in (see the pre-warm effect), so it
- * costs a couple of fixes, not a sustained poll. Deliberately gated to "in range
- * of a collectable crown, popup closed" and run at balanced power, so a parked
- * phone showing crowns far away pays nothing.
- */
-private const val CROWN_PREWARM_FIX_INTERVAL_MS = 3_000L
 
 /**
  * How often the crown MAP layer refreshes the member's coarse location to decide
@@ -1806,6 +1777,9 @@ fun AuthenticatedApp(
             // can be fixed — clears the card without the user hunting for a
             // refresh. Granting elsewhere and coming back must Just Work.
             val lifecycleOwner = LocalLifecycleOwner.current
+            val crownLifecycle by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+            var crownMapVisible by remember(uid) { mutableStateOf(false) }
+            val crownSamplingActive = crownMapVisible && crownLifecycle.isAtLeast(Lifecycle.State.RESUMED)
             DisposableEffect(lifecycleOwner) {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) locationAccessProbe++
@@ -2528,15 +2502,21 @@ fun AuthenticatedApp(
             // so the in-range set tracks the member across the ring.
             val anyCrownLayerActive = crownSpawnEnabled || adminCrownsVisible
             var crownUserLocation by remember { mutableStateOf<LatLng?>(null) }
-            LaunchedEffect(anyCrownLayerActive) {
-                if (!anyCrownLayerActive) {
+            var crownAmbientFix by remember(uid) { mutableStateOf<CrownFix?>(null) }
+            LaunchedEffect(anyCrownLayerActive, crownSamplingActive) {
+                if (!anyCrownLayerActive || !crownSamplingActive) {
                     crownUserLocation = null
+                    crownAmbientFix = null
                     return@LaunchedEffect
                 }
                 val appContext = context.applicationContext
-                while (true) {
-                    crownUserLocation = CurrentLocation.currentFix(appContext)
-                    delay(CROWN_RANGE_LOCATION_INTERVAL_MS)
+                lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    while (true) {
+                        val fix = CrownLocation.currentFix(appContext, highAccuracy = false)
+                        crownAmbientFix = fix
+                        crownUserLocation = fix?.let { LatLng(longitude = it.longitude, latitude = it.latitude) }
+                        delay(CROWN_RANGE_LOCATION_INTERVAL_MS)
+                    }
                 }
             }
             // The spawn ids the member is within collect range of. Keyed on the
@@ -2712,221 +2692,31 @@ fun AuthenticatedApp(
                         ?: MutableStateFlow<CrownClaimStatus>(CrownClaimStatus.Idle)
                 }
             val crownClaimStatus by crownClaimFlow.collectAsState()
-            // The rolling pair of fixes a claim needs (`crownHunt.claimSpawn` will
-            // not accept one — a self-reported speed of zero is just a number the
-            // client sent).
-            //
-            // SESSION-scoped, not keyed to the open crown, so it is PRE-WARMED: the
-            // range poll below feeds it while the member is near a crown, so a
-            // proof partner has usually already aged in the instant a popup opens —
-            // the fix for the "stand still, tap, tap, then it collects" lag. It is
-            // not cleared on leaving a popup; the tracker prunes anything past
-            // MAX_DWELL itself, and the server's freshness + dwell checks reject a
-            // stale pair, so keeping the warm recent history costs nothing and
-            // avoids throwing away a still-valid dwell the member just earned.
-            val crownFixTracker = remember { CrownFixTracker() }
-            var crownCurrentFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
-            var crownPreviousFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
-            // The FRESHEST fix, distinct from the SELECTED proof current above. The
-            // proof pair is chosen for best-accuracy-with-a-valid-in-range-partner
-            // (what a claim submits), so it can stay PINNED to an older, coarser fix
-            // while newer, finer fixes arrive that have not yet aged into their own
-            // in-range partner. If the "is GPS good enough to trust the distance"
-            // gate reads accuracy off that pinned proof fix, an improving signal
-            // never reaches it and the popup stays WaitingForSignal until a
-            // close/reopen re-seeds selection — exactly the "won't go collectable
-            // until I reopen it" report. This tracks the newest reading instead, so
-            // every fresh fix updates the accuracy the gate sees.
-            var crownLatestFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
-            // Counts refused (NeedsPosition) taps for THIS crown so a genuinely
-            // stuck dwell — the cause that never reaches the server — can be
-            // signalled once. Keyed per crown, so the dedup is structural: one
-            // signal per opened crown, no timer.
-            val crownCollectSignalTracker =
-                remember(tappedCrownId) { CrownCollectSignalTracker() }
-            // The claim has been ANSWERED — awarded or honestly refused. Terminal
-            // for this popup: [CrownSpawnPopup] swaps the whole body for the
-            // outcome, so there is no Collect button and no distance line left for
-            // a fresh fix to feed. `Failed` is deliberately NOT terminal — that one
-            // still offers a retry, which needs a live proof pair.
             val crownClaimDone = crownClaimStatus is CrownClaimStatus.Done
-            // High-accuracy fixes, but ONLY while a crown popup is open AND the
-            // claim is still open — so the cost is bounded by the user's own
-            // attention rather than running for the whole session, and a member who
-            // leaves the "+100 KP" confirmation on screen is not quietly holding
-            // GPS at 2 s for as long as they admire it. A 2 s cadence gets a usable
-            // proof pair a couple of seconds after the 4 s minimum dwell, which is
-            // as fast as the server's own rule allows.
-            LaunchedEffect(tappedCrownId, crownSpawnEnabled, crownClaimDone) {
-                if (tappedCrownId == null || !crownSpawnEnabled) {
-                    // With no crown open, drop any finished result. The status
-                    // lives on the controller and outlives the popup, so a
-                    // "someone got there first" left behind would greet the next
-                    // crown the member opened — whichever route closed this one.
-                    crownSpawnController?.resetClaim()
-                    return@LaunchedEffect
-                }
-                // Answered: stop polling, but leave the popup and the last fixes
-                // exactly as they are. Resetting here would replace the outcome the
-                // member is reading; that belongs to the close path above.
-                if (crownClaimDone) return@LaunchedEffect
-                val appContext = context.applicationContext
-                // Seed from the PRE-WARMED tracker before the first fresh read, so
-                // the distance line — and, when the range poll already warmed a
-                // pair, a live Collect button — are there the instant the popup
-                // opens rather than a fix cadence later.
-                // The crown is read from the slot each pass so the in-range gate
-                // uses the latched crown even if it landed a frame after this
-                // effect started (openCrownSlot fills from a sibling effect).
-                CrownProofSelection.selectFixes(
-                    crownFixTracker,
-                    System.currentTimeMillis(),
-                    openCrownSlot.value,
-                ).let { (cur, prev) ->
-                    crownCurrentFix = cur
-                    crownPreviousFix = prev
-                }
-                crownLatestFix = crownFixTracker.latest
-                while (true) {
-                    val fix = CrownLocation.currentFix(appContext)
-                    if (fix != null) {
-                        crownFixTracker.record(fix)
-                    }
-                    // Re-select the dwell pair on EVERY tick — the popup's own
-                    // now-tick — not only when THIS poll produced a fresh fix (#993).
-                    //
-                    // A fresh fix is still the only thing that can CREATE a new pair
-                    // (a dwell gap is measured between two fixed fix timestamps), so
-                    // recording stays gated on `fix != null` above. But selection must
-                    // NOT be: the seed at popup-open often runs before the tapped crown
-                    // has latched (openCrownSlot fills from a sibling effect a frame
-                    // later) or before the pre-warm pair is confirmed for THIS crown,
-                    // so it yields a null partner and the button shows "confirming".
-                    // If re-selection then only ran on a fresh fix, a popup whose
-                    // high-accuracy poll stalls or returns null (cold GPS right after
-                    // the balanced pre-warm, or a stationary phone the fused provider
-                    // withholds a new fix from) would stay frozen on that stale seed —
-                    // even though the shared, session-scoped tracker ALREADY holds a
-                    // usable in-range pair the pre-warm aged in. Closing and re-tapping
-                    // re-ran exactly this selection against that same tracker with the
-                    // crown now latched and went live, which is the reported
-                    // "close + reopen makes Collect active" workaround.
-                    //
-                    // Re-running selection each tick against the current tracker and
-                    // the now-latched crown flips crownDwellReady → true the instant a
-                    // usable stationary in-range pair exists, with no close/reopen —
-                    // mirroring how #972 re-evaluates the distance/accuracy gate live,
-                    // now applied to the dwell pair. It only ever gets STRICTER over
-                    // time (proofPair freshness-gates the current against `now`), never
-                    // weaker, so the #911 both-halves-in-range, #976 displacement-motion
-                    // and #972 GPS-coarse safety all stay intact; the server stays
-                    // authoritative.
-                    CrownProofSelection.selectFixes(
-                        crownFixTracker,
-                        System.currentTimeMillis(),
-                        openCrownSlot.value,
-                    ).let { (cur, prev) ->
-                        crownCurrentFix = cur
-                        crownPreviousFix = prev
-                    }
-                    // The newest reading, whether or not selection adopted it as the
-                    // proof current — this is what the WaitingForSignal gate watches,
-                    // so an improving accuracy flips the state live.
-                    crownLatestFix = crownFixTracker.latest
-                    delay(CROWN_FIX_INTERVAL_MS)
-                }
+            val crownCollectSignalTracker = remember(tappedCrownId) { CrownCollectSignalTracker() }
+            val crownNearbyInRange = remember(crownSpawns, inRangeSpawnIds) {
+                val ids = inRangeSpawnIds ?: emptySet()
+                crownSpawns.filter { it.id in ids }
             }
-            // Pre-warm the dwell tracker from the map's ongoing location WHILE the
-            // member is near a collectable crown but no popup is open yet, so a
-            // proof partner has already aged in the moment they tap one. Gated to
-            // "in range, popup closed" so it only runs where a collect is actually
-            // plausible; the open-popup loop above takes over (at the faster claim
-            // cadence, high accuracy) the instant a crown is tapped.
-            //
-            // Bounded so it never sits on GPS: it reads at BALANCED power (the
-            // timing, not the precise position, is all pre-warming needs — the
-            // popup's own high-accuracy loop refines the fix on open) and STOPS the
-            // moment an IN-RANGE proof partner is available. So the cost is a couple
-            // of samples when the member first parks by a crown, not a sustained
-            // poll while they linger.
-            val crownNearCollectable =
-                crownSpawnEnabled && (inRangeSpawnIds?.isNotEmpty() == true)
-            // The crowns the member is currently in range of — the ones a warm pair
-            // could actually be collected at. The pre-warm readiness is gated on
-            // being in range of ONE of them (#911): otherwise the loop stopped the
-            // instant any two approach-era fixes formed a time-valid pair, leaving
-            // the buffer full of out-of-range samples the popup's own geofence gate
-            // then rejected — so the "warm" pair bought nothing and the first tap
-            // fell back to a cold confirming wait. Keeping BOTH halves in range here
-            // means the popup usually opens genuinely Ready.
-            val crownNearbyInRange =
-                remember(crownSpawns, inRangeSpawnIds) {
-                    val ids = inRangeSpawnIds ?: emptySet()
-                    crownSpawns.filter { it.id in ids }
-                }
-            // Read through rememberUpdatedState so the long-lived pre-warm coroutine
-            // always warms against the CURRENT in-range crowns: the effect is keyed
-            // only on (crownNearCollectable, tappedCrownId), so as the member moves
-            // and the in-range SET changes underneath it — without that set becoming
-            // empty — the effect is not restarted and a plain capture would keep
-            // sampling against a stale crown (Copilot review).
-            val crownNearbyInRangeState = rememberUpdatedState(crownNearbyInRange)
-            LaunchedEffect(crownNearCollectable, tappedCrownId) {
-                if (!crownNearCollectable || tappedCrownId != null) return@LaunchedEffect
-                // In range of ANY nearby collectable crown. The popup re-checks the
-                // SPECIFIC crown; this only decides when the warm-up has what it
-                // needs, so an OR across the in-range crowns is the right bound.
-                val inRangeOfAny: (CrownFix) -> Boolean = { fix ->
-                    crownNearbyInRangeState.value.any { crown ->
-                        CrownRange.isInRange(
-                            CrownSpawnQuery.distanceMeters(
-                                fix.latitude,
-                                fix.longitude,
-                                crown.latitude,
-                                crown.longitude,
-                            ),
-                            crown.collectRadiusMeters,
-                        )
-                    }
-                }
-                // Already warm from an earlier pass — nothing to poll for. Uses the
-                // FRESH, in-range pair-readiness check, so a stale or out-of-range
-                // pair from a previous visit does not skip the warm-up.
-                if (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) != null) {
-                    return@LaunchedEffect
-                }
-                val appContext = context.applicationContext
-                while (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) == null) {
-                    CrownLocation.currentFix(appContext, highAccuracy = false)
-                        ?.let { crownFixTracker.record(it) }
-                    if (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) != null) {
-                        break
-                    }
-                    delay(CROWN_PREWARM_FIX_INTERVAL_MS)
-                }
+            val (crownReadinessSession, crownReadiness) = rememberCrownReadiness(
+                context.applicationContext, uid,
+                active = crownSamplingActive && crownSpawnEnabled,
+                crown = openCrown,
+                nearby = crownNearbyInRange,
+                answered = crownClaimDone,
+                ambient = crownAmbientFix,
+            )
+            val crownActionTarget = rememberUpdatedState(openCrown?.id)
+            val crownActionActive = rememberUpdatedState(crownSamplingActive)
+            val crownCurrentFix = crownReadiness.current
+            val crownPreviousFix = crownReadiness.previous
+            val crownLatestFix = crownReadiness.latest
+            val crownDwellReady = crownCurrentFix != null && crownPreviousFix != null &&
+                CrownCollectGate.isDwellProofUsable(crownPreviousFix, crownCurrentFix)
+            val crownDwellSecondsRemaining = crownReadiness.secondsRemaining
+            LaunchedEffect(tappedCrownId) {
+                if (tappedCrownId == null) crownSpawnController?.resetClaim()
             }
-            // Whether the two-fix stationary proof is ready, and — if not — a
-            // friendly whole-second hint for the confirming button. The gate turns
-            // "in range and stopped but no proof yet" into an honest, DISABLED
-            // "confirming you're stopped" instead of a live button that refuses.
-            val crownDwellReady =
-                remember(crownCurrentFix, crownPreviousFix) {
-                    val current = crownCurrentFix
-                    val previous = crownPreviousFix
-                    current != null && previous != null &&
-                        CrownCollectGate.isDwellProofUsable(previous, current)
-                }
-            val crownDwellSecondsRemaining =
-                remember(crownDwellReady, crownCurrentFix, openCrown) {
-                    if (crownDwellReady) {
-                        null
-                    } else {
-                        crownFixTracker.secondsUntilProofReady(
-                            System.currentTimeMillis(),
-                            CrownProofSelection.inRangePredicate(openCrown),
-                        )
-                    }
-                }
             // The ONE fix the popup DISPLAYS and the gate JUDGES — distance, speed
             // and accuracy all read off it, so the button never trusts a distance
             // from one fix against the accuracy of another. It is the FRESHEST
@@ -2998,6 +2788,9 @@ fun AuthenticatedApp(
                         accuracyMeters = crownGateFix?.accuracyMeters,
                     )
                 }
+            LaunchedEffect(crownCollectState, crownClaimStatus) {
+                if (crownCollectState == CrownCollectState.Ready) crownSpawnController?.resumeAfterPositionRefresh()
+            }
             // One key per opened crown, so a retry after a transport failure is the
             // SAME claim to the backend (which de-duplicates on it) rather than a
             // second attempt against the daily cap.
@@ -4243,6 +4036,10 @@ fun AuthenticatedApp(
                         navigating = navDestination != null,
                         navSearchOpen = navSearchOpen,
                     )
+
+                LaunchedEffect(uid, mapCover) {
+                    crownMapVisible = mapCover == MapCover.None
+                }
 
                 // Collapse the location prompt as soon as another page covers the
                 // map, matching how the map's other transient UI is reset (see
@@ -7170,16 +6967,25 @@ fun AuthenticatedApp(
                                         onCollect = {
                                             crownSpawnController?.let { controller ->
                                                 scope.launch {
+                                                    val freshProof = crownReadinessSession.proofForSubmission(
+                                                        System.currentTimeMillis(), crownForPopup,
+                                                    )
                                                     controller.collect(
                                                         spawn = crownForPopup,
-                                                        current = crownCurrentFix,
-                                                        previous = crownPreviousFix,
+                                                        current = freshProof?.current,
+                                                        previous = freshProof?.previous,
                                                         // Same key for every retry on
                                                         // this crown: the backend
                                                         // de-duplicates on it, so a
                                                         // failed-then-retried claim
                                                         // costs one attempt, not two.
                                                         idempotencyKey = crownIdempotencyKey,
+                                                        freshProofProvider = {
+                                                            if (crownActionActive.value && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                                                                crownActionTarget.value == crownForPopup.id) {
+                                                                crownReadinessSession.proofForSubmission(System.currentTimeMillis(), crownForPopup)
+                                                            } else null
+                                                        },
                                                     )
                                                     // Count THIS tap when it was
                                                     // refused for want of a dwell

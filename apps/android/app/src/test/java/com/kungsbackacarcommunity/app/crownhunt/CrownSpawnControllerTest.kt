@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -38,6 +39,8 @@ class CrownSpawnControllerTest {
         var lastKeys: List<String>? = null
         var claimCalls = 0
         var lastIdempotencyKey: String? = null
+        val claimKeys = mutableListOf<String>()
+        var claimAction: (suspend (CrownFix, CrownFix, String) -> CrownSpawnClaimOutcome)? = null
 
         override suspend fun listNearby(cellKeys: List<String>, nowMillis: Long): List<CrownSpawn> {
             listCalls += 1
@@ -54,6 +57,8 @@ class CrownSpawnControllerTest {
         ): CrownSpawnClaimOutcome {
             claimCalls += 1
             lastIdempotencyKey = idempotencyKey
+            claimKeys += idempotencyKey
+            claimAction?.let { return it(current, previous, idempotencyKey) }
             claimFailure?.let { throw it }
             return claimResult
                 ?: CrownSpawnClaimOutcome(CrownSpawnClaimResult.AWARDED, 10, 110, CrownRarity.COMMON)
@@ -984,4 +989,66 @@ class CrownSpawnControllerTest {
                 controller.collectedSpawnIds.value.contains("aCrown"),
             )
         }
+
+    @Test
+    fun `a delayed definite stale response retries once with a newer physical pair`() = runTest {
+        val repo = FakeRepo()
+        val controller = CrownSpawnController(repo)
+        val session = CrownReadinessSession()
+        val target = spawn()
+        fun fix(ms: Long) = CrownFix(target.latitude, target.longitude, ms, 0.0, 5.0)
+        session.record(fix(0)); session.record(fix(4000))
+        repo.claimAction = { _, _, _ ->
+            if (repo.claimCalls == 1) {
+                delay(11_000)
+                session.record(fix(15000))
+                CrownSpawnClaimOutcome(CrownSpawnClaimResult.POSITION_TOO_OLD, null, null, CrownRarity.COMMON)
+            } else CrownSpawnClaimOutcome(CrownSpawnClaimResult.AWARDED, 10, 110, CrownRarity.COMMON)
+        }
+        controller.collect(target, fix(4000), fix(0), "original") {
+            session.proofForSubmission(15000, target)
+        }
+        assertEquals(2, repo.claimCalls)
+        assertTrue(repo.claimKeys[0] != repo.claimKeys[1])
+        assertEquals(CrownSpawnClaimResult.AWARDED, (controller.claimStatus.value as CrownClaimStatus.Done).outcome.result)
+    }
+
+    @Test
+    fun `an unknown retry transport result preserves its new idempotency key`() = runTest {
+        val repo = FakeRepo()
+        val controller = CrownSpawnController(repo)
+        val target = spawn()
+        val old = CrownFix(target.latitude, target.longitude, 4000, 0.0)
+        val previous = old.copy(recordedAtMillis = 0)
+        val fresh = CrownProofPair(old.copy(recordedAtMillis = 15000), old)
+        repo.claimAction = { _, _, _ -> when (repo.claimCalls) {
+            1 -> CrownSpawnClaimOutcome(CrownSpawnClaimResult.POSITION_TOO_OLD, null, null, CrownRarity.COMMON)
+            2 -> throw IllegalStateException("transport result unknown")
+            else -> CrownSpawnClaimOutcome(CrownSpawnClaimResult.AWARDED, 10, 110, CrownRarity.COMMON)
+        } }
+        controller.collect(target, old, previous, "original") { fresh }
+        assertEquals(CrownClaimStatus.Failed, controller.claimStatus.value)
+        controller.collect(target, fresh.current, fresh.previous, "original") { fresh }
+        assertEquals(3, repo.claimCalls)
+        assertEquals(repo.claimKeys[1], repo.claimKeys[2])
+    }
+
+    @Test
+    fun `stale recovery is bounded and cannot manufacture a new pair when GPS stalls`() = runTest {
+        val repo = FakeRepo(claimResult = CrownSpawnClaimOutcome(
+            CrownSpawnClaimResult.POSITION_TOO_OLD, null, null, CrownRarity.COMMON))
+        val controller = CrownSpawnController(repo)
+        val target = spawn()
+        val old = CrownFix(target.latitude, target.longitude, 4000, 0.0)
+        val previous = old.copy(recordedAtMillis = 0)
+        controller.collect(target, old, previous, "original") { null }
+        assertEquals(1, repo.claimCalls)
+        assertEquals(CrownClaimStatus.NeedsPosition, controller.claimStatus.value)
+        controller.resumeAfterPositionRefresh()
+        controller.collect(target, old, previous, "second") {
+            CrownProofPair(old.copy(recordedAtMillis = 15000), old)
+        }
+        assertEquals(3, repo.claimCalls) // At most two in this second attempt.
+        assertEquals(CrownClaimStatus.NeedsPosition, controller.claimStatus.value)
+    }
 }

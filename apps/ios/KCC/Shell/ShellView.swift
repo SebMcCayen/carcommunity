@@ -1024,6 +1024,11 @@ struct ShellView: View {
                 do { try await Task.sleep(for: .seconds(86_400)) } catch {}
                 incidentMapCoordinator.stop()
             }
+            .onChange(of: foregroundMapWorkActive) { _, active in
+                // Cancel local evidence immediately, even if an earlier refresh
+                // is still waiting for its network response.
+                if !active { crownHuntComposition?.mapCoordinator?.stop() }
+            }
             .task(id: crownMapLifecycleKey) {
                 guard foregroundMapWorkActive,
                       let coordinator = crownHuntComposition?.mapCoordinator else { return }

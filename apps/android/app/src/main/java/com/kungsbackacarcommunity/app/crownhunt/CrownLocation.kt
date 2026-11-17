@@ -2,8 +2,17 @@ package com.kungsbackacarcommunity.app.crownhunt
 
 import android.content.Context
 import android.os.Build
+import android.os.Looper
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.isActive
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -16,7 +25,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * Separate from `CurrentLocation` rather than widening it, because the two want
  * opposite things. A route origin wants the CHEAPEST usable coordinate, so
  * `CurrentLocation` happily returns a cached last-known fix that may be minutes
- * old. A claim is refused outright if its fix is more than 60 s old, and its
+ * old. A claim must satisfy its server-side freshness window, and its
  * whole point is to describe where the member is RIGHT NOW — so this asks for a
  * current fix at high accuracy and never falls back to the cache.
  *
@@ -35,7 +44,7 @@ object CrownLocation {
      *
      * [Priority.PRIORITY_HIGH_ACCURACY] by default rather than the balanced
      * priority the route origin uses: a claim is decided on a 75 m radius and a
-     * 2 m/s speed ceiling, and a coarse network fix can be hundreds of metres out —
+     * near-stationary speed ceiling, and a coarse network fix can be hundreds of metres out —
      * which would produce refusals that look arbitrary to a member standing
      * directly on top of a crown.
      *
@@ -65,9 +74,11 @@ object CrownLocation {
             }
         return runCatching {
             suspendCancellableCoroutine { continuation ->
+                val cancellation = CancellationTokenSource()
+                continuation.invokeOnCancellation { cancellation.cancel() }
                 val task =
                     try {
-                        client.getCurrentLocation(priority, null)
+                        client.getCurrentLocation(priority, cancellation.token)
                     } catch (_: SecurityException) {
                         // Permission may be absent or revoked before the call.
                         continuation.resume(null)
@@ -102,6 +113,46 @@ object CrownLocation {
                     }
             }
         }.getOrNull()
+    }
+
+    /**
+     * Time-bounded by the collector's foreground/card lifecycle. A single request
+     * delivers physical provider fixes without getCurrentLocation + sleep gaps.
+     * Cancelling collection removes the callback, including failed registration.
+     */
+    fun updates(context: Context, highAccuracy: Boolean = true): Flow<CrownFix> = callbackFlow {
+        val client = runCatching {
+            LocationServices.getFusedLocationProviderClient(context.applicationContext)
+        }.getOrNull()
+        if (client == null) { close(); return@callbackFlow }
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                for (location in result.locations) {
+                    trySend(CrownFix(
+                        location.latitude, location.longitude, location.time,
+                        if (location.hasSpeed()) location.speed.toDouble() else null,
+                        if (location.hasAccuracy()) location.accuracy.toDouble() else null,
+                        isMock(location),
+                    ))
+                }
+            }
+        }
+        val request = LocationRequest.Builder(
+            if (highAccuracy) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+            CrownReadinessSession.UPDATE_INTERVAL_MS,
+        )
+            .setMinUpdateIntervalMillis(CrownReadinessSession.UPDATE_INTERVAL_MS)
+            .setMinUpdateDistanceMeters(0f)
+            .setMaxUpdateDelayMillis(0)
+            .setMaxUpdateAgeMillis(if (highAccuracy) 0L else CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000)
+            .setWaitForAccurateLocation(false)
+            .build()
+        try {
+            client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+                .addOnSuccessListener { if (!isActive) runCatching { client.removeLocationUpdates(callback) } }
+                .addOnFailureListener { close() }
+        } catch (_: SecurityException) { close() }
+        awaitClose { runCatching { client.removeLocationUpdates(callback) } }
     }
 
     /**
