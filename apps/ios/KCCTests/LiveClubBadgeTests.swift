@@ -184,6 +184,34 @@ final class LiveClubBadgeTests: XCTestCase {
 
 @MainActor
 final class LiveDriverAppearanceTests: XCTestCase {
+    func testRingVisibilityClearsImmediatelyWithRosterAndViewer() async {
+        let repository = AppearanceRepository()
+        let coordinator = LiveClubBadgeCoordinator { _ in repository }
+        coordinator.setRoster(viewerID: "viewer", drawnUIDs: ["driver"])
+        for _ in 0..<100 where repository.stream == nil { await Task.yield() }
+        repository.stream?.yield(.init(clubBadge: nil, showMembershipMapRing: true))
+        for _ in 0..<100 where !coordinator.showsMembershipRing(for: "driver", viewerID: "viewer") { await Task.yield() }
+        XCTAssertTrue(coordinator.showsMembershipRing(for: "driver", viewerID: "viewer"))
+        XCTAssertFalse(coordinator.showsMembershipRing(for: "driver", viewerID: "other"))
+        coordinator.setRoster(viewerID: "viewer", drawnUIDs: [])
+        XCTAssertFalse(coordinator.showsMembershipRing(for: "driver", viewerID: "viewer"))
+        repository.stream?.yield(.init(clubBadge: nil, showMembershipMapRing: true))
+        await Task.yield()
+        XCTAssertTrue(coordinator.membershipRings.isEmpty)
+        coordinator.stop()
+    }
+    func testRingUsesNativeGoldOverlayWithoutChangingPhotoSize() throws {
+        let plain = ImageRenderer(content: LiveCarPhotoBadge(imageURL: nil, badge: nil).padding(4))
+        let ring = ImageRenderer(content: LiveCarPhotoBadge(imageURL: nil, badge: nil, showMembershipMapRing: true).padding(4))
+        XCTAssertNotEqual(try XCTUnwrap(plain.uiImage).pngData(), try XCTUnwrap(ring.uiImage).pngData())
+        XCTAssertEqual(plain.uiImage?.size, ring.uiImage?.size)
+    }
+    private final class AppearanceRepository: LiveClubBadgeRepository {
+        var stream: AsyncStream<LiveDriverAppearance?>.Continuation?
+        func badgeUpdates(uid: String) -> AsyncStream<LiveClubBadge?> { AsyncStream { $0.finish() } }
+        func appearanceUpdates(uid: String) -> AsyncStream<LiveDriverAppearance?> { AsyncStream { stream = $0 } }
+    }
+
     func testPublicGoldRingEligibilityAndOptOutMirrorAndroid() {
         XCTAssertFalse(LiveDriverAppearance.decode([:])!.showMembershipMapRing)
         XCTAssertTrue(LiveDriverAppearance.decode(["membershipMapRingEligible": true])!.showMembershipMapRing)
