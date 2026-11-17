@@ -88,6 +88,21 @@ class DriverPhotoLayoutTest {
         }
     }
 
+    @Test fun `configured maximum keeps all photos when moving offsets fragment the grid`() {
+        val engine = DriverPhotoLayout()
+        val controls = listOf(DriverPhotoRect(16.0, 16.0, 64.0, 64.0), DriverPhotoRect(326.0, 16.0, 374.0, 64.0),
+            DriverPhotoRect(12.0, 632.0, 378.0, 688.0)) + (0..4).map { DriverPhotoRect(326.0, 88.0 + it * 60, 374.0, 136.0 + it * 60) }
+        val center = DriverPhotoPoint(195.0, 420.0)
+        val initial = (0..73).map { DriverPhotoAnchor("driver-$it", center) }
+        engine.layout(initial, 390.0, 700.0, center, controls)
+        for (frame in 0..3) {
+            val moved = initial.mapIndexed { i, a -> a.copy(point = DriverPhotoPoint(40.0 + (i * 37 + frame * 23) % 300, 80.0 + (i * 83 + frame * 31) % 500)) }
+            val result = engine.layout(moved, 390.0, 700.0, center, controls)
+            assertEquals(74, result.placed.size)
+            assertTrue(result.overflow.isEmpty())
+        }
+    }
+
     @Test fun `dense placement tokens and offsets remain stable during geographic motion`() {
         val engine = DriverPhotoLayout()
         val anchors = (0..11).map { DriverPhotoAnchor("driver-$it", own) }

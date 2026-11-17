@@ -479,6 +479,22 @@ final class DriverPhotoLayoutTests: XCTestCase {
             }
         }
     }
+    func testMovingMaximumRosterRepackagesFragmentedStickyOffsets() {
+        let layout = DriverPhotoLayout()
+        let center = DriverPhotoPoint(x: 195, y: 420)
+        var controls = [DriverPhotoRect(left: 16, top: 16, right: 64, bottom: 64),
+            DriverPhotoRect(left: 326, top: 16, right: 374, bottom: 64),
+            DriverPhotoRect(left: 12, top: 632, right: 378, bottom: 688)]
+        controls += (0...4).map { DriverPhotoRect(left: 326, top: 88 + Double($0) * 60, right: 374, bottom: 136 + Double($0) * 60) }
+        let initial = (0..<74).map { DriverPhotoAnchor(uid: "driver-\($0)", point: center) }
+        _ = layout.layout(initial, width: 390, height: 700, ownPoint: center, exclusions: controls)
+        for frame in 0...3 {
+            let moved = initial.enumerated().map { i, a in DriverPhotoAnchor(uid: a.uid,
+                point: .init(x: 40 + Double((i * 37 + frame * 23) % 300), y: 80 + Double((i * 83 + frame * 31) % 500))) }
+            let result = layout.layout(moved, width: 390, height: 700, ownPoint: center, exclusions: controls)
+            XCTAssertEqual(result.placed.count, 74); XCTAssertTrue(result.overflow.isEmpty)
+        }
+    }
     func testCrowdClearingRestoresShortLeaders() {
         let layout = DriverPhotoLayout()
         _ = layout.layout(anchors(74), width: 390, height: 844, ownPoint: own)

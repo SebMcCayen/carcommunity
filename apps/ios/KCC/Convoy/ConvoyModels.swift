@@ -1051,6 +1051,12 @@ final class DriverPhotoLayout {
             let wide = plan(valid, width: width, height: height, ownPoint: ownPoint, exclusions: exclusions, grid: grid, wide: true)
             if wide.placed.count > result.placed.count { result = wide; expanded = true; expandedCount = valid.count }
         }
+        if expanded, !result.overflow.isEmpty {
+            // Moving sticky offsets can fragment available grid capacity.
+            let packed = plan(valid, width: width, height: height, ownPoint: ownPoint,
+                exclusions: exclusions, grid: grid, wide: true, reusePrior: false)
+            if packed.placed.count > result.placed.count { result = packed }
+        }
         let committed = result.placed.map { item -> DriverPhotoPlacement in
             guard item.slot < 0 else { return item }
             let token = nextToken; nextToken += 1
@@ -1065,7 +1071,7 @@ final class DriverPhotoLayout {
     }
 
     private func plan(_ anchors: [DriverPhotoAnchor], width: Double, height: Double,
-                      ownPoint: DriverPhotoPoint?, exclusions: [DriverPhotoRect], grid: [DriverPhotoPoint], wide: Bool, clearance: Double = 4) -> DriverPhotoLayoutResult {
+                      ownPoint: DriverPhotoPoint?, exclusions: [DriverPhotoRect], grid: [DriverPhotoPoint], wide: Bool, clearance: Double = 4, reusePrior: Bool = true) -> DriverPhotoLayoutResult {
         let viewport = DriverPhotoRect(left: 8, top: 8, right: width - 8, bottom: height - 8)
         var placed: [DriverPhotoPlacement] = []
         var overflow: [DriverPhotoAnchor] = []
@@ -1076,7 +1082,7 @@ final class DriverPhotoLayout {
                     let ad = a.element.distance(to: item.point); let bd = b.element.distance(to: item.point)
                     return ad == bd ? (a.offset ^ Self.stableHash(item.uid)) < (b.offset ^ Self.stableHash(item.uid)) : ad < bd
                 }.map { Candidate(slot: -1 - $0.offset, photo: $0.element) }
-                if let slot = slots[item.uid], slot >= 1_000, let offset = offsets[item.uid] {
+                if reusePrior, let slot = slots[item.uid], slot >= 1_000, let offset = offsets[item.uid] {
                     candidates = [Candidate(slot: slot, photo: .init(x: item.point.x + offset.x, y: item.point.y + offset.y))] + ordered
                 } else { candidates = ordered }
             } else {

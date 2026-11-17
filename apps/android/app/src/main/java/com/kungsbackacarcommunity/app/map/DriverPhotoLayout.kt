@@ -68,6 +68,12 @@ class DriverPhotoLayout {
             val wide = plan(valid, width, height, ownPoint, exclusions, grid, true)
             if (wide.placed.size > result.placed.size) { result = wide; expanded = true; expandedCount = valid.size }
         }
+        if (expanded && result.overflow.isNotEmpty()) {
+            // Sticky offsets can fragment otherwise sufficient grid capacity
+            // after drivers separate. Repack only on an actual packing failure.
+            val packed = plan(valid, width, height, ownPoint, exclusions, grid, true, reusePrior = false)
+            if (packed.placed.size > result.placed.size) result = packed
+        }
         val committed = result.placed.map { if (it.slot < 0) it.copy(slot = nextToken++) else it }
         for (item in committed) {
             slots[item.uid] = item.slot
@@ -78,7 +84,7 @@ class DriverPhotoLayout {
 
     private fun plan(
         anchors: List<DriverPhotoAnchor>, width: Double, height: Double, ownPoint: DriverPhotoPoint?,
-        exclusions: List<DriverPhotoRect>, grid: List<DriverPhotoPoint>, wide: Boolean, clearance: Double = 4.0,
+        exclusions: List<DriverPhotoRect>, grid: List<DriverPhotoPoint>, wide: Boolean, clearance: Double = 4.0, reusePrior: Boolean = true,
     ): DriverPhotoLayoutResult {
         val viewport = DriverPhotoRect(8.0, 8.0, width - 8, height - 8)
         val placed = mutableListOf<DriverPhotoPlacement>()
@@ -87,7 +93,7 @@ class DriverPhotoLayout {
             val candidates = if (wide) {
                 val ordered = grid.withIndex().sortedWith(compareBy<IndexedValue<DriverPhotoPoint>> { it.value.distanceTo(item.point) }
                     .thenBy { it.index xor stableHash(item.uid) }).map { Candidate(-1 - it.index, it.value) }
-                val prior = slots[item.uid]?.takeIf { it >= 1_000 }?.let { slot -> offsets[item.uid]?.let {
+                val prior = slots[item.uid]?.takeIf { reusePrior && it >= 1_000 }?.let { slot -> offsets[item.uid]?.let {
                     Candidate(slot, DriverPhotoPoint(item.point.x + it.x, item.point.y + it.y))
                 } }
                 listOfNotNull(prior) + ordered

@@ -16,7 +16,10 @@ space between controls. Source coordinates remain unchanged.
 
 Normal placement uses sticky short slots (56/72 dp/pt). Dense placement packs
 48 dp/pt viewport cells, removing extra gaps while keeping 40 dp/pt photographs.
-Cached offsets move with their geographic anchors. Stable placement tokens permit
+Cached offsets move with their geographic anchors. If these moving offsets fragment
+the available grid and fail to place every driver, the planner retries a fresh
+full-grid packing before reporting a physical-capacity overflow. Stable placement
+tokens permit
 the separate transition PR to fade discrete slot changes without moving through
 the own puck. A crowd that shrinks to 60% of its entry count (minimum two), or
 spreads to at least 104 dp/pt between anchors, returns to short slots only when
@@ -42,6 +45,11 @@ SV/EN membership ring description comes from the shared localization contract.
 - PASS: Android production Kotlin compilation and 70 focused unit tests: geometry
   (13), smoothing (25), arrows (26), live layers (6). Debug APK and instrumentation
   APK assemble successfully.
+- PASS: all 14 pure Kotlin geometry cases using the bounded standalone compiler
+  and JUnit, including a matched Android/iOS 74-driver mixed-motion regression.
+  The pre-fix compiled planner lost 22–28 photos across the four deterministic
+  mixed-motion frames; the fix has zero overflow in those frames. The final
+  integrated Gradle run must repeat this added regression.
 - PASS: iOS read-only source preflight and 67 Python script tests.
 - Pending: Android synthetic component capture (normal, dense, edge/manual-pan,
   exact UID tap and offscreen convoy arrow). Fixture compilation is complete.
