@@ -51,6 +51,11 @@ final class ProfileCoordinator {
     /// The resolved avatar download URL, nil while unresolved / when the
     /// profile has no avatar / when resolution failed (placeholder renders).
     private(set) var avatarURL: URL?
+    /// Derive affiliation from the same observable snapshot as Android; no duplicate state.
+    var clubBadge: ClubBadge? {
+        guard case .loaded(let profile) = state else { return nil }
+        return profile?.clubBadge
+    }
     /// The avatarPath ``avatarURL`` was last resolved for, so an unchanged
     /// path across snapshots (every profile update re-emits the whole doc)
     /// never re-pays the download-URL round-trip — the concern Android's
@@ -65,7 +70,10 @@ final class ProfileCoordinator {
     init(repository: UserProfileRepository?, uid: String?) {
         self.repository = repository
         self.uid = uid
-        self.state = (repository == nil || uid == nil) ? .unavailable : .loading
+        self.state = .loading
+        if repository == nil || uid == nil {
+            self.state = .unavailable
+        }
     }
 
     deinit {

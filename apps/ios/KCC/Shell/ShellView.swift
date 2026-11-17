@@ -21,6 +21,8 @@ struct ShellView: View {
     let access: AccountAccess
     let featureFlags: FeatureFlags
     let diagnostics: IOSDiagnosticsComposition
+    /// Reuse the authenticated experience's live profile; no extra listener per avatar.
+    let profile: ProfileCoordinator?
 
     @State private var selectedTab: ShellTab = .defaultTab
     @State private var chatHasOpened = false
@@ -37,6 +39,7 @@ struct ShellView: View {
         access: AccountAccess,
         featureFlags: FeatureFlags,
         diagnostics: IOSDiagnosticsComposition,
+        profile: ProfileCoordinator? = nil,
         initialRoute: ShellRoute? = nil,
         initialTab: ShellTab? = nil
     ) {
@@ -45,6 +48,7 @@ struct ShellView: View {
         self.access = access
         self.featureFlags = featureFlags
         self.diagnostics = diagnostics
+        self.profile = profile
         let restoredTab = initialTab ?? .defaultTab
         _selectedTab = State(initialValue: ShellNavigation.restoredTab(restoredTab))
         _routes = State(initialValue: ShellNavigation.restoredRoutes(tab: restoredTab, route: initialRoute))
@@ -1252,16 +1256,11 @@ struct ShellView: View {
                 }
             }
         } label: {
-            Label(
-                signedInUid == nil
-                    ? LocalizedStringKey("settingsMenu.title")
-                    : LocalizedStringKey("shell.moreProfile"),
-                systemImage: signedInUid == nil ? "gearshape" : "person.circle"
+            MapProfileAvatar(
+                avatarURL: profile?.avatarURL,
+                clubBadge: profile?.clubBadge,
+                signedIn: signedInUid != nil
             )
-            .labelStyle(.iconOnly)
-            .font(.system(size: 22))
-            .frame(width: 48, height: 48)
-            .kccMapControl()
         }
         .accessibilityIdentifier("shell.menu")
         .padding(KccSpacing.s4)
@@ -3354,4 +3353,69 @@ extension ShellTab {
 private struct InvitationFooterHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// The map menu consumes resolved own-profile state, just like Android MapHome.
+struct MapProfileAvatar: View {
+    let avatarURL: URL?
+    let clubBadge: ClubBadge?
+    let signedIn: Bool
+
+    var body: some View {
+        AsyncImage(url: signedIn ? avatarURL : nil) { avatar in
+            AsyncImage(url: signedIn ? clubBadge?.logoURL : nil) { logo in
+                MapProfileAvatarContent(
+                    avatar: avatar.image, clubBadge: signedIn ? clubBadge : nil,
+                    clubLogo: logo.image, signedIn: signedIn
+                )
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(signedIn
+            ? Text("shell.moreProfile") : Text("settingsMenu.title"))
+        .accessibilityValue(signedIn ? clubBadge.map {
+            String(format: String(localized: "clubBadge.accessibility"), $0.clubName)
+        } ?? "" : "")
+    }
+}
+
+/// Image phases share the same geometry; loading/failure keep visible fallbacks.
+struct MapProfileAvatarContent: View {
+    let avatar: Image?
+    let clubBadge: ClubBadge?
+    let clubLogo: Image?
+    let signedIn: Bool
+
+    var body: some View {
+        ZStack {
+            Image(systemName: signedIn ? "person.circle" : "gearshape")
+                .font(.system(size: 22))
+            if let avatar, signedIn {
+                avatar.resizable().scaledToFill()
+                    .frame(width: 48, height: 48)
+                    .clipShape(Circle())
+            }
+        }
+        .frame(width: 48, height: 48)
+        .kccMapControl()
+        .overlay(alignment: .topLeading) {
+            if let clubBadge, signedIn {
+                ZStack {
+                    KccTheme.subtle
+                    Text(clubBadge.initials)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(KccTheme.text)
+                        .lineLimit(1)
+                    if let clubLogo {
+                        clubLogo.resizable().scaledToFill()
+                            .frame(width: 20, height: 20)
+                    }
+                }
+                .frame(width: 20, height: 20)
+                .clipShape(Circle())
+                .overlay { Circle().strokeBorder(KccTheme.surface, lineWidth: 2) }
+                .allowsHitTesting(false)
+            }
+        }
+    }
 }

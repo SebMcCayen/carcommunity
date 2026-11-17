@@ -52,7 +52,8 @@ struct AuthenticatedExperience: View {
                     session: session,
                     access: access,
                     featureFlags: featureFlags,
-                    diagnostics: diagnostics
+                    diagnostics: diagnostics,
+                    profile: profile
                 )
                 .id(uid)
             case .recovery(let canRetry):

@@ -35,6 +35,25 @@ eligible accounts. The API and authorization contract is in
 - The club logo is a server-projected avatar affiliation badge; it is not a trust
   or moderator indicator and clients cannot assign it in a profile-edit payload.
 
+### Map profile avatar parity (iOS and Android)
+
+The top-right map menu displays the saved own-profile photo, including changes
+received while the profile editor is open. A missing/loading/failed photo keeps
+the account icon. A valid public `users/{uid}.clubBadge` overlays a 20 pt/dp club
+logo at the top-left of the 48 pt/dp avatar; missing/failed/unsafe logos keep club
+initials. Only Firebase Storage HTTPS logo objects belonging to that club are
+accepted. Removing the projection removes the badge; switching accounts starts
+with empty identity state. The menu keeps its profile accessibility label and
+announces the club name. The iOS shell reuses the onboarding profile observer,
+so rendering the badge opens no additional profile or membership query.
+
+Acceptance scenarios: upload/change/remove a photo, join/change/leave a club,
+load without a photo or logo, fail image loading, and replace the signed-in
+account. iOS model/coordinator and native rendering tests cover these state
+and image-fallback rules; Android already implements them through
+`rememberStorageImageUrl`, `ClubAvatarFrame`, and `ClubBadgeTest` and needs no
+runtime change for this iOS parity correction.
+
 ## Cost and privacy limits
 
 Directory, roster, calendar, messages and event participants load in bounded
