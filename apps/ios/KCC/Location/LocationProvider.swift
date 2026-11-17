@@ -74,6 +74,45 @@ protocol LocationProvider: AnyObject {
     func recordingEvents() -> AsyncStream<RecordingLocationEvent>
 }
 
+extension LocationProvider {
+    /// One bounded positioning attempt. Cancelling the reader terminates its
+    /// provider stream on success, timeout and parent cancellation, so a periodic
+    /// caller holds no GPS demand while it uploads or waits for the next attempt.
+    func freshFix(timeout: Duration = .seconds(10)) async -> LocationFix? {
+        guard authorization.isAuthorized, !Task.isCancelled else { return nil }
+        let stream = fixes()
+        let result = AsyncStream<LocationFix?>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        return await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for await fix in stream {
+                    let age = Date().timeIntervalSince(fix.timestamp)
+                    guard age >= -60, age <= 300,
+                          fix.latitude.isFinite, abs(fix.latitude) <= 90,
+                          fix.longitude.isFinite, abs(fix.longitude) <= 180 else { continue }
+                    result.continuation.yield(fix)
+                    // Keep the reader alive until the parent cancels it. Returning
+                    // here would merely break iteration, not cancel the stream.
+                }
+                result.continuation.finish()
+            }
+            group.addTask {
+                do { try await Task.sleep(for: timeout) }
+                catch { return }
+                result.continuation.yield(nil)
+                result.continuation.finish()
+            }
+            var fix: LocationFix?
+            for await value in result.stream {
+                fix = value
+                break
+            }
+            group.cancelAll()
+            result.continuation.finish()
+            return Task.isCancelled ? nil : fix
+        }
+    }
+}
+
 /// Decisions retain coordinates only for the accepted, private route stream.
 /// Rejections contain a closed reason, never the rejected location.
 enum RecordingLocationRejection: Sendable {

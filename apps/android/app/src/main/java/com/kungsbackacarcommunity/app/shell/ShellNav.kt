@@ -214,6 +214,10 @@ data class ShellRouteStack(
 )
 
 object ShellNavigation {
+    /** Only the unobscured map chrome can present and acknowledge an incoming wave. */
+    fun waveOverlayVisible(tab: ShellTab, cover: MapCover, chatHubOpen: Boolean, navigating: Boolean): Boolean =
+        tab == ShellTab.Map && cover == MapCover.None && !chatHubOpen && !navigating
+
     /**
      * Resolves a system-Back press given the current [tab] and open [route].
      * An open route always closes first — which, with a route back-stack, means

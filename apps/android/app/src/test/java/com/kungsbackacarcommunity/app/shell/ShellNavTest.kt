@@ -9,6 +9,22 @@ import org.junit.Test
  */
 class ShellNavTest {
     @Test
+    fun `waves stay unread when another tab or map overlay hides them`() {
+        for (tab in ShellTab.entries) {
+            val cover = ShellNavigation.mapCover(tab, null, navigating = false, navSearchOpen = false)
+            assertEquals(tab == ShellTab.Map, ShellNavigation.waveOverlayVisible(tab, cover, false, false))
+        }
+        for (route in listOf(ShellRoute.Profile, ShellRoute.Settings, ShellRoute.Notifications)) {
+            val cover = ShellNavigation.mapCover(ShellTab.Map, route, navigating = false, navSearchOpen = false)
+            assertEquals(false, ShellNavigation.waveOverlayVisible(ShellTab.Map, cover, false, false))
+        }
+        val searchCover = ShellNavigation.mapCover(ShellTab.Map, null, navigating = false, navSearchOpen = true)
+        assertEquals(false, ShellNavigation.waveOverlayVisible(ShellTab.Map, searchCover, false, false))
+        assertEquals(false, ShellNavigation.waveOverlayVisible(ShellTab.Map, MapCover.None, true, false))
+        assertEquals(false, ShellNavigation.waveOverlayVisible(ShellTab.Map, MapCover.None, false, true))
+    }
+
+    @Test
     fun `full screen finish feedback pauses the map above every tab and search`() {
         ShellTab.entries.forEach { tab ->
             assertEquals(

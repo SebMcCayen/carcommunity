@@ -34,7 +34,10 @@ The discovery record must be active, unexpired and refreshed within five minutes
 The private `userPrivate/{uid}.epicNotificationLocation` stores only the latest
 position and expires after 24 hours. Both apps update it at most every five
 minutes while foregrounded and already authorized for location. No new
-background location permission is requested. Disabling Epic in-app notices or
+background location permission is requested. iOS acquires a fresh fix with a
+bounded ten-second attempt and cancels that stream before uploading or sleeping
+between attempts; this observer keeps no GPS demand during the five-minute gap.
+Disabling Epic in-app notices or
 revoking location permission clears the position on the next foreground sync.
 The existing daily notification sweep clears expired position fields without
 deleting private user documents. Account deletion removes the private position.
@@ -64,7 +67,9 @@ Normal Community retention applies.
 
 ## Displayed Android waves
 
-Only a wave displayed while the map is resumed calls `live-acknowledgeWave`.
+Only a wave displayed while the map is resumed and unobscured calls
+`live-acknowledgeWave`. Other tabs, routes, search, the chat hub and turn-by-turn
+navigation stop the wave listener and leave incoming notices unread.
 The callable derives the recipient from auth and records `seen` on that wave.
 It marks only the associated persistent wave notification read. The wave writer
 and acknowledgement share a transaction fence, so an acknowledgement arriving

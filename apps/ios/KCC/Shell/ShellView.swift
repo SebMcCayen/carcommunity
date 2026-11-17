@@ -2989,14 +2989,14 @@ struct ShellView: View {
             return
         }
         guard epicLocationEnabled == true, scenePhase == .active else { return }
-        var lastAttempt = Date.distantPast
-        for await fix in locationProvider.fixes() {
+        while !Task.isCancelled {
+            // Release this feature's positioning demand before uploading/sleeping.
+            // Chat and settings must not leave the GPS running for five minutes.
+            let fix = await locationProvider.freshFix()
             guard !Task.isCancelled else { return }
-            let now = Date()
-            guard now.timeIntervalSince(lastAttempt) >= 300,
-                  now.timeIntervalSince(fix.timestamp) <= 300 else { continue }
-            lastAttempt = now
-            try? await repository.updateEpicLocation(fix)
+            if let fix { try? await repository.updateEpicLocation(fix) }
+            do { try await Task.sleep(for: .seconds(300)) }
+            catch { return }
         }
     }
 

@@ -27,6 +27,60 @@ final class StubLocationProviderTests: XCTestCase {
     // MARK: - authorization stream
 
     @MainActor
+    func testOneShotFixReleasesPositioningBetweenPeriodicAttempts() async {
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        for _ in 0..<2 {
+            let task = Task { await provider.freshFix() }
+            await waitUntil { provider.activeFixStreamCount == 1 }
+            let fix = LocationFix.of(latitude: 57.48, longitude: 12.08, timestamp: Date())!
+            provider.emitFix(fix)
+            let received = await task.value
+            XCTAssertEqual(received, fix)
+            await waitUntil { provider.activeFixStreamCount == 0 }
+        }
+        XCTAssertEqual(provider.whenInUseRequestCount, 0)
+    }
+
+    @MainActor
+    func testOneShotFixTimeoutReleasesPositioning() async {
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let received = await provider.freshFix(timeout: .milliseconds(20))
+        XCTAssertNil(received)
+        await waitUntil { provider.activeFixStreamCount == 0 }
+    }
+
+    @MainActor
+    func testCancelledOneShotFixReleasesPositioning() async {
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let task = Task { await provider.freshFix() }
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        task.cancel()
+        let received = await task.value
+        XCTAssertNil(received)
+        await waitUntil { provider.activeFixStreamCount == 0 }
+    }
+
+    @MainActor
+    func testOneShotFixSkipsStaleSamplesAndDoesNotRequestPermission() async {
+        let denied = StubLocationProvider(authorization: .denied)
+        let unavailable = await denied.freshFix()
+        XCTAssertNil(unavailable)
+        XCTAssertEqual(denied.activeFixStreamCount, 0)
+        XCTAssertEqual(denied.whenInUseRequestCount, 0)
+
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let task = Task { await provider.freshFix() }
+        await waitUntil { provider.activeFixStreamCount == 1 }
+        provider.emitFix(LocationFix.of(latitude: 58, longitude: 13,
+                                       timestamp: Date().addingTimeInterval(-600))!)
+        let current = LocationFix.of(latitude: 57.48, longitude: 12.08, timestamp: Date())!
+        provider.emitFix(current)
+        let received = await task.value
+        XCTAssertEqual(received, current)
+        await waitUntil { provider.activeFixStreamCount == 0 }
+    }
+
+    @MainActor
     func testAuthorizationStreamYieldsCurrentValueFirstThenChanges() async {
         let provider = StubLocationProvider(authorization: .notDetermined)
         let stream = provider.authorizationUpdates()

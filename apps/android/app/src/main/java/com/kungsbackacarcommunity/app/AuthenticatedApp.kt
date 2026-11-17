@@ -5608,13 +5608,19 @@ fun AuthenticatedApp(
                 val waveCaptionAnon = stringResource(R.string.wave_captionAnonymous)
                 val waveCaptionSelf = stringResource(R.string.wave_captionSelf)
 
-                // Receive: while sharing, listen to MY inbox and pop each incoming
-                // wave with a "who waved" caption. Keyed on (repo, uid, isSharing) so
-                // the listener is torn down the moment sharing stops.
+                // A resumed Activity can still have another page above the map.
+                // Listen only while the overlay itself can be seen; waves arriving
+                // behind chat, another tab, search, a route or navigation stay unread.
+                val waveOverlayVisible = ShellNavigation.waveOverlayVisible(
+                    selectedTab, mapCover, chatHubOpen, navDestination != null,
+                )
                 val waveLifecycle = LocalLifecycleOwner.current.lifecycle
-                LaunchedEffect(waveRepository, uid, isSharing, waveLifecycle) {
+                LaunchedEffect(waveRepository, uid, isSharing, waveLifecycle, waveOverlayVisible) {
                     val repo = waveRepository
-                    if (repo == null || !isSharing) return@LaunchedEffect
+                    if (repo == null || !isSharing || !waveOverlayVisible) {
+                        waveOverlayEvent = null
+                        return@LaunchedEffect
+                    }
                     waveLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
                         val since = System.currentTimeMillis()
                         repo.observeIncomingWaves(uid, since).collect { wave ->
@@ -5710,7 +5716,7 @@ fun AuthenticatedApp(
                     }
 
                 val waveOverlaySlot: (@Composable () -> Unit)? =
-                    if (waveRepository != null) {
+                    if (waveRepository != null && waveOverlayVisible) {
                         { ReactionOverlay(event = waveOverlayEvent, onFinished = { waveOverlayEvent = null }) }
                     } else {
                         null
