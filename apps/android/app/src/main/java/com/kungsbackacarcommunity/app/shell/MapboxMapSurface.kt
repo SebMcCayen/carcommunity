@@ -1315,7 +1315,7 @@ class MapboxMapSurface(
     private fun updateCameraVisibility() {
         val visible = surfaceActive && sceneResumed
         cameraResume.visibilityChanged(visible, followController.shouldTrack(routeOverlayFlow.value != null) && convoyFitPoints == null,
-            lastPoint?.let { MapPoint(it.longitude(), it.latitude()) })
+            puckLocationProvider?.cameraSourceFix?.sequence)
         if (!visible) {
             cameraReturnJob?.cancel()
             cameraReturnJob = null
@@ -1327,11 +1327,13 @@ class MapboxMapSurface(
     }
 
     private fun returnCameraIfNeeded(point: Point): Boolean {
-        val recorded = recordedBreadcrumbFlow.value?.position
+        val source = puckLocationProvider?.cameraSourceFix
         val now = SystemClock.elapsedRealtime()
-        val fresh = if (recordedBreadcrumbFlow.value != null) recorded != null && now - recorded.elapsedRealtimeMs in 0L..MapCameraResumePolicy.MAX_FIX_AGE_MS else true
-        val coordinate = MapPoint(point.longitude(), point.latitude())
-        if (!cameraResume.takeReturn(coordinate, fresh)) return cameraResume.pending || cameraReturnJob?.isActive == true
+        // SDK-only input exposes receipt time, not physical GPS capture time.
+        // Its first callback may recenter, but course still requires two raw
+        // source positions: native interpolation cannot masquerade as movement.
+        val fresh = source == null || now - (source.capturedAtMs ?: source.receivedAtMs) in 0L..MapCameraResumePolicy.MAX_FIX_AGE_MS
+        if (!cameraResume.takeReturn(source?.sequence, fresh)) return cameraResume.pending || cameraReturnJob?.isActive == true
         val map = mapViewRef ?: return false
         val scope = followScope ?: return false
         val firstFix = !centeredOnFirstFix
@@ -1783,7 +1785,9 @@ class MapboxMapSurface(
                         }
                         val map = mapViewRef ?: return@OnIndicatorPositionChangedListener
                         if (!surfaceActive || !sceneResumed) return@OnIndicatorPositionChangedListener
-                        cameraResume.position(MapPoint(point.longitude(), point.latitude()), SystemClock.elapsedRealtime(), recordedBreadcrumbFlow.value?.position?.speedMps)
+                        puckLocationProvider?.cameraSourceFix?.let { source ->
+                            cameraResume.position(source.point, source.receivedAtMs, source.speedMps, source.sequence)
+                        }
                         if (convoyFitPoints == null && returnCameraIfNeeded(point)) return@OnIndicatorPositionChangedListener
                         // "Keep the whole convoy in view" replaces the follow TARGET,
                         // not the follow MACHINERY: same gate above, same listener,

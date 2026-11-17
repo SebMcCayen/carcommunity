@@ -25,6 +25,10 @@ internal class RecordingPuckLocationProvider(
     private var courseBearing = RecordingCourseBearing()
     private var recordingBearing: Double? = null
     private val motion = RecordingMapMotion()
+    private var cameraSourceSequence = 0L
+    /** Receipt identity is separate from interpolated render frames and GPS age. */
+    var cameraSourceFix: MapCameraSourceFix? = null
+        private set
     var renderedFrame: RecordingMapFrame? = null
         private set
 
@@ -39,12 +43,15 @@ internal class RecordingPuckLocationProvider(
         this.position = next
         if (changedSource || changedPosition) emissionGeneration++
         if (changedSource) {
+            cameraSourceFix = null
             courseBearing = RecordingCourseBearing()
             recordingBearing = null
             motion.reset()
             renderedFrame = null
         }
         if (recording && next != null && (changedSource || changedPosition)) {
+            cameraSourceFix = MapCameraSourceFix(next.point, ++cameraSourceSequence,
+                elapsedRealtime(), capturedAtMs = next.elapsedRealtimeMs, speedMps = next.speedMps)
             recordingBearing = courseBearing.update(next)
             motion.update(next, points, recordingBearing, elapsedRealtime())
         }
@@ -133,7 +140,12 @@ internal class RecordingPuckLocationProvider(
             fun current() = !recording && consumer in consumers && deviceConsumers[consumer] === this
 
             override fun onLocationUpdated(vararg location: Point, options: (ValueAnimator.() -> Unit)?) {
-                if (current()) consumer.onLocationUpdated(*location, options = options)
+                if (!current()) return
+                location.lastOrNull()?.let { point ->
+                    cameraSourceFix = MapCameraSourceFix(
+                        MapPoint(point.longitude(), point.latitude()), ++cameraSourceSequence, elapsedRealtime())
+                }
+                consumer.onLocationUpdated(*location, options = options)
             }
 
             override fun onBearingUpdated(vararg bearing: Double, options: (ValueAnimator.() -> Unit)?) {

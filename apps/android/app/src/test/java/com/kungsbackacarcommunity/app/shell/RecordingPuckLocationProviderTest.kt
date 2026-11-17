@@ -25,6 +25,30 @@ class RecordingPuckLocationProviderTest {
     )
 
     @Test
+    fun `camera source identity advances on raw receipts but never on display frames`() {
+        provider.registerLocationConsumer(consumer)
+        val proxy = device.consumers.single()
+        val point = Point.fromLngLat(12.0, 57.0)
+        proxy.onLocationUpdated(point)
+        val first = requireNotNull(provider.cameraSourceFix)
+        assertEquals(MapPoint(12.0, 57.0), first.point)
+        assertEquals(null, first.capturedAtMs) // The SDK supplies Point[], not a GPS timestamp.
+        now += 1_000
+        proxy.onLocationUpdated(point)
+        val identical = requireNotNull(provider.cameraSourceFix)
+        assertTrue(identical.sequence > first.sequence)
+        assertEquals(first.point, identical.point)
+
+        val fix = position().copy(pointCount = 1)
+        provider.update(true, fix, listOf(fix.point))
+        val recordingSource = requireNotNull(provider.cameraSourceFix)
+        assertEquals(fix.elapsedRealtimeMs, recordingSource.capturedAtMs)
+        now += 100
+        provider.advance()
+        assertEquals(recordingSource, provider.cameraSourceFix)
+    }
+
+    @Test
     fun `live puck uses exact recorder vertices and fences independent device fixes`() {
         provider.registerLocationConsumer(consumer)
         val oldDeviceConsumer = device.consumers.single()

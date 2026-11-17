@@ -17,6 +17,20 @@ final class MapCameraResumePolicyTests: XCTestCase {
         XCTAssertTrue(policy.takeReturn(fixAt: now.addingTimeInterval(1), now: now.addingTimeInterval(1)))
     }
 
+    func testFreshIdenticalPositionIsNotStarvedByTheCachedFixTimestamp() {
+        // Coordinates intentionally remain identical: receipt identity is solely temporal.
+        var policy = MapCameraResumePolicy()
+        policy.visibilityChanged(visible: true, following: true)
+        XCTAssertTrue(policy.takeReturn(fixAt: now, now: now))
+        policy.recordFix(at: now.addingTimeInterval(1))
+        policy.visibilityChanged(visible: false, following: true)
+        policy.visibilityChanged(visible: true, following: true)
+        XCTAssertFalse(policy.takeReturn(fixAt: now.addingTimeInterval(1), now: now.addingTimeInterval(2)))
+        XCTAssertFalse(policy.takeReturn(fixAt: now.addingTimeInterval(-10), now: now.addingTimeInterval(2)))
+        XCTAssertTrue(policy.takeReturn(fixAt: now.addingTimeInterval(2), now: now.addingTimeInterval(2)))
+        XCTAssertFalse(policy.pending)
+    }
+
     func testManualIntentNeverArmsOrRestartsAnAutomaticReturn() {
         var policy = MapCameraResumePolicy()
         policy.visibilityChanged(visible: true, following: false)

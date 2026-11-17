@@ -10,25 +10,55 @@ class MapCameraResumePolicyTest {
     @Test fun `one return per visible edge and no replay of hidden position`() {
         val policy = MapCameraResumePolicy()
         policy.visibilityChanged(true, true, null)
-        assertTrue(policy.takeReturn(point, true))
-        assertFalse(policy.takeReturn(moved, true))
-        policy.visibilityChanged(false, true, point)
-        policy.visibilityChanged(true, true, point)
-        assertFalse(policy.takeReturn(point, true))
+        assertTrue(policy.takeReturn(1L, true))
+        assertFalse(policy.takeReturn(2L, true))
+        policy.visibilityChanged(false, true, 1L)
+        policy.visibilityChanged(true, true, 1L)
+        assertFalse(policy.takeReturn(1L, true))
         assertTrue(policy.pending)
-        assertFalse(policy.takeReturn(moved, false))
-        assertTrue(policy.takeReturn(moved, true))
+        assertFalse(policy.takeReturn(2L, false))
+        assertTrue(policy.takeReturn(2L, true))
+    }
+
+    @Test fun `fresh identical coordinate resumes but stale and cached sources never do`() {
+        val policy = MapCameraResumePolicy()
+        policy.visibilityChanged(true, true, null)
+        policy.position(point, 1_000, 0.0, 1L)
+        assertTrue(policy.takeReturn(1L, true))
+        policy.visibilityChanged(false, true, 1L)
+        policy.visibilityChanged(true, true, 1L)
+        policy.position(point, 2_000, 0.0, 1L) // Cached identical position.
+        assertFalse(policy.takeReturn(1L, true))
+        policy.position(moved, 2_000, 0.0, 1L) // Changed coordinates do not make a cached receipt new.
+        assertFalse(policy.takeReturn(1L, true))
+        assertFalse(policy.takeReturn(2L, false)) // Stale identical source.
+        assertFalse(policy.takeReturn(3L, false)) // Stale changed source.
+        policy.position(point, 3_000, 0.0, 2L)
+        assertTrue(policy.takeReturn(2L, true)) // Fresh identical position must not starve.
+        assertFalse(policy.pending)
+    }
+
+    @Test fun `SDK fallback can return once but interpolated frames cannot create movement proof`() {
+        val policy = MapCameraResumePolicy()
+        policy.visibilityChanged(true, true, null)
+        assertTrue(policy.takeReturn(null, true))
+        assertFalse(policy.pending)
+        policy.position(point, 1_000, sourceSequence = 1L)
+        policy.position(moved, 1_500, sourceSequence = 1L)
+        assertFalse(policy.acceptsCourse(1_500))
+        policy.position(moved, 2_000, sourceSequence = 2L)
+        assertTrue(policy.acceptsCourse(2_000))
     }
 
     @Test fun `manual intent and route ownership survive visibility changes`() {
         val policy = MapCameraResumePolicy()
         policy.visibilityChanged(true, false, null)
-        assertFalse(policy.takeReturn(point, true))
-        policy.visibilityChanged(false, false, point)
-        policy.visibilityChanged(true, true, point)
+        assertFalse(policy.takeReturn(1L, true))
+        policy.visibilityChanged(false, false, 1L)
+        policy.visibilityChanged(true, true, 1L)
         policy.cancel()
-        assertFalse(policy.takeReturn(moved, true))
-        policy.visibilityChanged(true, true, point)
+        assertFalse(policy.takeReturn(2L, true))
+        policy.visibilityChanged(true, true, 1L)
         assertFalse(policy.pending)
     }
 
@@ -42,8 +72,8 @@ class MapCameraResumePolicyTest {
         policy.position(moved, 1_100, 0.0)
         assertFalse(policy.acceptsCourse(1_100))
         policy.position(moved, 1_200, 10.0)
-        policy.visibilityChanged(false, true, moved)
-        policy.visibilityChanged(true, true, moved)
+        policy.visibilityChanged(false, true, 2L)
+        policy.visibilityChanged(true, true, 2L)
         assertFalse(policy.acceptsCourse(1_300))
     }
 
