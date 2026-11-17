@@ -37,6 +37,8 @@ enum NotificationsSnapshot: Equatable, Sendable {
 /// Push DELIVERY and token registration are OUT OF SCOPE (they need the paid
 /// Apple account + console setup); this protocol never touches APNs.
 protocol NotificationsRepository: AnyObject, Sendable {
+    func updateEpicLocation(_ fix: LocationFix?) async throws
+
     /// The caller's inbox, newest first, bounded to
     /// ``Notifications/inboxQueryLimit``. Each call returns a fresh stream
     /// backed by its own listener; terminating the stream detaches the
@@ -70,4 +72,8 @@ protocol NotificationsRepository: AnyObject, Sendable {
     /// seam ``EventsRepository/currentUserId()`` provides (the shell passes no
     /// identity into the feature).
     func currentUserId() -> String?
+}
+
+extension NotificationsRepository {
+    func updateEpicLocation(_ fix: LocationFix?) async throws {}
 }

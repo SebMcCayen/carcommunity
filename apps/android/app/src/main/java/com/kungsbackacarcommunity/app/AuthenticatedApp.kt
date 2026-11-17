@@ -85,6 +85,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -1305,6 +1306,12 @@ fun AuthenticatedApp(
             LaunchedEffect(pushLink) {
                 val link = PushNavigator.consume() ?: return@LaunchedEffect
                 when (link.target) {
+                    PushTarget.MAP -> {
+                        clearRoutes()
+                        selectedTab = ShellTab.Map
+                        navSearchDismissRequest = true
+                        chatHubOpen = false
+                    }
                     PushTarget.DM ->
                         // With the counterpart resolved, open the thread directly;
                         // without it, the conversation list is the honest landing.
@@ -1825,6 +1832,28 @@ fun AuthenticatedApp(
                 } else {
                     LocationAccess.GRANTED
                 }
+            LaunchedEffect(uid, notificationsRepository, notificationSettingsRepository, locationAccess, lifecycleOwner) {
+                val inbox = notificationsRepository ?: return@LaunchedEffect
+                val settings = notificationSettingsRepository ?: return@LaunchedEffect
+                if (!hasMapboxToken) return@LaunchedEffect
+                lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    settings.observePreferences(uid).collectLatest { state ->
+                        val preferences = (state as? com.kungsbackacarcommunity.app.notifications.NotificationSettingsState.Loaded)?.preferences
+                            ?: return@collectLatest
+                        if (!preferences.effective("epic_crown").inApp || locationAccess != LocationAccess.GRANTED) {
+                            runCatching { inbox.updateEpicLocation(null, null) }
+                            return@collectLatest
+                        }
+                        while (true) {
+                            val fix = CurrentLocation.currentFix(context.applicationContext)
+                            if (fix != null) runCatching {
+                                inbox.updateEpicLocation(fix.latitude, fix.longitude, System.currentTimeMillis())
+                            }
+                            delay(5 * 60 * 1000L)
+                        }
+                    }
+                }
+            }
             val locationRemedy =
                 remember(locationAccessProbe, context, mapLocationPermissionRequested) {
                     locationPermissionRemedy(
@@ -5582,22 +5611,26 @@ fun AuthenticatedApp(
                 // Receive: while sharing, listen to MY inbox and pop each incoming
                 // wave with a "who waved" caption. Keyed on (repo, uid, isSharing) so
                 // the listener is torn down the moment sharing stops.
-                LaunchedEffect(waveRepository, uid, isSharing) {
+                val waveLifecycle = LocalLifecycleOwner.current.lifecycle
+                LaunchedEffect(waveRepository, uid, isSharing, waveLifecycle) {
                     val repo = waveRepository
                     if (repo == null || !isSharing) return@LaunchedEffect
-                    val since = System.currentTimeMillis()
-                    repo.observeIncomingWaves(uid, since).collect { wave ->
-                        val name = wave.senderName?.takeIf { it.isNotBlank() }
-                        val caption = if (name != null) waveCaptionFmt.format(name) else waveCaptionAnon
-                        waveOverlayEvent =
-                            ReactionOverlayEvent(
-                                id = wave.id,
-                                icon = Icons.Filled.WavingHand,
-                                caption = caption,
-                                contentDescription = caption,
-                                // Rock the hand hello — opt-in, wave pop only.
-                                waveWiggle = true,
-                            )
+                    waveLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+                        val since = System.currentTimeMillis()
+                        repo.observeIncomingWaves(uid, since).collect { wave ->
+                            val name = wave.senderName?.takeIf { it.isNotBlank() }
+                            val caption = if (name != null) waveCaptionFmt.format(name) else waveCaptionAnon
+                            waveOverlayEvent =
+                                ReactionOverlayEvent(
+                                    id = wave.id,
+                                    icon = Icons.Filled.WavingHand,
+                                    caption = caption,
+                                    contentDescription = caption,
+                                    // Rock the hand hello — opt-in, wave pop only.
+                                    waveWiggle = true,
+                                )
+                            launch { runCatching { repo.acknowledge(wave.id) } }
+                        }
                     }
                 }
 

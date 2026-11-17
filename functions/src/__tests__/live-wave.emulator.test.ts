@@ -602,3 +602,21 @@ describe('liveWaves Firestore rules', () => {
     ).toContain('permission-denied');
   });
 });
+
+describe('live-acknowledgeWave ownership', () => {
+  it('reads only the displayed wave notice in the authenticated recipient inbox', async () => {
+    const recipient = await createProvisionedUser('wave-ack-owner', 'Recipient');
+    const other = await createProvisionedUser('wave-ack-other', 'Other');
+    const waveId = `ack-${Date.now()}`;
+    const item = adminDb.doc(`notifications/${recipient.uid}/items/${waveId}`);
+    await item.set({ category: 'wave', read: false });
+    await adminDb.doc(`liveWaves/${recipient.uid}/waves/${waveId}`).set({ notificationId: waveId });
+    await signInAs(other);
+    await call('live-acknowledgeWave', { waveId });
+    expect((await item.get()).get('read')).toBe(false);
+    await signInAs(recipient);
+    await call('live-acknowledgeWave', { waveId });
+    expect((await item.get()).get('read')).toBe(true);
+    expect((await item.get()).get('readAt')).toBeDefined();
+  });
+});

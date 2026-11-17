@@ -113,6 +113,8 @@ describe('notifications-core social categories', () => {
       // A nearby live sharer waved at you outside a convoy (live.sendWave) —
       // social, opt-out-able like the rest.
       'wave',
+      'friend_live',
+      'epic_crown',
     ]);
     for (const category of SOCIAL_NOTIFICATION_CATEGORIES) {
       expect(NOTIFICATION_CATEGORIES).toContain(category);

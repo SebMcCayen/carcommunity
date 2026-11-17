@@ -35,6 +35,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { getMessaging, type TokenMessage } from 'firebase-admin/messaging';
 import { db } from '../firebase';
+import { engagementPushRemainingMs } from './engagement-core';
 import { clubInvitationNotifications } from '../clubInvitations';
 import { toUserAccessState } from '../shared/access';
 import { readFeatureFlag } from '../shared/featureFlags';
@@ -156,6 +157,7 @@ export const onNotificationCreated = onDocumentCreated(
     const uid = event.params.uid;
     const notificationId = event.params.notificationId;
     const data = snapshot.data();
+    if (data?.read === true) return;
 
     const category = toCategory(data?.category);
     if (!category) {
@@ -187,11 +189,12 @@ export const onNotificationCreated = onDocumentCreated(
 
     // Re-derive the SAME decision the inbox write made (decidePushDelivery
     // calls decideInAppDelivery), then apply the push-specific opt-out.
-    const [userSnap, privateSnap] = await Promise.all([
+    const [userSnap, privateSnap, currentItem] = await Promise.all([
       db.collection('users').doc(uid).get(),
       db.collection('userPrivate').doc(uid).get(),
+      snapshot.ref.get(),
     ]);
-    if (!userSnap.exists) return;
+    if (!userSnap.exists || !currentItem.exists || currentItem.get('read') === true) return;
 
     const preferences = privateSnap.data()?.notificationPreferences;
     const decision = decidePushDelivery(category, toUserAccessState(userSnap.data()), preferences);
@@ -210,6 +213,22 @@ export const onNotificationCreated = onDocumentCreated(
     )
       return;
 
+    const engagement = category === 'friend_live' || category === 'epic_crown';
+    const engagementTtl = engagement
+      ? engagementPushRemainingMs(currentItem.get('createdAt')?.toMillis?.() ?? NaN, Date.now())
+      : null;
+    if (engagementTtl !== null && engagementTtl <= 0) return;
+    if (category === 'epic_crown') {
+      const spawnId = toStringOrNull(data?.relatedEntityId);
+      if (!spawnId || spawnId.includes('/')) return;
+      const crown = await db.doc(`crownSpawns/${spawnId}`).get();
+      if (
+        crown.get('rarity') !== 'epic' ||
+        crown.get('status') !== 'live' ||
+        !(crown.get('expiresAt')?.toMillis?.() > Date.now())
+      )
+        return;
+    }
     const payload = buildPushPayload({
       category,
       title: toStringOrNull(data?.title) ?? '',
@@ -226,7 +245,7 @@ export const onNotificationCreated = onDocumentCreated(
 
     for (const chunk of chunkTokens(tokens)) {
       const messages: TokenMessage[] = chunk.map((entry) => {
-        const ttl = pushTtlMs(category);
+        const ttl = engagementTtl ?? pushTtlMs(category);
         return {
           token: entry.token,
           data: payload,

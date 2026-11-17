@@ -118,6 +118,24 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "live.acknowledgeWave",
+      "domain": "live",
+      "description": "Acknowledges a wave actually displayed in the Android foreground. Takes { waveId }, derives recipient uid from auth, and transactionally marks only the associated wave notification read. A seen receipt on liveWaves/{uid}/waves serializes with the persistent writer so acknowledgement works before or after the inbox item exists. Other unread notifications and the global inbox-seen marker remain untouched. Deployed as live-acknowledgeWave.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/live/acknowledgeWave.ts"
+    },
+    {
+      "name": "notifications.updateEpicLocation",
+      "domain": "notifications",
+      "description": "Stores or clears the caller's private last-known own position for nearby Epic notifications, independent of public live sharing. Takes { location: { latitude, longitude, recordedAtMillis } | null }. Requires a fresh fix, updates at most once per five minutes, ignores older devices/fixes, expires after 24 hours and honours the Epic in-app preference. Latitude/longitude are never included in notification payloads or exposed in discovery. Passing null removes the position. Deployed as notifications-updateEpicLocation.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/notifications/epicLocation.ts"
+    },
+    {
       "name": "drives.save",
       "domain": "drives",
       "description": "Saves a completed drive: computes distanceMeters/durationSeconds/averageSpeed server-side from the submitted route points (implausible GPS jumps filtered), writes rides/{rideId}, and returns the canonical owner-scoped Cloud Storage upload paths (rideRoutes/{uid}/{rideId}/) for the client route/preview upload. Idempotent per sourceSessionId. No top-speed is ever stored. Deployed via grouped export as drives-save (functions/src/drives/saveDrive.ts).",

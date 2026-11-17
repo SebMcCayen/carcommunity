@@ -173,6 +173,8 @@ const DELIBERATE_NULL_CATEGORIES = [
   // wave: relatedEntityId is the waver's uid, but the notifications inbox has no
   // profile deep-link target, so nothing navigable comes back.
   'wave',
+  'friend_live',
+  'epic_crown',
 ] as const satisfies readonly NotificationCategory[];
 
 describe('buildPushDeepLink', () => {

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.live
 
 import android.content.Context
+import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import com.google.firebase.FirebaseApp
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentChange
@@ -74,6 +75,9 @@ interface WaveRepository {
      */
     suspend fun send(clientId: String): WaveSendResult
 
+    /** Acknowledge only a wave whose overlay was displayed in the foreground. */
+    suspend fun acknowledge(waveId: String) {}
+
     /**
      * Emits waves delivered to [uid]'s inbox STRICTLY AFTER [sinceMillis] — the
      * moment the caller subscribed — so waves still inside their short TTL are never
@@ -91,6 +95,11 @@ class FirebaseWaveRepository private constructor(
     private val functions: FirebaseFunctions,
     private val firestore: FirebaseFirestore,
 ) : WaveRepository {
+
+    override suspend fun acknowledge(waveId: String) {
+        functions.getHttpsCallable("live-acknowledgeWave")
+            .call(mapOf("waveId" to waveId)).awaitOrThrow { "Acknowledging displayed wave failed" }
+    }
 
     override suspend fun send(clientId: String): WaveSendResult =
         suspendCancellableCoroutine { continuation ->

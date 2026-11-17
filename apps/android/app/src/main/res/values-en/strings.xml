@@ -1655,6 +1655,9 @@
     <string name="notifications_convoyEndedRowDescription">%1$s. Convoy has ended.</string>
     <string name="notifications_convoyInviteAnsweredLabel">You have already answered this invite</string>
     <string name="notifications_categoryConvoyUpdate">Convoy updates</string>
+    <string name="notifications_categoryFriendLive">Friends going live</string>
+    <string name="notifications_categoryEpicCrown">Nearby Epic crowns</string>
+    <string name="notifications_epicCrownLocationBody">Uses your private last-known position for up to 24 hours. At most two notifications per day.</string>
     <string name="feedback_title">Report a problem</string>
     <string name="feedback_openButton">Report a problem</string>
     <string name="feedback_publicNoticeTitle">This report is public</string>
@@ -1740,6 +1743,8 @@
     <string name="channel_mentionLimit">You can mention up to %1$d members in one message.</string>
     <string name="channel_mentionsNotDelivered">Your message was posted, but some members you mentioned couldn\'t be notified.</string>
     <string name="channel_locationLink">📍 Show on map</string>
+    <string name="channel_epicSystem">CarCommunity</string>
+    <string name="channel_epicCaught">caught an Epic crown! 👑</string>
     <string name="chatHub_title">Chat</string>
     <string name="chatHub_tabChats">Chats</string>
     <string name="chatHub_tabDriver">Driver</string>

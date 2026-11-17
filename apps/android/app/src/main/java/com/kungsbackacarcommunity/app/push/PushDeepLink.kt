@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * [PushNavigator].
  */
 enum class PushTarget(val wire: String) {
+    MAP("map"),
     /** A 1:1 conversation. [PushDeepLink.entityId] is the OTHER member's uid. */
     DM("dm"),
 

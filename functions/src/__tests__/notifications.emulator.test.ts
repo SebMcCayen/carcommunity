@@ -511,3 +511,22 @@ describe('notifications retention cleanup', () => {
     expect(ids).toEqual(['read-recent', 'unread-recent']);
   });
 });
+
+describe('private Epic notification location callable', () => {
+  it('stores only the caller position, rejects extra recipient fields and clears on request', async () => {
+    await adminDb.doc('config/featureFlags').set({ crownHunt: true, crownHuntSpawn: true }, { merge: true });
+    const owner = await createProvisionedUser('epic-location-owner');
+    await signInAs(owner);
+    const location = { latitude: 57.48, longitude: 12.08, recordedAtMillis: Date.now() };
+    await call('notifications-updateEpicLocation', { location });
+    const ref = adminDb.doc(`userPrivate/${owner.uid}`);
+    expect((await ref.get()).get('epicNotificationLocation.latitude')).toBe(57.48);
+    expect(
+      await callableErrorCode(
+        call('notifications-updateEpicLocation', { uid: user.uid, location }),
+      ),
+    ).toBe('functions/invalid-argument');
+    await call('notifications-updateEpicLocation', { location: null });
+    expect((await ref.get()).get('epicNotificationLocation')).toBeUndefined();
+  });
+});

@@ -73,6 +73,7 @@ internal fun DocumentSnapshot.toChannelMessage(): ChannelMessage? {
         senderUid = senderUid,
         text = getString("text") ?: "",
         senderDisplayName = getString("senderDisplayName"),
+        systemEvent = getString("systemEvent")?.takeIf { it == "epic_crown_claimed" },
         senderAvatarPath = getString("senderAvatarPath"),
         createdAtMillis = millis,
         createdAtIso = millis?.let { java.time.Instant.ofEpochMilli(it).toString() },

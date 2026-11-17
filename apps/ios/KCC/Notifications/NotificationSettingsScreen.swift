@@ -147,6 +147,9 @@ struct NotificationPreferenceRow: View {
             .frame(minHeight: 48)
             .disabled(isEssential)
 
+            if category == .epicCrown {
+                Text("notifications.epicCrownLocationBody").font(.footnote).foregroundStyle(.secondary)
+            }
             if isEssential {
                 Label("notifications.settingsEssential", systemImage: "lock.fill")
                     .font(.footnote)

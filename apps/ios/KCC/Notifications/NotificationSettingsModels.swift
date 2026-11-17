@@ -34,6 +34,8 @@ enum NotificationCategories {
         .convoyInvite,
         .convoyUpdate,
         .wave,
+        .friendLive,
+        .epicCrown,
         .accountWarning,
         .accountSuspension,
     ]
@@ -49,6 +51,8 @@ enum NotificationCategories {
         .convoyInvite,
         .convoyUpdate,
         .wave,
+        .friendLive,
+        .epicCrown,
     ]
 
     /// Essential account notices — cannot be disabled in-app or push

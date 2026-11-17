@@ -469,7 +469,9 @@ final class ChannelChatCoordinator {
             clientId: bubble.clientId,
             deliveryState: deliveryState,
             sendError: sendError,
-            replyTo: bubble.replyTo
+            replyTo: bubble.replyTo,
+            reactionCounts: bubble.reactionCounts,
+            systemEvent: bubble.systemEvent
         )
     }
 }
