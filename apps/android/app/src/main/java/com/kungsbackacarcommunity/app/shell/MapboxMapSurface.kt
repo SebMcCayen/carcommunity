@@ -2875,13 +2875,21 @@ class MapboxMapSurface(
     private fun applyMarkerOpacity(frames: Map<String, MapPresencePolicy.Frame>, manager: PointAnnotationManager?,
         each: ((String, PointAnnotation) -> Unit) -> Unit, lookup: MutableMap<String, String>, currentIds: Set<String>) {
         lookup.clear()
+        val changed = mutableListOf<Pair<PointAnnotation, Double?>>()
         each { id, annotation ->
             val frame = frames[id]
-            if (manager != null && frame != null && annotation.iconOpacity != frame.alpha.toDouble()) runCatching {
+            if (manager != null && frame != null && annotation.iconOpacity != frame.alpha.toDouble()) {
+                changed += annotation to annotation.iconOpacity
                 annotation.iconOpacity = frame.alpha.toDouble()
-                manager.update(annotation)
             }
             if (frame?.interactive == true && id in currentIds) lookup[annotation.id] = id
+        }
+        if (manager != null && changed.isNotEmpty()) {
+            // One source update per layer/frame, even when many entries arrive together.
+            if (runCatching { manager.update(changed.map { it.first }) }.isFailure) {
+                // Restore the Kotlin value so the next frame retries the failed SDK update.
+                changed.forEach { (annotation, previous) -> annotation.iconOpacity = previous }
+            }
         }
     }
 
