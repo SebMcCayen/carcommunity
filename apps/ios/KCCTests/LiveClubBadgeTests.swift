@@ -181,3 +181,14 @@ final class LiveClubBadgeTests: XCTestCase {
         func emit(_ badge: LiveClubBadge?, uid: String) { streams[uid]?.yield(badge) }
     }
 }
+
+@MainActor
+final class LiveDriverAppearanceTests: XCTestCase {
+    func testPublicGoldRingEligibilityAndOptOutMirrorAndroid() {
+        XCTAssertFalse(LiveDriverAppearance.decode([:])!.showMembershipMapRing)
+        XCTAssertTrue(LiveDriverAppearance.decode(["membershipMapRingEligible": true])!.showMembershipMapRing)
+        XCTAssertFalse(LiveDriverAppearance.decode(["membershipMapRingEligible": true, "showMembershipMapRing": false])!.showMembershipMapRing)
+        XCTAssertFalse(LiveDriverAppearance.decode(["membershipMapRingEligible": false, "showMembershipMapRing": true])!.showMembershipMapRing)
+        XCTAssertNil(LiveDriverAppearance.decode(nil))
+    }
+}

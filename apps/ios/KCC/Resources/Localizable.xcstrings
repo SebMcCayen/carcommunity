@@ -22713,6 +22713,23 @@
         }
       }
     },
+    "liveDriverPhoto.membershipRing": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guldring för medlemskap"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Membership gold ring"
+          }
+        }
+      }
+    },
     "liveLocation.accessLimitedByModeration": {
       "extractionState": "manual",
       "localizations": {

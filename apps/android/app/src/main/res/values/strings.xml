@@ -2334,4 +2334,5 @@
     <string name="mapDensity_previous">Föregående</string>
     <string name="mapDensity_next">Nästa</string>
     <string name="mapDensity_page">Visar %1$d–%2$d av %3$d</string>
+    <string name="liveDriverPhoto_membershipRing">Guldring för medlemskap</string>
 </resources>

@@ -1010,6 +1010,9 @@ final class DriverPhotoLayout {
     static let ownFreeRadius = 28.0
     private var slots: [String: Int] = [:]
     private var expanded = false
+    private var expandedCount = 0
+    private var nextToken = 1_000
+    private var offsets: [String: DriverPhotoPoint] = [:]
     private struct Candidate { let slot: Int; let photo: DriverPhotoPoint }
     private static let directions: [DriverPhotoPoint] = {
         let d = sqrt(0.5)
@@ -1027,6 +1030,7 @@ final class DriverPhotoLayout {
             }
         let uids = Set(valid.map(\.uid))
         slots = slots.filter { uids.contains($0.key) }
+        offsets = offsets.filter { uids.contains($0.key) }
         if valid.isEmpty { expanded = false }
         var grid: [DriverPhotoPoint] = []
         var y = 32.0
@@ -1035,17 +1039,33 @@ final class DriverPhotoLayout {
             while x <= width - 32, grid.count < 2_500 { grid.append(.init(x: x, y: y)); x += 48 }
             y += 48
         }
-        var result = plan(valid, width: width, height: height, ownPoint: ownPoint, exclusions: exclusions, grid: grid, wide: expanded)
+        // Count/spatial hysteresis matches Android; extra clearance prevents
+        // tiny geographic movement toggling between short and wide layouts.
+        let spread = valid.indices.allSatisfy { i in valid.dropFirst(i + 1).allSatisfy { valid[i].point.distance(to: $0.point) >= 104 } }
+        let canCollapse = valid.count <= max(2, Int(Double(expandedCount) * 0.6)) || spread
+        let short = expanded && canCollapse ? plan(valid, width: width, height: height, ownPoint: ownPoint, exclusions: exclusions, grid: grid, wide: false, clearance: 8) : nil
+        if short?.overflow.isEmpty == true { expanded = false }
+        var result = short.flatMap { $0.overflow.isEmpty ? $0 : nil }
+            ?? plan(valid, width: width, height: height, ownPoint: ownPoint, exclusions: exclusions, grid: grid, wide: expanded)
         if !expanded, !result.overflow.isEmpty {
             let wide = plan(valid, width: width, height: height, ownPoint: ownPoint, exclusions: exclusions, grid: grid, wide: true)
-            if wide.placed.count > result.placed.count { result = wide; expanded = true }
+            if wide.placed.count > result.placed.count { result = wide; expanded = true; expandedCount = valid.count }
         }
-        for item in result.placed { slots[item.uid] = item.slot }
-        return result
+        let committed = result.placed.map { item -> DriverPhotoPlacement in
+            guard item.slot < 0 else { return item }
+            let token = nextToken; nextToken += 1
+            return DriverPhotoPlacement(uid: item.uid, anchor: item.anchor, photo: item.photo,
+                lineStart: item.lineStart, lineEnd: item.lineEnd, showAnchor: item.showAnchor, slot: token, lines: item.lines)
+        }
+        for item in committed {
+            slots[item.uid] = item.slot
+            offsets[item.uid] = .init(x: item.photo.x - item.anchor.x, y: item.photo.y - item.anchor.y)
+        }
+        return DriverPhotoLayoutResult(placed: committed, overflow: result.overflow)
     }
 
     private func plan(_ anchors: [DriverPhotoAnchor], width: Double, height: Double,
-                      ownPoint: DriverPhotoPoint?, exclusions: [DriverPhotoRect], grid: [DriverPhotoPoint], wide: Bool) -> DriverPhotoLayoutResult {
+                      ownPoint: DriverPhotoPoint?, exclusions: [DriverPhotoRect], grid: [DriverPhotoPoint], wide: Bool, clearance: Double = 4) -> DriverPhotoLayoutResult {
         let viewport = DriverPhotoRect(left: 8, top: 8, right: width - 8, bottom: height - 8)
         var placed: [DriverPhotoPlacement] = []
         var overflow: [DriverPhotoAnchor] = []
@@ -1055,9 +1075,9 @@ final class DriverPhotoLayout {
                 let ordered = grid.enumerated().sorted { a, b in
                     let ad = a.element.distance(to: item.point); let bd = b.element.distance(to: item.point)
                     return ad == bd ? (a.offset ^ Self.stableHash(item.uid)) < (b.offset ^ Self.stableHash(item.uid)) : ad < bd
-                }.map { Candidate(slot: 1_000 + $0.offset, photo: $0.element) }
-                if let slot = slots[item.uid], slot >= 1_000, grid.indices.contains(slot - 1_000) {
-                    candidates = [Candidate(slot: slot, photo: grid[slot - 1_000])] + ordered
+                }.map { Candidate(slot: -1 - $0.offset, photo: $0.element) }
+                if let slot = slots[item.uid], slot >= 1_000, let offset = offsets[item.uid] {
+                    candidates = [Candidate(slot: slot, photo: .init(x: item.point.x + offset.x, y: item.point.y + offset.y))] + ordered
                 } else { candidates = ordered }
             } else {
                 let first = Self.stableHash(item.uid) % 8
@@ -1074,8 +1094,8 @@ final class DriverPhotoLayout {
             for candidate in candidates {
                 let photo = candidate.photo
                 let rect = DriverPhotoRect(left: photo.x - 24, top: photo.y - 24, right: photo.x + 24, bottom: photo.y + 24)
-                guard viewport.contains(rect), !exclusions.contains(where: { (wide ? $0 : $0.inflated(4)).intersects(rect) }),
-                      !placed.contains(where: { (wide ? $0.hitBounds : $0.hitBounds.inflated(4)).intersects(rect) }),
+                guard viewport.contains(rect), !exclusions.contains(where: { (wide ? $0 : $0.inflated(clearance)).intersects(rect) }),
+                      !placed.contains(where: { (wide ? $0.hitBounds : $0.hitBounds.inflated(clearance)).intersects(rect) }),
                       !(ownPoint.map { Self.circleIntersectsRect($0, radius: Self.ownFreeRadius, rect: rect) } ?? false)
                 else { continue }
                 let dx = photo.x - item.point.x; let dy = photo.y - item.point.y

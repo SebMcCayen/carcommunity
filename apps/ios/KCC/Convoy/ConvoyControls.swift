@@ -411,6 +411,10 @@ struct ConvoyMapAwarenessOverlay: View {
     var badgeViewerID: String? = nil
     var onDrawnUIDsChanged: (Set<String>) -> Void = { _ in }
 
+    var presentationProvided = false
+    var showsOnScreenPhotos = true
+    var suppressedArrowUIDs = Set<String>()
+
     @State private var motion = DriverMotionRoster()
     @State private var presented: [ConvoyMemberPosition] = []
 
@@ -419,7 +423,7 @@ struct ConvoyMapAwarenessOverlay: View {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 let placements = placements(size: geometry.size, now: context.date)
                 ZStack {
-                    ForEach(placements.onScreen) { placement in
+                    ForEach(showsOnScreenPhotos ? placements.onScreen : []) { placement in
                         Button { onSelect?(placement.member.uid) } label: {
                             memberChip(placement.member)
                                 .frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
@@ -427,18 +431,19 @@ struct ConvoyMapAwarenessOverlay: View {
                         .buttonStyle(.plain)
                         .position(x: placement.point.x, y: placement.point.y)
                     }
-                    ForEach(placements.offScreen) { placement in
+                    ForEach(placements.offScreen.filter { !suppressedArrowUIDs.contains($0.member.uid) }) { placement in
                         edgeChip(placement)
                             .allowsHitTesting(false)
                             .position(x: placement.point.x, y: placement.point.y)
                     }
                 }
-                .onChange(of: Set(placements.onScreen.map(\.id) + placements.offScreen.map(\.id)), initial: true) { _, uids in
+                .onChange(of: Set((showsOnScreenPhotos ? placements.onScreen.map(\.id) : []) + placements.offScreen.filter { !suppressedArrowUIDs.contains($0.member.uid) }.map(\.id)), initial: true) { _, uids in
                     onDrawnUIDsChanged(uids)
                 }
             }
         }
         .task(id: members) {
+            guard !presentationProvided else { return }
             let now = ProcessInfo.processInfo.systemUptime
             motion.update(members, now: now, wallNow: Date())
             presented = motion.rendered(members, at: now)
@@ -457,7 +462,7 @@ struct ConvoyMapAwarenessOverlay: View {
             return ConvoyPlacements(onScreen: [], offScreen: [])
         }
         return ConvoyArrowPlanner.plan(
-            members: presented.filter { item in members.contains { $0.uid == item.uid } },
+            members: presentationProvided ? members : presented.filter { item in members.contains { $0.uid == item.uid } },
             camera: camera,
             viewportWidth: size.width,
             viewportHeight: size.height,

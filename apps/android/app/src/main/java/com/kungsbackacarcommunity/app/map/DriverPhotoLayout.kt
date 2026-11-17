@@ -1,6 +1,5 @@
 package com.kungsbackacarcommunity.app.map
 
-import kotlin.math.max
 import kotlin.math.sqrt
 
 /** Display points (dp on Android, points on iOS), never geographic coordinates. */
@@ -36,6 +35,9 @@ data class DriverPhotoLayoutResult(val placed: List<DriverPhotoPlacement>, val o
 class DriverPhotoLayout {
     private val slots = mutableMapOf<String, Int>()
     private var expanded = false
+    private var expandedCount = 0
+    private var nextToken = 1_000
+    private val offsets = mutableMapOf<String, DriverPhotoPoint>()
     private data class Candidate(val slot: Int, val photo: DriverPhotoPoint)
 
     fun layout(
@@ -45,6 +47,7 @@ class DriverPhotoLayout {
         val valid = anchors.filter { it.uid.isNotEmpty() && it.point.x.isFinite() && it.point.y.isFinite() }
             .distinctBy { it.uid }.sortedWith(compareBy<DriverPhotoAnchor> { if (it.uid in slots) 0 else 1 }.thenBy { it.uid })
         slots.keys.retainAll(valid.map { it.uid }.toSet())
+        offsets.keys.retainAll(valid.map { it.uid }.toSet())
         if (valid.isEmpty()) expanded = false
         val grid = buildList {
             var y = 32.0
@@ -54,18 +57,28 @@ class DriverPhotoLayout {
                 y += 48
             }
         }
-        var result = plan(valid, width, height, ownPoint, exclusions, grid, expanded)
+        // Count/spatial hysteresis: once a crowd clears, return to short leaders
+        // only with extra clearance. Tiny frame-to-frame movement keeps its slots.
+        val spread = valid.indices.all { i -> valid.drop(i + 1).all { valid[i].point.distanceTo(it.point) >= 104 } }
+        val canCollapse = valid.size <= maxOf(2, (expandedCount * 0.6).toInt()) || spread
+        val short = if (expanded && canCollapse) plan(valid, width, height, ownPoint, exclusions, grid, false, 8.0) else null
+        if (short != null && short.overflow.isEmpty()) expanded = false
+        var result = short?.takeIf { it.overflow.isEmpty() } ?: plan(valid, width, height, ownPoint, exclusions, grid, expanded)
         if (!expanded && result.overflow.isNotEmpty()) {
             val wide = plan(valid, width, height, ownPoint, exclusions, grid, true)
-            if (wide.placed.size > result.placed.size) { result = wide; expanded = true }
+            if (wide.placed.size > result.placed.size) { result = wide; expanded = true; expandedCount = valid.size }
         }
-        for (item in result.placed) slots[item.uid] = item.slot
-        return result
+        val committed = result.placed.map { if (it.slot < 0) it.copy(slot = nextToken++) else it }
+        for (item in committed) {
+            slots[item.uid] = item.slot
+            offsets[item.uid] = DriverPhotoPoint(item.photo.x - item.anchor.x, item.photo.y - item.anchor.y)
+        }
+        return result.copy(placed = committed)
     }
 
     private fun plan(
         anchors: List<DriverPhotoAnchor>, width: Double, height: Double, ownPoint: DriverPhotoPoint?,
-        exclusions: List<DriverPhotoRect>, grid: List<DriverPhotoPoint>, wide: Boolean,
+        exclusions: List<DriverPhotoRect>, grid: List<DriverPhotoPoint>, wide: Boolean, clearance: Double = 4.0,
     ): DriverPhotoLayoutResult {
         val viewport = DriverPhotoRect(8.0, 8.0, width - 8, height - 8)
         val placed = mutableListOf<DriverPhotoPlacement>()
@@ -73,8 +86,10 @@ class DriverPhotoLayout {
         for (item in anchors) {
             val candidates = if (wide) {
                 val ordered = grid.withIndex().sortedWith(compareBy<IndexedValue<DriverPhotoPoint>> { it.value.distanceTo(item.point) }
-                    .thenBy { it.index xor stableHash(item.uid) }).map { Candidate(1_000 + it.index, it.value) }
-                val prior = slots[item.uid]?.takeIf { it >= 1_000 }?.let { slot -> grid.getOrNull(slot - 1_000)?.let { Candidate(slot, it) } }
+                    .thenBy { it.index xor stableHash(item.uid) }).map { Candidate(-1 - it.index, it.value) }
+                val prior = slots[item.uid]?.takeIf { it >= 1_000 }?.let { slot -> offsets[item.uid]?.let {
+                    Candidate(slot, DriverPhotoPoint(item.point.x + it.x, item.point.y + it.y))
+                } }
                 listOfNotNull(prior) + ordered
             } else {
                 val first = stableHash(item.uid) % 8
@@ -91,8 +106,8 @@ class DriverPhotoLayout {
             val chosen = candidates.firstNotNullOfOrNull { candidate ->
                 val photo = candidate.photo
                 val rect = DriverPhotoRect(photo.x - 24, photo.y - 24, photo.x + 24, photo.y + 24)
-                if (!viewport.contains(rect) || exclusions.any { (if (wide) it else it.inflated(4.0)).intersects(rect) } ||
-                    placed.any { (if (wide) it.hitBounds else it.hitBounds.inflated(4.0)).intersects(rect) } ||
+                if (!viewport.contains(rect) || exclusions.any { (if (wide) it else it.inflated(clearance)).intersects(rect) } ||
+                    placed.any { (if (wide) it.hitBounds else it.hitBounds.inflated(clearance)).intersects(rect) } ||
                     (ownPoint != null && circleIntersectsRect(ownPoint, OWN_FREE_RADIUS, rect))) return@firstNotNullOfOrNull null
                 val dx = photo.x - item.point.x; val dy = photo.y - item.point.y
                 val distance = kotlin.math.hypot(dx, dy)

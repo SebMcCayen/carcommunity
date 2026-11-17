@@ -2503,5 +2503,8 @@
     "previous": "Föregående",
     "next": "Nästa",
     "page": "Visar %1$d–%2$d av %3$d"
+  },
+  "liveDriverPhoto": {
+    "membershipRing": "Guldring för medlemskap"
   }
 }

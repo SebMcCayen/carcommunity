@@ -411,3 +411,89 @@ final class DriverMotionTimelineTests: XCTestCase {
         XCTAssertEqual(member.speedMetersPerSecond, marker.speedMetersPerSecond)
     }
 }
+
+final class DriverPhotoLayoutTests: XCTestCase {
+    private let own = DriverPhotoPoint(x: 195, y: 500)
+    private func anchors(_ count: Int) -> [DriverPhotoAnchor] {
+        (0..<count).map { DriverPhotoAnchor(uid: "driver-\($0)", point: own) }
+    }
+    func testNearbyAndConvoyShareNonOverlappingTargetsAndProtectOwnPoint() {
+        let result = DriverPhotoLayout().layout(anchors(2), width: 390, height: 844, ownPoint: own)
+        XCTAssertEqual(result.placed.count, 2); XCTAssertTrue(result.overflow.isEmpty)
+        XCTAssertFalse(result.placed[0].hitBounds.intersects(result.placed[1].hitBounds))
+        for item in result.placed {
+            XCTAssertEqual(item.anchor, own); XCTAssertFalse(item.showAnchor)
+            XCTAssertGreaterThanOrEqual(item.lineStart.distance(to: own), 27.999)
+            XCTAssertEqual(item.hitBounds.right - item.hitBounds.left, 48)
+        }
+    }
+    func testReorderAndSmallMotionKeepUidSlotsStable() {
+        let layout = DriverPhotoLayout()
+        let before = layout.layout(anchors(2), width: 390, height: 844, ownPoint: own).placed.map { ($0.uid, $0.slot) }
+        let moved = anchors(2).reversed().map { DriverPhotoAnchor(uid: $0.uid, point: .init(x: own.x + 0.2, y: own.y - 0.2)) }
+        let after = layout.layout(moved, width: 390, height: 844, ownPoint: own).placed
+        XCTAssertEqual(Dictionary(uniqueKeysWithValues: before), Dictionary(uniqueKeysWithValues: after.map { ($0.uid, $0.slot) }))
+    }
+    func testActualOwnPositionAtPannedEdgeIsProtected() throws {
+        let edge = DriverPhotoPoint(x: 22, y: 400)
+        let result = DriverPhotoLayout().layout([DriverPhotoAnchor(uid: "nearby", point: edge)], width: 390, height: 844, ownPoint: edge)
+        let item = try XCTUnwrap(result.placed.first)
+        XCTAssertEqual(item.anchor, edge); XCTAssertGreaterThanOrEqual(item.hitBounds.left, 8)
+        XCTAssertGreaterThanOrEqual(item.lineStart.distance(to: edge), 27.999)
+    }
+    func testDenseCaseUsesLongerLinesAndKeepsEveryPhoto() {
+        let result = DriverPhotoLayout().layout(anchors(12), width: 390, height: 844, ownPoint: own)
+        XCTAssertEqual(result.placed.count, 12); XCTAssertTrue(result.overflow.isEmpty)
+        XCTAssertTrue(result.placed.contains { $0.photo.distance(to: $0.anchor) > 72 })
+        for (index, first) in result.placed.enumerated() {
+            for second in result.placed.dropFirst(index + 1) { XCTAssertFalse(first.hitBounds.intersects(second.hitBounds)) }
+        }
+    }
+    func testDenseTokensAndOffsetsRemainStableUnderNormalGeographicMotion() {
+        let layout = DriverPhotoLayout()
+        let first = layout.layout(anchors(12), width: 390, height: 844, ownPoint: own).placed
+        let moved = anchors(12).map { DriverPhotoAnchor(uid: $0.uid, point: .init(x: own.x + 0.1, y: own.y + 0.1)) }
+        let second = layout.layout(moved, width: 390, height: 844, ownPoint: .init(x: own.x + 0.1, y: own.y + 0.1)).placed
+        XCTAssertEqual(first.map(\.slot), second.map(\.slot))
+        for (a, b) in zip(first, second) { XCTAssertEqual(b.photo.x - a.photo.x, 0.1, accuracy: 1e-8) }
+    }
+    func testNoDataLossWhenTheScreenPhysicallyCannotFitAllTargets() {
+        let all = anchors(200)
+        let result = DriverPhotoLayout().layout(all, width: 390, height: 844, ownPoint: own)
+        XCTAssertEqual(Set(all.map(\.uid)), Set(result.placed.map(\.uid) + result.overflow.map(\.uid)))
+        XCTAssertFalse(result.overflow.isEmpty)
+    }
+    func testConfiguredMaximumFitsPhonesWithIndividualControlBounds() {
+        for height in [700.0, 844.0] {
+            let center = DriverPhotoPoint(x: 195, y: height * 0.6)
+            var controls = [DriverPhotoRect(left: 16, top: 16, right: 64, bottom: 64),
+                DriverPhotoRect(left: 326, top: 16, right: 374, bottom: 64),
+                DriverPhotoRect(left: 12, top: height - 68, right: 378, bottom: height - 12)]
+            controls += (0...4).map { DriverPhotoRect(left: 326, top: 88 + Double($0) * 60, right: 374, bottom: 136 + Double($0) * 60) }
+            let anchors = (0..<74).map { DriverPhotoAnchor(uid: "driver-\($0)", point: center) }
+            let result = DriverPhotoLayout().layout(anchors, width: 390, height: height, ownPoint: center, exclusions: controls)
+            XCTAssertEqual(result.placed.count, 74); XCTAssertTrue(result.overflow.isEmpty)
+            for (index, first) in result.placed.enumerated() {
+                XCTAssertFalse(controls.contains { $0.intersects(first.hitBounds) })
+                for second in result.placed.dropFirst(index + 1) { XCTAssertFalse(first.hitBounds.intersects(second.hitBounds)) }
+            }
+        }
+    }
+    func testCrowdClearingRestoresShortLeaders() {
+        let layout = DriverPhotoLayout()
+        _ = layout.layout(anchors(74), width: 390, height: 844, ownPoint: own)
+        let small = layout.layout(anchors(2), width: 390, height: 844, ownPoint: own).placed
+        XCTAssertEqual(small.count, 2)
+        XCTAssertTrue(small.allSatisfy { $0.slot < 16 && $0.photo.distance(to: $0.anchor) <= 72.001 })
+        XCTAssertEqual(small, layout.layout(anchors(2), width: 390, height: 844, ownPoint: own).placed)
+    }
+    func testSpreadFormerCrowdRestoresShortLeaders() {
+        let layout = DriverPhotoLayout()
+        _ = layout.layout(anchors(12), width: 390, height: 844, ownPoint: own)
+        let spread = anchors(12).enumerated().map { i, item in DriverPhotoAnchor(uid: item.uid,
+            point: .init(x: 75 + Double(i % 3) * 120, y: 110 + Double(i / 3) * 160)) }
+        let result = layout.layout(spread, width: 390, height: 844, ownPoint: .init(x: 20, y: 810))
+        XCTAssertEqual(result.placed.count, 12); XCTAssertTrue(result.placed.allSatisfy { $0.slot < 16 })
+    }
+    func testPortableHashMatchesAndroid() { XCTAssertEqual(DriverPhotoLayout.stableHash("driver"), 1_700_010_463) }
+}

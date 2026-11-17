@@ -71,6 +71,54 @@ class DriverPhotoLayoutTest {
         assertTrue(result.placed.any { it.photo.distanceTo(it.anchor) > 72 })
     }
 
+    @Test fun `configured maximum roster fits phones with actual individual control bounds`() {
+        for (height in listOf(700.0, 844.0)) {
+            val center = DriverPhotoPoint(195.0, height * 0.6)
+            val controls = listOf(DriverPhotoRect(16.0, 16.0, 64.0, 64.0), DriverPhotoRect(326.0, 16.0, 374.0, 64.0),
+                DriverPhotoRect(12.0, height - 68, 378.0, height - 12)) +
+                (0..4).map { DriverPhotoRect(326.0, 88.0 + it * 60, 374.0, 136.0 + it * 60) }
+            val anchors = (0..73).map { DriverPhotoAnchor("driver-$it", center) }
+            val result = DriverPhotoLayout().layout(anchors, 390.0, height, center, controls)
+            assertEquals(74, result.placed.size)
+            assertTrue(result.overflow.isEmpty())
+            for ((index, first) in result.placed.withIndex()) {
+                assertTrue(controls.none { it.intersects(first.hitBounds) })
+                result.placed.drop(index + 1).forEach { assertFalse(first.hitBounds.intersects(it.hitBounds)) }
+            }
+        }
+    }
+
+    @Test fun `dense placement tokens and offsets remain stable during geographic motion`() {
+        val engine = DriverPhotoLayout()
+        val anchors = (0..11).map { DriverPhotoAnchor("driver-$it", own) }
+        val first = layout(engine, anchors).placed
+        val shift = DriverPhotoPoint(own.x + 0.1, own.y + 0.1)
+        val second = layout(engine, anchors.map { it.copy(point = shift) }, shift).placed
+        assertEquals(first.map { it.slot }, second.map { it.slot })
+        first.zip(second).forEach { (a, b) -> assertEquals(0.1, b.photo.x - a.photo.x, 1e-8) }
+    }
+
+    @Test fun `a crowd returning to isolated drivers restores short leaders`() {
+        val engine = DriverPhotoLayout()
+        val crowded = (0..73).map { DriverPhotoAnchor("driver-$it", own) }
+        assertEquals(74, layout(engine, crowded).placed.size)
+        val small = layout(engine, crowded.take(2)).placed
+        assertEquals(2, small.size)
+        assertTrue(small.all { it.slot < 16 && it.photo.distanceTo(it.anchor) <= 72.001 })
+        val second = layout(engine, crowded.take(2)).placed
+        assertEquals(small, second)
+    }
+
+    @Test fun `a spread out former crowd returns to short leaders without roster churn`() {
+        val engine = DriverPhotoLayout()
+        val crowded = (0..11).map { DriverPhotoAnchor("driver-$it", own) }
+        layout(engine, crowded)
+        val spread = crowded.mapIndexed { i, item -> item.copy(point = DriverPhotoPoint(75.0 + i % 3 * 120, 110.0 + i / 3 * 160)) }
+        val result = layout(engine, spread, ownPoint = DriverPhotoPoint(20.0, 810.0))
+        assertEquals(12, result.placed.size)
+        assertTrue(result.placed.all { it.slot < 16 })
+    }
+
     @Test fun `uid hashes are stable across platform implementations`() {
         assertEquals(1_700_010_463, DriverPhotoLayout.stableHash("driver"))
     }
