@@ -2800,7 +2800,7 @@ class MapboxMapSurface(
     }
 
     /**
-     * Clears and redraws the event pins — one event badge per marker — and
+     * Reconciles keyed event pins — one event badge per marker — and
      * rebuilds the annotation-id → event-id lookup the click listener resolves
      * taps through. A no-op until the manager exists (style loaded). Every native
      * call is wrapped defensively so a partial/failed draw degrades rather than
@@ -2955,7 +2955,7 @@ class MapboxMapSurface(
     }
 
     /**
-     * Clears and redraws the sponsored billboards on THIS surface. A no-op until
+     * Reconciles the sponsored billboards on THIS surface. A no-op until
      * the manager exists (style loaded).
      *
      * The draw itself is [BillboardMarkerLayer.draw]; everything with a lifetime

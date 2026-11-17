@@ -112,11 +112,11 @@ fun LiveDriverMapOverlay(
                 val description = if (member.uid in convoyUids) stringResource(R.string.convoy_awarenessMemberOnMap, member.displayName ?: stringResource(R.string.convoy_unknownMember))
                     else stringResource(R.string.nearby_liveSharerOnMap, member.displayName ?: stringResource(R.string.nearby_unknownSharer))
                 androidx.compose.runtime.key(item.id) {
-                Box(Modifier.fillMaxSize().graphicsLayer { alpha = item.alpha }) {
-                DriverLeaderLines(placement)
+                Box(Modifier.fillMaxSize()) {
+                DriverLeaderLines(placement, item.alpha)
                 Box(
                     Modifier.offset { IntOffset(((placement.photo.x - 24) * density).roundToInt(), ((placement.photo.y - 24) * density).roundToInt()) }
-                        .size(48.dp)
+                        .size(48.dp).graphicsLayer { alpha = item.alpha }
                         .clickable(enabled = item.interactive, role = Role.Button) { onDriverTap(member.uid) }
                         .semantics(mergeDescendants = true) { contentDescription = description }
                         .testTag(NEARBY_LIVE_CHIP_TAG + member.uid)
@@ -134,17 +134,17 @@ fun LiveDriverMapOverlay(
 }
 
 @Composable
-private fun DriverLeaderLines(item: DriverPhotoPlacement) {
+private fun DriverLeaderLines(item: DriverPhotoPlacement, opacity: Float) {
     val density = LocalDensity.current.density
     val line = MaterialTheme.colorScheme.onSurface
     val dot = MaterialTheme.colorScheme.tertiary
     Canvas(Modifier.fillMaxSize().testTag("driver_photo_leaders")) {
-            for (segment in item.lines) drawLine(line, Offset(segment.start.x.toFloat() * density, segment.start.y.toFloat() * density),
+            for (segment in item.lines) drawLine(line.copy(alpha = opacity), Offset(segment.start.x.toFloat() * density, segment.start.y.toFloat() * density),
                 Offset(segment.end.x.toFloat() * density, segment.end.y.toFloat() * density), 1.5f * density, StrokeCap.Round)
             if (item.showAnchor) {
                 val anchor = Offset(item.anchor.x.toFloat() * density, item.anchor.y.toFloat() * density)
-                drawCircle(dot, 3f * density, anchor)
-                drawCircle(line, 3f * density, anchor, style = Stroke(1f * density))
+                drawCircle(dot.copy(alpha = opacity), 3f * density, anchor)
+                drawCircle(line.copy(alpha = opacity), 3f * density, anchor, style = Stroke(1f * density))
             }
     }
 }

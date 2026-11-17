@@ -254,10 +254,11 @@ struct LiveDriverMapOverlay: View {
                     // below own selection; empty map space belongs to Mapbox.
                     .allowsHitTesting(false)
                 MapPresenceLayer(items: Dictionary(uniqueKeysWithValues: plan.placed.map { ($0.uid, $0) }),
-                    allowed: Set(originals.keys), placements: Dictionary(uniqueKeysWithValues: plan.placed.map { ($0.uid, $0.slot) })) { presence in
+                    allowed: Set(originals.keys), placements: Dictionary(uniqueKeysWithValues: plan.placed.map { ($0.uid, $0.slot) }), appliesOpacity: false) { presence in
                     let item = presence.value
                     ZStack {
                         Canvas { context, _ in
+                            context.opacity = presence.alpha
                             for segment in item.lines {
                                 var path = Path()
                                 path.move(to: CGPoint(x: segment.start.x, y: segment.start.y))
@@ -282,6 +283,7 @@ struct LiveDriverMapOverlay: View {
                         .accessibilityLabel(spokenLabel(member))
                         .accessibilityIdentifier("driver.photo.\(item.uid)")
                         .position(x: item.photo.x, y: item.photo.y)
+                        .opacity(presence.alpha)
                     }
                 }
                     }

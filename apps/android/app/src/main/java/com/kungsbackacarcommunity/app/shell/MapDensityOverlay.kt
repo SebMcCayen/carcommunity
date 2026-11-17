@@ -128,14 +128,14 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
                 val description = stringResource(R.string.mapDensity_groupLabel, group.count) +
                     (if (group.critical) ". " + stringResource(R.string.mapDensity_hazardsIncluded) else "") +
                     (if (group.selected) ". " + stringResource(R.string.mapDensity_selected) else "")
-                Box(Modifier.fillMaxSize().graphicsLayer { alpha = present.alpha }) {
+                Box(Modifier.fillMaxSize()) {
                 if (placed != anchor) Canvas(Modifier.fillMaxSize()) {
-                    drawLine(Color.White.copy(alpha = 0.8f), point,
+                    drawLine(Color.White.copy(alpha = 0.8f * present.alpha), point,
                         Offset((placed.x * density).toFloat(), (placed.y * density).toFloat()), 2.dp.toPx())
-                    drawCircle(Color.White, 2.dp.toPx(), point)
+                    drawCircle(Color.White.copy(alpha = present.alpha), 2.dp.toPx(), point)
                 }
                 Box(Modifier.offset { IntOffset((placed.x * density - sidePx / 2).roundToInt(), (placed.y * density - sidePx / 2).roundToInt()) }
-                    .size(48.dp).semantics { contentDescription = description }
+                    .size(48.dp).graphicsLayer { alpha = present.alpha }.semantics { contentDescription = description }
                     .clickable(enabled = present.interactive, role = Role.Button) { selection = group.members.map { it.id } }
                     .then(if (present.interactive) Modifier else Modifier.clearAndSetSemantics {})
                     .testTag("map_density_group_${group.id}")) {

@@ -37,11 +37,11 @@ struct MapDensityOverlay: View {
                 let lookup = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
                 let input = Input(items: entries.map(\.item), bucket: bucket)
                 let visuals = visuals(lookup: lookup, size: geometry.size)
-                MapPresenceLayer(items: visuals, placements: visuals.mapValues(\.slot), retainRemovedPublicItems: true) { present in
+                MapPresenceLayer(items: visuals, placements: visuals.mapValues(\.slot), retainRemovedPublicItems: true, appliesOpacity: false) { present in
                     let value = present.value
                     ZStack {
                         marker(value.group, entry: value.entry, lookup: lookup, projected: value.projected,
-                            position: value.position)
+                            position: value.position, opacity: present.alpha)
                     }
                 }
                 .onChange(of: input, initial: true) { _, value in
@@ -75,14 +75,14 @@ struct MapDensityOverlay: View {
     }
 
     @ViewBuilder private func marker(_ group: MapDensityGroup, entry: MapDensityContentItem,
-        lookup: [String: MapDensityContentItem], projected: MapScreenPoint, position: MapDensityScreenPoint) -> some View {
+        lookup: [String: MapDensityContentItem], projected: MapScreenPoint, position: MapDensityScreenPoint, opacity: Double) -> some View {
         let anchor = MapDensityScreenPoint(x: projected.x, y: projected.y)
         if position != anchor {
             Path { path in
                 path.move(to: CGPoint(x: anchor.x, y: anchor.y))
                 path.addLine(to: CGPoint(x: position.x, y: position.y))
-            }.stroke(.white.opacity(0.8), lineWidth: 2).allowsHitTesting(false)
-            Circle().fill(.white).frame(width: 4, height: 4).position(x: anchor.x, y: anchor.y)
+            }.stroke(.white.opacity(0.8 * opacity), lineWidth: 2).allowsHitTesting(false)
+            Circle().fill(.white.opacity(opacity)).frame(width: 4, height: 4).position(x: anchor.x, y: anchor.y)
                 .allowsHitTesting(false)
         }
         Button {
@@ -96,7 +96,7 @@ struct MapDensityOverlay: View {
         .frame(width: 48, height: 48).contentShape(Rectangle())
         .accessibilityLabel(group.count > 1 ? groupLabel(group) : entry.label)
         .accessibilityIdentifier("map.density." + group.id)
-        .position(x: position.x, y: position.y)
+        .position(x: position.x, y: position.y).opacity(opacity)
     }
 
     private func groupLabel(_ group: MapDensityGroup) -> String {

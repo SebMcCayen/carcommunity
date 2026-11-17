@@ -75,6 +75,7 @@ struct MapPresenceLayer<Value: Equatable, Content: View>: View {
     var active = true
     var placements: [String: Int] = [:]
     var retainRemovedPublicItems = false
+    var appliesOpacity = true
     @ViewBuilder let content: (MapPresentItem<Value>) -> Content
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.mapPresentationActive) private var mapActive
@@ -94,7 +95,7 @@ struct MapPresenceLayer<Value: Equatable, Content: View>: View {
                         content(MapPresentItem(id: frame.id, value: value,
                             alpha: samePlacement ? frame.alpha : 0,
                             interactive: samePlacement && current && frame.interactive))
-                            .opacity(samePlacement ? frame.alpha : 0)
+                            .opacity(appliesOpacity ? (samePlacement ? frame.alpha : 0) : 1)
                             .allowsHitTesting(samePlacement && current && frame.interactive)
                             .accessibilityHidden(!samePlacement || !current || !frame.interactive)
                     }

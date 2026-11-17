@@ -26,7 +26,7 @@ import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
  */
 internal object BillboardMarkerLayer {
     /**
-     * Clears and redraws [markers] on [manager] and rebuilds [idsByAnnotation]
+     * Reconciles keyed [markers] on [manager] and rebuilds [idsByAnnotation]
      * so a tap resolves back to the billboard it landed on. Returns whether the
      * draw was COMPLETE — i.e. whether the marker image made it onto the style.
      * An incomplete draw must not be cached by the caller, or the missing icon
@@ -37,7 +37,7 @@ internal object BillboardMarkerLayer {
      * variants), so it is rasterised and registered against the style once and
      * every annotation then references it by name.
      *
-     * The lookup is cleared FIRST and repopulated as annotations are created, so
+     * The lookup is rebuilt from retained native annotations after reconciliation, so
      * it can never outlive the annotations it describes and hand a click
      * listener a stale billboard id after a redraw.
      *
