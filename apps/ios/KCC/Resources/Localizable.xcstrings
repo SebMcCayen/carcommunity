@@ -39339,6 +39339,91 @@
         }
       }
     },
+    "whatsNew.release016Build17Clubs": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klubblogotyper visas på liveförare och konvojens kantindikatorer när klubbinformation är tillgänglig."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Club logos appear on live drivers and convoy edge indicators when club information is available."
+          }
+        }
+      }
+    },
+    "whatsNew.release016Build17Compass": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kompassknappen visar om kartan följer norr eller färdriktningen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The compass button shows whether the map follows north or your direction of travel."
+          }
+        }
+      }
+    },
+    "whatsNew.release016Build17Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tydligare profil, klubbar och kontroller på kartan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clearer profiles, clubs and controls on the map."
+          }
+        }
+      }
+    },
+    "whatsNew.release016Build17Profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din profilbild och klubblogotyp visas nu i kartans profilmeny och uppdateras när profilen ändras."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your profile photo and club logo now appear in the map profile menu and update when your profile changes."
+          }
+        }
+      }
+    },
+    "whatsNew.release016Build17Wave": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vågknappen ligger under kartverktygen så att de behåller sin plats när knappen visas."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The wave button sits below the map tools so they stay in place when it appears."
+          }
+        }
+      }
+    },
     "whatsNew.title": {
       "extractionState": "manual",
       "localizations": {
