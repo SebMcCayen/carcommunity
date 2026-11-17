@@ -299,6 +299,8 @@ struct ConvoyMemberPosition: Equatable, Sendable, Identifiable {
     let imagePath: String?
     let updatedAt: Date?
     let accuracyMeters: Double?
+    let headingDegrees: Double?
+    let speedMetersPerSecond: Double?
 
     var id: String { uid }
 
@@ -313,7 +315,9 @@ struct ConvoyMemberPosition: Equatable, Sendable, Identifiable {
         displayName: String? = nil,
         imagePath: String? = nil,
         updatedAt: Date? = nil,
-        accuracyMeters: Double? = nil
+        accuracyMeters: Double? = nil,
+        headingDegrees: Double? = nil,
+        speedMetersPerSecond: Double? = nil
     ) {
         self.uid = uid
         self.latitude = latitude
@@ -322,6 +326,8 @@ struct ConvoyMemberPosition: Equatable, Sendable, Identifiable {
         self.imagePath = imagePath
         self.updatedAt = updatedAt
         self.accuracyMeters = accuracyMeters
+        self.headingDegrees = headingDegrees
+        self.speedMetersPerSecond = speedMetersPerSecond
     }
 
     init(marker: LiveMarker) {
@@ -332,6 +338,8 @@ struct ConvoyMemberPosition: Equatable, Sendable, Identifiable {
         imagePath = marker.imagePath
         updatedAt = marker.recordedAt
         accuracyMeters = marker.accuracyMeters
+        headingDegrees = marker.headingDegrees
+        speedMetersPerSecond = marker.speedMetersPerSecond
     }
 }
 
@@ -918,4 +926,55 @@ enum ConvoyManagementStrings {
         case .noInvitees: "convoy.errorNoInvitees"
         }
     }
+}
+
+/// Both public-nearby and convoy overlays use the same geographic timeline.
+/// Project the resulting coordinates every camera frame; never animate pixels
+/// with SwiftUI, which would drift independently of a rotating/moving map.
+struct DriverMotionRoster {
+    private var tracks: [String: DriverMotionTimeline] = [:]
+    private var accepted: [String: ConvoyMemberPosition] = [:]
+    private var pending: [String: ConvoyMemberPosition] = [:]
+
+    mutating func update(_ members: [ConvoyMemberPosition], now: TimeInterval, wallNow: Date) {
+        let uids = Set(members.map(\.uid))
+        tracks = tracks.filter { uids.contains($0.key) }
+        accepted = accepted.filter { uids.contains($0.key) }
+        pending = pending.filter { uids.contains($0.key) }
+        for member in members {
+            switch ConvoyPositionQuality.judge(member, previous: accepted[member.uid], pending: pending[member.uid]) {
+            case .reject:
+                pending.removeValue(forKey: member.uid)
+                continue
+            case .hold:
+                pending[member.uid] = member
+                continue
+            case .accept:
+                pending.removeValue(forKey: member.uid)
+            }
+            var timeline = tracks[member.uid] ?? DriverMotionTimeline()
+            if timeline.update(
+                DriverMotionPoint(latitude: member.latitude, longitude: member.longitude, bearing: member.headingDegrees),
+                recordedAt: member.updatedAt,
+                sampleAge: member.updatedAt.map { wallNow.timeIntervalSince($0) } ?? 0,
+                now: now, speed: member.speedMetersPerSecond, course: member.headingDegrees
+            ) {
+                tracks[member.uid] = timeline
+                accepted[member.uid] = member
+            }
+        }
+    }
+
+    mutating func rendered(_ members: [ConvoyMemberPosition], at now: TimeInterval) -> [ConvoyMemberPosition] {
+        members.compactMap { member in
+            guard var timeline = tracks[member.uid], let point = timeline.frame(at: now) else { return nil }
+            tracks[member.uid] = timeline
+            return ConvoyMemberPosition(uid: member.uid, latitude: point.latitude, longitude: point.longitude,
+                                        displayName: member.displayName, imagePath: member.imagePath,
+                                        updatedAt: member.updatedAt, accuracyMeters: member.accuracyMeters,
+                                        headingDegrees: member.headingDegrees, speedMetersPerSecond: member.speedMetersPerSecond)
+        }
+    }
+
+    func isAnimating(at now: TimeInterval) -> Bool { tracks.values.contains { $0.isAnimating(at: now) } }
 }

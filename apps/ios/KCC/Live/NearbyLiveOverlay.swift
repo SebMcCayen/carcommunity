@@ -10,7 +10,8 @@ struct NearbyLiveOverlay: View {
     var clubBadges: LiveClubBadgeCoordinator? = nil
     var badgeViewerID: String? = nil
     var onDrawnUIDsChanged: (Set<String>) -> Void = { _ in }
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var motion = DriverMotionRoster()
+    @State private var presented: [ConvoyMemberPosition] = []
 
     var body: some View {
         GeometryReader { geometry in
@@ -36,7 +37,15 @@ struct NearbyLiveOverlay: View {
                 .onChange(of: Set(placements.map(\.id)), initial: true) { _, uids in
                     onDrawnUIDsChanged(uids)
                 }
-                .animation(reduceMotion ? nil : .linear(duration: 1.2), value: coordinator.positions)
+            }
+        }
+        .task(id: coordinator.positions) {
+            let now = ProcessInfo.processInfo.systemUptime
+            motion.update(coordinator.visibleMarkers().map(ConvoyMemberPosition.init(marker:)), now: now, wallNow: Date())
+            presented = motion.rendered(coordinator.visibleMarkers().map(ConvoyMemberPosition.init(marker:)), at: now)
+            while motion.isAnimating(at: ProcessInfo.processInfo.systemUptime), !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(DriverMotionPolicy.frameInterval)) } catch { return }
+                presented = motion.rendered(coordinator.visibleMarkers().map(ConvoyMemberPosition.init(marker:)), at: ProcessInfo.processInfo.systemUptime)
             }
         }
         .onDisappear { onDrawnUIDsChanged([]) }
@@ -46,10 +55,13 @@ struct NearbyLiveOverlay: View {
     private func visible(size: CGSize, now: Date) -> [NearbyLivePlacement] {
         guard projection.cameraSnapshot != nil, size.width > 0, size.height > 0 else { return [] }
         let margin = 24.0
-        return coordinator.visibleMarkers(at: now).compactMap { marker in
-            guard let point = projection.screenPositionFor(
-                latitude: marker.latitude,
-                longitude: marker.longitude
+        let originals = coordinator.visibleMarkers(at: now)
+        let rendered = presented
+        let byUID = Dictionary(uniqueKeysWithValues: originals.map { ($0.uid, $0) })
+        return rendered.compactMap { displayed in
+            guard let marker = byUID[displayed.uid], let point = projection.screenPositionFor(
+                latitude: displayed.latitude,
+                longitude: displayed.longitude
             ), point.trustworthy,
             point.x >= margin, point.y >= margin,
             point.x <= Double(size.width) - margin,

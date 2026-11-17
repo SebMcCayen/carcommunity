@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import android.os.SystemClock
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Canvas
@@ -316,7 +318,7 @@ fun ConvoyMapAwarenessOverlay(
  * timestamps it compares against.
  */
 @Composable
-private fun rememberSmoothedMembers(
+internal fun rememberSmoothedMembers(
     members: List<ConvoyMemberPosition>,
     nowMillis: () -> Long,
 ): List<ConvoyMemberPosition> {
@@ -341,11 +343,11 @@ private fun rememberSmoothedMembers(
         }
     // The instant the markers are currently drawn AT. Every published change is
     // one recomposition of the overlay, which is why the loop below throttles.
-    var renderAtMillis by remember { mutableLongStateOf(nowMillis()) }
+    var renderAtMillis by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
 
     LaunchedEffect(members) {
-        val startMillis = nowMillis()
-        smoother.onPositions(members, startMillis)
+        val startMillis = SystemClock.elapsedRealtime()
+        smoother.onPositions(members, startMillis, sourceWallNowMillis = nowMillis())
         renderAtMillis = startMillis
 
         var frameBaseMillis: Long? = null

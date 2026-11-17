@@ -138,9 +138,8 @@ final class LiveLocationModelsTests: XCTestCase {
 
     func testFixFasterThanMinUpdateIntervalIsThrottledEvenWithMovement() {
         // ~110 m of movement, but only 1 s after the last submit — under the
-        // 2 s min-update floor. CoreLocation can deliver above 1 Hz, so the
-        // floor is enforced in the throttle (Android caps it in the fused
-        // request instead).
+        // 3 s publication floor. CoreLocation can deliver above 1 Hz, so the
+        // floor is enforced in the publication throttle on both platforms.
         XCTAssertFalse(
             LiveShareCadence.shouldPublish(
                 lastSubmittedAt: now.addingTimeInterval(-1),
@@ -172,6 +171,35 @@ final class LiveLocationModelsTests: XCTestCase {
         let distance = LiveShareCadence.distanceMeters(lat1: 57.0, lon1: 12.0, lat2: 58.0, lon2: 12.0)
         XCTAssertEqual(distance, 111_195, accuracy: 100)
         XCTAssertEqual(LiveShareCadence.distanceMeters(lat1: 57.5, lon1: 12.1, lat2: 57.5, lon2: 12.1), 0)
+    }
+
+    func testSlowMotionUsesThreeSecondCadenceBelowDistanceThreshold() {
+        func eligible(_ elapsed: TimeInterval) -> Bool {
+            LiveShareCadence.shouldPublish(
+                lastSubmittedAt: now.addingTimeInterval(-elapsed),
+                lastSubmittedLatitude: 57.5, lastSubmittedLongitude: 12.1,
+                latitude: 57.500027, longitude: 12.1, now: now,
+                lastSubmittedSpeedMetersPerSecond: 1, speedMetersPerSecond: 1
+            )
+        }
+        XCTAssertFalse(eligible(2.999))
+        XCTAssertTrue(eligible(3))
+    }
+
+    func testStopBypassesFloorOnceThenUsesSparseHeartbeat() {
+        func eligible(_ previous: Double?, _ speed: Double?, _ elapsed: TimeInterval) -> Bool {
+            LiveShareCadence.shouldPublish(
+                lastSubmittedAt: now.addingTimeInterval(-elapsed),
+                lastSubmittedLatitude: 57.5, lastSubmittedLongitude: 12.1,
+                latitude: 57.5, longitude: 12.1, now: now,
+                lastSubmittedSpeedMetersPerSecond: previous, speedMetersPerSecond: speed
+            )
+        }
+        XCTAssertTrue(eligible(12, 0, 1))
+        XCTAssertFalse(eligible(0, 0, 3))
+        XCTAssertFalse(eligible(12, nil, 1))
+        XCTAssertFalse(eligible(12, .nan, 1))
+        XCTAssertTrue(eligible(0, 0, LiveShareCadence.stationaryHeartbeat))
     }
 
     // MARK: - wire mappings
@@ -280,5 +308,106 @@ final class LiveLocationModelsTests: XCTestCase {
         XCTAssertNil(LiveMarker.fromMap(uid: "member", ["longitude": 12.0]))
         XCTAssertNil(LiveMarker.fromMap(uid: "member", ["latitude": 91.0, "longitude": 12.0]))
         XCTAssertNil(LiveMarker.fromMap(uid: "", ["latitude": 57.0, "longitude": 12.0]))
+    }
+}
+
+final class DriverMotionTimelineTests: XCTestCase {
+    private let point = DriverMotionPoint(latitude: 57, longitude: 12, bearing: 0)
+    private let epoch = Date(timeIntervalSince1970: 10_000)
+
+    func testThreeSecondUpdatesStayContinuousAndRetargetWithoutTeleporting() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 0, now: 0, speed: 10, course: 0)
+        XCTAssertEqual(point, motion.frame(at: 0.250))
+        var previous = motion.frame(at: 0.250)!
+        for step in 6...60 {
+            let frame = motion.frame(at: Double(step) / 20)!
+            XCTAssertGreaterThan(frame.latitude, previous.latitude)
+            previous = frame
+        }
+        let next = DriverMotionPoint(latitude: point.latitude + 30 / 6_371_000 * 180 / .pi, longitude: point.longitude, bearing: 0)
+        let before = motion.frame(at: 3)
+        motion.update(next, recordedAt: epoch.addingTimeInterval(3), sampleAge: 0, now: 3, speed: 10, course: 0)
+        XCTAssertEqual(before, motion.frame(at: 3))
+        XCTAssertEqual(next.latitude, motion.frame(at: 3.250)!.latitude, accuracy: 1e-9)
+        XCTAssertGreaterThan(motion.frame(at: 3.300)!.latitude, next.latitude)
+    }
+
+    func testSelfNearbyAndConvoyHaveOnePresentationPolicy() {
+        var tracks = Array(repeating: DriverMotionTimeline(), count: 3)
+        for index in tracks.indices {
+            tracks[index].update(point, recordedAt: epoch, sampleAge: 0.100, now: 0.100, speed: 20, course: 90)
+        }
+        for step in 1...250 {
+            let time = Double(step) / 60
+            let frames = tracks.indices.map { index in tracks[index].frame(at: time) }
+            XCTAssertEqual(frames[0], frames[1]); XCTAssertEqual(frames[0], frames[2])
+        }
+        XCTAssertEqual(DriverMotionPolicy.presentationDelay, 0.250)
+    }
+
+    func testStopReplacesEstimatedVelocityAndStaysStopped() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 0, now: 0, speed: 20, course: 0)
+        _ = motion.frame(at: 2)
+        let stopped = DriverMotionPoint(latitude: 57.0001, longitude: 12, bearing: 0)
+        motion.update(stopped, recordedAt: epoch.addingTimeInterval(2), sampleAge: 0, now: 2, speed: 0, course: 0)
+        XCTAssertEqual(stopped, motion.frame(at: 2.250))
+        XCTAssertEqual(stopped, motion.frame(at: 30))
+        XCTAssertFalse(motion.isAnimating(at: 2.250))
+    }
+
+    func testPredictionIsBoundedBySourceTimeRatherThanPacketArrival() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 20, now: 30, speed: 20, course: 0)
+        XCTAssertEqual(point, motion.frame(at: 30))
+        XCTAssertEqual(motion.frame(at: 30), motion.frame(at: 60))
+        XCTAssertFalse(motion.isAnimating(at: 30))
+        var fresh = DriverMotionTimeline()
+        fresh.update(point, recordedAt: epoch, sampleAge: 0, now: 0, speed: 20, course: 0)
+        XCTAssertEqual(fresh.frame(at: 3.750), fresh.frame(at: 60))
+        XCTAssertFalse(fresh.isAnimating(at: 3.750))
+    }
+
+    func testOldDuplicateFutureAndUndatedSamplesDoNotInventMotion() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 0, now: 0)
+        XCTAssertFalse(motion.update(point, recordedAt: epoch, sampleAge: 0, now: 1))
+        XCTAssertFalse(motion.update(point, recordedAt: epoch.addingTimeInterval(-1), sampleAge: 0, now: 1))
+        for (recordedAt, age) in [(Optional<Date>.none, 0.0), (Optional(epoch), -1.0)] {
+            var unknown = DriverMotionTimeline()
+            unknown.update(point, recordedAt: recordedAt, sampleAge: age, now: 0, speed: 20, course: 0)
+            XCTAssertEqual(point, unknown.frame(at: 30))
+        }
+    }
+
+    func testBearingAndLongitudeCrossTheirWrapWithoutSpinning() {
+        let a = DriverMotionPoint(latitude: 0, longitude: 179, bearing: 359)
+        let b = DriverMotionPoint(latitude: 0, longitude: -179, bearing: 1)
+        let middle = DriverMotionTimeline.interpolate(a, b, fraction: 0.5)
+        XCTAssertEqual(middle.longitude, -180, accuracy: 1e-9)
+        XCTAssertEqual(middle.bearing!, 0, accuracy: 1e-9)
+    }
+
+    func testTurnCorrectionDoesNotTeleportAndThenFollowsTheNewCourse() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 0, now: 0, speed: 10, course: 0)
+        let before = motion.frame(at: 3)
+        let corner = DriverMotionPoint(latitude: 57.00027, longitude: 12, bearing: 90)
+        motion.update(corner, recordedAt: epoch.addingTimeInterval(3), sampleAge: 0, now: 3, speed: 10, course: 90)
+        XCTAssertEqual(before, motion.frame(at: 3))
+        let east = motion.frame(at: 3.500)!
+        XCTAssertGreaterThan(east.longitude, corner.longitude)
+        XCTAssertEqual(east.bearing!, 90, accuracy: 1e-9)
+    }
+
+    func testMarkerParsingPreservesOptionalPhysicalMotionFields() {
+        let marker = LiveMarker.fromMap(uid: "driver", ["latitude": 57.0, "longitude": 12.0,
+            "recordedAt": "2026-11-17T18:00:00Z", "headingDegrees": 359.0, "speedMetersPerSecond": 12.5])!
+        XCTAssertEqual(marker.headingDegrees, 359)
+        XCTAssertEqual(marker.speedMetersPerSecond, 12.5)
+        let member = ConvoyMemberPosition(marker: marker)
+        XCTAssertEqual(member.headingDegrees, marker.headingDegrees)
+        XCTAssertEqual(member.speedMetersPerSecond, marker.speedMetersPerSecond)
     }
 }

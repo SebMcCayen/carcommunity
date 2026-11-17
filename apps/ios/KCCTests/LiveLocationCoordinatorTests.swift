@@ -527,6 +527,7 @@ final class LiveLocationCoordinatorTests: XCTestCase {
         // A burst of qualifying fixes lands while the call is in flight:
         // the bounded relay must keep only the NEWEST, not a backlog.
         for step in 1...4 {
+            clock.advance(by: 1)
             provider.emitFix(fix(latitude: 57.5 + Double(step) * 0.001, longitude: 12.1))
         }
         // Wait for the async provider drain to accept the full burst before
@@ -711,6 +712,38 @@ final class LiveLocationCoordinatorTests: XCTestCase {
     }
 
     // MARK: - cadence gating
+
+    @MainActor
+    func testMovingCadenceAndPromptStopUseTheActualPublishedSpeed() async {
+        let repository = FakeLiveLocationRepository()
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository: repository, provider: provider)
+        coordinator.start()
+        repository.emitSession(activeSession())
+        await waitUntil { provider.activeFixStreamCount == 1 }
+
+        func movingFix(_ speed: Double, _ offset: Double) -> LocationFix {
+            LocationFix.of(latitude: 57.5 + offset, longitude: 12.1,
+                timestamp: clock.now, speedMetersPerSecond: speed)!
+        }
+        provider.emitFix(movingFix(1, 0))
+        await waitUntil { repository.publishedCoordinates.count == 1 }
+        clock.advance(by: 2)
+        provider.emitFix(movingFix(1, 0.000018))
+        await waitUntil { coordinator.receivedFixCount == 2 }
+        XCTAssertEqual(repository.publishedCoordinates.count, 1)
+        clock.advance(by: 1)
+        provider.emitFix(movingFix(1, 0.000027))
+        await waitUntil { repository.publishedCoordinates.count == 2 }
+        clock.advance(by: 1)
+        provider.emitFix(movingFix(0, 0.000027))
+        await waitUntil { repository.publishedCoordinates.count == 3 }
+        XCTAssertEqual(repository.publishedCoordinates.last?.speedMetersPerSecond, 0)
+        clock.advance(by: 3)
+        provider.emitFix(movingFix(0, 0.000027))
+        await waitUntil { coordinator.receivedFixCount == 5 }
+        XCTAssertEqual(repository.publishedCoordinates.count, 3)
+    }
 
     @MainActor
     func testJitterWithinHeartbeatIsThrottledAndMovementPublishes() async {

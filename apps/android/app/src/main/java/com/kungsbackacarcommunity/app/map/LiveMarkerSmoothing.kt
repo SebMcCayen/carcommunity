@@ -12,17 +12,10 @@ import com.kungsbackacarcommunity.app.location.LivePositionRejectionReport
 /**
  * Stops other people's live markers TELEPORTING around the map.
  *
- * ## The problem this exists for
- * A convoy member's position is published, not streamed: the sharing device
- * only writes a fix once it has moved past
- * [com.kungsbackacarcommunity.app.location.BackgroundLocation.MOVEMENT_THRESHOLD_METERS]
- * (15 m), at a fix cadence of
- * [com.kungsbackacarcommunity.app.location.BackgroundLocation.UPDATE_INTERVAL_MS]
- * (5 s). Drawn naively, the person driving beside you therefore does not move at
- * all for five seconds and then jumps ~100 m in one frame — which is exactly the
- * "icons jumping here and there even though they are driving next to me" this
- * fixes. A bad fix (a reflected/urban-canyon GPS sample) makes it worse: the
- * marker leaps a kilometre sideways and back.
+ * Published positions arrive at a nominal three-second moving cadence, with
+ * a sparse heartbeat while parked. The shared [DriverMotionTimeline] bridges
+ * normal gaps with bounded source-timestamped prediction and corrects a new
+ * fix over the same short window used by the caller's own puck.
  *
  * ## The rules
  * 1. **Reject the impossible.** A fix implying more than
@@ -53,37 +46,11 @@ import com.kungsbackacarcommunity.app.location.LivePositionRejectionReport
  * "where do I draw everyone right now?".
  */
 object LiveMarkerSmoothing {
-    /**
-     * Shortest glide. Below this the animation is not perceptible as motion and
-     * a burst of fixes would render as a stutter rather than a slide.
-     */
-    const val GLIDE_MIN_MS: Long = 300L
-
-    /**
-     * Longest glide, and the reason it is capped: a member who drops out (tunnel,
-     * dead signal) and reappears minutes later at a genuinely reachable position
-     * must not then crawl across the map for minutes. Their marker slides for at
-     * most this long and settles.
-     */
-    const val GLIDE_MAX_MS: Long = 3_000L
-
-    /**
-     * Glide used when the gap between two fixes is not yet known — the second
-     * fix of a session, essentially. Roughly a walking-pace slide; the third fix
-     * onwards uses the measured cadence.
-     */
-    const val GLIDE_DEFAULT_MS: Long = 1_200L
-
-    /**
-     * Minimum wall time between two rendered frames of a glide (~30 fps).
-     *
-     * Repositioning a marker means re-projecting every member through the live
-     * map (a native call each) and recomposing the overlay, per member, per
-     * frame. Thirty steps a second is already past the point where a 100 m slide
-     * reads as continuous motion, so the display refresh rate buys nothing and
-     * costs projections. Consumed by the overlay's frame loop.
-     */
-    const val GLIDE_FRAME_INTERVAL_MS: Long = 32L
+    /** Compatibility names: every driver kind uses the one correction budget. */
+    const val GLIDE_MIN_MS: Long = DriverMotionPolicy.CORRECTION_MS
+    const val GLIDE_MAX_MS: Long = DriverMotionPolicy.CORRECTION_MS
+    const val GLIDE_DEFAULT_MS: Long = DriverMotionPolicy.CORRECTION_MS
+    const val GLIDE_FRAME_INTERVAL_MS: Long = DriverMotionPolicy.FRAME_INTERVAL_MS
 
     /**
      * Whether a coordinate can be drawn at all: finite and inside the WGS-84
@@ -149,25 +116,9 @@ object LiveMarkerSmoothing {
             accuracyMeters = accuracyMeters,
         ) == LiveFixVerdict.ACCEPT
 
-    /**
-     * How long the glide to a new target should take, given how long it has been
-     * since the previous accepted fix ARRIVED.
-     *
-     * Matching the glide to the observed arrival cadence is what makes the motion
-     * continuous rather than stop-start: at the publisher's 5 s cadence the
-     * marker is still sliding when the next fix lands, so it never sits frozen
-     * and then jumps. Clamped to [GLIDE_MIN_MS]..[GLIDE_MAX_MS]; an unknown or
-     * non-positive gap falls back to [GLIDE_DEFAULT_MS].
-     *
-     * ARRIVAL gap, deliberately — unlike [acceptsFix], which is about the car,
-     * this is about the renderer: it should pace itself by how often it is
-     * actually fed, network delay included.
-     */
-    fun glideDurationMillis(arrivalGapMillis: Long?): Long {
-        val gap = arrivalGapMillis ?: return GLIDE_DEFAULT_MS
-        if (gap <= 0L) return GLIDE_DEFAULT_MS
-        return gap.coerceIn(GLIDE_MIN_MS, GLIDE_MAX_MS)
-    }
+    /** Arrival cadence never adds a second, longer presentation delay. */
+    fun glideDurationMillis(@Suppress("UNUSED_PARAMETER") arrivalGapMillis: Long?): Long =
+        DriverMotionPolicy.CORRECTION_MS
 
     /**
      * Fraction of the glide completed: 0 at the start, 1 at or after the end,
@@ -264,23 +215,20 @@ class LiveMarkerSmoother(
      * marker staying where it was last believed to be.
      */
     private class Track(
-        var fromLatitude: Double,
-        var fromLongitude: Double,
         var toLatitude: Double,
         var toLongitude: Double,
-        var startedAtMillis: Long,
-        var durationMillis: Long,
         var acceptedRecordedAtMillis: Long?,
-        var acceptedAtMillis: Long,
         var pendingLatitude: Double? = null,
         var pendingLongitude: Double? = null,
+        val motion: DriverMotionTimeline = DriverMotionTimeline(),
     )
 
     private val tracks = HashMap<String, Track>()
     private val rejectionWindows = HashMap<String, LivePositionFailureWindow>()
 
     /**
-     * Feed a fresh roster snapshot, at wall time [nowMillis].
+     * Feed a roster on the local monotonic [nowMillis] clock.
+     * [sourceWallNowMillis] is used only to measure publisher sample age.
      *
      * Each member's position is accepted or rejected by
      * [LiveMarkerSmoothing.acceptsFix]; an accepted position that actually MOVED
@@ -293,7 +241,7 @@ class LiveMarkerSmoother(
      * Members absent from [members] are dropped, so someone who stops sharing
      * cannot leave a track behind.
      */
-    fun onPositions(members: List<ConvoyMemberPosition>, nowMillis: Long) {
+    fun onPositions(members: List<ConvoyMemberPosition>, nowMillis: Long, sourceWallNowMillis: Long = nowMillis) {
         for (member in members) {
             val track = tracks[member.uid]
             if (track == null) {
@@ -325,15 +273,19 @@ class LiveMarkerSmoother(
                 rejectionWindows.remove(member.uid)
                 tracks[member.uid] =
                     Track(
-                        fromLatitude = member.latitude,
-                        fromLongitude = member.longitude,
                         toLatitude = member.latitude,
                         toLongitude = member.longitude,
-                        startedAtMillis = nowMillis,
-                        durationMillis = 0L,
                         acceptedRecordedAtMillis = member.updatedAtMillis,
-                        acceptedAtMillis = nowMillis,
-                    )
+                    ).also { track ->
+                        track.motion.update(
+                            DriverMotionPoint(member.latitude, member.longitude, member.headingDegrees),
+                            member.updatedAtMillis,
+                            member.updatedAtMillis?.let { sourceWallNowMillis - it } ?: 0L,
+                            nowMillis,
+                            member.speedMetersPerSecond,
+                            member.headingDegrees,
+                        )
+                    }
                 continue
             }
 
@@ -375,42 +327,24 @@ class LiveMarkerSmoother(
             track.pendingLatitude = null
             track.pendingLongitude = null
 
-            val arrivalGapMillis = nowMillis - track.acceptedAtMillis
             // Bookkeeping advances even for a stationary heartbeat (same
             // coordinates, newer timestamp): the NEXT move must be judged against
             // the interval since this sample, not since the member last actually
             // moved, or a long park would make any subsequent jump look slow
             // enough to be plausible.
             track.acceptedRecordedAtMillis = member.updatedAtMillis
-            track.acceptedAtMillis = nowMillis
 
-            val moved =
-                member.latitude != track.toLatitude || member.longitude != track.toLongitude
-            if (!moved) continue
-
-            val currentFraction =
-                LiveMarkerSmoothing.progress(
-                    nowMillis - track.startedAtMillis,
-                    track.durationMillis,
-                )
-            val currentLatitude =
-                LiveMarkerSmoothing.lerpLatitude(
-                    track.fromLatitude,
-                    track.toLatitude,
-                    currentFraction,
-                )
-            val currentLongitude =
-                LiveMarkerSmoothing.lerpLongitude(
-                    track.fromLongitude,
-                    track.toLongitude,
-                    currentFraction,
-                )
-            track.fromLatitude = currentLatitude
-            track.fromLongitude = currentLongitude
+            track.motion.update(
+                DriverMotionPoint(member.latitude, member.longitude, member.headingDegrees),
+                member.updatedAtMillis,
+                member.updatedAtMillis?.let { sourceWallNowMillis - it } ?: 0L,
+                nowMillis,
+                member.speedMetersPerSecond,
+                member.headingDegrees,
+            )
             track.toLatitude = member.latitude
             track.toLongitude = member.longitude
-            track.startedAtMillis = nowMillis
-            track.durationMillis = LiveMarkerSmoothing.glideDurationMillis(arrivalGapMillis)
+
         }
         // Drop anyone who is no longer on the roster. A linear scan per surviving
         // track rather than an intermediate set: this runs once per roster update
@@ -493,7 +427,7 @@ class LiveMarkerSmoother(
      * spinning for the whole time a convoy is on screen.
      */
     fun isGliding(nowMillis: Long): Boolean =
-        tracks.values.any { nowMillis - it.startedAtMillis < it.durationMillis }
+        tracks.values.any { it.motion.isAnimating(nowMillis) }
 
     /**
      * [members] with each position replaced by where that member's marker should
@@ -522,23 +456,9 @@ class LiveMarkerSmoother(
                         LiveFixVerdict.ACCEPT
                 }
             } else {
-                val fraction =
-                    LiveMarkerSmoothing.progress(
-                        nowMillis - track.startedAtMillis,
-                        track.durationMillis,
-                    )
-                val latitude =
-                    LiveMarkerSmoothing.lerpLatitude(
-                        track.fromLatitude,
-                        track.toLatitude,
-                        fraction,
-                    )
-                val longitude =
-                    LiveMarkerSmoothing.lerpLongitude(
-                        track.fromLongitude,
-                        track.toLongitude,
-                        fraction,
-                    )
+                val point = track.motion.frame(nowMillis) ?: return@mapNotNull null
+                val latitude = point.latitude
+                val longitude = point.longitude
                 if (latitude == member.latitude && longitude == member.longitude) {
                     member
                 } else {

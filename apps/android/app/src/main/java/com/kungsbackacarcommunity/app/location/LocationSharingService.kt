@@ -119,9 +119,9 @@ class LocationSharingService : Service() {
      * Last fix the quality gate BELIEVED, as opposed to the last one published.
      *
      * The distinction is the whole point of filtering here: this callback sees a
-     * fix every [BackgroundLocation.UPDATE_INTERVAL_MS] (~5 s) whether or not the
+     * fix every [BackgroundLocation.UPDATE_INTERVAL_MS] (~3 s) whether or not the
      * movement/heartbeat throttle publishes it, so the implausible-speed rule
-     * measured from HERE has a ~278 m ceiling. Measured from the last PUBLISHED
+     * measured from HERE has a ~167 m ceiling. Measured from the last PUBLISHED
      * sample it would be a 3-minute interval while parked, i.e. a ~10 km ceiling
      * — which is exactly how a 1-2 km jump on a stationary phone got through.
      *
@@ -194,10 +194,10 @@ class LocationSharingService : Service() {
                 // 1-2 km while I was standing still"). Two things make it belong
                 // HERE rather than only on the viewer:
                 //
-                //  - This callback sees EVERY fix at UPDATE_INTERVAL_MS (~5 s),
+                //  - This callback sees EVERY fix at UPDATE_INTERVAL_MS (~3 s),
                 //    whereas a viewer only sees the ones we publish — which, while
                 //    parked, is once per STATIONARY_HEARTBEAT_MS (3 min). Against a
-                //    5 s interval the shared implausible-speed rule has a ~278 m
+                //    3 s interval the shared implausible-speed rule has a ~167 m
                 //    ceiling; against 3 min it does not bite below ~10 km. The same
                 //    constant is simply far sharper on this side of the wire.
                 //  - Dropping the fix here fixes every consumer at once — map,

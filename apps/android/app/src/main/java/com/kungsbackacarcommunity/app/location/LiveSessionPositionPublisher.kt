@@ -75,6 +75,10 @@ internal class LiveSessionPositionPublisher(
     fun accept(coordinate: LiveCoordinate) {
         val current = run?.takeIf { it.enabled } ?: return
         if (!isFresh(coordinate, nowMillis())) return
+        val accepted = current.latest
+        if (accepted != null &&
+            !Instant.parse(coordinate.recordedAtIso).isAfter(Instant.parse(accepted.recordedAtIso))
+        ) return
         current.latest = coordinate
         current.wake.trySend(Unit)
     }
@@ -95,9 +99,12 @@ internal class LiveSessionPositionPublisher(
                 continue
             }
             val previous = current.lastSubmitted
-            val ordinary = BackgroundLocation.shouldPublish(
+            val hasNewFix = previous == null ||
+                Instant.parse(coordinate.recordedAtIso).isAfter(Instant.parse(previous.recordedAtIso))
+            val ordinary = hasNewFix && BackgroundLocation.shouldPublish(
                 current.lastSubmittedAt, previous?.latitude, previous?.longitude,
                 coordinate.latitude, coordinate.longitude, now,
+                previous?.speedMetersPerSecond, coordinate.speedMetersPerSecond,
             )
             val startupAt = if (
                 !(current.discoveryReady && current.uploadConfirmed) &&
@@ -121,7 +128,12 @@ internal class LiveSessionPositionPublisher(
                 continue
             }
             val heartbeatAt = current.lastSubmittedAt!! + BackgroundLocation.STATIONARY_HEARTBEAT_MS
-            val nextAt = startupAt?.let { minOf(it, heartbeatAt) } ?: heartbeatAt
+            // A provider burst can arrive before the publication floor. Keep
+            // its newest fix and wake once the moving deadline arrives.
+            val movingAt = if (hasNewFix && BackgroundLocation.isMoving(coordinate.speedMetersPerSecond)) {
+                current.lastSubmittedAt!! + BackgroundLocation.MOVING_PUBLISH_INTERVAL_MS
+            } else null
+            val nextAt = listOfNotNull(startupAt, movingAt, heartbeatAt).min()
             withTimeoutOrNull((nextAt - now).coerceAtLeast(1L)) { current.wake.receive() }
         }
     }

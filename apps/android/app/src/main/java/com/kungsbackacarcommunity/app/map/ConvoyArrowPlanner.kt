@@ -36,6 +36,8 @@ data class ConvoyMemberPosition(
      * [com.kungsbackacarcommunity.app.location.LivePositionQuality].
      */
     val accuracyMeters: Double? = null,
+    val headingDegrees: Double? = null,
+    val speedMetersPerSecond: Double? = null,
 )
 
 /**
@@ -60,6 +62,8 @@ fun LiveMarker.toConvoyMemberPosition(): ConvoyMemberPosition =
         updatedAtMillis =
             recordedAtIso?.let { iso -> runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull() },
         accuracyMeters = accuracyMeters,
+        headingDegrees = headingDegrees,
+        speedMetersPerSecond = speedMetersPerSecond,
     )
 
 /**
