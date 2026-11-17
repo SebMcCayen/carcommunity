@@ -355,6 +355,7 @@ final class CrownHuntMapModelTests: XCTestCase {
         tracker.record(previous)
         tracker.record(current)
         tracker.record(moved)
+        XCTAssertNil(tracker.proof(for: spawn, now: moved.timestamp))
         tracker.record(LocationFix.of(latitude: current.latitude + 4 / 111195.0,
                                       longitude: current.longitude, timestamp: now.addingTimeInterval(4),
                                       accuracyMeters: 5, speedMetersPerSecond: 1)!)

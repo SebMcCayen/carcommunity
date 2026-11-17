@@ -524,4 +524,14 @@ class CrownFixTrackerTest {
         val pair = tracker.proofPair(base + 4_000)!!
         assertTrue(!CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(pair.current, pair.previous)))
     }
+
+    @Test
+    fun `a newly reported departure corroborated by displacement immediately clears the old stop`() {
+        val tracker = CrownFixTracker()
+        tracker.record(CrownFix(57.5, 12.0, base, 0.0))
+        tracker.record(CrownFix(57.5, 12.0, base + 4_000, 0.0))
+        assertNotNull(tracker.proofPair(base + 4_000))
+        tracker.record(CrownFix(57.5 + 2.0 / 111195.0, 12.0, base + 6_000, 1.0))
+        assertNull(tracker.proofPair(base + 6_000))
+    }
 }

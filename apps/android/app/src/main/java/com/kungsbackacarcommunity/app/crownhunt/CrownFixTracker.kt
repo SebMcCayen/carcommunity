@@ -72,9 +72,9 @@ class CrownFixTracker {
             val gap = fix.recordedAtMillis - it.recordedAtMillis
             gap in CrownSpawnLimits.MIN_DWELL_SECONDS * 1000..CrownSpawnLimits.MAX_DWELL_SECONDS * 1000
         }
-        val reportedMotion = current != null &&
-            CrownCollectGate.isMoving(current.speedMetersPerSecond) &&
-            CrownCollectGate.isMoving(fix.speedMetersPerSecond)
+        val reportedMotion = current != null && CrownCollectGate.isMoving(fix.speedMetersPerSecond) &&
+            (CrownCollectGate.isMoving(current.speedMetersPerSecond) ||
+                CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(fix, current)))
         if (reportedMotion || CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(fix, movementAnchor))) {
             recent.clear()
         }
