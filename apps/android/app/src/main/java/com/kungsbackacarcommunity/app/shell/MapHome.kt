@@ -451,9 +451,7 @@ fun MapHome(
     val roadCameraViewport by mapSurface.cameraSnapshot.collectAsState()
     val roadCameraMarkers = roadCameraLayers?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude,
         roadCameraViewport?.zoom ?: 17.0).orEmpty()
-    LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled, roadCameraMarkers) {
-        mapSurface.setIncidentMarkers((if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers)
-    }
+    val densityIncidents = (if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers
 
     // Push the community event pins onto the surface whenever they change (or the
     // surface instance is swapped), so every signed-in user sees them. No layer
@@ -548,6 +546,7 @@ fun MapHome(
         // at the BOTTOM of the chrome stack: it belongs to the map, so every
         // control composed below this point draws over it rather than being
         // covered by a car photo pinned to a screen edge.
+        MapDensityOverlay(mapSurface, densityIncidents)
         convoyOverlay?.invoke()
 
         // Nearby-public live sharers (discovered via live.listNearby), on the

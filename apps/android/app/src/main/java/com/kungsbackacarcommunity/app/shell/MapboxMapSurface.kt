@@ -472,6 +472,8 @@ class MapboxMapSurface(
     // reconciliation. Changed lists retain annotations by marker id. Reset with
     // the manager so a recreated map always draws the current markers.
     private var lastAppliedIncidents: List<MapIncidentMarker>? = null
+    private var groupedIncidentIds: Set<String> = emptySet()
+    private var groupedCrownIds: Set<String> = emptySet()
 
     // ---- Kronjakt crown layer -----------------------------------------------
     // Its OWN annotation manager, image set and lookup, parallel to the incident
@@ -856,6 +858,16 @@ class MapboxMapSurface(
         // The Content update lambda observes this flow and (re)draws the incident
         // badges when the set changes, so publishing the value is enough.
         incidentMarkersFlow.value = markers
+    }
+
+    override fun setGroupedMarkerIds(incidentIds: Set<String>, crownIds: Set<String>) {
+        if (groupedIncidentIds == incidentIds && groupedCrownIds == crownIds) return
+        groupedIncidentIds = incidentIds
+        groupedCrownIds = crownIds
+        // Reconcile removes annotations AND native hit lookup for covered sources.
+        lastAppliedIncidents = null
+        runCatching { applyIncidentMarkersIfChanged(incidentMarkersFlow.value) }
+        runCatching { renderCrownFrame(SystemClock.uptimeMillis()) }
     }
 
     override fun setCrownMarkers(markers: List<MapCrownMarker>) {
@@ -2671,7 +2683,7 @@ class MapboxMapSurface(
      */
     internal fun onIncidentAnnotationClicked(annotationId: String): Boolean {
         val incidentId = incidentIdsByAnnotation[annotationId]
-        if (incidentId != null) {
+        if (incidentId != null && incidentId !in groupedIncidentIds) {
             emitIncidentTap(incidentId)
             return true
         }
@@ -2810,7 +2822,7 @@ class MapboxMapSurface(
             manager = manager,
             style = mapViewRef?.mapboxMap?.style,
             context = appContext,
-            markers = markers,
+            markers = markers.filterNot { it.id in groupedIncidentIds },
             registeredImages = registeredIncidentImages,
             idsByAnnotation = incidentIdsByAnnotation,
             annotations = incidentAnnotations,
@@ -2893,7 +2905,7 @@ class MapboxMapSurface(
      */
     internal fun onCrownAnnotationClicked(annotationId: String): Boolean {
         val spawnId = crownIdsByAnnotation[annotationId]
-        if (spawnId != null) {
+        if (spawnId != null && spawnId !in groupedCrownIds) {
             emitCrownTap(spawnId)
             return true
         }
@@ -2958,6 +2970,7 @@ class MapboxMapSurface(
         val liveIds = HashSet<String>(states.size)
 
         for (state in states) {
+            if (state.id in groupedCrownIds) continue
             liveIds += state.id
             val marker = crownMarkerById[state.id] ?: continue
             val annotation =

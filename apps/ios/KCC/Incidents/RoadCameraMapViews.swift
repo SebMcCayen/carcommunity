@@ -76,12 +76,12 @@ final class RoadCameraMapCoordinator {
             let east = (camera.longitude - center.longitude) * 111_000 * longitudeScale
             return enabledTypes.contains(camera.type) && hypot(north, east) <= 50_000
         }
-        let ordered = RoadCameraMapGroup.group(nearby, zoom: center.zoom).sorted { lhs, rhs in
+        let ordered = nearby.map { RoadCameraMapGroup(sites: [$0]) }.sorted { lhs, rhs in
             let lhsDistance = hypot(lhs.camera.latitude - center.latitude, (lhs.camera.longitude - center.longitude) * longitudeScale)
             let rhsDistance = hypot(rhs.camera.latitude - center.latitude, (rhs.camera.longitude - center.longitude) * longitudeScale)
             return lhsDistance == rhsDistance ? lhs.id < rhs.id : lhsDistance < rhsDistance
         }
-        return Array(ordered.prefix(250))
+        return ordered
     }
 
     var selectedViews: [RoadCamera] {

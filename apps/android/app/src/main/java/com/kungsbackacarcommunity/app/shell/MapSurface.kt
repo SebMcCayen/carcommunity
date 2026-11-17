@@ -703,6 +703,9 @@ interface MapSurface : MapProjection {
      * surface's annotation click listener; also drivable by the stub/tests to
      * simulate the tap without a GL surface.
      */
+    /** Presentation substitutes only: grouped sources retain their original data and authorization. */
+    fun setGroupedMarkerIds(incidentIds: Set<String>, crownIds: Set<String>) {}
+
     fun emitIncidentTap(incidentId: String)
 
     /** Clear the pending [incidentTap] once the host has opened the sheet for it. */
