@@ -341,7 +341,7 @@ final class CrownHuntMapModelTests: XCTestCase {
     func testShortDepartureRejectsZeroAndAbsentReportedSpeed() {
         let now = Date(timeIntervalSince1970: 2000)
         let spawn = makeSpawn()
-        for speed: Double? in [1.0, 0.0, nil] {
+        for speed in [1.0, 0.0, nil] as [Double?] {
             var tracker = CrownFixTracker()
             tracker.record(fix(at: now.addingTimeInterval(-4)))
             tracker.record(fix(at: now))
