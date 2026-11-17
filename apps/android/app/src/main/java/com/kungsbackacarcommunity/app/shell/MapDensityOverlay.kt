@@ -15,7 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -46,10 +46,10 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
     val zoomState = remember { MapDensityZoom() }
     val bucket = zoomState.update(camera?.zoom ?: 14.0)
     val roadCameras = LocalRoadCameraLayers.current
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val configuration = LocalConfiguration.current
-    val entries = remember(incidents, crowns, selectedIncident, selectedCrown, configuration, roadCameras?.cameras) {
-        fun text(id: Int, vararg args: Any): String = context.getString(id, *args)
+    val entries = remember(incidents, crowns, selectedIncident, selectedCrown, configuration, resources, roadCameras?.cameras) {
+        fun text(id: Int, vararg args: Any): String = resources.getString(id, *args)
         incidents.map { marker ->
         val critical = marker.iconRes in setOf(R.drawable.ic_incident_accident,
             R.drawable.ic_incident_hazard, R.drawable.ic_incident_road_closed)

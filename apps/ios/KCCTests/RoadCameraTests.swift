@@ -109,7 +109,7 @@ final class RoadCameraTests: XCTestCase {
         let center = MapCameraSnapshot(latitude: 57.45, longitude: 12.09, zoom: 13, bearing: 0, pitch: 0)
         let sites = coordinator.visibleGroups(center: center, radius: nil, coordinatedDensity: true)
         XCTAssertEqual(sites.count, 300)
-        XCTAssertEqual(Set(sites.flatMap(\.views).map(\.id)), Set(upstream.catalogCameras.map(\.id)))
+        XCTAssertEqual(Set(sites.flatMap(\.views).map(\.id)), Set((upstream.catalogCameras ?? []).map(\.id)))
         XCTAssertEqual(upstream.photoCalls, 0)
     }
 
