@@ -338,6 +338,21 @@ final class CrownHuntMapModelTests: XCTestCase {
         XCTFail("Perk state did not update")
     }
 
+    func testShortDepartureRejectsZeroAndAbsentReportedSpeed() {
+        let now = Date(timeIntervalSince1970: 2000)
+        let spawn = makeSpawn()
+        for speed: Double? in [1.0, 0.0, nil] {
+            var tracker = CrownFixTracker()
+            tracker.record(fix(at: now.addingTimeInterval(-4)))
+            tracker.record(fix(at: now))
+            XCTAssertNotNil(tracker.proof(for: spawn, now: now))
+            tracker.record(LocationFix.of(latitude: spawn.latitude + 2 / 111195.0,
+                longitude: spawn.longitude, timestamp: now.addingTimeInterval(2),
+                accuracyMeters: 5, speedMetersPerSecond: speed)!)
+            XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(2)))
+        }
+    }
+
     func testSlowRollingAndNewDepartureCannotUseAnOldParkedProof() {
         let now = Date(timeIntervalSince1970: 2_000)
         let spawn = makeSpawn()

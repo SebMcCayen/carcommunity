@@ -266,13 +266,11 @@ struct CrownFixTracker: Equatable, Sendable {
             let gap = fix.timestamp.timeIntervalSince($0.timestamp)
             return gap >= CrownSpawnLimits.minimumDwell && gap <= CrownSpawnLimits.maximumDwell
         }
-        let reportedMotion = fixes.last.map {
-            (fix.speedMetersPerSecond ?? 0) > CrownSpawnLimits.maximumSpeedMetersPerSecond
-                && (($0.speedMetersPerSecond ?? 0) > CrownSpawnLimits.maximumSpeedMetersPerSecond
-                    || CrownFixPair(previous: $0, current: fix).movementSpeedMetersPerSecond
-                        > CrownSpawnLimits.maximumSpeedMetersPerSecond)
+        let recentMotion = fixes.last.map {
+            CrownFixPair(previous: $0, current: fix).movementSpeedMetersPerSecond
+                > CrownSpawnLimits.maximumSpeedMetersPerSecond
         } ?? false
-        if reportedMotion || anchor.map({
+        if recentMotion || anchor.map({
             CrownFixPair(previous: $0, current: fix).movementSpeedMetersPerSecond
                 > CrownSpawnLimits.maximumSpeedMetersPerSecond
         }) == true {
