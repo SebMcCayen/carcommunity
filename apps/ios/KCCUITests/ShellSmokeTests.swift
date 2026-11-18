@@ -808,12 +808,13 @@ final class ShellSmokeTests: XCTestCase {
     func testChatBackLiveMetricsProfileAndStopMatchAndroid() {
         for largeText in [false, true] {
             let app = launch(language: "en", largeText: largeText,
-                theme: largeText ? "Dark" : "Light", chatFixture: !largeText, liveFixture: true)
+                theme: largeText ? "Dark" : "Light", chatFixture: !largeText, liveFixture: true,
+                mapGestureFixture: true)
             let map = app.staticTexts["shell.mapPlaceholder"]
             let identity = map.value as? String
             let bar = app.buttons["map.session.bar"]
             XCTAssertTrue(bar.waitForExistence(timeout: 15))
-            XCTAssertTrue(map.isHittable, "Driver decorations must leave blank map space interactive")
+            assertMapReceivesGestures(app)
             let marker = app.buttons["map.fixture.liveSharer"]
             XCTAssertTrue(marker.wait(for: \.isHittable, toEqual: true, timeout: 10),
                 "Driver decorations must not cover the nearby driver's button")
@@ -1076,18 +1077,44 @@ final class ShellSmokeTests: XCTestCase {
     }
 
     func testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip() {
-        let app = launch(language: "en")
+        let app = launch(language: "en", mapGestureFixture: true)
         let placeholder = app.staticTexts["shell.mapPlaceholder"]
         XCTAssertTrue(placeholder.waitForExistence(timeout: 5))
-        XCTAssertTrue(placeholder.isHittable, "Map content must not be covered by the tab host")
+        assertMapReceivesGestures(app)
         app.buttons["shell.tab.social"].tap()
         app.buttons["shell.tab.map"].tap()
         assertSelected(app.buttons["shell.tab.map"])
-        XCTAssertTrue(placeholder.isHittable)
+        assertMapReceivesGestures(app)
         openSettings(app)
         app.buttons["Back"].firstMatch.tap()
         XCTAssertTrue(placeholder.waitForExistence(timeout: 5))
-        XCTAssertTrue(placeholder.isHittable)
+        assertMapReceivesGestures(app)
+    }
+
+    private func assertMapReceivesGestures(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let map = app.staticTexts["shell.mapPlaceholder"]
+        let probe = app.staticTexts["shell.mapGestureProbe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5), file: file, line: line)
+        let counts = (probe.value as? String)?.split(separator: "|").compactMap { Int($0) } ?? []
+        guard counts.count == 2 else {
+            XCTFail("Map touch probe must expose tap and pan counts", file: file, line: line)
+            return
+        }
+        print("MAP_GESTURE_PROBE labelHittable=\(map.isHittable) labelFrame=\(map.frame) before=\(counts)")
+        // Use physical coordinates, not an AX activation action. A full-map
+        // overlay that steals taps or pans must prevent these counters moving.
+        let center = map.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        center.tap()
+        let tapDelivered = NSPredicate(format: "value == %@", "\(counts[0] + 1)|\(counts[1])")
+        let tapReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: tapDelivered, object: probe)], timeout: 5)
+        if tapReady != .completed { chatProof(app, name: "map-tap-blocked", tree: true) }
+        XCTAssertEqual(tapReady, .completed, "Blank map space must receive taps through marker and chrome layers", file: file, line: line)
+        center.withOffset(CGVector(dx: -70, dy: 40)).press(forDuration: 0.05,
+            thenDragTo: center.withOffset(CGVector(dx: 70, dy: 40)))
+        let panDelivered = NSPredicate(format: "value == %@", "\(counts[0] + 1)|\(counts[1] + 1)")
+        let panReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: panDelivered, object: probe)], timeout: 5)
+        if panReady != .completed { chatProof(app, name: "map-pan-blocked", tree: true) }
+        XCTAssertEqual(panReady, .completed, "Blank map space must receive drags through marker and chrome layers", file: file, line: line)
     }
 
     func testMapToolsAppearOnRightAndWorkWithoutBackend() {
@@ -1716,7 +1743,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(sheetBar.exists, "Dismissal must remove the sheet before using the screen behind it")
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatKeyboardFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false, convoyDockFixture: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatKeyboardFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false, convoyDockFixture: Bool = false, mapGestureFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -1729,6 +1756,7 @@ final class ShellSmokeTests: XCTestCase {
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
         if rejectMaps { app.launchArguments += ["-KCCUITestNavigationFailure"] }
         if liveFixture { app.launchArguments += ["-KCCUITestLiveSession"] }
+        if mapGestureFixture { app.launchArguments += ["-KCCUITestMapGestures"] }
         if convoyDockFixture { app.launchArguments += ["-KCCUITestConvoyDock"] }
         if !markerPoints.isEmpty {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]
