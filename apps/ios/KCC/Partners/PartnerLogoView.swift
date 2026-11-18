@@ -1,16 +1,17 @@
 import FirebaseCore
 import FirebaseStorage
 import SwiftUI
+import UIKit
 
 /// Only server-published Storage paths are resolved. No arbitrary URL from an application is rendered.
 struct PartnerLogoView: View {
     let path: String?
     var size: CGFloat = 48
-    @State private var resolvedURL: URL?
+    @State private var resolvedImage: (path: String, image: UIImage)?
     var body: some View {
         Group {
-            if let resolvedURL {
-                AsyncImage(url: resolvedURL) { image in image.resizable().scaledToFit() } placeholder: { fallback }
+            if let resolvedImage, resolvedImage.path == path {
+                Image(uiImage: resolvedImage.image).resizable().scaledToFit()
             } else { fallback }
         }
         .frame(width: size, height: size)
@@ -18,11 +19,11 @@ struct PartnerLogoView: View {
         .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.sm))
         .accessibilityHidden(true)
         .task(id: path) {
-            resolvedURL = nil
+            resolvedImage = nil
             guard let path, Self.allowed(path), FirebaseApp.app() != nil else { return }
-            let value = await PartnerLogoStorage.downloadURL(for: path)
-            guard !Task.isCancelled else { return }
-            resolvedURL = value
+            let data = await PartnerLogoStorage.imageData(for: path)
+            guard !Task.isCancelled, let data, let image = UIImage(data: data) else { return }
+            resolvedImage = (path, image)
         }
     }
     private var fallback: some View {
@@ -37,12 +38,17 @@ struct PartnerLogoView: View {
 
 @MainActor
 private enum PartnerLogoStorage {
-    /// Keep the SDK reference on this actor; only the Sendable URL crosses
-    /// Firebase's completion boundary.
-    static func downloadURL(for path: String) async -> URL? {
-        await withCheckedContinuation { continuation in
-            storage.reference(withPath: path).downloadURL { url, _ in
-                continuation.resume(returning: url)
+    /// Fetch through authenticated Storage rules. Admin-published logos do not
+    /// carry public download tokens. Only bounded Sendable bytes leave the SDK.
+    static func imageData(for path: String) async -> Data? {
+        let limit: Int64 = 1024 * 1024
+        return await withCheckedContinuation { continuation in
+            _ = storage.reference(withPath: path).getData(maxSize: limit) { @Sendable data, error in
+                guard error == nil, let data, data.count <= Int(limit) else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: data)
             }
         }
     }
