@@ -116,7 +116,9 @@ class GoogleCredentialTokenProvider(
         /**
          * Runtime lookup by name is required because the resource only exists
          * when the google-services plugin is applied — compile-time R access
-         * would break the credential-less CI build.
+         * would break the credential-less CI build. The scoped resource keep file
+         * com_kungsbackacarcommunity_google_signin_keep.xml preserves this name
+         * through release resource shrinking; CI checks the optimized APK/AAB.
          */
         @SuppressLint("DiscouragedApi")
         fun resolveServerClientId(context: Context): String? {
