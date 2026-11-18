@@ -104,6 +104,144 @@ class ReactionRoomRefreshTest {
         state.invalidate(); state.store.clear()
     }
 
+    @Test fun `reaction switches and removals display immediately before the server responds`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        var payload: Map<String, Any?>? = null
+        val state = ReactionRoomState(ReactionRoom("community", "global"), "optimistic-fixture", RuntimeEnvironment.getApplication(), this,
+            sessionIsCurrent = { true }, remoteCall = { _, request ->
+                payload = request; release.await()
+                mapOf("emojiId" to "1f602", "version" to 2L, "counts" to mapOf("1f602" to 1L))
+            })
+        state.store.clear(); state.enabled = true
+        state.register("message", mapOf("1f44d" to 1L))
+        state.own["message"] = ReactionChoice("1f44d", 1)
+        state.select("message"); state.choose("1f602")
+        assertEquals(mapOf("1f602" to 1L), state.visible["message"])
+        assertEquals("1f602", state.own["message"]?.emojiId)
+        assertNull("The picker must close before network work runs", state.selectedId)
+        assertTrue(state.busy)
+        assertNull("Optimistic private state must not be cached", state.store.own(state.room, "message"))
+        runCurrent()
+        assertEquals(1L, payload?.get("expectedVersion"))
+        // A stale snapshot and an old own-state response cannot erase the pending intent.
+        state.register("message", mapOf("1f44d" to 2L))
+        assertEquals(mapOf("1f602" to 1L), state.visible["message"])
+        assertEquals("1f602", state.own["message"]?.emojiId)
+        release.complete(Unit); runCurrent()
+        assertEquals(2L, state.own["message"]?.version)
+        // The listener can coalesce our write with another member's reaction.
+        state.register("message", mapOf("1f602" to 2L))
+        assertEquals(mapOf("1f602" to 2L), state.visible["message"])
+        state.invalidate(); state.store.clear()
+    }
+
+    @Test fun `a listener snapshot newer than the mutation response remains visible`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val state = ReactionRoomState(ReactionRoom("community", "global"), "newer-snapshot-fixture", RuntimeEnvironment.getApplication(), this,
+            sessionIsCurrent = { true }, remoteCall = { _, _ ->
+                release.await()
+                mapOf("emojiId" to "1f602", "version" to 1L, "counts" to mapOf("1f602" to 1L))
+            })
+        state.store.clear(); state.enabled = true
+        state.register("message", emptyMap()); state.own["message"] = ReactionChoice(null, 0)
+        state.select("message"); state.choose("1f602"); runCurrent()
+        state.register("message", mapOf("1f602" to 2L, "1f44d" to 1L))
+        release.complete(Unit); runCurrent()
+        assertEquals(mapOf("1f602" to 2L, "1f44d" to 1L), state.visible["message"])
+        assertEquals("1f602", state.own["message"]?.emojiId)
+        state.invalidate(); state.store.clear()
+    }
+
+    @Test fun `a listener sequence returning to its original counts still supersedes an old response`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val state = ReactionRoomState(ReactionRoom("community", "global"), "snapshot-cycle-fixture", RuntimeEnvironment.getApplication(), this,
+            sessionIsCurrent = { true }, remoteCall = { _, _ ->
+                release.await()
+                mapOf("emojiId" to "1f602", "version" to 1L, "counts" to mapOf("1f602" to 2L))
+            })
+        state.store.clear(); state.enabled = true
+        state.register("message", mapOf("1f602" to 1L)); state.own["message"] = ReactionChoice(null, 0)
+        state.select("message"); state.choose("1f602"); runCurrent()
+        state.register("message", mapOf("1f602" to 2L))
+        state.register("message", mapOf("1f602" to 1L))
+        release.complete(Unit); runCurrent()
+        assertEquals(mapOf("1f602" to 1L), state.visible["message"])
+        state.invalidate(); state.store.clear()
+    }
+
+    @Test fun `a pending reaction survives its row being scrolled out and remounted`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val state = ReactionRoomState(ReactionRoom("community", "global"), "remount-fixture", RuntimeEnvironment.getApplication(), this,
+            sessionIsCurrent = { true }, remoteCall = { _, _ ->
+                release.await()
+                mapOf("emojiId" to "1f602", "version" to 1L, "counts" to mapOf("1f602" to 1L))
+            })
+        state.store.clear(); state.enabled = true
+        state.register("message", emptyMap()); state.own["message"] = ReactionChoice(null, 0)
+        state.select("message"); state.choose("1f602"); runCurrent()
+        state.unregister("message"); state.register("message", emptyMap())
+        assertEquals(mapOf("1f602" to 1L), state.visible["message"])
+        assertEquals("1f602", state.own["message"]?.emojiId)
+        state.select("message")
+        assertEquals("message", state.selectedId)
+        release.complete(Unit); runCurrent()
+        assertEquals(1L, state.own["message"]?.version)
+        assertEquals(mapOf("1f602" to 1L), state.visible["message"])
+        state.invalidate(); state.store.clear()
+    }
+
+    @Test fun `removing own reaction hides its final chip immediately`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val state = ReactionRoomState(ReactionRoom("community", "global"), "remove-fixture", RuntimeEnvironment.getApplication(), this,
+            sessionIsCurrent = { true }, remoteCall = { _, _ -> release.await(); emptyMap() })
+        state.store.clear(); state.enabled = true
+        state.register("message", mapOf("1f44d" to 1L, "1f602" to 2L))
+        state.own["message"] = ReactionChoice("1f44d", 1)
+        state.select("message"); state.choose("1f44d")
+        assertEquals(mapOf("1f602" to 2L), state.visible["message"])
+        assertNull(state.own["message"]?.emojiId)
+        state.invalidate(); state.store.clear()
+    }
+
+    @Test fun `failed optimistic reaction rolls back to the latest snapshot and preserves a newer menu`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val state = ReactionRoomState(ReactionRoom("community", "global"), "rollback-fixture", RuntimeEnvironment.getApplication(), this,
+            sessionIsCurrent = { true }, remoteCall = { name, _ ->
+                if (name.endsWith("getMine")) mapOf("items" to emptyList<Any>())
+                else { release.await(); error("Synthetic network failure") }
+            })
+        state.store.clear(); state.enabled = true
+        state.register("message", mapOf("1f44d" to 1L))
+        state.own["message"] = ReactionChoice(null, 0)
+        state.select("message"); state.choose("1f602"); runCurrent()
+        state.register("message", mapOf("1f44d" to 3L))
+        state.register("other", emptyMap()); state.select("other")
+        release.complete(Unit); runCurrent()
+        assertEquals(mapOf("1f44d" to 3L), state.visible["message"])
+        assertNull(state.own["message"])
+        assertEquals("other", state.selectedId)
+        assertFalse(state.busy)
+        state.invalidate(); state.store.clear()
+    }
+
+    @Test fun `invalidation prevents a pending mutation from restoring cleared state`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val state = ReactionRoomState(ReactionRoom("community", "global"), "mutation-invalidate-fixture", RuntimeEnvironment.getApplication(), this,
+            sessionIsCurrent = { true }, remoteCall = { _, _ ->
+                release.await()
+                mapOf("emojiId" to "1f602", "version" to 1L, "counts" to mapOf("1f602" to 1L))
+            })
+        state.store.clear(); state.enabled = true
+        state.register("message", emptyMap()); state.own["message"] = ReactionChoice(null, 0)
+        state.select("message"); state.choose("1f602"); runCurrent()
+        state.invalidate(); release.complete(Unit); runCurrent()
+        assertTrue(state.visible.isEmpty())
+        assertTrue(state.own.isEmpty())
+        assertFalse(state.busy)
+        assertNull(state.store.own(state.room, "message"))
+        state.store.clear()
+    }
+
     @Test fun `invalidation still cancels an active read and prevents cached private state`() = runTest {
         val release = CompletableDeferred<Unit>()
         var cancelled = false
