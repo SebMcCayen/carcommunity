@@ -317,7 +317,8 @@ struct PoliceProximityBanner: View {
     }
 }
 
-private extension Color {
+// Shared by incident and event map markers, including the event reading panel.
+extension Color {
     init(argb: UInt32) {
         self.init(
             red: Double((argb >> 16) & 0xFF) / 255,
