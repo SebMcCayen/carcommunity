@@ -930,8 +930,12 @@ struct ShellView: View {
 
 
     private func recordDriverControl(_ id: String, _ bounds: CGRect?) {
-        if let bounds, bounds.width > 0, bounds.height > 0 { mapDriverControlFrames[id] = bounds }
-        else { mapDriverControlFrames.removeValue(forKey: id) }
+        if let bounds, bounds.width > 0, bounds.height > 0 {
+            guard mapDriverControlFrames[id] != bounds else { return }
+            mapDriverControlFrames[id] = bounds
+        } else if mapDriverControlFrames[id] != nil {
+            mapDriverControlFrames.removeValue(forKey: id)
+        }
     }
 
     private var mapChromeContent: AnyView {
@@ -3480,9 +3484,25 @@ private struct DriverPhotoObstacle: ViewModifier {
     let id: String
     let update: @MainActor (String, CGRect?) -> Void
     func body(content: Content) -> some View {
-        content.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { update(id, $0) }
+        content
+            // Measurement must not introduce an interactive layer around a
+            // control: the surrounding map still owns taps and pans.
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: DriverPhotoObstacleFrameKey.self,
+                        value: geometry.frame(in: .global))
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+            .onPreferenceChange(DriverPhotoObstacleFrameKey.self) { update(id, $0) }
             .onDisappear { update(id, nil) }
     }
+}
+
+private struct DriverPhotoObstacleFrameKey: PreferenceKey {
+    static var defaultValue: CGRect { .zero }
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
 }
 private extension View {
     func driverPhotoObstacle(_ id: String, update: @escaping @MainActor (String, CGRect?) -> Void) -> some View {

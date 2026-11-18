@@ -813,6 +813,10 @@ final class ShellSmokeTests: XCTestCase {
             let identity = map.value as? String
             let bar = app.buttons["map.session.bar"]
             XCTAssertTrue(bar.waitForExistence(timeout: 15))
+            XCTAssertTrue(map.isHittable, "Driver decorations must leave blank map space interactive")
+            let marker = app.buttons["map.fixture.liveSharer"]
+            XCTAssertTrue(marker.wait(for: \.isHittable, toEqual: true, timeout: 10),
+                "Driver decorations must not cover the nearby driver's button")
             let speedReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "36 km/h"), object: bar)
             XCTAssertEqual(XCTWaiter.wait(for: [speedReady], timeout: 10), .completed)
             let stop = app.buttons["shell.tab.create"]
@@ -868,7 +872,6 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertEqual(map.value as? String, identity)
             XCTAssertTrue(bar.isHittable, "Back must not stop the session")
 
-            let marker = app.buttons["map.fixture.liveSharer"]
             XCTAssertTrue(marker.wait(for: \.isHittable, toEqual: true, timeout: 10))
             marker.tap()
             let visit = app.buttons["nearby.visitProfile"]

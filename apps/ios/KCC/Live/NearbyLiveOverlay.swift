@@ -247,9 +247,12 @@ struct LiveDriverMapOverlay: View {
             ZStack {
                 ConvoyMapAwarenessOverlay(members: visible.filter { convoyUIDs.contains($0.uid) },
                     imageURLs: convoyImageURLs, projection: projection,
-                    onSelect: { onSelect($0, true) }, clubBadges: clubBadges, badgeViewerID: badgeViewerID,
+                    clubBadges: clubBadges, badgeViewerID: badgeViewerID,
                     onDrawnUIDsChanged: { arrowUIDs = $0 }, presentationProvided: true,
                     showsOnScreenPhotos: false, suppressedArrowUIDs: Set(anchors.map(\.uid)))
+                    // This child only draws offscreen arrows. Photo Buttons
+                    // below own selection; empty map space belongs to Mapbox.
+                    .allowsHitTesting(false)
                 Canvas { context, _ in
                     for item in plan.placed {
                         for segment in item.lines {
