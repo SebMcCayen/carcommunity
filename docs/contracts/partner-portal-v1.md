@@ -63,7 +63,9 @@ availableUntil?: ISO|null, capacity?: number|null, reservationDays?: number }`
   Manager-only. Stops new reservations; existing valid reservations remain usable.
   Existing company/offer status pause remains a fail-closed security suspension.
 - `offer`: `{ offerId }` -> `{ offer: ManagedOffer,
-reservation: Reservation|null }`. Active, in-date company+offer and existing
+reservation: Reservation|null, alreadyUsed: boolean }`. The last field prevents
+  presenting a new reservation after the operational record has been removed
+  while its protected campaign anti-reuse tombstone remains. Active, in-date company+offer and existing
   membership checks required. Used before reserve; full terms shown here.
 - `reserve`: `{ offerId, requestId, expectedVersion }` -> `Reservation`.
 - `reservations`: `{}` -> `{ reservations: Reservation[] }` (own recent, max100).

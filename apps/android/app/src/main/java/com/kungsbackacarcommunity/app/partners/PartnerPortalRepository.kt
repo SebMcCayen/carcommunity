@@ -28,7 +28,7 @@ data class PartnerReservation(
     val expiresAt: String, val redeemedAt: String?,
 )
 data class PartnerReservationToken(val token: String, val expiresAt: String)
-data class PartnerOfferReservationDetail(val offer: ManagedPartnerOffer, val reservation: PartnerReservation?)
+data class PartnerOfferReservationDetail(val offer: ManagedPartnerOffer, val reservation: PartnerReservation?, val alreadyUsed: Boolean = false)
 data class PartnerAggregateOffer(val offerId: String, val title: String, val totalRedeemed: Long)
 data class PartnerAggregateStatistics(val updatedAt: String, val totalRedeemed: Long, val offers: List<PartnerAggregateOffer>)
 
@@ -75,7 +75,7 @@ class FirebasePartnerPortalRepository private constructor(private val functions:
     }
     override suspend fun offer(offerId: String): PartnerOfferReservationDetail {
         val data = call("offer", mapOf("offerId" to offerId))
-        return PartnerOfferReservationDetail(parseManagedOffer(requireNotNull(data["offer"].portalMap())), data["reservation"].portalMap()?.let(::parseReservation))
+        return parseOfferReservationDetail(data)
     }
     override suspend fun reserve(offerId: String, requestId: String, expectedVersion: Int) = parseReservation(call("reserve", mapOf("offerId" to offerId, "requestId" to requestId, "expectedVersion" to expectedVersion)))
     override suspend fun reservations() = call("reservations").maps("reservations").map(::parseReservation)
@@ -106,6 +106,11 @@ internal fun parseManagedOffer(row: Map<String, Any?>) = ManagedPartnerOffer(
 )
 internal fun parseReservation(row: Map<String, Any?>) = PartnerReservation(row.text("reservationId"), row.text("offerId"), row.text("companyId"),
     row.text("companyName"), row.text("title"), row.text("terms"), row.text("status"), row.text("expiresAt"), row.optionalText("redeemedAt"))
+internal fun parseOfferReservationDetail(data: Map<String, Any?>) = PartnerOfferReservationDetail(
+    parseManagedOffer(requireNotNull(data["offer"].portalMap())),
+    data["reservation"].portalMap()?.let(::parseReservation),
+    data["alreadyUsed"] == true,
+)
 /** Remaining visual QR lifetime uses monotonic elapsed time, never the phone's date. */
 internal fun partnerQrSecondsRemaining(deadlineElapsed: Long, nowElapsed: Long): Int =
     ((deadlineElapsed - nowElapsed) / 1000).coerceIn(0L, 60L).toInt()

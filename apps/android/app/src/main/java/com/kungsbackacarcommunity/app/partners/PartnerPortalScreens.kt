@@ -165,7 +165,11 @@ fun PartnerReserveOfferRoute(repository: PartnerPortalRepository, offerId: Strin
             Text(stringResource(R.string.partnerPortal_reservationStatsNotice))
             Text(stringResource(R.string.partnerPortal_noAppointment))
             Text(stringResource(R.string.partnerPortal_noPayment))
-            Button(onClick = { scope.launch { operation.run { reservation = repository.reserve(offerId, requestId, offer.version) } } }, enabled = !operation.busy && !offer.reservationsPaused, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_reserve)) }
+            if (detail?.alreadyUsed == true) {
+                Text(stringResource(R.string.partnerPortal_alreadyUsed))
+            } else {
+                Button(onClick = { scope.launch { operation.run { reservation = repository.reserve(offerId, requestId, offer.version) } } }, enabled = !operation.busy && !offer.reservationsPaused, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_reserve)) }
+            }
         }
     }
 }

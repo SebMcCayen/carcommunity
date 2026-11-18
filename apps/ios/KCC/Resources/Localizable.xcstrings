@@ -27252,6 +27252,23 @@
         }
       }
     },
+    "partnerPortal.alreadyUsed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det här kontot kan inte använda kampanjen igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This account cannot use this campaign again."
+          }
+        }
+      }
+    },
     "partnerPortal.application": {
       "extractionState": "manual",
       "localizations": {

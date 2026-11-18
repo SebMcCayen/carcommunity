@@ -45,6 +45,14 @@ class PartnerPortalPolicyTest {
         assertEquals(0, result.redeemedCount)
     }
 
+    @Test fun `claim tombstone survives deletion of the personal reservation in the offer response`() {
+        val offer = mapOf("offerId" to "offer", "companyId" to "partner", "version" to 1L)
+        val detail = parseOfferReservationDetail(mapOf("offer" to offer, "reservation" to null, "alreadyUsed" to true))
+        assertTrue(detail.alreadyUsed)
+        assertNull(detail.reservation)
+        assertFalse(parseOfferReservationDetail(mapOf("offer" to offer)).alreadyUsed)
+    }
+
     @Test fun `application retains explicit requests without treating either as authorization`() {
         val input = PartnerApplications.toInput(PartnerApplicationForm("Partner", PartnerCategory.CAR_CARE, "Contact", "contact@example.com", selfServiceRequested = true, billboardRequested = true, billboardPlacementRequest = "  E6  ", address = " Street 1 "))!!
         assertTrue(input.selfServiceRequested)

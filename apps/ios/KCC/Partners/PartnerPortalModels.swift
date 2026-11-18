@@ -81,6 +81,7 @@ struct PortalReservation: Decodable, Identifiable, Equatable, Sendable {
 struct PortalOfferResponse: Decodable, Sendable {
     let offer: PortalOffer
     let reservation: PortalReservation?
+    let alreadyUsed: Bool?
 }
 struct PortalOffersResponse: Decodable, Sendable { let offers: [PortalOffer] }
 struct PortalReservationsResponse: Decodable, Sendable { let reservations: [PortalReservation] }

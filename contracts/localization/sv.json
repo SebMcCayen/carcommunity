@@ -2608,6 +2608,7 @@
     "signedInAccount": "Inloggat konto: %1$s",
     "reservationStatsNotice": "Bekräftad inlösen räknas i samlad statistik. Kundidentifierare visas inte i statistiken.",
     "validUntil": "Erbjudandet gäller till: %1$s",
-    "reservationWindow": "Reservationen gäller i upp till %1$d dagar. Sista giltighet visas i bekräftelsen."
+    "reservationWindow": "Reservationen gäller i upp till %1$d dagar. Sista giltighet visas i bekräftelsen.",
+    "alreadyUsed": "Det här kontot kan inte använda kampanjen igen."
   }
 }

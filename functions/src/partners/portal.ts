@@ -275,25 +275,17 @@ async function handlePortal(request: CallableRequest) {
       throw new HttpsError('invalid-argument', 'Confirm permission to use this logo.');
     const logo = a.logoBase64 ? (await sanitizeLogo(a.logoBase64)).toString('base64') : null;
     const ownerRef = db.collection('partnerApplicationOwners').doc(uid);
-    const emailRef = db
-      .collection('partnerApplicationEmails')
-      .doc(hash(a.contactEmail.toLowerCase()));
     const newRef = db.collection('partnerApplications').doc();
     return db.runTransaction(async (tx) => {
-      const [owner, email, legacy, byEmail] = await Promise.all([
+      // A business contact address is applicant-supplied contact data, not proof
+      // of identity or exclusive ownership. Only the authenticated UID owns an
+      // application; administrators review potential business duplicates.
+      const [owner, legacy] = await Promise.all([
         tx.get(ownerRef),
-        tx.get(emailRef),
         tx.get(
           db
             .collection('partnerApplications')
             .where('submittedByUserId', '==', uid)
-            .where('status', 'in', ['submitted', 'under_review', 'changes_requested'])
-            .limit(1),
-        ),
-        tx.get(
-          db
-            .collection('partnerApplications')
-            .where('contactEmail', '==', a.contactEmail.toLowerCase())
             .where('status', 'in', ['submitted', 'under_review', 'changes_requested'])
             .limit(1),
         ),
@@ -308,10 +300,6 @@ async function handlePortal(request: CallableRequest) {
         ['submitted', 'under_review', 'approved'].includes(existing.data()!.status)
       )
         throw new HttpsError('already-exists', 'Your application is already being processed.');
-      if (email.exists && email.data()!.uid !== uid)
-        throw new HttpsError('already-exists', 'This contact email already has an application.');
-      if (!byEmail.empty && byEmail.docs[0]!.data().submittedByUserId !== uid)
-        throw new HttpsError('already-exists', 'This contact email already has an application.');
       const ref =
         existing?.exists && existing.data()!.status === 'changes_requested' ? existing.ref : newRef;
       if (a.billboardRequested && !logo && !existing?.data()?.logoPreviewBase64)
@@ -345,7 +333,6 @@ async function handlePortal(request: CallableRequest) {
         reviewReason: null,
       });
       tx.set(ownerRef, { applicationId: ref.id });
-      tx.set(emailRef, { uid, applicationId: ref.id });
       return { applicationId: ref.id, status: 'submitted' };
     });
   }

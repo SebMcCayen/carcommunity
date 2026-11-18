@@ -420,6 +420,42 @@ describe('portal publication and private storage rules', () => {
       0,
     );
   });
+  it('keeps application ownership scoped to UID when a business contact email is shared', async () => {
+    const { hash } = await import('../partners/portal-core');
+    const contactEmail = `${users[21]}@example.test`;
+    const fields = {
+      companyName: 'Shared Contact Partner',
+      category: 'car_care',
+      contactName: 'Business contact',
+      contactEmail,
+      selfServiceRequested: false,
+      billboardRequested: false,
+    };
+    // Older private email-lock records must not establish contact ownership.
+    const staleLock = db.collection('partnerApplicationEmails').doc(hash(contactEmail));
+    await staleLock.set({ uid: users[20], applicationId: 'older-application' });
+    const first = await call(users[20]!, 'submitApplication', fields);
+    const second = await call(users[21]!, 'submitApplication', fields);
+    expect(first.status).toBe('submitted');
+    expect(second.status).toBe('submitted');
+    expect(first.applicationId).not.toBe(second.applicationId);
+    await expect(call(users[20]!, 'submitApplication', fields)).rejects.toMatchObject({
+      code: 'already-exists',
+    });
+    // A rejected application does not give its applicant ownership of the
+    // business contact address either. Review remains an administrator task.
+    await db
+      .collection('partnerApplications')
+      .doc(first.applicationId as string)
+      .update({ status: 'rejected' });
+    const third = await call(users[22]!, 'submitApplication', fields);
+    expect(third.status).toBe('submitted');
+    expect(third.applicationId).not.toBe(second.applicationId);
+    expect((await staleLock.get()).data()).toEqual({
+      uid: users[20],
+      applicationId: 'older-application',
+    });
+  });
   it('denies direct reads and writes even for admin claims', async () => {
     const env = await initializeTestEnvironment({
       projectId,

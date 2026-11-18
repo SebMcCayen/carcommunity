@@ -191,6 +191,14 @@ final class PartnerApplicationTests: XCTestCase {
         XCTAssertNil(response.offer.reservedCount)
         XCTAssertNil(response.offer.redeemedCount)
         XCTAssertEqual(response.offer.version, 4)
+        XCTAssertNil(response.alreadyUsed)
+    }
+
+    func testCustomerOfferDecodesAccountScopedCampaignTombstoneWithoutUsageRecord() throws {
+        let json = #"{"offer":{"offerId":"offer-test","companyId":"company-test","title":"Test offer","teaserText":"Short text","description":"Description","terms":"Terms","percentageDiscount":null,"availableFrom":null,"availableUntil":null,"capacity":3,"remainingCount":2,"reservationDays":7,"status":"active","version":4},"reservation":null,"alreadyUsed":true}"#
+        let response = try JSONDecoder().decode(PortalOfferResponse.self, from: Data(json.utf8))
+        XCTAssertNil(response.reservation)
+        XCTAssertEqual(response.alreadyUsed, true)
     }
 
     func testStatisticsPeriodsExcludeTheOpenUTCMonthAcrossYearBoundary() throws {

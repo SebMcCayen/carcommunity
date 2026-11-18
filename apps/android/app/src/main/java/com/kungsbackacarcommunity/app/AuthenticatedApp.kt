@@ -1652,6 +1652,13 @@ fun AuthenticatedApp(
             // whether a billboard exists for a member to see at all is an admin
             // decision, enforced by the read rule on `billboards`, not by
             // anything here.
+            val partnersEnabled =
+                FeatureGate.isAvailable(
+                    flags = flags,
+                    flag = FeatureFlag.PARTNERS,
+                    memberGated = false,
+                    isActiveMember = profile?.activeMember == true,
+                )
             val billboardsEnabled = flags.isEnabled(FeatureFlag.DIGITAL_BILLBOARDS)
             // ONE bounded snapshot listener for the whole signed-in session,
             // deliberately NOT keyed on the selected tab and NOT re-issued for a
@@ -6402,13 +6409,7 @@ fun AuthenticatedApp(
                         leaderboardRepository = leaderboardRepository,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
-                        partnersEnabled =
-                            FeatureGate.isAvailable(
-                                flags = flags,
-                                flag = FeatureFlag.PARTNERS,
-                                memberGated = false,
-                                isActiveMember = profile?.activeMember == true,
-                            ),
+                        partnersEnabled = partnersEnabled,
                         notificationsRepository = notificationsRepository,
                         notificationsCoordinator = notificationsCoordinator,
                         notificationSettingsRepository = notificationSettingsRepository,

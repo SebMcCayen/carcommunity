@@ -35,9 +35,14 @@ struct PartnerReservationSheet: View {
                         Text("\(portalString("portal.reservationDays")): \(response.offer.reservationDays)")
                         PortalText("portal.noAppointments").font(.footnote).foregroundStyle(.secondary)
                         PortalText("portal.redemptionStatisticsNotice").font(.footnote).foregroundStyle(.secondary)
-                        Toggle(portalString("portal.acceptTerms"), isOn: $termsAccepted)
-                        Button { Task { await reserve(response.offer) } } label: { PortalText("portal.reserve") }
-                            .kccPrimaryAction().disabled(busy || !termsAccepted || response.offer.remainingCount == 0)
+                        if response.alreadyUsed == true {
+                            PortalText("portal.alreadyUsed")
+                                .accessibilityIdentifier("partnerPortal.alreadyUsed")
+                        } else {
+                            Toggle(portalString("portal.acceptTerms"), isOn: $termsAccepted)
+                            Button { Task { await reserve(response.offer) } } label: { PortalText("portal.reserve") }
+                                .kccPrimaryAction().disabled(busy || !termsAccepted || response.offer.remainingCount == 0)
+                        }
                     } else if !busy {
                         Button { Task { await load() } } label: { PortalText("portal.retry") }.frame(minHeight: 48)
                     }
@@ -62,7 +67,7 @@ struct PartnerReservationSheet: View {
         } catch { errorKey = PartnerPortalCoordinator.message(error) }
     }
     private func reserve(_ offer: PortalOffer) async {
-        guard let client, !busy else { return }
+        guard let client, !busy, response?.alreadyUsed != true else { return }
         busy = true; errorKey = nil
         defer { busy = false }
         do {

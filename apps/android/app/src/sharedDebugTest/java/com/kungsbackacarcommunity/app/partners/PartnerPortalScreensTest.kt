@@ -24,8 +24,9 @@ class PartnerPortalScreensTest {
         var firstRequestId: String? = null
         var secondRequestId: String? = null
         var failFirstReserve = false
+        var alreadyUsed = false
         val reservation = PartnerReservation("fixture-reservation", "offer", "company", "Fixture business", "Fixture offer", "Fixture terms", "reserved", Instant.now().plusSeconds(3600).toString(), null)
-        override suspend fun offer(offerId: String) = PartnerOfferReservationDetail(ManagedPartnerOffer("offer", "company", "Fixture offer", "Teaser", "Description", "Fixture terms", "active", 3, 0, 0, 7, 20, null, null, false, 5, 2), null)
+        override suspend fun offer(offerId: String) = PartnerOfferReservationDetail(ManagedPartnerOffer("offer", "company", "Fixture offer", "Teaser", "Description", "Fixture terms", "active", 3, 0, 0, 7, 20, null, null, false, 5, 2), null, alreadyUsed)
         override suspend fun reserve(offerId: String, requestId: String, expectedVersion: Int): PartnerReservation {
             reserveCount++; reservedVersion = expectedVersion
             if (reserveCount == 1) firstRequestId = requestId else secondRequestId = requestId
@@ -74,6 +75,14 @@ class PartnerPortalScreensTest {
         compose.onNodeWithText("Fixture terms").assertIsDisplayed()
         compose.runOnIdle { dispatcher!!.onBackPressed() }
         assertEquals(1, backCount)
+    }
+
+    @Test fun retainedClaimWithoutPersonalHistoryDoesNotOfferAnotherReservation() {
+        val repo = FakePortal().apply { alreadyUsed = true }
+        compose.setContent { KccTheme { PartnerReserveOfferRoute(repo, "offer", {}) } }
+        compose.onNodeWithText(text(R.string.partnerPortal_alreadyUsed)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerPortal_reserve)).assertDoesNotExist()
+        assertEquals(0, repo.reserveCount)
     }
 
     @Test fun inspectionDoesNotRedeemUntilStaffConfirms() {

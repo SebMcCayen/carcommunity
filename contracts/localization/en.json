@@ -2608,6 +2608,7 @@
     "signedInAccount": "Signed-in account: %1$s",
     "reservationStatsNotice": "Confirmed redemptions count toward aggregate statistics. Customer identifiers are not shown in statistics.",
     "validUntil": "Offer valid until: %1$s",
-    "reservationWindow": "Your reservation is valid for up to %1$d days. The exact expiry appears in your confirmation."
+    "reservationWindow": "Your reservation is valid for up to %1$d days. The exact expiry appears in your confirmation.",
+    "alreadyUsed": "This account cannot use this campaign again."
   }
 }
