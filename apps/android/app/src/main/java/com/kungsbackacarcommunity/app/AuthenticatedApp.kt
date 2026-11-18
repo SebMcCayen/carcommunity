@@ -2005,6 +2005,19 @@ fun AuthenticatedApp(
                     }
                 }
                     .collectAsState(initial = GarageState.Loading)
+            // Account-scoped ordering survives closing the chooser. Fetch it in
+            // parallel with the garage, without delaying rows or image loading.
+            val startDrivingVehicleOrder = remember(uid, garageRepository) {
+                garageRepository?.let { repository ->
+                    com.kungsbackacarcommunity.app.live.StartDrivingVehicleOrder(repository::recentDrivingVehicleIds)
+                }
+            }
+            val recentDrivingVehicleIds = startDrivingVehicleOrder?.ids?.collectAsState()?.value.orEmpty()
+            LaunchedEffect(showCreateChooser, startDrivingVehicleOrder) {
+                if (showCreateChooser) {
+                    kotlinx.coroutines.withTimeoutOrNull(15_000) { startDrivingVehicleOrder?.refresh() }
+                }
+            }
             val createChooserVehicles =
                 (createChooserGarageState as? GarageState.Loaded)?.vehicles ?: emptyList()
             // The car the user tapped in the picker; null means "not yet chosen",
@@ -8016,7 +8029,7 @@ fun AuthenticatedApp(
                         selectedVehicleId = effectiveStartDrivingCarId,
                         onSelectVehicle = { startDrivingCarId = it },
                         garageState = createChooserGarageState,
-                        loadRankedVehicleIds = garageRepository?.let { it::rankedDrivingVehicleIds },
+                        rankedVehicleIds = recentDrivingVehicleIds,
                     )
                 }
 
@@ -8589,24 +8602,9 @@ internal fun CreateChooserDialog(
     selectedVehicleId: String? = null,
     onSelectVehicle: (String) -> Unit = {},
     garageState: GarageState = GarageState.Loaded(vehicles),
-    loadRankedVehicleIds: (suspend () -> List<String>)? = null,
+    rankedVehicleIds: List<String> = emptyList(),
 ) {
     var showAll by remember { mutableStateOf(false) }
-    var rankedIds by remember { mutableStateOf<List<String>?>(null) }
-    val shouldRank = vehicles.size > 1 && loadRankedVehicleIds != null
-    LaunchedEffect(shouldRank) {
-        if (shouldRank && rankedIds == null && loadRankedVehicleIds != null) {
-            rankedIds = kotlinx.coroutines.withTimeoutOrNull(1_500) {
-                try {
-                    loadRankedVehicleIds()
-                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    emptyList()
-                }
-            } ?: emptyList()
-        }
-    }
     MapDetailSheet(
         title = stringResource(if (showAll) R.string.shell_createChooserAllVehicles else R.string.shell_createChooserTitle),
         onDismiss = { if (showAll) showAll = false else onDismiss() },
@@ -8623,10 +8621,9 @@ internal fun CreateChooserDialog(
                     onSelectVehicle(id)
                     showAll = false
                 },
-                rankedVehicleIds = rankedIds.orEmpty(),
+                rankedVehicleIds = rankedVehicleIds,
                 showAll = showAll,
                 onShowAll = { showAll = true },
-                rankingPending = shouldRank && rankedIds == null,
             )
         }
         if (!showAll) {
