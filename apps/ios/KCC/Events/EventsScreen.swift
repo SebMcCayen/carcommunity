@@ -256,3 +256,86 @@ struct EventScheduleContent: View {
 extension EventFormCoordinator: Identifiable {
     nonisolated var id: ObjectIdentifier { ObjectIdentifier(self) }
 }
+
+
+/// Public teaser pins share the list coordinator's bounded listener. The native
+/// presence layer owns the finite 200 ms fade, Reduce Motion and map lifecycle.
+struct EventMapOverlay: View {
+    let coordinator: EventsCoordinator
+    let projection: any MapProjection
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            MapPresenceLayer(items: Dictionary(uniqueKeysWithValues: coordinator.mapEvents.map { ($0.id, $0) }),
+                retainRemovedPublicItems: true, appliesOpacity: false) { present in
+                let event = present.value
+                if let latitude = event.latitude, let longitude = event.longitude,
+                   let point = projection.screenPositionFor(latitude: latitude, longitude: longitude),
+                   point.trustworthy, point.x >= -32, point.y >= -32,
+                   point.x <= Double(geometry.size.width + 32),
+                   point.y <= Double(geometry.size.height + 32) {
+                    Button {
+                        // An outgoing/expired pin must never reopen a stale teaser.
+                        guard coordinator.mapEvent(id: event.id) != nil else { return }
+                        onSelect(event.id)
+                    } label: {
+                        EventMapMarker()
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel(Text(event.title))
+                    .accessibilityIdentifier("map.event." + event.id)
+                    .opacity(present.alpha)
+                    .position(x: CGFloat(point.x), y: CGFloat(point.y))
+                }
+            }
+        }
+    }
+}
+
+/// Android's exact calendar vector, teal disc, and shared two-tone marker ring.
+private struct EventMapMarker: View {
+    var body: some View {
+        let diameter = IncidentMarkerStyle.discDiameter
+        ZStack {
+            Circle().fill(Color(argb: IncidentMarkerStyle.dark))
+                .frame(width: diameter + 7, height: diameter + 7)
+            Circle().fill(Color(argb: IncidentMarkerStyle.light))
+                .frame(width: diameter + 5, height: diameter + 5)
+            Circle().fill(Color(argb: 0xFF00897B)).frame(width: diameter, height: diameter)
+            Image("event-calendar").renderingMode(.template).resizable().scaledToFit()
+                .frame(width: diameter * IncidentMarkerStyle.glyphScale,
+                       height: diameter * IncidentMarkerStyle.glyphScale)
+                .foregroundStyle(.white)
+        }
+        .frame(width: diameter + 7, height: diameter + 7)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Teaser-only docked content. The existing detail route keeps ownership of
+/// private reads, membership, blocking, RSVP and chat authorization.
+struct EventMapContents: View {
+    let event: EventSummary
+    let onViewDetails: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s3) {
+            EventScheduleContent(event: event)
+            Text(String.localizedStringWithFormat(
+                NSLocalizedString("events.mapPopupGoing", comment: "Going tally on the event map teaser"),
+                event.counts.going
+            ))
+            .font(.subheadline)
+            .foregroundStyle(KccTheme.secondary)
+            Button(action: onViewDetails) {
+                Text("events.mapPopupViewDetails").frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("map.event.details")
+        }
+        .accessibilityIdentifier("map.event.teaser")
+    }
+}

@@ -116,6 +116,7 @@ enum MapReadingSelection: Hashable {
     case savedPlaces
     case place(PlaceSuggestion)
     case crown(String)
+    case event(String)
     case incident(String)
     case police(String)
     case camera(String)
