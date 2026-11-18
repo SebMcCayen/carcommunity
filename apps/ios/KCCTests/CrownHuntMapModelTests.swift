@@ -130,21 +130,41 @@ final class CrownHuntMapModelTests: XCTestCase {
         XCTAssertEqual(CrownSpawnLimits.collectRadius(120), 120)
     }
 
-    func testProofRequiresTwoInRangeFixesAtLeastFourSecondsApart() {
+    func testProofRequiresTwoInRangeFixesAtLeastFourSecondsApart() throws {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        var tracker = CrownFixTracker()
+        tracker.record(fix(at: now.addingTimeInterval(-4)))
+        tracker.record(fix(at: now.addingTimeInterval(-3)))
+        XCTAssertNil(tracker.proof(for: spawn, now: now))
+
+        tracker.record(fix(at: now))
+        let proof = try XCTUnwrap(tracker.proof(for: spawn, now: now))
+        XCTAssertEqual(proof.current.timestamp, now)
+        XCTAssertEqual(
+            proof.current.timestamp.timeIntervalSince(proof.previous.timestamp),
+            CrownSpawnLimits.minimumDwell
+        )
+        XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(11)))
+    }
+
+    func testOutOfOrderFixCannotBackfillDwellEvidence() throws {
         let now = Date(timeIntervalSince1970: 2_000)
         let spawn = makeSpawn()
         var tracker = CrownFixTracker()
         tracker.record(fix(at: now.addingTimeInterval(-3)))
         tracker.record(fix(at: now.addingTimeInterval(-5)))
-        XCTAssertNil(tracker.proof(for: spawn, now: now))
+        XCTAssertEqual(tracker.fixes.count, 1)
+        XCTAssertEqual(tracker.latest(now: now)?.timestamp, now.addingTimeInterval(-3))
 
         tracker.record(fix(at: now))
-        let proof = tracker.proof(for: spawn, now: now)
-        XCTAssertNotNil(proof)
-        XCTAssertGreaterThanOrEqual(
-            proof!.current.timestamp.timeIntervalSince(proof!.previous.timestamp),
-            CrownSpawnLimits.minimumDwell
-        )
+        XCTAssertNil(tracker.proof(for: spawn, now: now))
+
+        let next = now.addingTimeInterval(1)
+        tracker.record(fix(at: next))
+        let proof = try XCTUnwrap(tracker.proof(for: spawn, now: next))
+        XCTAssertEqual(proof.current.timestamp, next)
+        XCTAssertEqual(proof.previous.timestamp, now.addingTimeInterval(-3))
     }
 
     func testProofRejectsOutOfRangeEarlierFix() {
