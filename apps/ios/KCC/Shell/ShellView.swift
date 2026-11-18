@@ -864,7 +864,7 @@ struct ShellView: View {
     // A computed `some View` property alone does not bound the concrete type:
     // Release must still decode every nested generic modifier at first render.
     private var mapOverlayContent: AnyView {
-        Color.clear.ignoresSafeArea()
+        Color.clear.allowsHitTesting(false).ignoresSafeArea()
             .overlay { mapChromeContent }
             .eraseToAnyView()
     }
@@ -956,6 +956,7 @@ struct ShellView: View {
 
     private var mapChromeContent: AnyView {
         Color.clear
+            .allowsHitTesting(false)
             // Account entries require a real session. Public Settings
             // (including legal links) also remain usable without config.
             .overlay(alignment: .topTrailing) {

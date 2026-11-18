@@ -288,6 +288,13 @@ struct LiveDriverMapOverlay: View {
                 }
                     }
             }
+            // The geometry/timeline host spans the entire map, even with an
+            // empty roster. Restrict its interaction region to the photo
+            // buttons; leader lines and the spaces between photos must pass
+            // taps and pans through to the retained native map.
+            .contentShape(.interaction, DriverPhotoInteractionShape(bounds: plan.placed.map {
+                CGRect(x: $0.photo.x - 24, y: $0.photo.y - 24, width: 48, height: 48)
+            }))
             .onChange(of: [photoUIDs, convoyUIDs, arrowUIDs], initial: true) { _, _ in
                 onConvoyDrawn(photoUIDs.intersection(convoyUIDs).union(arrowUIDs).intersection(Set(originals.keys)))
                 onNearbyDrawn(photoUIDs.subtracting(convoyUIDs).intersection(Set(originals.keys)))
@@ -314,5 +321,15 @@ struct LiveDriverMapOverlay: View {
             parts.append(String(localized: "liveDriverPhoto.membershipRing"))
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+private struct DriverPhotoInteractionShape: Shape {
+    let bounds: [CGRect]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for bounds in bounds { path.addRect(bounds) }
+        return path
     }
 }
