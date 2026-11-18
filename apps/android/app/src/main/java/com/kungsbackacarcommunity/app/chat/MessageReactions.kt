@@ -140,6 +140,12 @@ class ReactionRoomState(val room: ReactionRoom, val uid: String, private val con
     val actions = mutableMapOf<String, (() -> Unit)?>()
     val visible = mutableStateMapOf<String, Map<String, Long>>()
     val store = ReactionLocalStore.forUser(context, uid)
+    private val sourceCounts = mutableMapOf<String, Map<String, Long>>()
+    private val sourceRevisions = mutableMapOf<String, Long>()
+    private var nextSourceRevision = 0L
+    private val pendingMutations = mutableMapOf<String, Pair<Map<String, Long>, ReactionChoice>>()
+    private var mutation: Job? = null
+    private var generation = 0L
     private var refresh: Job? = null
     private var refreshPending = false
     private var nextOwnRevision = 0L
@@ -162,15 +168,27 @@ class ReactionRoomState(val room: ReactionRoom, val uid: String, private val con
     fun select(id: String) { if (enabled && id in visible) { selectedId = id; moreActions = false; picker = false; failed = false; request() } }
     fun dismiss() { val close = dismissActions; dismissActions = null; selectedId = null; picker = false; moreActions = false; failed = false; close?.invoke() }
     fun register(id: String, counts: Map<String, Long>) {
-        val previous = visible[id]
+        val previous = sourceCounts.put(id, counts)
         val changed = previous != counts
+        if (changed) sourceRevisions[id] = ++nextSourceRevision
+        // Message snapshots may arrive before the callable completes. Keep the local intent
+        // visible until the mutation is acknowledged, without applying its delta twice.
+        pendingMutations[id]?.let { (optimisticCounts, choice) ->
+            if (id !in visible) visible[id] = optimisticCounts
+            if (id !in own) own[id] = choice
+            return
+        }
         if (changed) ownRevisions[id] = ++nextOwnRevision
-        if (previous != null && changed) { own.remove(id); attempts.remove(id); store.forget(room) }
-        visible[id] = counts
+        if (previous != null && changed && visible[id] != counts) { own.remove(id); attempts.remove(id); store.forget(room) }
+        if (changed || id !in visible) visible[id] = counts
         if (id !in own) store.own(room, id)?.let { own[id] = it }
         if (changed || id !in own) request()
     }
-    fun unregister(id: String) { visible.remove(id); own.remove(id); ownRevisions.remove(id); attempts.remove(id); bounds.remove(id); actions.remove(id); if (selectedId == id) dismiss() }
+    fun unregister(id: String) {
+        if (id !in pendingMutations) { sourceCounts.remove(id); sourceRevisions.remove(id) }
+        visible.remove(id); own.remove(id); ownRevisions.remove(id); attempts.remove(id); bounds.remove(id); actions.remove(id)
+        if (selectedId == id) dismiss()
+    }
     fun reload() { selectedId?.let { ownRevisions[it] = ++nextOwnRevision; attempts.remove(it); own.remove(it) }; failed = false; request() }
     fun request() {
         refreshPending = true
@@ -186,54 +204,95 @@ class ReactionRoomState(val room: ReactionRoom, val uid: String, private val con
                 val ids = candidates.filter { it in visible && now - (attempts[it] ?: 0) > 10_000 && (own[it] == null || now - own[it]!!.fetchedAt > 60_000) }.take(50)
                 if (ids.isEmpty()) continue
                 val revisions = ids.associateWith { ownRevisions[it] }
+                val epoch = generation
                 ids.forEach { attempts[it] = now }
                 try {
                     val result = call(mineName, mapOf("scope" to room.scope, "roomId" to room.roomId, "messageIds" to ids))
-                    if (!current()) return@launch
+                    if (!current() || epoch != generation) return@launch
                     (result?.get("items") as? List<*>)?.forEach { raw ->
                         val row = raw as? Map<*, *> ?: return@forEach
                         val id = row["messageId"] as? String ?: return@forEach
                         // A delayed read must not replace a confirmed mutation or a newer message snapshot.
-                        if (id !in ids || id !in visible || revisions[id] != ownRevisions[id]) return@forEach
+                        if (id !in ids || id !in visible || id in pendingMutations || revisions[id] != ownRevisions[id]) return@forEach
                         val choice = ReactionChoice(row["emojiId"] as? String, (row["version"] as? Number)?.toLong() ?: return@forEach)
                         own[id] = choice; store.cache(room, id, choice)
                     }
                     store.save()
-                } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { own.clear(); store.forget(room); failed = selectedId != null }
+                } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) {
+                    if (current() && epoch == generation) {
+                        ids.filter { it !in pendingMutations && revisions[it] == ownRevisions[it] }.forEach { own.remove(it) }
+                        store.forget(room); failed = selectedId != null
+                    }
+                }
             } while (refreshPending)
         }
     }
     fun choose(emojiId: String?) {
         val id = selectedId ?: return
         val before = own[id] ?: run { failed = true; request(); return }
-        if (busy || !current() || id !in visible) return
+        if (!enabled || busy || !current() || id !in visible) return
         val desired = emojiId?.takeUnless { it == before.emojiId }
         if (desired == before.emojiId) { dismiss(); return }
         val existing = retry?.takeIf { it.first["messageId"] == id && it.first["emojiId"] == desired }
         val operation = existing?.second ?: UUID.randomUUID().toString()
         val payload = existing?.first ?: mapOf("scope" to room.scope, "roomId" to room.roomId, "messageId" to id, "emojiId" to desired, "expectedVersion" to before.version, "operationId" to operation)
         retry = payload to operation
-        busy = true; failed = false
-        scope.launch {
+        val epoch = generation
+        val sourceRevisionBefore = sourceRevisions[id]
+        val optimistic = visible.getValue(id).toMutableMap()
+        before.emojiId?.let { key ->
+            optimistic[key]?.let { count -> if (count <= 1) optimistic.remove(key) else optimistic[key] = count - 1 }
+        }
+        desired?.let { key -> optimistic[key] = (optimistic[key] ?: 0) + 1 }
+        ownRevisions[id] = ++nextOwnRevision
+        val optimisticChoice = before.copy(emojiId = desired)
+        pendingMutations[id] = optimistic to optimisticChoice
+        visible[id] = optimistic
+        own[id] = optimisticChoice
+        busy = true
+        dismiss()
+        mutation = scope.launch {
             try {
                 val result = call(setName, payload) ?: error("Missing response")
-                if (!current() || id !in visible) return@launch
+                if (!current() || epoch != generation || id !in visible) return@launch
                 val choice = ReactionChoice(result["emojiId"] as? String, (result["version"] as? Number)?.toLong() ?: error("Missing version"))
-                // Acknowledge the authoritative aggregate before the message listener re-registers it.
-                visible[id] = parseReactionCounts(result["counts"])
+                val latestSource = sourceCounts[id]
+                // The listener may already include reactions newer than this callable's
+                // transaction. Preserve a changed snapshot rather than replay older counts.
+                visible[id] = if (sourceRevisions[id] != sourceRevisionBefore) latestSource.orEmpty() else parseReactionCounts(result["counts"])
+                pendingMutations.remove(id)
                 ownRevisions[id] = ++nextOwnRevision
                 own[id] = choice; store.cache(room, id, choice)
                 if (desired != null && choice.emojiId == desired && recordedOperations.add(operation)) store.record(desired)
                 if (recordedOperations.size > 100) recordedOperations.remove(recordedOperations.first())
-                retry = null; store.save(); dismiss()
+                retry = null; store.save()
             } catch (cancelled: CancellationException) { throw cancelled } catch (error: Exception) {
+                if (!current() || epoch != generation || id !in visible) return@launch
                 if ((error as? com.google.firebase.functions.FirebaseFunctionsException)?.code in listOf(com.google.firebase.functions.FirebaseFunctionsException.Code.ABORTED, com.google.firebase.functions.FirebaseFunctionsException.Code.PERMISSION_DENIED, com.google.firebase.functions.FirebaseFunctionsException.Code.NOT_FOUND, com.google.firebase.functions.FirebaseFunctionsException.Code.FAILED_PRECONDITION)) retry = null
-                // The same operation is retained for an explicit retry after an unknown transport result.
-                failed = true; ownRevisions[id] = ++nextOwnRevision; own.remove(id); attempts.remove(id); request()
-            } finally { busy = false; if (failed) request() }
+                // Roll back the optimistic display to the latest snapshot. A transport error
+                // retains the operation ID for an idempotent explicit retry.
+                visible[id] = sourceCounts[id].orEmpty()
+                ownRevisions[id] = ++nextOwnRevision; own.remove(id); attempts.remove(id)
+                store.forget(room)
+                if (selectedId == null && enabled && foreground) {
+                    selectedId = id; actions[id]?.invoke()
+                }
+                failed = selectedId == id
+            } finally {
+                if (epoch == generation) {
+                    pendingMutations.remove(id)
+                    if (id !in visible) { sourceCounts.remove(id); sourceRevisions.remove(id) }
+                    busy = false
+                    request()
+                }
+            }
         }
     }
-    fun invalidate() { enabled = false; dismiss(); own.clear(); ownRevisions.clear(); store.forget(room); refreshPending = false; refresh?.cancel() }
+    fun invalidate() {
+        generation++; enabled = false; dismiss(); own.clear(); ownRevisions.clear()
+        visible.clear(); sourceCounts.clear(); sourceRevisions.clear(); pendingMutations.clear(); busy = false
+        retry = null; mutation?.cancel(); store.forget(room); refreshPending = false; refresh?.cancel()
+    }
 }
 
 val LocalReactionRoom = staticCompositionLocalOf<ReactionRoomState?> { null }
@@ -263,11 +322,11 @@ fun ReactionRoomHost(room: ReactionRoom, uid: String, content: @Composable () ->
             // Firestore coalesces this document target with the app's existing flags listener.
             val listener = FirebaseFirestore.getInstance().document("config/featureFlags").addSnapshotListener { value, error ->
                 state.enabled = error == null && value?.getBoolean("chatReactions") == true && auth.currentUser?.uid == uid
-                if (!state.enabled) state.dismiss() else state.request()
+                if (!state.enabled) state.invalidate() else state.request()
             }
             val account = FirebaseAuth.AuthStateListener { if (it.currentUser?.uid != uid) { state.invalidate(); state.store.clear() } }
             auth.addAuthStateListener(account)
-            onDispose { listener.remove(); auth.removeAuthStateListener(account); state.dismiss() }
+            onDispose { listener.remove(); auth.removeAuthStateListener(account); state.invalidate() }
         }
     }
     CompositionLocalProvider(LocalReactionRoom provides state, content = content)
@@ -292,7 +351,7 @@ fun MessageReactionChips(id: String, counts: Map<String, Long>) {
     LaunchedEffect(room, id, counts, room.enabled) { if (room.enabled) room.register(id, counts) }
     DisposableEffect(room, id) { onDispose { room.unregister(id) } }
     if (!room.enabled) return
-    val choices = counts.entries.sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
+    val choices = (room.visible[id] ?: counts).entries.sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key })
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         choices.take(3).forEach { (key, count) ->
             val emoji = room.catalog.firstOrNull { it.id == key } ?: return@forEach
@@ -301,8 +360,10 @@ fun MessageReactionChips(id: String, counts: Map<String, Long>) {
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.heightIn(min = 48.dp).clickable { room.select(id); room.choose(key) }) {
-                Text("${emoji.glyph} $count${if (selected) " ✓" else ""}", modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                    .semantics { contentDescription = "${emoji.name}, $count"; this.selected = selected })
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)) {
+                    Text("${emoji.glyph} $count", modifier = Modifier
+                        .semantics { contentDescription = "${emoji.name}, $count"; this.selected = selected })
+                }
             }
         }
         if (choices.size > 3) TextButton(onClick = { room.select(id); room.actions[id]?.invoke(); room.picker = true }) { Text(stringResource(R.string.reactions_more)) }
