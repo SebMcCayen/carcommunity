@@ -96,7 +96,7 @@ struct MapDensityOverlay: View {
         .frame(width: 48, height: 48).contentShape(Rectangle())
         .accessibilityLabel(group.count > 1 ? groupLabel(group) : entry.label)
         .accessibilityIdentifier("map.density." + group.id)
-        .position(x: position.x, y: position.y).opacity(opacity)
+        .opacity(opacity).position(x: position.x, y: position.y)
     }
 
     private func groupLabel(_ group: MapDensityGroup) -> String {

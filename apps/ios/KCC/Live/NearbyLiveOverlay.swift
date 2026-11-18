@@ -282,8 +282,8 @@ struct LiveDriverMapOverlay: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(spokenLabel(member))
                         .accessibilityIdentifier("driver.photo.\(item.uid)")
-                        .position(x: item.photo.x, y: item.photo.y)
                         .opacity(presence.alpha)
+                        .position(x: item.photo.x, y: item.photo.y)
                     }
                 }
                     }

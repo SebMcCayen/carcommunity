@@ -2788,6 +2788,8 @@ class MapboxMapSurface(
      * attempted before the style handle is ready repairs itself on the next update.
      */
     private fun applyEventMarkersIfChanged(markers: List<MapEventMarker>): Boolean {
+        // No native work (including Android animation clocks) until the layer exists.
+        if (eventMarkerManager == null) return false
         val presentation = eventPresence.frame(markers, SystemClock.uptimeMillis(), surfaceActive && sceneResumed,
             android.animation.ValueAnimator.areAnimatorsEnabled())
         if (presentation.markers != lastAppliedEvents) {
@@ -2861,6 +2863,8 @@ class MapboxMapSurface(
      * The cache is reset to null wherever the manager is (re)created or torn down.
      */
     private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>): Boolean {
+        // No native work (including Android animation clocks) until the layer exists.
+        if (incidentMarkerManager == null) return false
         val presentation = incidentPresence.frame(markers, SystemClock.uptimeMillis(), surfaceActive && sceneResumed,
             android.animation.ValueAnimator.areAnimatorsEnabled(), groupedIncidentIds)
         if (presentation.markers != lastAppliedIncidents) {
@@ -2951,6 +2955,8 @@ class MapboxMapSurface(
      * rather than leaving permanently blank annotations.
      */
     private fun applyBillboardMarkersIfChanged(markers: List<MapBillboardMarker>): Boolean {
+        // No native work (including Android animation clocks) until the layer exists.
+        if (billboardMarkerManager == null) return false
         val presentation = billboardPresence.frame(markers, SystemClock.uptimeMillis(), surfaceActive && sceneResumed,
             android.animation.ValueAnimator.areAnimatorsEnabled())
         if (presentation.markers != lastAppliedBillboards) {

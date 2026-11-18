@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.shell
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -16,6 +17,9 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MapPresenceComposeTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    // With the frame clock paused, publish writes made outside composition
+    // explicitly before advancing it; waitForIdle alone does not notify them.
     @Test fun metadataRefreshUsesCurrentPayloadWithoutRestartingOrDelayingTheFade() {
         var items by mutableStateOf(mapOf("driver" to 1))
         var visible = emptyList<MapPresentItem<Int>>()
@@ -25,8 +29,13 @@ class MapPresenceComposeTest {
             SideEffect { visible = frame }
         }
         compose.mainClock.advanceTimeBy(256); compose.waitForIdle()
-        compose.runOnIdle { assertEquals(1f, visible.single().alpha); items = mapOf("driver" to 2) }
-        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(1f, visible.single().alpha)
+            items = mapOf("driver" to 2)
+            Snapshot.sendApplyNotifications()
+        }
+        // Flush snapshot notification and recomposition frames without completing the 200 ms exit.
+        compose.mainClock.advanceTimeBy(48); compose.waitForIdle()
         compose.runOnIdle { assertEquals(2, visible.single().value); assertEquals(1f, visible.single().alpha) }
     }
     @Test fun retainedAuthorizedExitDisablesInteractionAndPrivacyFlushesItWithoutWaiting() {
@@ -40,10 +49,16 @@ class MapPresenceComposeTest {
             frame.forEach { Box(Modifier.testTag(it.id)) }
         }
         compose.mainClock.advanceTimeBy(256); compose.waitForIdle()
-        compose.runOnIdle { items = emptyMap() }
-        compose.waitForIdle()
-        compose.runOnIdle { assertFalse(visible.single().interactive); allowed = emptySet() }
-        compose.waitForIdle()
+        compose.runOnIdle { items = emptyMap(); Snapshot.sendApplyNotifications() }
+        // Flush snapshot notification and recomposition frames without completing the 200 ms exit.
+        compose.mainClock.advanceTimeBy(48); compose.waitForIdle()
+        compose.runOnIdle {
+            assertFalse(visible.single().interactive)
+            allowed = emptySet()
+            Snapshot.sendApplyNotifications()
+        }
+        // Flush snapshot notification and recomposition frames without completing the 200 ms exit.
+        compose.mainClock.advanceTimeBy(48); compose.waitForIdle()
         compose.onNodeWithTag("driver").assertDoesNotExist()
         compose.runOnIdle { assertTrue(visible.isEmpty()) }
     }
@@ -57,8 +72,9 @@ class MapPresenceComposeTest {
             SideEffect { visible = frame }
         }
         compose.mainClock.advanceTimeBy(256); compose.waitForIdle()
-        compose.runOnIdle { items = emptyMap(); active = false }
-        compose.waitForIdle()
+        compose.runOnIdle { items = emptyMap(); active = false; Snapshot.sendApplyNotifications() }
+        // Flush snapshot notification and recomposition frames without completing the 200 ms exit.
+        compose.mainClock.advanceTimeBy(48); compose.waitForIdle()
         compose.runOnIdle { assertTrue(visible.isEmpty()) }
     }
 }
