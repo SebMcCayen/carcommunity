@@ -76,6 +76,8 @@ jobs:
           jq -e 'any(.client[]?; .client_info.android_client_info.package_name == "com.kungsbackacarcommunity.app")' \
             apps/android/app/google-services.json > /dev/null \
             || { echo "::error::Decoded google-services.json is not valid for com.kungsbackacarcommunity.app."; exit 1; }
+          python3 apps/android/scripts/verify-google-signin-config.py \
+            --config apps/android/app/google-services.json
           echo "google-services.json materialized and validated."
 
       - name: Materialize upload keystore + signing config from production secrets
@@ -134,6 +136,17 @@ jobs:
           ORG_GRADLE_PROJECT_MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
           ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
         run: ./gradlew --no-daemon bundleRelease assembleRelease
+
+      - name: Verify Google Sign-In survives APK and AAB optimization
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          aapt2=$(find "$sdk_root/build-tools" -type f -name aapt2 | sort -V | tail -n1)
+          test -n "$aapt2"
+          python3 apps/android/scripts/verify-google-signin-config.py \
+            --config apps/android/app/google-services.json --aapt2 "$aapt2" \
+            apps/android/app/build/outputs/apk/release/app-release.apk \
+            apps/android/app/build/outputs/bundle/release/app-release.aab
 
       - name: Verify 16 KB native-library alignment
         working-directory: apps/android

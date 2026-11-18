@@ -1,0 +1,17 @@
+{
+  "client": [
+    {
+      "client_info": {
+        "android_client_info": {
+          "package_name": "com.kungsbackacarcommunity.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_type": 3,
+          "client_id": "123456789012-ci-fixture.apps.googleusercontent.com"
+        }
+      ]
+    }
+  ]
+}
