@@ -37,6 +37,7 @@ class MessageReactionsCaptureTest {
             ChannelMessage("incoming-two", "fixture-author-two", "Låter bra! Jag är också med.", "Testmedlem B", null, System.currentTimeMillis() - 60_000, null),
             ChannelMessage("own", "fixture-viewer", "Jag kommer!", null, null, System.currentTimeMillis(), null),
         ))
+        val mutationResponse = kotlinx.coroutines.CompletableDeferred<Unit>()
         var chosen: String? = null
         var version = 0L
         compose.activityRule.scenario.onActivity { it.enableEdgeToEdge() }
@@ -47,6 +48,7 @@ class MessageReactionsCaptureTest {
                         calls += name to payload
                         if (name.endsWith("getMine")) mapOf("items" to (payload["messageIds"] as List<*>).map { id -> mapOf("messageId" to id, "emojiId" to chosen.takeIf { id == "incoming" }, "version" to if (id == "incoming") version else 0L) })
                         else {
+                            mutationResponse.await()
                             val desired = payload["emojiId"] as? String
                             val counts = messages.value.first().reactionCounts.toMutableMap()
                             chosen?.let { key -> counts[key]?.let { value -> if (value == 1L) counts.remove(key) else counts[key] = value - 1 } }
@@ -90,8 +92,12 @@ class MessageReactionsCaptureTest {
         assertEquals(before, calls.count { it.first.endsWith("-set") })
         screenshot("$theme-picker")
         compose.onNodeWithContentDescription(state.catalog.first { it.id == "1f680" }.name).performClick()
+        compose.waitUntil(10_000) { state.busy && state.selectedId == null }
+        compose.onNodeWithText("🚀 1").assertIsDisplayed()
+        compose.onNodeWithText("🚀 1 ✓").assertDoesNotExist()
+        compose.runOnIdle { mutationResponse.complete(Unit) }
         compose.waitUntil(10_000) { !state.busy && state.selectedId == null }
-        compose.onNodeWithText("🚀 1 ✓").assertIsDisplayed()
+        compose.onNodeWithText("🚀 1").assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(1, calls.count { it.first.endsWith("-set") })
             assertEquals(1L, state.store.usage["1f680"]?.first)
