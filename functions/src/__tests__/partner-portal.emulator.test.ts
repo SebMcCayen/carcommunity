@@ -7,7 +7,7 @@ process.env.GCLOUD_PROJECT ??= 'demo-test';
 process.env.FUNCTIONS_EMULATOR = 'true';
 
 import { randomUUID } from 'node:crypto';
-import sharp from 'sharp';
+import { PNG } from 'pngjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { initializeApp as initializeClientApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
@@ -351,11 +351,7 @@ describe('portal publication and private storage rules', () => {
       selfServiceRequested: true,
       billboardRequested: true,
       billboardPlacementRequest: 'E6',
-      logoBase64: (
-        await sharp({ create: { width: 32, height: 32, channels: 3, background: 'white' } })
-          .png()
-          .toBuffer()
-      ).toString('base64'),
+      logoBase64: PNG.sync.write(new PNG({ width: 32, height: 32 })).toString('base64'),
       logoRightsConfirmed: true,
     });
     const result = await call(admin, 'reviewApplication', {

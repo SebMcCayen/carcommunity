@@ -43,7 +43,7 @@ contactEmail, contactPhone?, website?, description?, address?, publicPhone?,
 selfServiceRequested: boolean, billboardRequested: boolean,
 billboardPlacementRequest?: string, message?, logoBase64?: string, logoRightsConfirmed?: boolean }`
   -> `{ applicationId, status }`. PNG logo base64 (without data prefix), <=5MB,
-  recommended 1024x1024, <=16MP. Server decodes/re-encodes, strips metadata.
+  recommended 1024x1024, <=16MP, <=16,384 px per dimension and <=64 MiB decoded RGBA (16-bit input consumes twice the raster budget). Animation is rejected; at most 4,096 PNG chunks are accepted. Server decodes/re-encodes, strips metadata.
   `submitApplication` resubmits a changes_requested application owned by the actor.
 - `workspace`: `{}` -> `{ companies: Company[], application: Application|null }`.
   Application includes applicant fields above (no logoBase64), `applicationId`,
@@ -147,8 +147,11 @@ limit. KCC Admin's own lists already use cursor pagination.
 Statistics scopes are bounded at 10,000 aggregate offer rows; larger requests fail
 explicitly instead of returning incomplete totals. Public daily snapshot cache
 generations expire after seven days; durable period totals and processed event
-markers remain. Logo processing uses at most four concurrent requests per
-instance, and inline PNG preview output is capped at 450 KB.
+markers remain. The portal callable uses one concurrent request per instance (512 MiB), and inline
+PNG preview output is capped at 450 KB. The MIT-licensed [pngjs](https://github.com/pngjs/pngjs) decoder is preceded
+by strict chunk/CRC validation and exact, bounded zlib inflation for ordinary and
+Adam7 PNGs; output is fresh RGBA PNG without source metadata. No license-check
+exception is required.
 
 ## Controlled activation
 

@@ -270,7 +270,18 @@ export const showOfferCode = onCall(
     if (!offerSnap.exists || offerSnap.data()!.status !== 'active') {
       throw new HttpsError('not-found', 'Offer not found or not active.');
     }
-    const company = await db.collection('companies').doc(offerSnap.data()!.companyId).get();
+    const companyId = offerSnap.data()!.companyId;
+    if (
+      typeof companyId !== 'string' ||
+      !companyId ||
+      companyId.includes('/') ||
+      companyId === '.' ||
+      companyId === '..' ||
+      Buffer.byteLength(companyId, 'utf8') > 1500
+    ) {
+      throw new HttpsError('not-found', 'Offer not found or not available.');
+    }
+    const company = await db.collection('companies').doc(companyId).get();
     if (company.data()?.status !== 'active' || !inWindow(offerSnap.data()!, Date.now())) {
       throw new HttpsError('not-found', 'Offer not found or not available.');
     }

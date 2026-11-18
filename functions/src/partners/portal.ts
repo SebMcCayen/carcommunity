@@ -42,7 +42,8 @@ const CALLABLE_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_MEMBER,
   memory: '512MiB' as const,
-  concurrency: 4,
+  // PNG decoding/resampling is CPU-bound; serialize bounded image memory per instance.
+  concurrency: 1,
   timeoutSeconds: 60,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
 };
