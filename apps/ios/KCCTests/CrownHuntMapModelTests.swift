@@ -49,7 +49,11 @@ final class CrownHuntMapModelTests: XCTestCase {
             let remaining = CrownRewardText.remaining(allowance, locale: locale, bundle: bundle)
             XCTAssertTrue(credit.contains("7") && credit.contains(currency))
             XCTAssertTrue(balance.contains("207") && balance.contains(currency))
-            XCTAssertTrue(remaining.contains("2193") && remaining.contains("2250") && remaining.contains(currency))
+            // Locale-aware integer formatting may group thousands with commas
+            // or nonbreaking spaces. Check the actual amounts independently of
+            // those presentation separators.
+            XCTAssertEqual(String(remaining.filter(\.isNumber)), "21932250")
+            XCTAssertTrue(remaining.contains(currency))
             XCTAssertFalse(remaining.contains("Stockholm"))
             XCTAssertFalse(remaining.contains("2026"))
             XCTAssertFalse(remaining.contains("%"), "Every native format placeholder must be substituted")
