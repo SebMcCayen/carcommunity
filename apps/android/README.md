@@ -41,6 +41,22 @@ Google **Play App Signing** re-signs the uploaded bundle, so the keystore here i
 
 Without those files the release build is **unsigned** with a blank-map token — never fatal, so CI/validation builds stay green.
 
+Google Sign-In resolves `default_web_client_id` by name so builds without Firebase
+configuration can still compile. The scoped resource keep file preserves this
+entry through R8 resource shrinking. The signed release workflow requires a web
+OAuth client (`client_type: 3`) for this Android package in `google-services.json`,
+then checks that its exact value is still available under the expected resource
+name in **both the optimized APK and AAB**. Values are never printed. PR validation
+exercises the same packaging check with a synthetic release-only resource; it
+does not use production Firebase configuration. To check a configured build:
+
+```bash
+python3 scripts/verify-google-signin-config.py --config app/google-services.json \
+  --aapt2 "$ANDROID_HOME/build-tools/36.0.0/aapt2" \
+  app/build/outputs/apk/release/app-release.apk \
+  app/build/outputs/bundle/release/app-release.aab
+```
+
 ### Changelog ("Vad är nytt")
 
 `app/src/main/res/raw/changelog.json` is the bundled release-notes source for the after-update popup and the Settings → "Vad är nytt" page. **Every release PR that bumps `versionCode`/`versionName` must append an entry** (newest first): `versionCode`, `versionName`, `releaseDate` (ISO `yyyy-MM-dd`), `highlights` (max ~3 short lines, shown in the popup) and `changes` (the full bulleted list). Descriptions are user-facing Swedish — what the user notices, not internal jargon. The page shows the 10 newest entries; the popup shows the newest entry unseen by the device (tracked per `versionCode` in SharedPreferences) and is skipped entirely on first install. Selection logic lives in `whatsnew/Changelog.kt` (unit-tested in `whatsnew/ChangelogTest.kt`).
