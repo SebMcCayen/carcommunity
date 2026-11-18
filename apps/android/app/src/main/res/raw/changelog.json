@@ -2,6 +2,20 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 77,
+      "versionName": "1.1.22",
+      "releaseDate": "2026-11-18",
+      "highlights": [
+        "Rättad Google-inloggning för nya och utloggade användare",
+        "Snabbare emoji-reaktioner i chatten"
+      ],
+      "changes": [
+        "Rättat ett fel som hindrade Google-inloggning för nya och utloggade användare",
+        "Emoji-reaktioner i chatten visas direkt när du väljer dem",
+        "Reaktionsväljaren öppnas centrerad i chatten"
+      ]
+    },
+    {
       "versionCode": 76,
       "versionName": "1.1.21",
       "releaseDate": "2026-11-17",
