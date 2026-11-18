@@ -20,7 +20,7 @@ struct PartnerLogoView: View {
         .task(id: path) {
             resolvedURL = nil
             guard let path, Self.allowed(path), FirebaseApp.app() != nil else { return }
-            let value = try? await PartnerLogoStorage.storage.reference(withPath: path).downloadURL()
+            let value = await PartnerLogoStorage.downloadURL(for: path)
             guard !Task.isCancelled else { return }
             resolvedURL = value
         }
@@ -37,6 +37,16 @@ struct PartnerLogoView: View {
 
 @MainActor
 private enum PartnerLogoStorage {
+    /// Keep the SDK reference on this actor; only the Sendable URL crosses
+    /// Firebase's completion boundary.
+    static func downloadURL(for path: String) async -> URL? {
+        await withCheckedContinuation { continuation in
+            storage.reference(withPath: path).downloadURL { url, _ in
+                continuation.resume(returning: url)
+            }
+        }
+    }
+
     static let storage: Storage = {
         let value = Storage.storage()
         if let emulator = FirebaseEmulatorHost.parse(ProcessInfo.processInfo.environment["FIREBASE_STORAGE_EMULATOR_HOST"]) {
