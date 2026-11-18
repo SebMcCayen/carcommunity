@@ -705,7 +705,8 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(start.isHittable)
         XCTAssertEqual(app.staticTexts["place.navigation.name"].label, "Göteborg Centralstation")
         app.buttons["map.reading.close"].tap()
-        XCTAssertFalse(start.exists)
+        XCTAssertTrue(start.wait(for: \.exists, toEqual: false, timeout: 2),
+            "Closing must remove the destination after its bounded fade")
         XCTAssertTrue(app.buttons["shell.search"].isHittable)
         app.terminate()
     }
@@ -925,7 +926,8 @@ final class ShellSmokeTests: XCTestCase {
             chatProof(app, name: largeText ? "live-stop-panel-sv-accessibility" : "live-stop-panel-sv")
 
             app.buttons["map.reading.close"].tap()
-            XCTAssertFalse(app.buttons["map.session.stop"].exists)
+            XCTAssertTrue(app.buttons["map.session.stop"].wait(for: \.exists, toEqual: false, timeout: 2),
+                "Closing must remove the Stop panel after its bounded fade")
             XCTAssertTrue(bar.isHittable, "Closing the panel must leave the live session running")
             XCTAssertFalse(element("map.fixture.savedDrive", in: app).exists)
 
@@ -1162,7 +1164,8 @@ final class ShellSmokeTests: XCTestCase {
         saved.tap()
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()
-        XCTAssertFalse(panel.exists)
+        XCTAssertTrue(panel.wait(for: \.exists, toEqual: false, timeout: 2),
+            "Closing must remove the saved-places panel after its bounded fade")
         XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
     }
 
