@@ -5,29 +5,31 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
-import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.kungsbackacarcommunity.app.media.resolveStorageDownloadUrl
+import com.kungsbackacarcommunity.app.media.LogoImagePolicy
+import com.kungsbackacarcommunity.app.media.rememberLogoStorageSession
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-/** Bounded per-version logos. Coil and the Storage URL cache reuse prior downloads. */
+/** Bounded per-version logos. Authenticated bytes use Coil's account-scoped caches. */
 @Composable
 internal fun rememberBillboardLogoImages(paths: List<String>): Map<String, Bitmap> {
     val context = LocalContext.current
-    val uniquePaths = remember(paths) { paths.distinct().take(150) }
+    val uniquePaths = remember(paths) { paths.filter(LogoImagePolicy::allowed).distinct().take(LogoImagePolicy.BILLBOARD_LIMIT) }
     val imageLoader = remember(context) { context.imageLoader }
-    val bitmaps by produceState<Map<String, Bitmap>>(emptyMap(), uniquePaths, imageLoader) {
+    val session = rememberLogoStorageSession(context)
+    val bitmaps by produceState<Map<String, Bitmap>>(emptyMap(), uniquePaths, imageLoader, session) {
         value = emptyMap()
-        val gate = Semaphore(4)
+        if (session == null) return@produceState
+        val gate = Semaphore(LogoImagePolicy.PARALLEL_DOWNLOADS)
         coroutineScope {
             uniquePaths.map { path -> async {
                 gate.withPermit {
-                    val url = resolveStorageDownloadUrl(context, path) ?: return@withPermit null
-                    val result = imageLoader.execute(ImageRequest.Builder(context).data(url).size(128).allowHardware(false).build())
+                    val request = session.request(context, path, 128) ?: return@withPermit null
+                    val result = imageLoader.execute(request)
                     (result as? SuccessResult)?.drawable?.toBitmap()?.let { path to it }
                 }
             } }.awaitAll().filterNotNull().toMap().also { value = it }

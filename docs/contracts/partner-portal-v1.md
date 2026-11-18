@@ -114,7 +114,12 @@ Admin/personnel changes are audited without QR/customer identity.
 
 Billboard public models add nullable `imagePath` (existing field) and company
 models expose nullable `logoPath`; use Storage references, not invented URLs.
-Internal partner_profile CTA opens companyId on both apps.
+Both apps fetch published logos through authenticated Storage byte reads, bounded
+to 1 MiB per object. Admin-published objects do not require public download-token
+metadata. Internal partner_profile CTA opens companyId on both apps. When partner
+navigation is disabled or unavailable, the billboard retains its ordinary popup
+and existing call-to-action. Explicit legacy phone and website placements retain
+their popup actions even while partner navigation is enabled.
 
 ## Retention
 

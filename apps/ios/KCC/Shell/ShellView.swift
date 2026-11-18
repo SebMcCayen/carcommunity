@@ -859,6 +859,22 @@ struct ShellView: View {
             .eraseToAnyView()
     }
 
+    private var billboardPartnerNavigation: ((String) -> Bool)? {
+        guard featureFlags.isEnabled(.partners), partnersCoordinator != nil else { return nil }
+        return { companyId in
+            // Recheck at activation as well as rendering: feature availability
+            // may change after the popup was presented.
+            BillboardPartnerNavigation.open(
+                companyId: companyId,
+                partnersEnabled: featureFlags.isEnabled(.partners),
+                coordinatorAvailable: partnersCoordinator != nil
+            ) { destination in
+                partnerCompanyDestination = destination
+                routes = routes.opening(.partners)
+            }
+        }
+    }
+
     private var mapMarkerContent: AnyView {
         ZStack {
             #if DEBUG
@@ -904,11 +920,7 @@ struct ShellView: View {
                 BillboardMapOverlay(
                     coordinator: billboardsCoordinator,
                     projection: mapSurface,
-                    onOpenPartner: { companyId in
-                        guard featureFlags.isEnabled(.partners), partnersCoordinator != nil else { return }
-                        partnerCompanyDestination = companyId
-                        routes = routes.opening(.partners)
-                    }
+                    onOpenPartner: billboardPartnerNavigation
                 )
             }
             if liveLocationFeatureEnabled {

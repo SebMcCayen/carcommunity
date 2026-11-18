@@ -4,7 +4,7 @@ struct BillboardMapOverlay: View {
     @Environment(\.openURL) private var openURL
     @Bindable var coordinator: BillboardsCoordinator
     let projection: any MapProjection
-    var onOpenPartner: ((String) -> Void)? = nil
+    var onOpenPartner: ((String) -> Bool)? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -18,11 +18,7 @@ struct BillboardMapOverlay: View {
                        point.x <= Double(geometry.size.width + 32),
                        point.y <= Double(geometry.size.height + 32) {
                         Button {
-                            coordinator.open(billboardId: marker.id)
-                            if let companyId = marker.companyId, let onOpenPartner {
-                                onOpenPartner(companyId)
-                                coordinator.dismiss()
-                            }
+                            coordinator.open(billboardId: marker.id, onOpenPartner: onOpenPartner)
                         } label: {
                             if let path = marker.imagePath {
                                 PartnerLogoView(path: path, size: 42)
@@ -57,8 +53,8 @@ struct BillboardMapOverlay: View {
     }
 
     private func partnerAction(for billboard: Billboard) -> (() -> Void)? {
-        guard let companyId = billboard.companyId, let onOpenPartner else { return nil }
-        return { onOpenPartner(companyId); coordinator.dismiss() }
+        guard billboard.companyId != nil, let onOpenPartner else { return nil }
+        return { _ = coordinator.openPartner(for: billboard.id, using: onOpenPartner) }
     }
 }
 

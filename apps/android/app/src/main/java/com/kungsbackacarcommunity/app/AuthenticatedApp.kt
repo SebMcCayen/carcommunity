@@ -1724,9 +1724,10 @@ fun AuthenticatedApp(
                     tappedBillboardId?.let { id -> visibleBillboards.firstOrNull { it.id == id } }
                 }
 
-            LaunchedEffect(tappedBillboard?.id, partnersEnabled) {
-                val destination = com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.directCompanyId(tappedBillboard)
-                if (destination != null && partnersEnabled) {
+            val partnerNavigationAvailable = com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.available(partnersEnabled, partnersRepository != null)
+            LaunchedEffect(tappedBillboard?.id, partnerNavigationAvailable) {
+                val destination = com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.directCompanyId(tappedBillboard, partnerNavigationAvailable)
+                if (destination != null) {
                     val id = tappedBillboard?.id
                     if (id != null) scope.launch { runCatching { billboardsRepository?.recordInteraction(id, BillboardInteractionType.OPEN) } }
                     pendingPartnerCompanyId = destination
@@ -7384,7 +7385,7 @@ fun AuthenticatedApp(
                                 // it rather than leaving an advert on screen the
                                 // member is no longer meant to be shown.
                                 val openBillboard = tappedBillboard
-                                if (openBillboard != null && (!partnersEnabled || com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.directCompanyId(openBillboard) == null)) {
+                                if (openBillboard != null && com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.directCompanyId(openBillboard, partnerNavigationAvailable) == null) {
                                     val action =
                                         remember(openBillboard) {
                                             BillboardCallToAction.resolve(openBillboard)

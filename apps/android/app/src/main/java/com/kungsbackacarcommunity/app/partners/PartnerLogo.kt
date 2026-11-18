@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import com.kungsbackacarcommunity.app.media.PickedImage
-import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.media.rememberLogoStorageSession
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,11 +23,13 @@ import kotlinx.coroutines.withContext
 /** Only server-approved Storage paths are placed in the public company model. */
 @Composable
 fun PartnerLogo(path: String?, modifier: Modifier = Modifier.size(64.dp)) {
-    val url = rememberStorageImageUrl(LocalContext.current, path)
-    if (url == null) {
+    val context = LocalContext.current
+    val session = rememberLogoStorageSession(context)
+    val request = androidx.compose.runtime.remember(context, session, path) { session?.request(context, path, 512) }
+    if (request == null) {
         Icon(Icons.Filled.Storefront, contentDescription = null, modifier = modifier)
     } else {
-        SubcomposeAsyncImage(model = url, contentDescription = null, modifier = modifier, contentScale = ContentScale.Fit,
+        SubcomposeAsyncImage(model = request, contentDescription = null, modifier = modifier, contentScale = ContentScale.Fit,
             error = { Icon(Icons.Filled.Storefront, contentDescription = null) },
             loading = { Icon(Icons.Filled.Storefront, contentDescription = null) })
     }

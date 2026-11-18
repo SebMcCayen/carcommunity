@@ -94,3 +94,18 @@ enum BillboardCallToAction {
 enum Billboards {
     static let activeQueryLimit = 150
 }
+
+/// Navigation is accepted only while its feature and destination are available.
+@MainActor
+enum BillboardPartnerNavigation {
+    static func open(
+        companyId: String,
+        partnersEnabled: Bool,
+        coordinatorAvailable: Bool,
+        navigate: (String) -> Void
+    ) -> Bool {
+        guard partnersEnabled, coordinatorAvailable else { return false }
+        navigate(companyId)
+        return true
+    }
+}

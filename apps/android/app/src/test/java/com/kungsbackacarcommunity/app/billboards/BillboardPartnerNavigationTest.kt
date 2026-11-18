@@ -15,4 +15,12 @@ class BillboardPartnerNavigationTest {
         assertNull(BillboardPartnerNavigation.directCompanyId(billboard(BillboardCtaType.WEBSITE)))
         assertNull(BillboardPartnerNavigation.directCompanyId(billboard(null, null)))
     }
+    @Test fun `disabled directory or unavailable repository retains the popup`() {
+        for ((flag, repository) in listOf(false to true, true to false, false to false)) {
+            val available = BillboardPartnerNavigation.available(flag, repository)
+            assertFalse(available)
+            assertNull(BillboardPartnerNavigation.directCompanyId(billboard(BillboardCtaType.PARTNER_PROFILE), available))
+        }
+        assertEquals("partner", BillboardPartnerNavigation.directCompanyId(billboard(null), BillboardPartnerNavigation.available(true, true)))
+    }
 }
