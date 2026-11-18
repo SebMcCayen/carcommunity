@@ -119,7 +119,7 @@ Internal partner_profile CTA opens companyId on both apps.
 ## Retention
 
 Local per-account application drafts expire after seven days and exclude logos.
-Private terminal reservation records and their claim pointers are deleted after
+Private terminal reservation records and their claim pointers are eligible for deletion after
 30 days with a transactional recheck (a re-reserved active record is never deleted).
 A redeemed/revoked campaign retains only a backend-only campaign-scoped anti-reuse
 tombstone, not a reservation pointer or event timestamp, while the campaign remains
@@ -127,6 +127,17 @@ usable; it is retired 30 days after campaign end. This is protected operational
 pseudonymous data, never an anonymous analytics identifier. Tokens/limits/requests
 are swept by expiry. Aggregate counts and minimal processed outbox IDs persist for
 correct lifetime totals and retry deduplication; they carry no customer reference.
+
+Canonical account erasure also removes partner data after the app's existing
+30-day account-deletion window: private application contacts and owner pointers,
+company staff memberships, owned reservations, QR/retry references and campaign
+anti-reuse claims. The used-claim sweep includes missing offer parents and uses
+bounded pages with a durable cursor; it adds no shared customer identifier to
+campaign claims. Incomplete erasure remains pending for retry before the account
+is acknowledged as purged. Outstanding reserved capacity is released exactly
+once; redeemed totals, identity-free aggregate statistics and the separate public
+business profile remain intact. Technical reservation retries expire after
+30 days, independently of the campaign's one-use control.
 
 ## Initial operating limits
 
@@ -160,3 +171,14 @@ both native builds first; separately enable it through the existing audited
 admin feature-flag control. Off stops new reservations and partner mutations,
 while own cancellations and valid pre-existing QR redemption remain available.
 No merge, deployment, flag activation or app publication is authorized by this PR.
+
+A separately reviewed backend rollout must include the new `partners-portal`,
+`partners-sweepPortal` and `partners-publishStatistics`, and the changed legacy
+`partners-updateOffer`, `partners-setOfferStatus` and `partners-showOfferCode`.
+It must also update every deployed caller of the canonical erasure routine:
+`account-purgeDeleted`, `account-cleanupInactive`, `admin-deleteUser` and
+`admin-purgeNeverOnboarded`. Deploying only the new partner functions would leave
+older account-erasure revisions unaware of the new private records. The existing
+`admin-setFeatureFlag` must know the new flag before it can be enabled. Review the
+finance-model consumers with that rollout as well. This is a source dependency
+checklist, not deployment approval or a command to execute.

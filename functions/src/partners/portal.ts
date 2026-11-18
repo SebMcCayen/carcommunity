@@ -31,6 +31,7 @@ import {
   type PortalAction,
 } from './portal-core';
 import { sanitizeLogo } from './portal-logo';
+import { readPartnerReservationErasurePage } from './portal-erasure';
 import { readFeatureFlag } from '../shared/featureFlags';
 import { identityKeys, isCarCommunityRestricted } from '../access/carCommunity-core';
 import {
@@ -65,12 +66,33 @@ function missing(): never {
 function denied(): never {
   throw new HttpsError('permission-denied', 'This operation is not allowed.');
 }
+/** A retained deletion request fences inactivity erasure too, where Auth is
+ * disabled before the existing users document is necessarily removed.
+ */
+async function assertNotErasing(uid: string, tx?: Transaction) {
+  const refs = [
+    db.collection('users').doc(uid),
+    db.collection('accountDeletionRequests').doc(uid),
+    db.collection('accountPurgeProgress').doc(uid),
+  ];
+  const [user, request, progress] = await Promise.all(
+    refs.map((ref) => (tx ? tx.get(ref) : ref.get())),
+  );
+  if (
+    !user!.exists ||
+    isRestricted(toUserAccessState(user!.data())) ||
+    ['pending', 'processed'].includes(request!.data()?.status) ||
+    progress!.data()?.partnerErasureActive === true
+  )
+    denied();
+}
 async function customerPolicy(tx: Transaction, uid: string) {
   const [user, subscription, access, policy] = await Promise.all([
     tx.get(db.collection('users').doc(uid)),
     tx.get(db.collection('subscriptions').doc(uid)),
     tx.get(db.collection('carCommunityAccess').doc(uid)),
     tx.get(db.collection('carCommunityPolicy').doc('access')),
+    assertNotErasing(uid, tx),
   ]);
   if (
     !user.exists ||
@@ -110,6 +132,7 @@ async function rateLimit(uid: string, action: PortalAction) {
       : 120;
   const ref = db.collection('partnerPortalRateLimits').doc(hash(`${uid}:${action}:${window}`));
   await db.runTransaction(async (tx) => {
+    await assertNotErasing(uid, tx);
     const snap = await tx.get(ref);
     const count = Number(snap.data()?.count ?? 0);
     if (count >= limit)
@@ -128,6 +151,7 @@ async function staff(
     tx.get(db.collection('users').doc(uid)),
     tx.get(db.collection('companies').doc(companyId)),
     tx.get(db.collection('partnerMembers').doc(hash(`${companyId}:${uid}`))),
+    assertNotErasing(uid, tx),
   ]);
   if (!user.exists || isRestricted(toUserAccessState(user.data()))) denied();
   const admin =
@@ -257,6 +281,7 @@ async function handlePortal(request: CallableRequest) {
   if (!parsed.success) throw new HttpsError('invalid-argument', 'Invalid command fields.');
   // The discriminated command is validated above. Branches project only their schema's fields.
   const input = parsed.data as Record<string, unknown>;
+  await assertNotErasing(actor.uid);
   if (ADMIN.has(action)) await requireAdminActor(request);
   if (
     ['uploadLogo', 'updateProfile', 'submitOffer', 'pauseReservations', 'reserve'].includes(
@@ -281,6 +306,7 @@ async function handlePortal(request: CallableRequest) {
       // A business contact address is applicant-supplied contact data, not proof
       // of identity or exclusive ownership. Only the authenticated UID owns an
       // application; administrators review potential business duplicates.
+      await assertNotErasing(uid, tx);
       const [owner, legacy] = await Promise.all([
         tx.get(ownerRef),
         tx.get(
@@ -372,6 +398,7 @@ async function handlePortal(request: CallableRequest) {
       const snap = await tx.get(ref);
       if (!snap.exists) missing();
       const data = snap.data()!;
+      await assertNotErasing(uid, tx);
       // A revised application must be re-read and re-approved; never publish an older logo/review.
       if (data.revision !== initialData.revision) fail('Application changed. Reload the review.');
       if (data.partnerCompanyId)
@@ -403,6 +430,7 @@ async function handlePortal(request: CallableRequest) {
       const target = a.grantSelfService
         ? await tx.get(db.collection('users').doc(data.submittedByUserId))
         : null;
+      if (a.grantSelfService) await assertNotErasing(data.submittedByUserId, tx);
       if (target && (!target.exists || isRestricted(toUserAccessState(target.data())))) denied();
       tx.set(db.collection('companies').doc(companyId), {
         name: data.companyName,
@@ -463,6 +491,8 @@ async function handlePortal(request: CallableRequest) {
     if (a.enabled && (!target.emailVerified || target.disabled))
       fail('A verified active account is required.');
     return db.runTransaction(async (tx) => {
+      await assertNotErasing(uid, tx);
+      await assertNotErasing(a.uid, tx);
       const [company, user] = await Promise.all([
         tx.get(db.collection('companies').doc(a.companyId)),
         tx.get(db.collection('users').doc(a.uid)),
@@ -785,7 +815,7 @@ async function handlePortal(request: CallableRequest) {
       tx.set(requestRef, {
         offerId: a.offerId,
         reservationId: ref.id,
-        expiresAt: Timestamp.fromMillis(now + 90 * DAY),
+        expiresAt: Timestamp.fromMillis(now + 30 * DAY),
       });
       tx.set(quotaRef, {
         reservedCount: reserved + 1,
@@ -1116,11 +1146,17 @@ export async function expireReservations(now = Date.now()) {
       const r = current.data()!;
       // A cancelled/expired record may have been reserved again after the query.
       if (r.status === 'reserved' || (millis(r.closedAt) ?? Infinity) >= now - 30 * DAY) return;
+      const references = await readPartnerReservationErasurePage(tx, current.id);
+      if (!references.complete) {
+        references.refs.forEach((ref) => tx.delete(ref));
+        return;
+      }
       const claim = lockRef(r.uid, r.offerId);
       const [locked, offer] = await Promise.all([
         tx.get(claim),
         tx.get(db.collection('offers').doc(r.offerId)),
       ]);
+      references.refs.forEach((ref) => tx.delete(ref));
       if (locked.data()?.reservationId === current.id) {
         if (r.status === 'redeemed' || r.status === 'revoked') {
           const end = millis(offer.data()?.availableUntil);

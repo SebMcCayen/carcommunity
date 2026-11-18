@@ -393,7 +393,7 @@ export const REPOSITORY_SCHEDULED_JOBS: ScheduledJob[] = [
     avgSeconds: 20,
     cpu: CPU_SCHEDULED,
     memoryGiB: 0.5,
-    note: 'GDPR erasure — purges soft-deleted accounts once their grace period is due.',
+    note: 'Purges soft-deleted accounts after their grace period. Includes bounded partner reservation/reference and campaign-claim cleanup with retry checkpoints. Small-pilot average only: due-day work grows with owned data and global claim pages, up to the per-attempt limits.',
   },
   {
     id: 'account-cleanupInactive',

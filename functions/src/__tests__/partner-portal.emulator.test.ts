@@ -144,6 +144,13 @@ describe('partner reservations under real contention', () => {
     const quota = (await db.collection('partnerOfferQuotas').doc(offerId).get()).data()!;
     expect(quota.reservedCount).toBe(3);
     expect(quota.redeemedCount).toBe(0);
+    const retryRecords = await db
+      .collection('partnerPortalRequests')
+      .where('offerId', '==', offerId)
+      .get();
+    expect(retryRecords.size).toBe(3);
+    for (const retry of retryRecords.docs)
+      expect(retry.data().expiresAt.toMillis()).toBeLessThanOrEqual(Date.now() + 30 * 86400000);
     const publicOffer = (await db.collection('offers').doc(offerId).get()).data()!;
     expect(publicOffer.remainingCount).toBe(0);
     expect(publicOffer).not.toHaveProperty('redeemedCount');

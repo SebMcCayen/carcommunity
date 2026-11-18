@@ -1,4 +1,5 @@
 import { eraseUserReactions } from '../chatReactions/engine';
+import { erasePartnerAccountData } from '../partners/portal-erasure';
 /**
  * Account deletion hard-purge (Phase 9p stage 2).
  *
@@ -478,7 +479,7 @@ async function deleteEventContent(uid: string): Promise<void> {
     }
     after = page.docs.at(-1)?.ref.path ?? after;
     const complete = page.size < size;
-    batch.set(progress, { rsvpCursor: after ?? null, rsvpComplete: complete });
+    batch.set(progress, { rsvpCursor: after ?? null, rsvpComplete: complete }, { merge: true });
     await batch.commit();
     if (complete) return;
   }
@@ -487,6 +488,7 @@ async function deleteEventContent(uid: string): Promise<void> {
 
 /** Purges one user's data per the plan. Idempotent — safe to re-run. */
 export async function purgeUserData(uid: string): Promise<void> {
+  await erasePartnerAccountData(uid);
   await eraseUserReactions(db, uid);
   for (const collection of PURGE_DOC_TREES) {
     await db.recursiveDelete(db.collection(collection).doc(uid));
