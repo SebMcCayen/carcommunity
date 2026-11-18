@@ -516,7 +516,7 @@
     {
       "name": "garage.rankedDrivingVehicleIds",
       "domain": "garage",
-      "description": "Empty input. Returns { vehicleIds: string[] } for the active caller, ordered by confirmed uses in the last 90 days, then most recent use, then ID. Starts are private, one per solo session or convoy started with the owner's selected vehicle. Rides with a vehicle ID saved before the first tracked start seed earlier use in the rolling window. Clients intersect the result with their current garage. Deployed as garage-rankedDrivingVehicleIds.",
+      "description": "Empty input. Returns { vehicleIds: string[], recentVehicleIds: string[] } for the active caller. vehicleIds preserves frequency ordering by confirmed uses in the last 90 days, then most recent use, then ID. recentVehicleIds orders distinct vehicles by most recent confirmed use within the same window, then ID; Android uses this for its three recent quick choices. Starts are private, one per solo session or convoy started with the owner's selected vehicle. Rides with a vehicle ID saved before the first tracked start seed earlier use in the rolling window. Clients intersect the result with their current garage. Deployed as garage-rankedDrivingVehicleIds.",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",

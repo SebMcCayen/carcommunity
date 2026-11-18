@@ -20,21 +20,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.network.HttpException
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehicleDisplay
-import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.media.rememberStorageImage
 
 /** Matches the server's main → first → no vehicle default. */
 fun defaultStartDrivingVehicleId(vehicles: List<Vehicle>): String? =
@@ -56,13 +59,17 @@ fun StartDrivingCarPicker(
     rankedVehicleIds: List<String> = emptyList(),
     showAll: Boolean = false,
     onShowAll: () -> Unit = {},
-    rankingPending: Boolean = false,
 ) {
-    val visible = when {
-        showAll -> vehicles
-        rankingPending -> emptyList()
-        else -> quickStartDrivingVehicles(vehicles, rankedVehicleIds)
+    // Paint garage rows/photos immediately, then reorder when recent use arrives.
+    val visible = if (showAll) vehicles else quickStartDrivingVehicles(vehicles, rankedVehicleIds)
+    val selectedOutsideQuickList = if (!showAll && visible.none { it.id == selectedVehicleId }) {
+        vehicles.firstOrNull { it.id == selectedVehicleId }
+    } else {
+        null
     }
+    // One keyed row list keeps the selected photo's in-flight resolution alive
+    // when it moves between the quick choices and the additional selected row.
+    val rows = visible + listOfNotNull(selectedOutsideQuickList)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
         if (!showAll) {
             Text(
@@ -78,18 +85,11 @@ fun StartDrivingCarPicker(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (!showAll && visible.none { it.id == selectedVehicleId }) {
-            vehicles.firstOrNull { it.id == selectedVehicleId }?.let { selected ->
-                val headline = VehicleDisplay.headline(selected, stringResource(R.string.garage_catalogueOther))
-                Text(
-                    text = stringResource(R.string.shell_createChooserSelectedVehicle, headline),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
         Column(Modifier.selectableGroup()) {
-            visible.forEach { vehicle ->
-                CarPickerItem(vehicle, vehicle.id == selectedVehicleId) { onSelectVehicle(vehicle.id) }
+            rows.forEach { vehicle ->
+                key(vehicle.id) {
+                    CarPickerItem(vehicle, vehicle.id == selectedVehicleId) { onSelectVehicle(vehicle.id) }
+                }
             }
         }
         if (!showAll && vehicles.size > 3) {
@@ -101,7 +101,11 @@ fun StartDrivingCarPicker(
 @Composable
 private fun CarPickerItem(vehicle: Vehicle, selected: Boolean, onClick: () -> Unit) {
     val label = VehicleDisplay.headline(vehicle, stringResource(R.string.garage_catalogueOther))
-    val url = rememberStorageImageUrl(LocalContext.current, vehicle.imagePath)
+    val image = rememberStorageImage(
+        LocalContext.current,
+        vehicle.imagePath?.takeIf { it.isNotBlank() } ?: vehicle.photoPaths.firstOrNull(),
+    )
+    val url = image.url
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -113,7 +117,7 @@ private fun CarPickerItem(vehicle: Vehicle, selected: Boolean, onClick: () -> Un
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(32.dp)
+            Modifier.testTag("start-driving-photo-${vehicle.id}").size(32.dp)
                 .clip(RoundedCornerShape(KccRadius.sm))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
@@ -124,6 +128,9 @@ private fun CarPickerItem(vehicle: Vehicle, selected: Boolean, onClick: () -> Un
                     model = url,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    onError = { state ->
+                        if (state.result.throwable is HttpException) image.onLoadFailed()
+                    },
                     modifier = Modifier.matchParentSize(),
                 )
             }
