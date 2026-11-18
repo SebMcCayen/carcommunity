@@ -62,6 +62,14 @@ fun StartDrivingCarPicker(
 ) {
     // Paint garage rows/photos immediately, then reorder when recent use arrives.
     val visible = if (showAll) vehicles else quickStartDrivingVehicles(vehicles, rankedVehicleIds)
+    val selectedOutsideQuickList = if (!showAll && visible.none { it.id == selectedVehicleId }) {
+        vehicles.firstOrNull { it.id == selectedVehicleId }
+    } else {
+        null
+    }
+    // One keyed row list keeps the selected photo's in-flight resolution alive
+    // when it moves between the quick choices and the additional selected row.
+    val rows = visible + listOfNotNull(selectedOutsideQuickList)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
         if (!showAll) {
             Text(
@@ -78,16 +86,9 @@ fun StartDrivingCarPicker(
             )
         }
         Column(Modifier.selectableGroup()) {
-            visible.forEach { vehicle ->
+            rows.forEach { vehicle ->
                 key(vehicle.id) {
                     CarPickerItem(vehicle, vehicle.id == selectedVehicleId) { onSelectVehicle(vehicle.id) }
-                }
-            }
-            if (!showAll && visible.none { it.id == selectedVehicleId }) {
-                vehicles.firstOrNull { it.id == selectedVehicleId }?.let { selected ->
-                    key(selected.id) {
-                        CarPickerItem(selected, true) { onSelectVehicle(selected.id) }
-                    }
                 }
             }
         }

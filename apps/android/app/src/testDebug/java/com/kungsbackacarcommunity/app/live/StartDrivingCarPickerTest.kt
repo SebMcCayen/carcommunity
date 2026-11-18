@@ -141,6 +141,8 @@ class StartDrivingCarPickerTest {
         }
         composeTestRule.onNodeWithText("Volvo model0 (1988)").assertIsSelected()
         composeTestRule.onNodeWithTag("start-driving-photo-v0", useUnmergedTree = true).assertIsDisplayed()
+        val selectedPhotoNodeId = composeTestRule.onNodeWithTag("start-driving-photo-v0", useUnmergedTree = true)
+            .fetchSemanticsNode().id
         composeTestRule.onNodeWithText("Volvo model1 (1988)").assertIsDisplayed()
         composeTestRule.onNodeWithText("Volvo model4 (1988)").assertDoesNotExist()
         composeTestRule.runOnIdle { recentIds = listOf("v4", "v3", "v2") }
@@ -148,6 +150,11 @@ class StartDrivingCarPickerTest {
         composeTestRule.onNodeWithText("Volvo model1 (1988)").assertDoesNotExist()
         composeTestRule.onNodeWithText("Volvo model0 (1988)").assertIsSelected()
         composeTestRule.onNodeWithTag("start-driving-photo-v0", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(
+            "Keep the selected photo's composition so pending image resolution is not restarted",
+            selectedPhotoNodeId,
+            composeTestRule.onNodeWithTag("start-driving-photo-v0", useUnmergedTree = true).fetchSemanticsNode().id,
+        )
     }
 
     @Test
