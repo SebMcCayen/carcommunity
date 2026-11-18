@@ -34,6 +34,7 @@ import {
   type PartnerOfferStatus,
 } from './partners-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { inWindow } from './portal-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -114,6 +115,12 @@ export const updateOffer = onCall(CALLABLE_OPTS, async (request): Promise<OfferI
       throw new HttpsError('not-found', 'Partner offer not found.');
     }
     const existing = snap.data()!;
+    if (existing.redemptionMode === 'reservation') {
+      throw new HttpsError(
+        'failed-precondition',
+        'Use the partner portal to edit a reservation campaign.',
+      );
+    }
     const guard = guardEditableStatus(existing.status as string);
     if (!guard.ok) {
       throw new HttpsError(guard.code, guard.message);
@@ -174,7 +181,7 @@ export const setOfferStatus = onCall(CALLABLE_OPTS, async (request): Promise<Off
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { offerId, action, reason } = parsed.input;
+  const { offerId, action, reason, expectedVersion } = parsed.input;
   const offerRef = db.collection('offers').doc(offerId);
   const serverTimestamp = () => FieldValue.serverTimestamp();
 
@@ -188,6 +195,15 @@ export const setOfferStatus = onCall(CALLABLE_OPTS, async (request): Promise<Off
       throw new HttpsError(guard.code, guard.message);
     }
     if (guard.nextStatus === 'active') {
+      if (
+        snap.data()!.redemptionMode === 'reservation' &&
+        expectedVersion !== snap.data()!.version
+      ) {
+        throw new HttpsError(
+          'failed-precondition',
+          'Offer changed. Review the current version before activation.',
+        );
+      }
       const companyId = snap.data()!.companyId as string;
       const company = await tx.get(db.collection('companies').doc(companyId));
       if (!company.exists || company.data()!.status !== 'active') {
@@ -253,6 +269,13 @@ export const showOfferCode = onCall(
     ]);
     if (!offerSnap.exists || offerSnap.data()!.status !== 'active') {
       throw new HttpsError('not-found', 'Offer not found or not active.');
+    }
+    const company = await db.collection('companies').doc(offerSnap.data()!.companyId).get();
+    if (company.data()?.status !== 'active' || !inWindow(offerSnap.data()!, Date.now())) {
+      throw new HttpsError('not-found', 'Offer not found or not available.');
+    }
+    if (offerSnap.data()!.redemptionMode === 'reservation') {
+      throw new HttpsError('failed-precondition', 'Reserve this offer to receive a personal QR.');
     }
 
     // The code is returned here ONLY — never logged (legacy rule). The

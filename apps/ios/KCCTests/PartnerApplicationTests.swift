@@ -1,4 +1,5 @@
 import XCTest
+import CoreImage
 
 @testable import KCC
 
@@ -160,4 +161,88 @@ final class PartnerApplicationTests: XCTestCase {
         await coordinator.submit(input)
         XCTAssertEqual(coordinator.submission, .failed(.invalidInput))
     }
+
+    func testPortalApplicationPayloadSeparatesPublicProfileAndPrivateContact() throws {
+        var form = validForm()
+        form.proposedDescription = "Bilvård med personlig service"
+        form.proposedAddress = "Industrivägen 1"
+        form.publicPhone = "030012345"
+        form.selfServiceRequested = true
+        form.billboardRequested = true
+        form.billboardPlacementRequest = "Vid infarten"
+        let payload = try XCTUnwrap(PartnerApplications.input(from: form)).portalPayload
+        XCTAssertEqual(payload["action"] as? String, "submitApplication")
+        XCTAssertEqual(payload["website"] as? String, "https://example.com")
+        XCTAssertEqual(payload["description"] as? String, form.proposedDescription)
+        XCTAssertEqual(payload["address"] as? String, form.proposedAddress)
+        XCTAssertEqual(payload["publicPhone"] as? String, "030012345")
+        XCTAssertEqual(payload["contactPhone"] as? String, "0701234567")
+        XCTAssertEqual(payload["selfServiceRequested"] as? Bool, true)
+        XCTAssertEqual(payload["billboardRequested"] as? Bool, true)
+        XCTAssertNil(payload["websiteUrl"])
+        XCTAssertNil(payload["proposedDescription"])
+        XCTAssertNil(payload["submittedByUserId"])
+    }
+
+    func testCustomerOfferProjectionDecodesWithoutPrivateCounters() throws {
+        let json = #"{"offer":{"offerId":"offer-test","companyId":"company-test","title":"Test offer","teaserText":"Short text","description":"Description","terms":"Terms","percentageDiscount":null,"availableFrom":null,"availableUntil":null,"capacity":3,"remainingCount":2,"reservationDays":7,"status":"active","version":4},"reservation":null}"#
+        let response = try JSONDecoder().decode(PortalOfferResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(response.offer.remainingCount, 2)
+        XCTAssertNil(response.offer.reservedCount)
+        XCTAssertNil(response.offer.redeemedCount)
+        XCTAssertEqual(response.offer.version, 4)
+    }
+
+    func testStatisticsPeriodsExcludeTheOpenUTCMonthAcrossYearBoundary() throws {
+        let now = try XCTUnwrap(PortalDate.parse("2026-01-01T00:00:00.000Z"))
+        let months = PortalDate.closedMonths(now: now)
+        XCTAssertEqual(months.count, 12)
+        XCTAssertEqual(months.first, "2025-12")
+        XCTAssertEqual(months.last, "2025-01")
+        XCTAssertFalse(months.contains("2026-01"))
+    }
+
+    func testManagedOfferPreservesUnlimitedCapacityAndRejectsFractionalPercentage() {
+        var form = PortalOfferForm()
+        form.title = "Testförmån"; form.teaserText = "En kort sammanfattning"
+        form.description = "En beskrivning"; form.terms = "En gång per konto"
+        XCTAssertTrue(form.isValid)
+        XCTAssertTrue(form.payload(companyId: "company-test", offerId: nil)["capacity"] is NSNull)
+        form.percentage = "12,5"
+        XCTAssertFalse(form.isValid)
+        form.percentage = "20"
+        XCTAssertTrue(form.isValid)
+    }
+
+    @MainActor
+    func testPersonalQRContainsOnlyTheOpaqueServerToken() throws {
+        let token = "kcc1.synthetic-test-token-with-no-customer-details"
+        let image = try XCTUnwrap(PortalQR.image(token)?.cgImage)
+        let detector = try XCTUnwrap(CIDetector(ofType: CIDetectorTypeQRCode, context: CIContext(),
+            options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]))
+        let input = CIImage(cgImage: image).transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+        let features = detector.features(in: input).compactMap { $0 as? CIQRCodeFeature }
+        XCTAssertEqual(features.first?.messageString, token)
+        XCTAssertNil(PortalQR.image(""))
+    }
+
+
+    func testApplicationDeviceDraftOmitsLogoAndKeepsPublicPrivateFieldsSeparate() throws {
+        var form = validForm()
+        form.publicPhone = "03009999"
+        form.logoBase64 = "synthetic-image-data-that-must-not-be-persisted"
+        form.logoRightsConfirmed = true
+        XCTAssertEqual(PartnerApplications.input(from: form)?.portalPayload["logoRightsConfirmed"] as? Bool, true)
+        let draft = PortalApplicationDraft(form: form)
+        let data = try JSONEncoder().encode(draft)
+        let encoded = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertFalse(encoded.contains("synthetic-image-data"))
+        let restored = try JSONDecoder().decode(PortalApplicationDraft.self, from: data).form
+        XCTAssertNil(restored.logoBase64)
+        XCTAssertFalse(restored.logoRightsConfirmed)
+        XCTAssertEqual(restored.contactPhone, form.contactPhone)
+        XCTAssertEqual(restored.publicPhone, "03009999")
+        XCTAssertEqual(restored.companyName, form.companyName)
+    }
+
 }

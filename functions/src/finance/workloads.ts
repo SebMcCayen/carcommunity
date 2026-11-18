@@ -20,6 +20,7 @@ export interface WorkloadDefinition {
   deletesPerEvent: number;
   secondsPerEvent: number;
   bytesPerEvent: number;
+  memoryGiB?: number;
   // Queue mutations are in addition to already costed scheduled invocations.
   scheduled?: boolean;
 }
@@ -113,6 +114,20 @@ export const WORKLOADS: readonly WorkloadDefinition[] = [
     bytesPerEvent: 4 * 1024,
   },
   {
+    id: 'partners.portal',
+    labelKey: 'partnerPortal',
+    // Unmeasured pilot mix of browsing, reservations, QR and staff operations.
+    // Includes authorization, private quotas, retries and rare logo processing;
+    // the separately listed schedules own expiry and aggregate-publication work.
+    eventsPerMemberPerDay: 0.5,
+    readsPerEvent: 40,
+    writesPerEvent: 8,
+    deletesPerEvent: 1,
+    secondsPerEvent: 0.75,
+    bytesPerEvent: 64 * 1024,
+    memoryGiB: 0.5,
+  },
+  {
     id: 'chatReactionLifecycle.activeWork',
     labelKey: 'reactionCleanup',
     eventsPerMemberPerDay: 0.02,
@@ -204,7 +219,7 @@ export function buildWorkloads(
         writes: events * definition.writesPerEvent,
         deletes: events * definition.deletesPerEvent,
         cpuSeconds: seconds,
-        gibSeconds: seconds * 0.25,
+        gibSeconds: seconds * (definition.memoryGiB ?? 0.25),
         sentBytes: bytes,
       },
       sekPerMonth: 0,

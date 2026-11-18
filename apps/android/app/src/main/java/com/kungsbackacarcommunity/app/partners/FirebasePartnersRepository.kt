@@ -349,6 +349,7 @@ private fun DocumentSnapshot.toCompany(): PartnerCompany? {
         latitude = getDouble("latitude"),
         longitude = getDouble("longitude"),
         address = getString("address"),
+        logoPath = getString("logoPath"),
     )
 }
 
@@ -363,6 +364,9 @@ private fun DocumentSnapshot.toOffer(): PartnerOffer? {
         teaserText = getString("teaserText") ?: "",
         offerType = PartnerOfferType.fromWire(getString("offerType")),
         partnerCompanyName = getString("partnerCompanyName"),
+        redemptionMode = getString("redemptionMode"),
+        capacity = (get("capacity") as? Number)?.toInt(),
+        remainingCount = (get("remainingCount") as? Number)?.toInt(),
     )
 }
 

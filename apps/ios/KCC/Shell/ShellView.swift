@@ -109,6 +109,7 @@ struct ShellView: View {
     @State private var feedbackCoordinator: FeedbackCoordinator?
     @State private var openTicketsCoordinator: OpenTicketsCoordinator?
     @State private var partnerApplicationCoordinator: PartnerApplicationCoordinator?
+    @State private var partnerCompanyDestination: String?
     @State private var accountDeletionCoordinator: AccountDeletionCoordinator
     @State private var subscriptionCoordinator: SubscriptionCoordinator
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
@@ -902,7 +903,12 @@ struct ShellView: View {
             if let billboardsCoordinator {
                 BillboardMapOverlay(
                     coordinator: billboardsCoordinator,
-                    projection: mapSurface
+                    projection: mapSurface,
+                    onOpenPartner: { companyId in
+                        guard featureFlags.isEnabled(.partners), partnersCoordinator != nil else { return }
+                        partnerCompanyDestination = companyId
+                        routes = routes.opening(.partners)
+                    }
                 )
             }
             if liveLocationFeatureEnabled {
@@ -1245,14 +1251,26 @@ struct ShellView: View {
                 Button {
                     routes = routes.opening(.partnerApplication)
                 } label: {
-                    Label("shell.morePartnerApplication", systemImage: "briefcase")
+                    PortalText("portal.apply")
+                }
+                Button {
+                    routes = routes.opening(.partnerWorkspace)
+                } label: {
+                    Label(portalString("portal.workspace"), systemImage: "building.2.crop.circle")
+                }
+                if featureFlags.isEnabled(.partners) {
+                    Button {
+                        routes = routes.opening(.partnerReservations)
+                    } label: {
+                        Label(portalString("portal.myReservations"), systemImage: "qrcode")
+                    }
                 }
             }
             if partnerStatsEntryAvailable {
                 Button {
                     routes = routes.opening(.partnerStats)
                 } label: {
-                    Label("shell.morePartnerStats", systemImage: "hand.raised")
+                    Label(portalString("portal.privacySettings"), systemImage: "hand.raised")
                 }
             }
         } label: {
@@ -1694,18 +1712,30 @@ struct ShellView: View {
             if featureFlags.isEnabled(.partners), let partnersCoordinator {
                 PartnersScreen(
                     coordinator: partnersCoordinator,
-                    onBack: { routes = routes.poppingOne() }
+                    onBack: { routes = routes.poppingOne(); partnerCompanyDestination = nil },
+                    initialCompanyId: partnerCompanyDestination,
+                    sponsoredEntry: partnerCompanyDestination != nil
                 )
             } else {
                 unavailableRoute
             }
+        case .partnerWorkspace:
+            PartnerWorkspaceScreen(
+                onBack: { routes = routes.poppingOne() },
+                onApply: { routes = routes.opening(.partnerApplication) }
+            ).id(signedInUid)
+        case .partnerReservations:
+            if featureFlags.isEnabled(.partners) {
+                PartnerMyReservationsScreen(onBack: { routes = routes.poppingOne() }).id(signedInUid)
+            } else { unavailableRoute }
         case .partnerApplication:
             if let partnerApplicationCoordinator {
                 routeNavigation {
                     PartnerApplicationScreen(
                         coordinator: partnerApplicationCoordinator,
-                        onClose: { routes = routes.poppingOne() }
-                    )
+                        onClose: { routes = routes.poppingOne() },
+                        accountUID: signedInUid
+                    ).id(signedInUid)
                 }
             } else {
                 unavailableRoute
@@ -2593,6 +2623,7 @@ struct ShellView: View {
         feedbackCoordinator = nil
         openTicketsCoordinator = nil
         partnerApplicationCoordinator = nil
+        partnerCompanyDestination = nil
 
         navigationDestination = nil
         let friends = FirebaseFriendsRepository.createIfAvailable()

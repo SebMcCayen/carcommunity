@@ -1673,6 +1673,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "functions/src/finance/settings.ts"
+    },
+    {
+      "name": "partners.portal",
+      "domain": "partners",
+      "description": "Company-scoped partner application/publication, staff permissions, managed offer drafts, atomic limited reservations and short-lived online QR redemption. Administrative commands require current admin; customer claims require verified paid entitlement without an admin bypass. Aggregate statistics expose no customer identifiers, update daily and derive only from server-confirmed redemption. App Check and per-action rate limits enforced. Scheduled partners-sweepPortal expires reservations and minimizes private linkage; partners-publishStatistics publishes delayed aggregate snapshots.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/contracts/partner-portal-v1.md"
     }
   ]
 }

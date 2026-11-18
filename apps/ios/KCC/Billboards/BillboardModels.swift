@@ -28,6 +28,7 @@ struct Billboard: Equatable, Sendable {
     let callToActionValue: String?
     let availableFrom: Date?
     let availableUntil: Date?
+    var imagePath: String? = nil
 }
 
 enum BillboardVisibility {

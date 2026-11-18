@@ -104,6 +104,7 @@ export const FEATURE_FLAG_DEFAULTS = {
   crownHunt: true,
   crownHuntSpawn: false,
   partners: true,
+  partnerSelfService: false,
   partnerStats: true,
   pushNotifications: true,
   socialSharing: true,

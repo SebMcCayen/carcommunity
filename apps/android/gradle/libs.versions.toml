@@ -36,6 +36,8 @@ playServicesLocation = "21.4.0"
 playAppUpdate = "2.1.0"
 billing = "9.1.0"
 coil = "2.7.0"
+codeScanner = "16.1.0"
+zxingCore = "3.5.3"
 coroutinesTest = "1.11.0"
 junit = "4.13.2"
 # Real org.json for local unit tests only — the mockable android.jar's org.json
@@ -115,6 +117,9 @@ billing = { group = "com.android.billingclient", name = "billing-ktx", version.r
 
 # Coil — Compose image loading (avatar + vehicle photos)
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+play-services-code-scanner = { group = "com.google.android.gms", name = "play-services-code-scanner", version.ref = "codeScanner" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

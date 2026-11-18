@@ -464,6 +464,8 @@ dependencies {
 
     // Coil — Compose image loading (avatar + vehicle photos)
     implementation(libs.coil.compose)
+    implementation(libs.play.services.code.scanner)
+    implementation(libs.zxing.core)
 
     // Unit tests
     testImplementation(libs.junit)

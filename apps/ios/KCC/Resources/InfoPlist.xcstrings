@@ -1,23 +1,40 @@
 {
-  "sourceLanguage" : "sv",
-  "strings" : {
-    "NSLocationWhenInUseUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Without location access the map can't show where you are, and directions, drive recording, and live sharing won't work."
+  "sourceLanguage": "sv",
+  "strings": {
+    "NSLocationWhenInUseUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Without location access the map can't show where you are, and directions, drive recording, and live sharing won't work."
           }
         },
-        "sv" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte."
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte."
+          }
+        }
+      }
+    },
+    "NSCameraUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameran används när du väljer att skanna kundens personliga QR-kod för ett partnererbjudande."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camera is used when you choose to scan a customer’s personal QR for a partner offer."
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

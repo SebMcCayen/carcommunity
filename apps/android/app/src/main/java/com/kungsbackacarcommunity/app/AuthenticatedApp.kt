@@ -1296,6 +1296,8 @@ fun AuthenticatedApp(
             // Events route is reachable by normal navigation too, so a lingering
             // id would wrongly re-open the event on a later plain visit).
             var pendingEventDeepLinkId by remember { mutableStateOf<String?>(null) }
+            var pendingPartnerCompanyId by remember { mutableStateOf<String?>(null) }
+            var pendingPartnerFromBillboard by remember { mutableStateOf(false) }
             // Convoy id from a convoy-invite notification tap — the in-app inbox
             // row, and (once the backend sends it) the push. Consumed by
             // ConvoyRoute on entry, which clears it, so a later plain visit to
@@ -1691,13 +1693,16 @@ fun AuthenticatedApp(
                         delay((next - now + 1L).coerceAtLeast(1L))
                     }
                 }
+            val billboardLogoImages = com.kungsbackacarcommunity.app.shell.rememberBillboardLogoImages(visibleBillboards.mapNotNull { it.imagePath })
             val mapBillboardMarkers =
-                remember(visibleBillboards) {
+                remember(visibleBillboards, billboardLogoImages) {
                     visibleBillboards.map { billboard ->
                         MapBillboardMarker(
                             id = billboard.id,
                             longitude = billboard.longitude,
                             latitude = billboard.latitude,
+                            logoPath = billboard.imagePath,
+                            logoBitmap = billboard.imagePath?.let(billboardLogoImages::get),
                         )
                     }
                 }
@@ -1711,6 +1716,18 @@ fun AuthenticatedApp(
                 remember(tappedBillboardId, visibleBillboards) {
                     tappedBillboardId?.let { id -> visibleBillboards.firstOrNull { it.id == id } }
                 }
+
+            LaunchedEffect(tappedBillboard?.id, partnersEnabled) {
+                val destination = com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.directCompanyId(tappedBillboard)
+                if (destination != null && partnersEnabled) {
+                    val id = tappedBillboard?.id
+                    if (id != null) scope.launch { runCatching { billboardsRepository?.recordInteraction(id, BillboardInteractionType.OPEN) } }
+                    pendingPartnerCompanyId = destination
+                    pendingPartnerFromBillboard = true
+                    mapSurface.consumeBillboardTap()
+                    route = ShellRoute.Partners
+                }
+            }
 
             // True while a removal is in flight, so the sheet can disable its
             // remove button. Keyed to the open incident: the sheet now survives
@@ -6457,6 +6474,9 @@ fun AuthenticatedApp(
                         // state.
                         chatHubPushLink = null,
                         eventDeepLinkId = pendingEventDeepLinkId,
+                        partnerCompanyId = pendingPartnerCompanyId,
+                        partnerFromBillboard = pendingPartnerFromBillboard,
+                        onPartnerCompanyConsumed = { pendingPartnerCompanyId = null; pendingPartnerFromBillboard = false },
                         onEventDeepLinkConsumed = { pendingEventDeepLinkId = null },
                         convoyInviteDeepLinkId = pendingConvoyInviteId,
                         onConvoyInviteDeepLinkConsumed = { pendingConvoyInviteId = null },
@@ -7363,7 +7383,7 @@ fun AuthenticatedApp(
                                 // it rather than leaving an advert on screen the
                                 // member is no longer meant to be shown.
                                 val openBillboard = tappedBillboard
-                                if (openBillboard != null) {
+                                if (openBillboard != null && (!partnersEnabled || com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.directCompanyId(openBillboard) == null)) {
                                     val action =
                                         remember(openBillboard) {
                                             BillboardCallToAction.resolve(openBillboard)
@@ -7386,6 +7406,7 @@ fun AuthenticatedApp(
                                     BillboardMapPopup(
                                         headline = openBillboard.headline,
                                         message = openBillboard.message,
+                                        imagePath = openBillboard.imagePath,
                                         ctaLabel = action?.let { stringResource(it.labelRes) },
                                         onCallToAction = {
                                             val target = action ?: return@BillboardMapPopup
@@ -8795,6 +8816,9 @@ private fun RouteHost(
     // the shell's pending id once EventsRoute has taken it.
     eventDeepLinkId: String?,
     onEventDeepLinkConsumed: () -> Unit,
+    partnerCompanyId: String?,
+    partnerFromBillboard: Boolean,
+    onPartnerCompanyConsumed: () -> Unit,
     // Convoy id from a convoy-invite notification tap (null otherwise).
     // Forwarded to ConvoyRoute, which lands on its pending-invite list and — if
     // the invite is no longer there — says what became of it.
@@ -9328,6 +9352,9 @@ private fun RouteHost(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
+                    initialCompanyId = partnerCompanyId,
+                    initialFromBillboard = partnerFromBillboard,
+                    onInitialCompanyConsumed = onPartnerCompanyConsumed,
                     // Member offers require verified paid/admin access on an
                     // account that remains active in the live profile snapshot.
                     canAccessMemberOffers =

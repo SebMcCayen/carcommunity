@@ -2722,5 +2722,23 @@ service cloud.firestore {
     match /_liveSessionFences/{userId} {
       allow read, write: if false;
     }
+
+    // Partner portal: all operational customer data and aggregates are API-only.
+    match /partnerCompanyBudgets/{document=**} { allow read, write: if false; }
+    match /partnerPortalMaintenance/{document=**} { allow read, write: if false; }
+    match /partnerMembers/{document=**} { allow read, write: if false; }
+    match /partnerReservations/{document=**} { allow read, write: if false; }
+    match /partnerClaimLocks/{document=**} { allow read, write: if false; }
+    match /partnerOfferQuotas/{document=**} { allow read, write: if false; }
+    match /partnerPortalRequests/{document=**} { allow read, write: if false; }
+    match /partnerRedemptionTokens/{document=**} { allow read, write: if false; }
+    match /partnerRedemptionOutbox/{document=**} { allow read, write: if false; }
+    match /partnerRedemptionStats/{document=**} { allow read, write: if false; }
+    match /partnerRedemptionStatsPublic/{document=**} { allow read, write: if false; }
+    match /partnerRedemptionStatsState/{document=**} { allow read, write: if false; }
+    match /partnerPortalRateLimits/{document=**} { allow read, write: if false; }
+    match /partnerApplicationOwners/{document=**} { allow read, write: if false; }
+    match /partnerApplicationEmails/{document=**} { allow read, write: if false; }
+    match /partnerBillboardRequests/{requestId} { allow read: if isAdmin(); }
   }
 }
