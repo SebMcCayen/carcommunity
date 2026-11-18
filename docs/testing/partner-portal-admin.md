@@ -91,3 +91,24 @@ Intentional differences from the concept image are the existing KCC Admin
 sidebar, a visibly labelled test business/logo, real form fields and no invented
 offer cards before any offer has been submitted and approved. No production
 profile, role, offer, billboard or customer record was changed for visual QA.
+
+## Storage preflight before production activation
+
+The admin logo preview uses authenticated `getBlob`, with no persistent public
+download-token URL. Firebase's [direct-download documentation](https://firebase.google.com/docs/storage/web/download-files#cors_configuration)
+requires bucket CORS for browser SDK downloads. The isolated fixture and Node
+emulator tests cannot establish that the production bucket has this setting.
+
+`firebase/storage.cors.partner-admin.json` is a proposed **GET-only** entry for
+the two current admin Hosting origins recorded in `.firebaserc`. It is not
+automatically deployed by Firebase or by this PR. Before an authorized release,
+inspect the actual bucket's existing CORS, retain every required existing entry,
+and merge this entry (plus the exact custom admin origin, if one is used).
+Do not overwrite existing CORS blindly or use a wildcard origin as a shortcut.
+Storage Security Rules and authentication remain the authorization boundary.
+
+After the separately authorized configuration/deployment, verify a published
+company logo and a replacement logo from the real admin origin with real
+Storage/CSP/CORS. Also verify the error/fallback state without Storage access.
+The existing Hosting CSP already permits `blob:` image sources and the Firebase
+Storage API origin. No production bucket setting was read or changed here.

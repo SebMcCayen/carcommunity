@@ -1,0 +1,10 @@
+[
+  {
+    "origin": [
+      "https://kungsbacka-car-community.web.app",
+      "https://kungsbacka-car-community.firebaseapp.com"
+    ],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]
