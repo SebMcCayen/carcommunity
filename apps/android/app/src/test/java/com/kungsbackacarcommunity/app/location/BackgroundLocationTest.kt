@@ -62,8 +62,8 @@ class BackgroundLocationTest {
 
     @Test
     fun `interval constants are sane`() {
-        assertEquals(5_000L, BackgroundLocation.UPDATE_INTERVAL_MS)
-        assertEquals(2_000L, BackgroundLocation.MIN_UPDATE_INTERVAL_MS)
+        assertEquals(3_000L, BackgroundLocation.UPDATE_INTERVAL_MS)
+        assertEquals(1_000L, BackgroundLocation.MIN_UPDATE_INTERVAL_MS)
         // Fastest cadence must not exceed the nominal interval.
         assertTrue(
             BackgroundLocation.MIN_UPDATE_INTERVAL_MS <= BackgroundLocation.UPDATE_INTERVAL_MS,
@@ -142,7 +142,7 @@ class BackgroundLocationTest {
 
     @Test
     fun `a moving car publishes every fix`() {
-        // 50 km/h for the 5 s nominal interval is ~69 m — far past the threshold,
+        // Ordinary driving clears the displacement fallback at the nominal cadence,
         // so convoy arrows and focus mode keep getting fresh positions.
         assertTrue(
             BackgroundLocation.shouldPublish(
@@ -154,6 +154,40 @@ class BackgroundLocationTest {
                 nowMillis = 1_000L + BackgroundLocation.UPDATE_INTERVAL_MS,
             ),
         )
+    }
+
+    @Test
+    fun `slow moving car publishes at three seconds below distance threshold`() {
+        fun eligible(after: Long) = BackgroundLocation.shouldPublish(
+            1_000L, kungsbacka.first, kungsbacka.second,
+            kungsbacka.first + 0.000027, kungsbacka.second, 1_000L + after,
+            lastSubmittedSpeedMps = 1.0, speedMps = 1.0,
+        )
+        assertFalse(eligible(2_999L))
+        assertTrue(eligible(3_000L))
+    }
+
+    @Test
+    fun `first stop bypasses moving floor then parked fixes use sparse heartbeat`() {
+        fun eligible(previousSpeed: Double?, speed: Double?, after: Long) =
+            BackgroundLocation.shouldPublish(
+                1_000L, kungsbacka.first, kungsbacka.second,
+                kungsbacka.first, kungsbacka.second, 1_000L + after,
+                previousSpeed, speed,
+            )
+        assertTrue(eligible(12.0, 0.0, 1_000L))
+        assertFalse(eligible(0.0, 0.0, 3_000L))
+        assertFalse(eligible(12.0, null, 1_000L))
+        assertFalse(eligible(12.0, Double.NaN, 1_000L))
+        assertTrue(eligible(0.0, 0.0, BackgroundLocation.STATIONARY_HEARTBEAT_MS))
+    }
+
+    @Test
+    fun `provider bursts cannot bypass publication floor even after large displacement`() {
+        assertFalse(BackgroundLocation.shouldPublish(
+            1_000L, kungsbacka.first, kungsbacka.second,
+            kungsbacka.first + 0.001, kungsbacka.second, 3_999L,
+        ))
     }
 
     @Test

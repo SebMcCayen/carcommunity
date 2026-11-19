@@ -17,14 +17,18 @@ import kotlin.math.sqrt
  */
 object BackgroundLocation {
     /** Requested cadence for fused-location updates while sharing. */
-    const val UPDATE_INTERVAL_MS = 5_000L
+    const val UPDATE_INTERVAL_MS = 3_000L
 
     /** Fastest cadence we will accept updates at (throttles bursty fixes). */
-    const val MIN_UPDATE_INTERVAL_MS = 2_000L
+    const val MIN_UPDATE_INTERVAL_MS = 1_000L
+
+    /** Publication is capped independently of provider bursts on both platforms. */
+    const val MOVING_PUBLISH_INTERVAL_MS = 3_000L
+    const val MOVING_SPEED_MPS = 0.5
 
     /**
      * How far the device must have moved since the last SUBMITTED fix before a
-     * new one is worth a network round-trip. At 50 km/h this is reached in
+     * new one is worth a network round-trip when speed is unavailable. At 50 km/h this is reached in
      * roughly a second, so on a moving convoy every fix at [UPDATE_INTERVAL_MS]
      * publishes and the convoy arrows/focus stay live; parked at a meet, GPS
      * jitter of a few metres stops generating callable traffic.
@@ -77,6 +81,8 @@ object BackgroundLocation {
         latitude: Double,
         longitude: Double,
         nowMillis: Long,
+        lastSubmittedSpeedMps: Double? = null,
+        speedMps: Double? = null,
     ): Boolean {
         if (lastSubmittedAtMillis == null ||
             lastSubmittedLatitude == null ||
@@ -84,11 +90,23 @@ object BackgroundLocation {
         ) {
             return true
         }
-        if (nowMillis - lastSubmittedAtMillis >= STATIONARY_HEARTBEAT_MS) return true
+        // One newly observed stop bypasses the moving floor so viewers do not
+        // continue predicting motion until the stationary heartbeat.
+        if (isMoving(lastSubmittedSpeedMps) && isStopped(speedMps)) return true
+        val elapsed = nowMillis - lastSubmittedAtMillis
+        if (elapsed < MOVING_PUBLISH_INTERVAL_MS) return false
+        if (elapsed >= STATIONARY_HEARTBEAT_MS) return true
+        if (isMoving(speedMps)) return true
         val moved =
             distanceMeters(lastSubmittedLatitude, lastSubmittedLongitude, latitude, longitude)
         return moved >= MOVEMENT_THRESHOLD_METERS
     }
+
+    fun isMoving(speedMps: Double?): Boolean =
+        speedMps != null && speedMps.isFinite() && speedMps > MOVING_SPEED_MPS
+
+    private fun isStopped(speedMps: Double?): Boolean =
+        speedMps != null && speedMps.isFinite() && speedMps in 0.0..MOVING_SPEED_MPS
 
     /** Great-circle distance in metres between two WGS-84 coordinates. */
     fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

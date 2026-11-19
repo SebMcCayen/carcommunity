@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.shell
 
+import com.kungsbackacarcommunity.app.map.DriverMotionPoint
+import com.kungsbackacarcommunity.app.map.DriverMotionTimeline
+import com.kungsbackacarcommunity.app.map.DriverMotionPolicy
+
 /** One display frame. The trail is an immutable accepted prefix ending at [point]. */
 internal data class RecordingMapFrame(
     val point: MapPoint,
@@ -28,6 +32,7 @@ internal class RecordingMapMotion {
         val cumulativeMeters: DoubleArray,
     )
 
+    private var prediction = DriverMotionTimeline()
     private var latestFix: MapRecordingPosition? = null
     private var updatedMs: Long? = null
     private var renderedMs: Long? = null
@@ -35,6 +40,7 @@ internal class RecordingMapMotion {
     private var movement: Movement? = null
 
     fun reset() {
+        prediction = DriverMotionTimeline()
         latestFix = null
         updatedMs = null
         renderedMs = null
@@ -67,6 +73,14 @@ internal class RecordingMapMotion {
             rawDelta in 1L..MAX_CONTINUITY_GAP_MS && displayDelta in 0L..MAX_CONTINUITY_GAP_MS &&
             current.completedCount >= firstCount + lastBreak - 1 && current.completedCount < fix.pointCount
 
+        prediction.update(
+            DriverMotionPoint(fix.point.latitude, fix.point.longitude, targetBearing),
+            recordedAt = fix.elapsedRealtimeMs,
+            sampleAgeMs = nowMs - fix.elapsedRealtimeMs,
+            nowMs = nowMs,
+            speedMps = fix.speedMps,
+            courseDegrees = targetBearing,
+        )
         latestFix = fix
         updatedMs = nowMs
         renderedMs = nowMs
@@ -100,7 +114,7 @@ internal class RecordingMapMotion {
         val firstTargetIndex = startIndex - historyStart
         movement = Movement(
             startedMs = nowMs,
-            durationMs = rawDelta.coerceAtMost(MAX_ANIMATION_MS),
+            durationMs = DriverMotionPolicy.CORRECTION_MS,
             start = start,
             targetBearing = targetBearing,
             route = cached,
@@ -114,7 +128,7 @@ internal class RecordingMapMotion {
     fun frame(nowMs: Long): RecordingMapFrame? = stateAt(nowMs)?.frame
 
     private fun stateAt(nowMs: Long): Rendered? {
-        val active = movement ?: return rendered
+        val active = movement ?: return rendered?.let { predicted(it, nowMs) }
         val effectiveNow = maxOf(nowMs, renderedMs ?: nowMs)
         val fraction = ((effectiveNow - active.startedMs).toDouble() / active.durationMs).coerceIn(0.0, 1.0)
         val targets = active.route.subList(active.firstTargetIndex, active.route.size)
@@ -147,10 +161,29 @@ internal class RecordingMapMotion {
         rendered = result
         renderedMs = effectiveNow
         if (fraction >= 1.0 || !result.frame.animating) movement = null
-        return result
+        return if (fraction >= 1.0) predicted(result, effectiveNow) else result
+    }
+
+    private fun predicted(base: Rendered, nowMs: Long): Rendered {
+        val point = prediction.frame(nowMs) ?: return base
+        val displayed = MapPoint(point.longitude, point.latitude)
+        return base.copy(frame = base.frame.copy(
+            point = displayed,
+            bearingDegrees = point.bearing ?: base.frame.bearingDegrees,
+            trail = TrailView(base.frame.trail, base.frame.trail.size, displayed),
+            animating = prediction.isAnimating(nowMs),
+        ))
     }
 
     private fun snap(fix: MapRecordingPosition, source: List<MapPoint>, lastBreak: Int, bearing: Double?) {
+        // A discontinuity/restart is a new presentation epoch. Do not let a
+        // previous correction offset drag a snapped source back to its old road.
+        prediction = DriverMotionTimeline().also { next ->
+            val now = requireNotNull(updatedMs)
+            next.update(DriverMotionPoint(fix.point.latitude, fix.point.longitude, bearing),
+                fix.elapsedRealtimeMs, now - fix.elapsedRealtimeMs, now,
+                fix.speedMps?.takeIf { now - fix.elapsedRealtimeMs in 0L..DriverMotionPolicy.PRESENTATION_DELAY_MS }, bearing)
+        }
         val start = historyStart(source, 1, source.size, fix.point, lastBreak)
         rendered = Rendered(RecordingMapFrame(fix.point, bearing, source.subList(start, source.size).toList(), false), fix.pointCount)
         movement = null
@@ -185,7 +218,6 @@ internal class RecordingMapMotion {
     }
 
     companion object {
-        private const val MAX_ANIMATION_MS = 2_000L
         private const val MAX_CONTINUITY_GAP_MS = 5_000L
 
         private fun valid(point: MapPoint): Boolean = point.latitude.isFinite() && point.longitude.isFinite() &&

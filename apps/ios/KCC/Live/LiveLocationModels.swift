@@ -158,6 +158,23 @@ struct LiveMarker: Equatable, Sendable {
     let recordedAt: Date?
     let accuracyMeters: Double?
 
+    let headingDegrees: Double?
+    let speedMetersPerSecond: Double?
+
+    init(uid: String, latitude: Double, longitude: Double, displayName: String?,
+         imagePath: String?, recordedAt: Date?, accuracyMeters: Double?,
+         headingDegrees: Double? = nil, speedMetersPerSecond: Double? = nil) {
+        self.uid = uid
+        self.latitude = latitude
+        self.longitude = longitude
+        self.displayName = displayName
+        self.imagePath = imagePath
+        self.recordedAt = recordedAt
+        self.accuracyMeters = accuracyMeters
+        self.headingDegrees = headingDegrees
+        self.speedMetersPerSecond = speedMetersPerSecond
+    }
+
     static func fromMap(uid: String, _ map: [String: Any]) -> LiveMarker? {
         guard !uid.isEmpty,
               let latitude = number(map["latitude"]),
@@ -173,7 +190,9 @@ struct LiveMarker: Equatable, Sendable {
             displayName: clean(map["displayName"] as? String),
             imagePath: clean(mainCar?["imagePath"] as? String),
             recordedAt: (map["recordedAt"] as? String).flatMap(LiveIsoInstant.parse),
-            accuracyMeters: number(map["accuracyMeters"]).flatMap { $0 >= 0 ? $0 : nil }
+            accuracyMeters: number(map["accuracyMeters"]).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil },
+            headingDegrees: number(map["headingDegrees"]).flatMap { $0.isFinite && (0...360).contains($0) ? $0 : nil },
+            speedMetersPerSecond: number(map["speedMetersPerSecond"]).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
         )
     }
 
@@ -229,11 +248,12 @@ enum LiveLocation {
 /// The values are the battery/traffic contract both platforms share; retune
 /// them together (see the Kotlin source for each constant's full rationale).
 enum LiveShareCadence {
-    /// Requested cadence for provider fixes while sharing (~5 s).
-    static let updateInterval: TimeInterval = 5
+    /// Nominal moving publication cadence, matching Android.
+    static let updateInterval: TimeInterval = 3
 
     /// Fastest cadence we will accept updates at (throttles bursty fixes).
-    static let minUpdateInterval: TimeInterval = 2
+    static let minUpdateInterval: TimeInterval = 3
+    static let movingSpeedMetersPerSecond = 0.5
 
     /// How far the device must have moved since the last SUBMITTED fix before
     /// a new one is worth a network round-trip.
@@ -254,26 +274,31 @@ enum LiveShareCadence {
     /// heartbeat qualifies; the first fix of a session always does; and
     /// nothing publishes faster than ``minUpdateInterval``.
     ///
-    /// The min-interval floor is enforced HERE on iOS, unlike Android's
-    /// `shouldPublish`: the fused request there caps delivery itself
-    /// (`setMinUpdateIntervalMillis`), while CoreLocation offers no such
-    /// knob and can deliver well above 1 Hz — without this gate a moving
-    /// device would publish at whatever rate fixes arrive.
+    /// Both platforms enforce the publication floor independently of provider
+    /// delivery. A first observed stop bypasses it, then uses the sparse heartbeat.
     static func shouldPublish(
         lastSubmittedAt: Date?,
         lastSubmittedLatitude: Double?,
         lastSubmittedLongitude: Double?,
         latitude: Double,
         longitude: Double,
-        now: Date
+        now: Date,
+        lastSubmittedSpeedMetersPerSecond: Double? = nil,
+        speedMetersPerSecond: Double? = nil
     ) -> Bool {
         guard
             let lastSubmittedAt,
             let lastSubmittedLatitude,
             let lastSubmittedLongitude
         else { return true }
+        // A newly observed stop is published once immediately, then returns to
+        // the sparse heartbeat instead of leaving viewers predicting motion.
+        if isMoving(lastSubmittedSpeedMetersPerSecond),
+           let speed = speedMetersPerSecond, speed.isFinite,
+           speed >= 0, speed <= movingSpeedMetersPerSecond { return true }
         if now.timeIntervalSince(lastSubmittedAt) < minUpdateInterval { return false }
         if now.timeIntervalSince(lastSubmittedAt) >= stationaryHeartbeat { return true }
+        if isMoving(speedMetersPerSecond) { return true }
         let moved = distanceMeters(
             lat1: lastSubmittedLatitude,
             lon1: lastSubmittedLongitude,
@@ -281,6 +306,11 @@ enum LiveShareCadence {
             lon2: longitude
         )
         return moved >= movementThresholdMeters
+    }
+
+    static func isMoving(_ speed: Double?) -> Bool {
+        guard let speed, speed.isFinite else { return false }
+        return speed > movingSpeedMetersPerSecond
     }
 
     /// Great-circle distance in metres between two WGS-84 coordinates
@@ -320,5 +350,153 @@ enum LiveIsoInstant {
 
     static func parse(_ iso: String) -> Date? {
         (try? Date(iso, strategy: fractional)) ?? (try? Date(iso, strategy: wholeSeconds))
+    }
+}
+
+/// Shared Android/iOS presentation budget. Transport latency remains separate.
+enum DriverMotionPolicy {
+    static let presentationDelay: TimeInterval = 0.250
+    static let correctionDuration: TimeInterval = 0.250
+    static let maximumPrediction: TimeInterval = 3.500
+    static let maximumVelocitySampleGap: TimeInterval = 5
+    static let frameInterval: TimeInterval = 1.0 / 60
+    static let maximumSpeedMetersPerSecond = 55.6
+}
+
+struct DriverMotionPoint: Equatable, Sendable {
+    let latitude: Double
+    let longitude: Double
+    var bearing: Double? = nil
+}
+
+/// Presentation-only, local monotonic timeline. Publisher timestamps determine
+/// ordering; source age maps the fix into the viewer clock. Never persist or
+/// upload the output, and never invent movement beyond the bounded horizon.
+struct DriverMotionTimeline {
+    private struct Sample {
+        let point: DriverMotionPoint
+        let sourceTime: TimeInterval
+        let recordedAt: Date?
+        let speed: Double
+        let course: Double?
+    }
+    private var previous: Sample?
+    private var latest: Sample?
+    private var correctedAt: TimeInterval = 0
+    private var latitudeOffset = 0.0
+    private var longitudeOffset = 0.0
+    private var bearingOffset = 0.0
+    private var lastRenderTime = -Double.greatestFiniteMagnitude
+
+    @discardableResult
+    mutating func update(
+        _ point: DriverMotionPoint, recordedAt: Date?, sampleAge: TimeInterval,
+        now: TimeInterval, speed: Double? = nil, course: Double? = nil
+    ) -> Bool {
+        guard point.latitude.isFinite, point.longitude.isFinite,
+              abs(point.latitude) <= 90, abs(point.longitude) <= 180,
+              now.isFinite, sampleAge.isFinite else { return false }
+        let before = latest
+        if let old = before?.recordedAt, let recordedAt, recordedAt <= old { return false }
+        if recordedAt == nil, before?.recordedAt == nil, before?.point == point { return false }
+        let time = max(now, lastRenderTime)
+        let oldFrame = frame(at: time)
+        let sourceTime = time - max(0, sampleAge)
+        let interval = before.map { sourceTime - $0.sourceTime }
+        let estimated: Double?
+        if let before, let interval, interval > 0,
+           interval <= DriverMotionPolicy.maximumVelocitySampleGap {
+            estimated = LiveShareCadence.distanceMeters(
+                lat1: before.point.latitude, lon1: before.point.longitude,
+                lat2: point.latitude, lon2: point.longitude
+            ) / interval
+        } else { estimated = nil }
+        let candidateSpeed = speed.flatMap { $0.isFinite && (0...DriverMotionPolicy.maximumSpeedMetersPerSecond).contains($0) ? $0 : nil }
+            ?? estimated.flatMap { $0.isFinite && $0 <= DriverMotionPolicy.maximumSpeedMetersPerSecond ? $0 : nil } ?? 0
+        let acceptedSpeed = recordedAt != nil && (0...DriverMotionPolicy.maximumPrediction).contains(sampleAge) ? candidateSpeed : 0
+        let acceptedCourse: Double?
+        if let value = course, value.isFinite { acceptedCourse = Self.normalized(value) }
+        else if let value = point.bearing, value.isFinite { acceptedCourse = Self.normalized(value) }
+        else if let before, let estimated, estimated > 0.1 { acceptedCourse = Self.course(from: before.point, to: point) }
+        else { acceptedCourse = nil }
+        let acceptedPoint = DriverMotionPoint(latitude: point.latitude, longitude: point.longitude,
+            bearing: point.bearing.flatMap { $0.isFinite ? Self.normalized($0) : nil })
+        previous = before
+        latest = Sample(point: acceptedPoint, sourceTime: sourceTime, recordedAt: recordedAt,
+                        speed: acceptedSpeed, course: acceptedCourse)
+        let target = target(at: time)
+        latitudeOffset = oldFrame.map { $0.latitude - target.latitude } ?? 0
+        longitudeOffset = oldFrame.map { Self.delta(from: target.longitude, to: $0.longitude) } ?? 0
+        if let from = oldFrame?.bearing, let to = target.bearing {
+            bearingOffset = Self.delta(from: to, to: from)
+        } else { bearingOffset = 0 }
+        correctedAt = time
+        return true
+    }
+
+    mutating func frame(at now: TimeInterval) -> DriverMotionPoint? {
+        guard latest != nil else { return nil }
+        let time = max(now, lastRenderTime)
+        lastRenderTime = time
+        let target = target(at: time)
+        let remaining = min(1, max(0, 1 - (time - correctedAt) / DriverMotionPolicy.correctionDuration))
+        if remaining == 0 || (latitudeOffset == 0 && longitudeOffset == 0 && bearingOffset == 0) { return target }
+        return DriverMotionPoint(
+            latitude: min(90, max(-90, target.latitude + latitudeOffset * remaining)),
+            longitude: Self.longitude(target.longitude + longitudeOffset * remaining),
+            bearing: target.bearing.map { Self.normalized($0 + bearingOffset * remaining) }
+        )
+    }
+
+    func isAnimating(at now: TimeInterval) -> Bool {
+        guard let latest else { return false }
+        let correcting = now - correctedAt < DriverMotionPolicy.correctionDuration
+            && (latitudeOffset != 0 || longitudeOffset != 0 || bearingOffset != 0)
+        return correcting || (latest.speed > 0 && latest.course != nil
+            && now < latest.sourceTime + DriverMotionPolicy.presentationDelay + DriverMotionPolicy.maximumPrediction)
+    }
+
+    private func target(at now: TimeInterval) -> DriverMotionPoint {
+        guard let latest else { preconditionFailure("A sample is required") }
+        let displayTime = now - DriverMotionPolicy.presentationDelay
+        if let previous, latest.sourceTime > previous.sourceTime, displayTime < latest.sourceTime {
+            let fraction = min(1, max(0, (displayTime - previous.sourceTime) / (latest.sourceTime - previous.sourceTime)))
+            return Self.interpolate(previous.point, latest.point, fraction: fraction)
+        }
+        let forecast = min(DriverMotionPolicy.maximumPrediction, max(0, displayTime - latest.sourceTime))
+        guard forecast > 0, latest.speed > 0, let course = latest.course else { return latest.point }
+        return Self.destination(latest.point, course: course, meters: latest.speed * forecast)
+    }
+
+    static func interpolate(_ a: DriverMotionPoint, _ b: DriverMotionPoint, fraction: Double) -> DriverMotionPoint {
+        if fraction <= 0 { return a }
+        if fraction >= 1 { return b }
+        let bearing: Double?
+        if let from = a.bearing, let to = b.bearing {
+            bearing = normalized(from + delta(from: from, to: to) * fraction)
+        } else { bearing = b.bearing ?? a.bearing }
+        return DriverMotionPoint(latitude: a.latitude + (b.latitude - a.latitude) * fraction,
+                                 longitude: a.longitude == b.longitude ? a.longitude : longitude(a.longitude + delta(from: a.longitude, to: b.longitude) * fraction),
+                                 bearing: bearing)
+    }
+    private static func normalized(_ value: Double) -> Double {
+        (value.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
+    }
+    private static func longitude(_ value: Double) -> Double { normalized(value + 180) - 180 }
+    private static func delta(from: Double, to: Double) -> Double { normalized(to - from + 180) - 180 }
+    private static func course(from a: DriverMotionPoint, to b: DriverMotionPoint) -> Double {
+        let lon = delta(from: a.longitude, to: b.longitude) * .pi / 180
+        let aLat = a.latitude * .pi / 180
+        let bLat = b.latitude * .pi / 180
+        return normalized(atan2(sin(lon) * cos(bLat), cos(aLat) * sin(bLat) - sin(aLat) * cos(bLat) * cos(lon)) * 180 / .pi)
+    }
+    private static func destination(_ point: DriverMotionPoint, course: Double, meters: Double) -> DriverMotionPoint {
+        let radius = meters / 6_371_000
+        let lat = point.latitude * .pi / 180
+        let angle = course * .pi / 180
+        let nextLat = asin(min(1, max(-1, sin(lat) * cos(radius) + cos(lat) * sin(radius) * cos(angle))))
+        let nextLon = point.longitude * .pi / 180 + atan2(sin(angle) * sin(radius) * cos(lat), cos(radius) - sin(lat) * sin(nextLat))
+        return DriverMotionPoint(latitude: nextLat * 180 / .pi,
+                                 longitude: longitude(nextLon * 180 / .pi), bearing: point.bearing ?? course)
     }
 }

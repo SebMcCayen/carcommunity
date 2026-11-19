@@ -289,7 +289,7 @@ class LiveMarkerSmoothingTest {
      * must not then crawl for minutes.
      */
     @Test
-    fun theGlideFollowsTheArrivalCadenceWithinBounds() {
+    fun theCorrectionBudgetIsTheSameRegardlessOfArrivalCadence() {
         assertEquals(
             LiveMarkerSmoothing.GLIDE_DEFAULT_MS,
             LiveMarkerSmoothing.glideDurationMillis(null),
@@ -298,7 +298,7 @@ class LiveMarkerSmoothingTest {
             LiveMarkerSmoothing.GLIDE_DEFAULT_MS,
             LiveMarkerSmoothing.glideDurationMillis(0L),
         )
-        assertEquals(2_000L, LiveMarkerSmoothing.glideDurationMillis(2_000L))
+        assertEquals(250L, LiveMarkerSmoothing.glideDurationMillis(2_000L))
         assertEquals(
             LiveMarkerSmoothing.GLIDE_MIN_MS,
             LiveMarkerSmoothing.glideDurationMillis(10L),
@@ -344,12 +344,13 @@ class LiveMarkerSmoothingTest {
         val atStart = smoother.rendered(second, t0 + 1_000L).single()
         assertEquals("still at the old position", kungsbackaLat, atStart.latitude, 1e-12)
 
-        val midway = smoother.rendered(second, t0 + 1_500L).single()
+        val midway = smoother.rendered(second, t0 + 1_125L).single()
         assertTrue("moved off the old position", midway.latitude > kungsbackaLat)
         assertTrue("has not arrived yet", midway.latitude < movedTo)
 
         val settled = smoother.rendered(second, t0 + 10_000L).single()
-        assertEquals("lands exactly on the reported fix", movedTo, settled.latitude, 0.0)
+        assertTrue("a moving marker may predict briefly beyond its sample", settled.latitude >= movedTo)
+        assertEquals("then freezes at the bounded prediction", settled, smoother.rendered(second, t0 + 20_000L).single())
         assertFalse("and stops asking for frames", smoother.isGliding(t0 + 10_000L))
     }
 

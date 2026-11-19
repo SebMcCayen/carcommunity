@@ -411,6 +411,9 @@ struct ConvoyMapAwarenessOverlay: View {
     var badgeViewerID: String? = nil
     var onDrawnUIDsChanged: (Set<String>) -> Void = { _ in }
 
+    @State private var motion = DriverMotionRoster()
+    @State private var presented: [ConvoyMemberPosition] = []
+
     var body: some View {
         GeometryReader { geometry in
             TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -435,6 +438,15 @@ struct ConvoyMapAwarenessOverlay: View {
                 }
             }
         }
+        .task(id: members) {
+            let now = ProcessInfo.processInfo.systemUptime
+            motion.update(members, now: now, wallNow: Date())
+            presented = motion.rendered(members, at: now)
+            while motion.isAnimating(at: ProcessInfo.processInfo.systemUptime), !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(DriverMotionPolicy.frameInterval)) } catch { return }
+                presented = motion.rendered(members, at: ProcessInfo.processInfo.systemUptime)
+            }
+        }
         .onDisappear { onDrawnUIDsChanged([]) }
         .allowsHitTesting(onSelect != nil)
         .accessibilityElement(children: .contain)
@@ -445,7 +457,7 @@ struct ConvoyMapAwarenessOverlay: View {
             return ConvoyPlacements(onScreen: [], offScreen: [])
         }
         return ConvoyArrowPlanner.plan(
-            members: members,
+            members: presented.filter { item in members.contains { $0.uid == item.uid } },
             camera: camera,
             viewportWidth: size.width,
             viewportHeight: size.height,
