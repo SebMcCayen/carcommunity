@@ -482,6 +482,14 @@
 		ED27A1E471A4323C49C03123 /* PartnerQRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096BE0E843B02B5C3CF4AAE2 /* PartnerQRScanner.swift */; };
 		D95A25198240B8451C7CE49F /* PartnerReservationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73D36B8F75ABD64D25D2EE3 /* PartnerReservationViews.swift */; };
 		5D8EB3E54A292A8922887251 /* PartnerPortal.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 637DDA202B0465239DFAEBDD /* PartnerPortal.xcstrings */; };
+		67A0522D4DE1ABE411B3D8C2 /* MapCameraResumePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94143779541C129C81DD2C15 /* MapCameraResumePolicy.swift */; };
+		B8EFC355540C77F85AC8B04D /* MapDensityOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C377379A12E046648347FB8E /* MapDensityOverlay.swift */; };
+		01ED35119B47FBAC0FACD003 /* MapDensityPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEFC21B4A440CB85BF7C09D1 /* MapDensityPolicy.swift */; };
+		18334F5BCE6442DCAF6F2439 /* MapPresenceLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3911BBBB2FF0DF085CDAD63 /* MapPresenceLayer.swift */; };
+		A079C7B1FD811C3F0456F93D /* MapPresencePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1F24FA5993299F0BCDDA5D /* MapPresencePolicy.swift */; };
+		93273B3B9A5321C1F48C6054 /* MapCameraResumePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05147463551E15DFD1D12166 /* MapCameraResumePolicyTests.swift */; };
+		184BDE088DA813EFBCE5C130 /* MapDensityPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D27EB67F7199507438C425 /* MapDensityPolicyTests.swift */; };
+		DD1D60D95BE0B0F29B0AE129 /* MapPresencePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D945C18BF584BEA13F4A5E6A /* MapPresencePolicyTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -971,6 +979,14 @@
 		096BE0E843B02B5C3CF4AAE2 /* PartnerQRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerQRScanner.swift; sourceTree = "<group>"; };
 		B73D36B8F75ABD64D25D2EE3 /* PartnerReservationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerReservationViews.swift; sourceTree = "<group>"; };
 		637DDA202B0465239DFAEBDD /* PartnerPortal.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = PartnerPortal.xcstrings; sourceTree = "<group>"; };
+		94143779541C129C81DD2C15 /* MapCameraResumePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCameraResumePolicy.swift; sourceTree = "<group>"; };
+		C377379A12E046648347FB8E /* MapDensityOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapDensityOverlay.swift; sourceTree = "<group>"; };
+		CEFC21B4A440CB85BF7C09D1 /* MapDensityPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapDensityPolicy.swift; sourceTree = "<group>"; };
+		C3911BBBB2FF0DF085CDAD63 /* MapPresenceLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPresenceLayer.swift; sourceTree = "<group>"; };
+		7F1F24FA5993299F0BCDDA5D /* MapPresencePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPresencePolicy.swift; sourceTree = "<group>"; };
+		05147463551E15DFD1D12166 /* MapCameraResumePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCameraResumePolicyTests.swift; sourceTree = "<group>"; };
+		D4D27EB67F7199507438C425 /* MapDensityPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapDensityPolicyTests.swift; sourceTree = "<group>"; };
+		D945C18BF584BEA13F4A5E6A /* MapPresencePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPresencePolicyTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1553,6 +1569,11 @@
 				F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */,
 				00786BDC5D7D80DF3558096D /* ShellView.swift */,
 				D310DD7A144B4F601CF0B1B7 /* TranslucentPanelView.swift */,
+				94143779541C129C81DD2C15 /* MapCameraResumePolicy.swift */,
+				C377379A12E046648347FB8E /* MapDensityOverlay.swift */,
+				CEFC21B4A440CB85BF7C09D1 /* MapDensityPolicy.swift */,
+				C3911BBBB2FF0DF085CDAD63 /* MapPresenceLayer.swift */,
+				7F1F24FA5993299F0BCDDA5D /* MapPresencePolicy.swift */,
 			);
 			path = Shell;
 			sourceTree = "<group>";
@@ -1845,6 +1866,9 @@
 				E75EB6E2E820DCDA7E57E20C /* WelcomeFlowTests.swift */,
 				17BCC930A79BCCE94D57464E /* DriverFeed */,
 				D4AB2B5B8163CD602E2EAE3C /* Resources */,
+				05147463551E15DFD1D12166 /* MapCameraResumePolicyTests.swift */,
+				D4D27EB67F7199507438C425 /* MapDensityPolicyTests.swift */,
+				D945C18BF584BEA13F4A5E6A /* MapPresencePolicyTests.swift */,
 			);
 			path = KCCTests;
 			sourceTree = "<group>";
@@ -2407,6 +2431,11 @@
 				CD2027F9BB2FF98CDB28BA22 /* WelcomeGateView.swift in Sources */,
 				36162ECF083352070B3E5A44 /* WelcomeScreen.swift in Sources */,
 				E74AF2642E6FF28D9B30E23B /* WhatsNewViews.swift in Sources */,
+				67A0522D4DE1ABE411B3D8C2 /* MapCameraResumePolicy.swift in Sources */,
+				B8EFC355540C77F85AC8B04D /* MapDensityOverlay.swift in Sources */,
+				01ED35119B47FBAC0FACD003 /* MapDensityPolicy.swift in Sources */,
+				18334F5BCE6442DCAF6F2439 /* MapPresenceLayer.swift in Sources */,
+				A079C7B1FD811C3F0456F93D /* MapPresencePolicy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2530,6 +2559,9 @@
 				EBAED2446DD015CA190171AC /* UserProfileModelsTests.swift in Sources */,
 				62938187623A99172E77D9D8 /* VehicleCatalogueTests.swift in Sources */,
 				F093F651023320CCBAA60281 /* WelcomeFlowTests.swift in Sources */,
+				93273B3B9A5321C1F48C6054 /* MapCameraResumePolicyTests.swift in Sources */,
+				184BDE088DA813EFBCE5C130 /* MapDensityPolicyTests.swift in Sources */,
+				DD1D60D95BE0B0F29B0AE129 /* MapPresencePolicyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

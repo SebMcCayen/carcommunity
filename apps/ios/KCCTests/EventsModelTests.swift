@@ -112,4 +112,49 @@ final class EventsModelTests: XCTestCase {
         XCTAssertTrue(MemberGating.allows(isActiveMember: false))
         XCTAssertTrue(MemberGating.allows(isActiveMember: true))
     }
+    private func mapEvent(_ id: String, startsAt: Date? = nil, endsAt: Date? = nil,
+                          status: EventStatus = .published, latitude: Double? = 57.5,
+                          longitude: Double? = 12.0) -> EventSummary {
+        EventSummary(id: id, title: id, summary: nil, startsAt: startsAt, endsAt: endsAt,
+            approximateArea: nil, locationName: nil, latitude: latitude, longitude: longitude,
+            isOfficial: false, status: status, counts: .empty, createdByUserId: "public-author")
+    }
+
+    func testMapPinsRequirePublishedAndBothPublicCoordinates() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let events = [mapEvent("public"), mapEvent("no-lat", latitude: nil),
+            mapEvent("no-lng", longitude: nil), mapEvent("draft", status: .draft),
+            mapEvent("cancelled", status: .cancelled), mapEvent("completed", status: .completed)]
+        // Public community locations do not inherit author-block/detail gates.
+        XCTAssertEqual(Events.mapPinEvents(events, now: now).map(\.id), ["public"])
+    }
+
+    func testMapPinCutoffIsInclusiveExplicitEndElseStartAndKeepsUnknownTimes() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let past = now.addingTimeInterval(-1)
+        let future = now.addingTimeInterval(1)
+        let events = [mapEvent("untimed"), mapEvent("start-now", startsAt: now),
+            mapEvent("start-past", startsAt: past), mapEvent("ongoing", startsAt: past, endsAt: future),
+            mapEvent("end-now", startsAt: past, endsAt: now),
+            mapEvent("end-past", startsAt: future, endsAt: past)]
+        XCTAssertEqual(Events.mapPinEvents(events, now: now).map(\.id),
+            ["untimed", "start-now", "ongoing", "end-now"])
+        XCTAssertEqual(Events.mapPinEvents(events, now: now.addingTimeInterval(0.001)).map(\.id),
+            ["untimed", "ongoing"])
+    }
+
+    func testNextPinExpiryOnlyConsidersCurrentlyEligibleTimedPins() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let past = now.addingTimeInterval(-1)
+        let future = now.addingTimeInterval(10)
+        let events = [mapEvent("untimed"), mapEvent("past", startsAt: past),
+            mapEvent("unpositioned", startsAt: now, latitude: nil),
+            mapEvent("draft", startsAt: now, status: .draft),
+            mapEvent("later", startsAt: future), mapEvent("next", endsAt: now)]
+        XCTAssertEqual(Events.nextPinExpiry(events, now: now), now)
+        XCTAssertEqual(Events.nextPinExpiry(events, now: now.addingTimeInterval(0.001)), future)
+        XCTAssertNil(Events.nextPinExpiry(events, now: future.addingTimeInterval(0.001)))
+        XCTAssertNil(Events.nextPinExpiry([], now: now))
+    }
+
 }

@@ -236,6 +236,7 @@ struct ShellView: View {
                 guard phase == .active, signedInUid != nil else { return }
                 appUpdateCoordinator.scheduleRequiredUpdateRecheck()
                 driveRecordingCoordinator?.retryPendingRouteUploads()
+                eventsCoordinator?.refreshMapPins()
             }
             // Own the idle timer at shell scope so tabs, routes and sheets
             // do not interrupt an active live session's screen-awake demand.
@@ -310,6 +311,8 @@ struct ShellView: View {
         invitationAnswerTask = nil
         notificationsCoordinator?.stopObserving()
         billboardsCoordinator?.stop()
+        eventsCoordinator?.stop()
+        mapSurface.setEventMarkers([])
         clubsCoordinator?.stop()
         mapSurface.setBillboardMarkers([])
     }
@@ -647,6 +650,11 @@ struct ShellView: View {
             if let target = crownHuntComposition?.mapCoordinator?.selectedTarget, target.id == id {
                 mapSurface.centerOn(MapPoint(longitude: target.longitude, latitude: target.latitude))
             }
+        case .event(let id):
+            if let item = eventsCoordinator?.mapEvent(id: id),
+               let longitude = item.longitude, let latitude = item.latitude {
+                mapSurface.centerOn(MapPoint(longitude: longitude, latitude: latitude))
+            }
         case .incident(let id):
             if let item = incidentMapCoordinator?.selectedIncident, item.id == id {
                 mapSurface.centerOn(MapPoint(longitude: item.longitude, latitude: item.latitude))
@@ -903,6 +911,13 @@ struct ShellView: View {
                     projection: mapSurface,
                     ownFix: crownHuntComposition?.mapCoordinator?.latestFix
                 )
+            }
+            if let eventsCoordinator {
+                EventMapOverlay(coordinator: eventsCoordinator, projection: mapSurface) { id in
+                    guard eventsCoordinator.mapEvent(id: id) != nil else { return }
+                    selectMapReading(.event(id))
+                }
+                .id(ObjectIdentifier(eventsCoordinator))
             }
             if let billboardsCoordinator {
                 BillboardMapOverlay(
@@ -1174,6 +1189,17 @@ struct ShellView: View {
                         excludedUids: excludedUids
                     )
                 }
+            }
+            .onChange(of: eventsCoordinator.map { ObjectIdentifier($0) }, initial: true) { _, _ in
+                eventsCoordinator?.startMap()
+            }
+            .onChange(of: eventsCoordinator?.mapEvents, initial: true) { _, events in
+                mapSurface.setEventMarkers((events ?? []).compactMap { event in
+                    guard let latitude = event.latitude, let longitude = event.longitude else { return nil }
+                    return MapEventMarker(id: event.id, longitude: longitude, latitude: latitude)
+                })
+                if case .event(let id) = mapReadingSelection,
+                   eventsCoordinator?.mapEvent(id: id) == nil { dismissMapReading() }
             }
             .onChange(of: billboardsCoordinator?.markers, initial: true) { _, markers in
                 mapSurface.setBillboardMarkers(markers ?? [])
@@ -1462,6 +1488,17 @@ struct ShellView: View {
                     })
                 }
             }
+        case .event(let id):
+            if let event = eventsCoordinator?.mapEvent(id: id) {
+                MapReadingPanel(title: LocalizedStringKey(event.title), onClose: dismissMapReading,
+                    leadingImage: "event-calendar", leadingTint: Color(argb: 0xFF00897B), docksToBottom: true) {
+                    EventMapContents(event: event) {
+                        guard eventsCoordinator?.mapEvent(id: id) != nil else { return }
+                        dismissMapReading()
+                        openEvents(eventId: id)
+                    }
+                }
+            }
         case .incident(let id):
             if let coordinator = incidentMapCoordinator, coordinator.selectedIncident?.id == id {
                 MapReadingPanel(title: "incidents.markerLabel", onClose: dismissMapReading) {
@@ -1554,6 +1591,7 @@ struct ShellView: View {
         if case .densityGroup = selection { clearIncidentSelection() }
         if case .savedPlaces = selection { clearIncidentSelection() }
         if case .stopLive = selection { clearIncidentSelection() }
+        if case .event = selection { clearIncidentSelection() }
         if case .nearby = selection { clearIncidentSelection() }
         if case .convoyMember = selection { clearIncidentSelection() }
     }
@@ -2739,6 +2777,8 @@ struct ShellView: View {
             FirebaseRoadCameraRepository.createIfAvailable().map { CachedRoadCameraRepository(upstream: $0) })
         let eventChat = eventChatEnabled
             ? FirebaseEventChatRepository.createIfAvailable() : nil
+        eventsCoordinator?.stop()
+        mapSurface.setEventMarkers([])
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
             EventsCoordinator(
                 repository: $0,
