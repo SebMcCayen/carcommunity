@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -34,6 +36,9 @@ import kotlin.math.roundToInt
 
 private data class DensityEntry(val item: MapDensityItem, val sourceId: String,
     val crown: Boolean, val icon: Int, val color: Int, val glyphColor: Int, val label: String)
+
+private data class DensityVisual(val group: MapDensityGroup, val entry: DensityEntry,
+    val anchor: MapDensityScreenPoint, val placed: MapDensityScreenPoint, val slot: Int)
 
 /** Static groups only. Driver avatars and their layout belong to their existing overlays. */
 @Composable
@@ -104,26 +109,35 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
         val density = LocalDensity.current.density
         val sidePx = 48f * density
         val own = ownPoint?.let { surface.screenPositionFor(it.latitude, it.longitude) }?.takeIf { it.trustworthy }
-        compactGroups.forEach { group ->
-            val entry = byId[group.anchor.id] ?: return@forEach
+        val visuals = compactGroups.mapNotNull { group ->
+            val entry = byId[group.anchor.id] ?: return@mapNotNull null
             val point = surface.screenPositionFor(group.anchor.latitude, group.anchor.longitude)
-            if (point != null && point.trustworthy && point.x >= -sidePx && point.y >= -sidePx &&
-                point.x <= widthPx + sidePx && point.y <= heightPx + sidePx) {
+                ?.takeIf { it.trustworthy && it.x >= -sidePx && it.y >= -sidePx && it.x <= widthPx + sidePx && it.y <= heightPx + sidePx }
+                ?: return@mapNotNull null
+            val anchor = MapDensityScreenPoint(point.x / density.toDouble(), point.y / density.toDouble())
+            val ownScreen = own?.let { MapDensityScreenPoint(it.x / density.toDouble(), it.y / density.toDouble()) }
+            val placed = MapDensityPolicy.badgePosition(anchor, ownScreen, widthPx / density.toDouble(), heightPx / density.toDouble())
+            val slot = if (placed == anchor || ownScreen == null) 0 else 1 + ((kotlin.math.atan2(placed.y-ownScreen.y, placed.x-ownScreen.x) * 180 / Math.PI + 360) / 45).roundToInt() % 8
+            group.id to DensityVisual(group, entry, anchor, placed, slot)
+        }.toMap()
+        val presence = rememberMapPresence(visuals, active = !covered, placements = visuals.mapValues { it.value.slot }, retainRemovedPublicItems = true)
+        presence.forEach { present ->
+            key(present.id) {
+                val (group, entry, anchor, placed) = present.value
+                val point = Offset((anchor.x * density).toFloat(), (anchor.y * density).toFloat())
                 val description = stringResource(R.string.mapDensity_groupLabel, group.count) +
                     (if (group.critical) ". " + stringResource(R.string.mapDensity_hazardsIncluded) else "") +
                     (if (group.selected) ". " + stringResource(R.string.mapDensity_selected) else "")
-                val anchor = MapDensityScreenPoint(point.x / density.toDouble(), point.y / density.toDouble())
-                val placed = MapDensityPolicy.badgePosition(anchor,
-                    own?.let { MapDensityScreenPoint(it.x / density.toDouble(), it.y / density.toDouble()) },
-                    widthPx / density.toDouble(), heightPx / density.toDouble())
+                Box(Modifier.fillMaxSize()) {
                 if (placed != anchor) Canvas(Modifier.fillMaxSize()) {
-                    drawLine(Color.White.copy(alpha = 0.8f), Offset(point.x, point.y),
+                    drawLine(Color.White.copy(alpha = 0.8f * present.alpha), point,
                         Offset((placed.x * density).toFloat(), (placed.y * density).toFloat()), 2.dp.toPx())
-                    drawCircle(Color.White, 2.dp.toPx(), Offset(point.x, point.y))
+                    drawCircle(Color.White.copy(alpha = present.alpha), 2.dp.toPx(), point)
                 }
                 Box(Modifier.offset { IntOffset((placed.x * density - sidePx / 2).roundToInt(), (placed.y * density - sidePx / 2).roundToInt()) }
-                    .size(48.dp).semantics { contentDescription = description }
-                    .clickable(role = Role.Button) { selection = group.members.map { it.id } }
+                    .size(48.dp).graphicsLayer { alpha = present.alpha }.semantics { contentDescription = description }
+                    .clickable(enabled = present.interactive, role = Role.Button) { selection = group.members.map { it.id } }
+                    .then(if (present.interactive) Modifier else Modifier.clearAndSetSemantics {})
                     .testTag("map_density_group_${group.id}")) {
                     Box(Modifier.align(Alignment.Center).size(34.dp)
                         .background(Color(entry.color), CircleShape)
@@ -141,6 +155,8 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
             }
         }
     }
+    }
+
     if (selection != null && currentSelection.isNotEmpty()) {
         MapDetailSheet(title = stringResource(R.string.mapDensity_title), onDismiss = { selection = null },
             modifier = Modifier.testTag("map_density_details")) {

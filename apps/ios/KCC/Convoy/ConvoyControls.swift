@@ -431,7 +431,10 @@ struct ConvoyMapAwarenessOverlay: View {
                         .buttonStyle(.plain)
                         .position(x: placement.point.x, y: placement.point.y)
                     }
-                    ForEach(placements.offScreen.filter { !suppressedArrowUIDs.contains($0.member.uid) }) { placement in
+                    MapPresenceLayer(items: Dictionary(uniqueKeysWithValues: placements.offScreen.filter {
+                        !suppressedArrowUIDs.contains($0.member.uid)
+                    }.map { ($0.member.uid, $0) }), allowed: Set(members.map(\.uid))) { present in
+                        let placement = present.value
                         edgeChip(placement)
                             .allowsHitTesting(false)
                             .position(x: placement.point.x, y: placement.point.y)

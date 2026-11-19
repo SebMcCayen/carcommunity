@@ -96,7 +96,7 @@ class ConvoyMapAwarenessOverlayTest {
         }
 
         // Fresh: the arrow is there.
-        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy(256)
         composeTestRule.onNodeWithTag(CONVOY_EDGE_ARROW_TAG + "ghost").assertIsDisplayed()
 
         // Time passes, and NOTHING else changes: same surface, same camera
@@ -104,7 +104,8 @@ class ConvoyMapAwarenessOverlayTest {
         now = t0 + ConvoyArrowPlanner.STALE_AFTER_MS + 1
 
         // Let the staleness tick fire.
-        composeTestRule.mainClock.advanceTimeBy(STALE_TICK_MS + 1)
+        // Include the bounded 200 ms exit fade after the staleness tick.
+        composeTestRule.mainClock.advanceTimeBy(STALE_TICK_MS + 256)
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag(CONVOY_EDGE_ARROW_TAG + "ghost").assertDoesNotExist()
@@ -135,14 +136,15 @@ class ConvoyMapAwarenessOverlayTest {
             )
         }
 
-        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.mainClock.advanceTimeBy(256)
         composeTestRule.onNodeWithTag(CONVOY_EDGE_ARROW_TAG + "live").assertIsDisplayed()
 
         // Same elapsed time as the stale test, but the member kept reporting.
         now = t0 + ConvoyArrowPlanner.STALE_AFTER_MS + 1
         membersState.value = listOf(offScreenMember("live", updatedAtMillis = now))
 
-        composeTestRule.mainClock.advanceTimeBy(STALE_TICK_MS + 1)
+        // Include the bounded 200 ms exit fade after the staleness tick.
+        composeTestRule.mainClock.advanceTimeBy(STALE_TICK_MS + 256)
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag(CONVOY_EDGE_ARROW_TAG + "live").assertIsDisplayed()

@@ -4,6 +4,7 @@ import android.content.Context
 import com.mapbox.geojson.Point
 import com.mapbox.maps.Style
 import com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 
@@ -25,7 +26,7 @@ import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
  */
 internal object BillboardMarkerLayer {
     /**
-     * Clears and redraws [markers] on [manager] and rebuilds [idsByAnnotation]
+     * Reconciles keyed [markers] on [manager] and rebuilds [idsByAnnotation]
      * so a tap resolves back to the billboard it landed on. Returns whether the
      * draw was COMPLETE — i.e. whether the marker image made it onto the style.
      * An incomplete draw must not be cached by the caller, or the missing icon
@@ -35,7 +36,7 @@ internal object BillboardMarkerLayer {
      * Each approved logo version is registered once per Mapbox style. Markers
      * without a loaded logo share the original generic billboard fallback.
      *
-     * The lookup is cleared FIRST and repopulated as annotations are created, so
+     * The lookup is rebuilt from retained native annotations after reconciliation, so
      * it can never outlive the annotations it describes and hand a click
      * listener a stale billboard id after a redraw.
      *
@@ -59,6 +60,8 @@ internal object BillboardMarkerLayer {
         markers: List<MapBillboardMarker>,
         registeredImages: MutableSet<String>,
         idsByAnnotation: MutableMap<String, String>,
+        annotations: MapAnnotationReconciler<MapBillboardMarker, PointAnnotation>,
+        opacityById: Map<String, Double> = emptyMap(),
     ): Boolean {
         var complete = true
         val fallbackId = BillboardMarkerBitmaps.imageId()
@@ -76,28 +79,19 @@ internal object BillboardMarkerLayer {
             val added = bitmap != null && style != null && runCatching { style.addImage(id, bitmap) }.isSuccess
             if (added) registeredImages.add(id) else complete = false
         }
-        runCatching { manager.deleteAll() }
+        complete = annotations.reconcile(markers,
+            prepare = { marker -> imageId(marker) in registeredImages },
+            create = { marker -> manager.create(PointAnnotationOptions()
+                .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                .withIconImage(imageId(marker)).withIconOpacity(opacityById[marker.id] ?: 1.0)
+                .withIconAnchor(IconAnchor.BOTTOM)) },
+            update = { annotation, marker ->
+                annotation.point = Point.fromLngLat(marker.longitude, marker.latitude)
+                annotation.iconImage = imageId(marker)
+                manager.update(annotation)
+            }, delete = { manager.delete(it) }) && complete
         idsByAnnotation.clear()
-        for (marker in markers) {
-            val imageId = imageId(marker)
-            if (imageId !in registeredImages) continue
-            runCatching {
-                val annotation =
-                    manager.create(
-                        PointAnnotationOptions()
-                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                            .withIconImage(imageId)
-                            // BOTTOM, unlike every other layer on this map: this
-                            // marker is a plaque standing on a post, so the
-                            // post's foot is the coordinate. Centring it would
-                            // bury the location under the plaque and throw away
-                            // half of what makes the shape distinguishable from
-                            // the three disc layers (see BillboardMarkerStyle).
-                            .withIconAnchor(IconAnchor.BOTTOM),
-                    )
-                idsByAnnotation[annotation.id] = marker.id
-            }
-        }
+        annotations.forEachAnnotation { id, annotation -> idsByAnnotation[annotation.id] = id }
         return complete
     }
 

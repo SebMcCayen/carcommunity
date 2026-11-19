@@ -24,6 +24,8 @@ import androidx.compose.runtime.withFrameMillis
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import com.kungsbackacarcommunity.app.shell.rememberMapPresence
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -286,7 +288,10 @@ fun ConvoyMapAwarenessOverlay(
             )
         }
 
-        placements.offScreen.filter { it.member.uid !in suppressedArrowUids }.forEach { placement ->
+        val arrows = placements.offScreen.filter { it.member.uid !in suppressedArrowUids }.associateBy { it.member.uid }
+        val arrowPresence = rememberMapPresence(arrows, allowed = members.map { it.uid }.toSet())
+        arrowPresence.forEach { present ->
+            val placement = present.value
             ConvoyMemberChip(
                 member = placement.member,
                 appearance = appearances[placement.member.uid] ?: LiveMarkerAppearance(),
@@ -296,7 +301,9 @@ fun ConvoyMapAwarenessOverlay(
                 extraCount = placement.extraCount,
                 contentDescription =
                     directionDescription(placement),
-                modifier = Modifier.testTag(CONVOY_EDGE_ARROW_TAG + placement.member.uid),
+                modifier = Modifier.testTag(CONVOY_EDGE_ARROW_TAG + placement.member.uid)
+                    .graphicsLayer { alpha = present.alpha }
+                    .then(if (present.interactive) Modifier else Modifier.clearAndSetSemantics {}),
             )
         }
     }

@@ -48,12 +48,21 @@ class IncidentAnnotationClickTest {
     @Test
     fun `tapping a badge opens its incident and no navigate prompt`() {
         val surface = MapboxMapSurface()
+        surface.setIncidentMarkers(listOf(MapIncidentMarker("incident-42", 12.0, 57.0, 0, 1, 0)))
         surface.incidentIdsByAnnotation["annotation-1"] = "incident-42"
 
         dispatchTap(surface, "annotation-1")
 
         assertEquals("incident-42", surface.incidentTap.value)
         assertNull("tapping a badge also raised a navigate prompt", surface.placeRequest.value)
+    }
+
+    @Test fun `a fading removed incident cannot open its old detail`() {
+        val surface = MapboxMapSurface()
+        surface.incidentIdsByAnnotation["old"] = "removed"
+        dispatchTap(surface, "old")
+        assertNull(surface.incidentTap.value)
+        assertNull(surface.placeRequest.value)
     }
 
     @Test

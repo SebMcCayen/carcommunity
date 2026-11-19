@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -93,7 +94,11 @@ internal fun DockedMapSheetHost(ownerKey: Any? = null, content: @Composable BoxS
                 } else {
                     Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)
                 }
-                Box(placement.clipToBounds()) { entry.content() }
+                Box(placement.clipToBounds()) {
+                    // Replacing a sheet disposes its pending fade/dismiss job even
+                    // when both entries intentionally share a dismissal callback.
+                    key(entry.key) { entry.content() }
+                }
             }
         }
     }

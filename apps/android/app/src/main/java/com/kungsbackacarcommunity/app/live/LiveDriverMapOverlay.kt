@@ -17,7 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.kungsbackacarcommunity.app.shell.rememberMapPresence
+import com.kungsbackacarcommunity.app.map.DriverPhotoPlacement
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -82,6 +86,8 @@ fun LiveDriverMapOverlay(
         val exclusions = excludedPixels.map { DriverPhotoRect(it.left / density, it.top / density, it.right / density, it.bottom / density) }
         layout.layout(anchors, size.width / density, size.height / density, ownScreen, exclusions)
     }
+    val presence = rememberMapPresence(result.placed.associateBy { it.uid }, allowed = originals.keys,
+        placements = result.placed.associate { it.uid to it.slot })
     val placedUids = result.placed.map { it.uid }.toSet()
     val inViewportUids = placedUids + result.overflow.map { it.uid }
     ReportDrawnLiveMarkerUids((placedUids.intersect(convoyUids) + arrowUids).intersect(originals.keys), onConvoyDrawn)
@@ -99,22 +105,28 @@ fun LiveDriverMapOverlay(
             appearances = appearances,
             onDrawnUidsChanged = { arrowUids = it },
         )
-        DriverLeaderLines(result)
         Box(Modifier.fillMaxSize().testTag(NEARBY_LIVE_OVERLAY_TAG)) {
-            for (placement in result.placed) {
+            for (item in presence) {
+                val placement = item.value
                 val member = originals[placement.uid] ?: continue
                 val description = if (member.uid in convoyUids) stringResource(R.string.convoy_awarenessMemberOnMap, member.displayName ?: stringResource(R.string.convoy_unknownMember))
                     else stringResource(R.string.nearby_liveSharerOnMap, member.displayName ?: stringResource(R.string.nearby_unknownSharer))
+                androidx.compose.runtime.key(item.id) {
+                Box(Modifier.fillMaxSize()) {
+                DriverLeaderLines(placement, item.alpha)
                 Box(
                     Modifier.offset { IntOffset(((placement.photo.x - 24) * density).roundToInt(), ((placement.photo.y - 24) * density).roundToInt()) }
-                        .size(48.dp)
-                        .clickable(role = Role.Button) { onDriverTap(member.uid) }
+                        .size(48.dp).graphicsLayer { alpha = item.alpha }
+                        .clickable(enabled = item.interactive, role = Role.Button) { onDriverTap(member.uid) }
                         .semantics(mergeDescendants = true) { contentDescription = description }
-                        .testTag(NEARBY_LIVE_CHIP_TAG + member.uid),
+                        .testTag(NEARBY_LIVE_CHIP_TAG + member.uid)
+                        .then(if (item.interactive) Modifier else Modifier.clearAndSetSemantics {}),
                     contentAlignment = Alignment.Center,
                 ) {
                     LiveCarPhotoBadge(member.imagePath, appearances[member.uid] ?: LiveMarkerAppearance(),
                         ringColor = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(40.dp))
+                }
+                }
                 }
             }
         }
@@ -122,19 +134,17 @@ fun LiveDriverMapOverlay(
 }
 
 @Composable
-private fun DriverLeaderLines(result: DriverPhotoLayoutResult) {
+private fun DriverLeaderLines(item: DriverPhotoPlacement, opacity: Float) {
     val density = LocalDensity.current.density
     val line = MaterialTheme.colorScheme.onSurface
     val dot = MaterialTheme.colorScheme.tertiary
     Canvas(Modifier.fillMaxSize().testTag("driver_photo_leaders")) {
-        for (item in result.placed) {
-            for (segment in item.lines) drawLine(line, Offset(segment.start.x.toFloat() * density, segment.start.y.toFloat() * density),
+            for (segment in item.lines) drawLine(line.copy(alpha = opacity), Offset(segment.start.x.toFloat() * density, segment.start.y.toFloat() * density),
                 Offset(segment.end.x.toFloat() * density, segment.end.y.toFloat() * density), 1.5f * density, StrokeCap.Round)
             if (item.showAnchor) {
                 val anchor = Offset(item.anchor.x.toFloat() * density, item.anchor.y.toFloat() * density)
-                drawCircle(dot, 3f * density, anchor)
-                drawCircle(line, 3f * density, anchor, style = Stroke(1f * density))
+                drawCircle(dot.copy(alpha = opacity), 3f * density, anchor)
+                drawCircle(line.copy(alpha = opacity), 3f * density, anchor, style = Stroke(1f * density))
             }
-        }
     }
 }
