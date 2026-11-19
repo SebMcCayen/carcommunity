@@ -2494,6 +2494,16 @@
     "category8": "Symboler",
     "category9": "Flaggor"
   },
+  "mapDensity": {
+    "title": "På den här platsen",
+    "choose": "Välj ett objekt för att se detaljer.",
+    "groupLabel": "%1$d kartobjekt",
+    "hazardsIncluded": "Innehåller trafikhändelse",
+    "selected": "Valt objekt",
+    "previous": "Föregående",
+    "next": "Nästa",
+    "page": "Visar %1$d–%2$d av %3$d"
+  },
   "partnerPortal": {
     "manage": "Hantera företag",
     "reservations": "Mina reservationer",

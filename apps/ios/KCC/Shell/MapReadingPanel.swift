@@ -75,6 +75,7 @@ struct MapReadingPanel<Content: View>: View {
 
 enum MapReadingSelection: Hashable {
     case stopLive
+    case densityGroup
     case savedPlaces
     case place(PlaceSuggestion)
     case crown(String)

@@ -2494,6 +2494,16 @@
     "category8": "Symbols",
     "category9": "Flags"
   },
+  "mapDensity": {
+    "title": "At this location",
+    "choose": "Choose an item to see its details.",
+    "groupLabel": "%1$d map items",
+    "hazardsIncluded": "Includes a traffic hazard",
+    "selected": "Selected item",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Showing %1$d–%2$d of %3$d"
+  },
   "partnerPortal": {
     "manage": "Manage business",
     "reservations": "My reservations",

@@ -486,6 +486,8 @@ struct MapPlaceRequest: Equatable, Sendable {
 /// the same overlays draw there too.)
 @MainActor
 protocol MapProjection: AnyObject {
+    /// Actual rendered local puck, never the camera center.
+    var renderedOwnPoint: MapPoint? { get }
     /// Where the camera currently is, or nil before the map has one.
     ///
     /// Rounded and de-duplicated by the implementation (see
@@ -517,6 +519,8 @@ protocol MapProjection: AnyObject {
 
 /// Seam between the map-first shell and the actual map renderer.
 ///
+extension MapProjection { var renderedOwnPoint: MapPoint? { nil } }
+
 /// The entire shell (search bar, renderer load state, floating controls,
 /// "Create route" CTA, bottom nav) is written against this abstraction so it
 /// compiles, unit-tests, and passes CI **without** a device, GPS, or a Mapbox
@@ -969,6 +973,9 @@ final class StubMapSurface: MapSurface {
     // projects anything: the marker overlays simply draw nothing on it, which
     // is exactly right for CI and the config-less build. Pinnable via
     // `setCameraSnapshotForTest`.
+    private(set) var renderedOwnPoint: MapPoint?
+    func updateRenderedOwnPoint(_ point: MapPoint?) { renderedOwnPoint = point }
+
     private(set) var cameraSnapshot: MapCameraSnapshot?
     // Pixel projection must track every rendered camera frame, independently
     // of the rounded snapshot used to throttle network/map queries.

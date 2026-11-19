@@ -2326,6 +2326,14 @@
     <string name="reactions_category7">Objects</string>
     <string name="reactions_category8">Symbols</string>
     <string name="reactions_category9">Flags</string>
+    <string name="mapDensity_title">At this location</string>
+    <string name="mapDensity_choose">Choose an item to see its details.</string>
+    <string name="mapDensity_groupLabel">%1$d map items</string>
+    <string name="mapDensity_hazardsIncluded">Includes a traffic hazard</string>
+    <string name="mapDensity_selected">Selected item</string>
+    <string name="mapDensity_previous">Previous</string>
+    <string name="mapDensity_next">Next</string>
+    <string name="mapDensity_page">Showing %1$d–%2$d of %3$d</string>
     <string name="partnerPortal_manage">Manage business</string>
     <string name="partnerPortal_reservations">My reservations</string>
     <string name="partnerPortal_apply">Become a business partner</string>

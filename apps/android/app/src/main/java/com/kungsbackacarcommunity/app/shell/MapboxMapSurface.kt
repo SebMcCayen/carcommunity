@@ -288,6 +288,8 @@ class MapboxMapSurface(
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
+    private val renderedOwnPointFlow = MutableStateFlow<MapPoint?>(null)
+    override val renderedOwnPoint: StateFlow<MapPoint?> = renderedOwnPointFlow.asStateFlow()
 
     // How the map is oriented while following (see [MapCompassMode]) — the
     // compass control's two modes. north-up pins the camera bearing at 0;
@@ -377,6 +379,7 @@ class MapboxMapSurface(
         }
         provider.update(recording = recording != null, position = recording?.position, points = recording?.points.orEmpty())
         val animating = surfaceActive && provider.advance()
+        if (!provider.canDisplayLocation) renderedOwnPointFlow.value = null
         renderRecordingBreadcrumb()
         if (recording == null && changedBreadcrumbOwner) redrawBreadcrumb()
         val map = mapViewRef ?: return animating
@@ -472,6 +475,8 @@ class MapboxMapSurface(
     // reconciliation. Changed lists retain annotations by marker id. Reset with
     // the manager so a recreated map always draws the current markers.
     private var lastAppliedIncidents: List<MapIncidentMarker>? = null
+    private var groupedIncidentIds: Set<String> = emptySet()
+    private var groupedCrownIds: Set<String> = emptySet()
 
     // ---- Kronjakt crown layer -----------------------------------------------
     // Its OWN annotation manager, image set and lookup, parallel to the incident
@@ -858,6 +863,16 @@ class MapboxMapSurface(
         incidentMarkersFlow.value = markers
     }
 
+    override fun setGroupedMarkerIds(incidentIds: Set<String>, crownIds: Set<String>) {
+        if (groupedIncidentIds == incidentIds && groupedCrownIds == crownIds) return
+        groupedIncidentIds = incidentIds
+        groupedCrownIds = crownIds
+        // Reconcile removes annotations AND native hit lookup for covered sources.
+        lastAppliedIncidents = null
+        runCatching { applyIncidentMarkersIfChanged(incidentMarkersFlow.value) }
+        runCatching { renderCrownFrame(SystemClock.uptimeMillis()) }
+    }
+
     override fun setCrownMarkers(markers: List<MapCrownMarker>) {
         // Same contract as the incident markers: the Content update lambda
         // observes this flow and redraws only when the set actually changes, so
@@ -1166,6 +1181,7 @@ class MapboxMapSurface(
         // map is composed; wrapped defensively like every other native call.
         val map = mapViewRef ?: return
         syncRecordingLocation()
+        if (!hasMapLocationPermission() || puckLocationProvider?.canDisplayLocation == false) renderedOwnPointFlow.value = null
         runCatching {
             map.location.updateSettings {
                 enabled = surfaceActive && puckLocationProvider?.canDisplayLocation != false
@@ -1312,11 +1328,19 @@ class MapboxMapSurface(
     }
 
     /** One return transition owns the camera; normal puck tracking stays immediate. */
+    private fun hasMapLocationPermission(): Boolean {
+        val context = appContext ?: return false
+        return listOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION).any {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     private fun updateCameraVisibility() {
         val visible = surfaceActive && sceneResumed
         cameraResume.visibilityChanged(visible, followController.shouldTrack(routeOverlayFlow.value != null) && convoyFitPoints == null,
             puckLocationProvider?.cameraSourceFix?.sequence)
         if (!visible) {
+            renderedOwnPointFlow.value = null
             cameraReturnJob?.cancel()
             cameraReturnJob = null
             idleReturnJob?.cancel()
@@ -1749,6 +1773,7 @@ class MapboxMapSurface(
                     // re-entered from inside itself (see [guardIndicator]).
                     guardIndicator {
                         lastPoint = point
+                        renderedOwnPointFlow.value = if (surfaceActive && sceneResumed && hasMapLocationPermission()) MapPoint(point.longitude(), point.latitude()) else null
                         // Cache this fix for the next map open (see
                         // [persistLastKnownLocation]). Before the follow gate so
                         // it keeps refreshing even when the user has panned away.
@@ -2496,6 +2521,7 @@ class MapboxMapSurface(
                 // heading arrives, rather than an arrow left pointing north.
                 puckBearingArrowShown = false
                 puckLocationProvider = null
+                renderedOwnPointFlow.value = null
                 resetBreadcrumbRenderCache()
                 cameraChangeListener?.let { l ->
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
@@ -2671,7 +2697,7 @@ class MapboxMapSurface(
      */
     internal fun onIncidentAnnotationClicked(annotationId: String): Boolean {
         val incidentId = incidentIdsByAnnotation[annotationId]
-        if (incidentId != null) {
+        if (incidentId != null && incidentId !in groupedIncidentIds) {
             emitIncidentTap(incidentId)
             return true
         }
@@ -2810,7 +2836,7 @@ class MapboxMapSurface(
             manager = manager,
             style = mapViewRef?.mapboxMap?.style,
             context = appContext,
-            markers = markers,
+            markers = markers.filterNot { it.id in groupedIncidentIds },
             registeredImages = registeredIncidentImages,
             idsByAnnotation = incidentIdsByAnnotation,
             annotations = incidentAnnotations,
@@ -2893,7 +2919,7 @@ class MapboxMapSurface(
      */
     internal fun onCrownAnnotationClicked(annotationId: String): Boolean {
         val spawnId = crownIdsByAnnotation[annotationId]
-        if (spawnId != null) {
+        if (spawnId != null && spawnId !in groupedCrownIds) {
             emitCrownTap(spawnId)
             return true
         }
@@ -2958,6 +2984,7 @@ class MapboxMapSurface(
         val liveIds = HashSet<String>(states.size)
 
         for (state in states) {
+            if (state.id in groupedCrownIds) continue
             liveIds += state.id
             val marker = crownMarkerById[state.id] ?: continue
             val annotation =

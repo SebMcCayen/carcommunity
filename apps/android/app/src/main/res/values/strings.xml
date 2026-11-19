@@ -2326,6 +2326,14 @@
     <string name="reactions_category7">Föremål</string>
     <string name="reactions_category8">Symboler</string>
     <string name="reactions_category9">Flaggor</string>
+    <string name="mapDensity_title">På den här platsen</string>
+    <string name="mapDensity_choose">Välj ett objekt för att se detaljer.</string>
+    <string name="mapDensity_groupLabel">%1$d kartobjekt</string>
+    <string name="mapDensity_hazardsIncluded">Innehåller trafikhändelse</string>
+    <string name="mapDensity_selected">Valt objekt</string>
+    <string name="mapDensity_previous">Föregående</string>
+    <string name="mapDensity_next">Nästa</string>
+    <string name="mapDensity_page">Visar %1$d–%2$d av %3$d</string>
     <string name="partnerPortal_manage">Hantera företag</string>
     <string name="partnerPortal_reservations">Mina reservationer</string>
     <string name="partnerPortal_apply">Bli företagspartner</string>
