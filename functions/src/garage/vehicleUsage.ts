@@ -5,7 +5,12 @@ import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { requireActiveActor } from '../shared/memberActor';
-import { rankVehicleUsage, VEHICLE_USAGE_WINDOW_MS, type VehicleUse } from './vehicleUsage-core';
+import {
+  recentVehicleUsage,
+  rankVehicleUsage,
+  VEHICLE_USAGE_WINDOW_MS,
+  type VehicleUse,
+} from './vehicleUsage-core';
 
 const usageEvents = (uid: string) => db.doc(`userPrivate/${uid}`).collection('vehicleUsageEvents');
 const listInput = z.object({}).strict();
@@ -57,7 +62,7 @@ export const rankedDrivingVehicleIds = onCall(
     timeoutSeconds: 15,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
   },
-  async (request): Promise<{ vehicleIds: string[] }> => {
+  async (request): Promise<{ vehicleIds: string[]; recentVehicleIds: string[] }> => {
     const actor = await requireActiveActor(request);
     if (!listInput.safeParse(request.data ?? {}).success) {
       throw new HttpsError('invalid-argument', 'Expected an empty request.');
@@ -101,7 +106,11 @@ export const rankedDrivingVehicleIds = onCall(
             ...history.docs.map((doc) => readUse(doc.data())).filter((use) => use !== null),
           );
         }
-        return { vehicleIds: rankVehicleUsage(uses, nowMs) };
+        return {
+          // Preserve frequency ordering for released clients, including iOS.
+          vehicleIds: rankVehicleUsage(uses, nowMs),
+          recentVehicleIds: recentVehicleUsage(uses, nowMs),
+        };
       },
       { readOnly: true },
     );

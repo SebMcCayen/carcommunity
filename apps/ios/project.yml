@@ -8,14 +8,14 @@ name: KCC
 options:
   developmentLanguage: sv
   deploymentTarget:
-    iOS: "17.0"
+    iOS: '17.0'
   createIntermediateGroups: true
 
 # Project-level settings so every target (and any future one) inherits the
 # same Swift language mode instead of Xcode's Swift 5 default.
 settings:
   base:
-    SWIFT_VERSION: "6.0"
+    SWIFT_VERSION: '6.0'
 
 packages:
   Firebase:
@@ -112,7 +112,8 @@ targets:
         # and the iOS analogue used by dedicated, user-started drive/live
         # sessions is the `location` UIBackgroundMode on a when-in-use grant
         # — not Always.
-        NSLocationWhenInUseUsageDescription: "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte."
+        NSCameraUsageDescription: 'Kameran används när du väljer att skanna kundens personliga QR-kod för ett partnererbjudande.'
+        NSLocationWhenInUseUsageDescription: 'Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte.'
         FirebaseCrashlyticsCollectionEnabled: $(CRASHLYTICS_COLLECTION_ENABLED)
         UIBackgroundModes:
           - location

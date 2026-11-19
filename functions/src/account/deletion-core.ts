@@ -89,6 +89,7 @@ export function parseDeleteAccountInput(data: unknown): ParseResult<DeleteAccoun
  * - Storage prefixes are removed wholesale.
  */
 export const PURGE_DOC_TREES = [
+  'partnerApplicationOwners',
   'userWarnings',
   'accountWarningSignals',
   'carCommunityChatRestrictions',
@@ -121,6 +122,11 @@ export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{
   collection: string;
   userField: string;
 }> = [
+  // Private application contacts and scoped company staff are account-owned;
+  // public business profiles and identity-free redemption aggregates remain.
+  { collection: 'partnerApplications', userField: 'submittedByUserId' },
+  { collection: 'partnerMembers', userField: 'uid' },
+  { collection: 'partnerApplicationEmails', userField: 'uid' },
   { collection: 'vehicles', userField: 'userId' },
   { collection: 'rides', userField: 'userId' },
   // Personal subscription IDs/token locators are hashes, not raw UID paths.

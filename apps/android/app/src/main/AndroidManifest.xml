@@ -46,6 +46,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.KCC">
 
+        <!-- Download the permissionless QR scanner with the Play install when available. -->
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
+
         <!-- Driver may send text-only geo: places only after checking this
              application-level capability; the receiving search requires a pick. -->
         <meta-data

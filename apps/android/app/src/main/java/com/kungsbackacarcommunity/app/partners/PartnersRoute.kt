@@ -1,6 +1,14 @@
 package com.kungsbackacarcommunity.app.partners
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccButton
+import com.kungsbackacarcommunity.app.design.KccOutlinedButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -41,9 +49,26 @@ fun PartnersRoute(
     // Verified paid subscriber or admin; legacy flags never unlock member offers.
     canAccessMemberOffers: Boolean,
     onBack: () -> Unit,
+    initialCompanyId: String? = null,
+    initialFromBillboard: Boolean = false,
+    onInitialCompanyConsumed: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val portal = remember(context, uid) { FirebasePartnerPortalRepository.createIfAvailable(context) }
+    var portalPage by remember(uid) { mutableStateOf<String?>(null) }
+    var reservationOffer by remember(uid) { mutableStateOf<String?>(null) }
+    var workspace by remember(uid) { mutableStateOf<PartnerWorkspace?>(null) }
+    LaunchedEffect(portal, uid) { try { workspace = portal?.workspace() } catch (e: CancellationException) { throw e } catch (_: Exception) { } }
     var selectedCompanyId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedFromBillboard by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(initialCompanyId) { if (initialCompanyId != null) { selectedCompanyId = initialCompanyId; selectedFromBillboard = initialFromBillboard; onInitialCompanyConsumed() } }
+    if (portal != null && portalPage == "workspace") { PartnerWorkspaceRoute(portal, onBack = { portalPage = null }); return }
+    if (portal != null && canAccessMemberOffers && portalPage == "reservations") { PartnerReservationsRoute(portal, onBack = { portalPage = null }); return }
+    if (portal != null && reservationOffer != null) {
+        if (canAccessMemberOffers) { PartnerReserveOfferRoute(portal, requireNotNull(reservationOffer), onBack = { reservationOffer = null }); return }
+        else { reservationOffer = null }
+    }
     var expandedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedOfferGeneration by rememberSaveable { mutableStateOf(0) }
     var rootSection by rememberSaveable { mutableStateOf(PartnersRootSection.DIRECTORY) }
@@ -160,9 +185,10 @@ fun PartnersRoute(
             canAccessMemberOffers = canAccessMemberOffers,
             section = rootSection,
             onSectionChange = { rootSection = it },
-            onOpenCompany = { selectedCompanyId = it },
+            onOpenCompany = { selectedCompanyId = it; selectedFromBillboard = false },
             onOpenSavedOffer = { savedCompanyId, offerId ->
                 selectedCompanyId = savedCompanyId
+                selectedFromBillboard = false
                 expandedOfferId = offerId
                 expandedOfferGeneration++
                 offerCodeCoordinator?.reset()
@@ -196,6 +222,10 @@ fun PartnersRoute(
             didFailLoadingMoreCompanies = didFailLoadingMoreCompanies,
             onRetrySaved = { savedReloadKey++ },
             onBack = onBack,
+            portalActions = {
+                if (portal != null && canAccessMemberOffers) KccOutlinedButton(onClick = { portalPage = "reservations" }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_reservations)) }
+                if (portal != null && workspace?.companies?.isNotEmpty() == true) KccButton(onClick = { portalPage = "workspace" }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_manage)) }
+            },
         )
         return
     }
@@ -313,6 +343,7 @@ fun PartnersRoute(
 
     PartnerDetailScreen(
         companyState = companyState,
+        sponsoredPlacement = selectedFromBillboard,
         offers = companyOffers,
         offersState = displayedCompanyOffersState,
         savedOfferIds = savedIds,
@@ -388,5 +419,6 @@ fun PartnersRoute(
         canLoadMoreOffers = companyOffersState is OffersState.Loaded && companyOffersCursor != null,
         isLoadingMoreOffers = isLoadingMoreCompanyOffers,
         didFailLoadingMoreOffers = didFailLoadingMoreCompanyOffers,
+        onReserveOffer = if (portal != null && canAccessMemberOffers) ({ reservationOffer = it }) else null,
     )
 }

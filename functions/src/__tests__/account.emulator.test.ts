@@ -93,7 +93,10 @@ async function createProvisionedUser(prefix: string): Promise<TestUser> {
   const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
   const password = 'password-123';
   const credential = await createUserWithEmailAndPassword(auth, email, password);
-  const uid = credential.user.uid;
+  // Purge helpers receive the canonical server-side Auth identity. Verify that
+  // the actual client signup and the server record refer to the same account.
+  const { uid } = await adminAuth.getUserByEmail(email);
+  expect(uid).toBe(credential.user.uid);
   await pollUntil(async () => {
     const snap = await adminDb.collection('users').doc(uid).get();
     return snap.exists ? true : undefined;

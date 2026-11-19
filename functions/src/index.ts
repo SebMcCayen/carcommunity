@@ -4,6 +4,8 @@ import {
   getPublicModerationCase,
   decidePublicModeration,
 } from './admin/publicModeration';
+import { portal, sweepPortal } from './partners/portal';
+import { publishStatistics } from './partners/portal-statistics';
 import { listMemberHistory } from './admin/memberHistory';
 import { getChatModerationContext, moderateChatMessage } from './admin/chatModeration';
 import { getMyChatWriteStatus } from './moderation/getMyChatWriteStatus';
@@ -795,6 +797,9 @@ export const leaderboard = {
  * bookmark writes under users/{uid}/savedOffers.
  */
 export const partners = {
+  portal,
+  sweepPortal,
+  publishStatistics,
   submitApplication,
   reviewApplication,
   createCompany,

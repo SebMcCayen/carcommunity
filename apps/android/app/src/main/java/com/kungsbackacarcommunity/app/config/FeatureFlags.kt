@@ -15,6 +15,9 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
     CHAT("chat", true),
     CROWN_HUNT("crownHunt", true),
     PARTNERS("partners", true),
+    // Controlled rollout: server blocks new claims and partner mutations while OFF;
+    // existing reservation redemption retains its normal server safety checks.
+    PARTNER_SELF_SERVICE("partnerSelfService", false),
     PARTNER_STATS("partnerStats", true),
     PUSH_NOTIFICATIONS("pushNotifications", true),
     SOCIAL_SHARING("socialSharing", true),

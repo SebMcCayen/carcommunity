@@ -196,6 +196,7 @@ test('event chat reports declare their collection-group date index without remov
 });
 
 for (const [collectionGroup, equality, date] of [
+  ['billboards', 'partnerCompanyId', 'createdAt'],
   ['crownHuntPoints', 'status', 'createdAt'],
   ['crownHuntClaims', 'result', 'claimedAt'],
   ['crownSpawnClaims', 'result', 'claimedAt'],
