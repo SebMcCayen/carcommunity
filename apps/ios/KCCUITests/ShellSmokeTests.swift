@@ -815,9 +815,10 @@ final class ShellSmokeTests: XCTestCase {
             let bar = app.buttons["map.session.bar"]
             XCTAssertTrue(bar.waitForExistence(timeout: 15))
             assertMapReceivesGestures(app)
-            let marker = app.buttons["map.fixture.liveSharer"]
-            XCTAssertTrue(marker.wait(for: \.isHittable, toEqual: true, timeout: 10),
-                "Driver decorations must not cover the nearby driver's button")
+            let initialVisit = openNearbyMarkerWithPhysicalTap(app, stage: "before-chat")
+            app.buttons["map.reading.close"].tap()
+            XCTAssertTrue(initialVisit.wait(for: \.exists, toEqual: false, timeout: 5),
+                "The initial nearby card must close before opening Chat")
             let speedReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "36 km/h"), object: bar)
             XCTAssertEqual(XCTWaiter.wait(for: [speedReady], timeout: 10), .completed)
             let stop = app.buttons["shell.tab.create"]
@@ -873,9 +874,7 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertEqual(map.value as? String, identity)
             XCTAssertTrue(bar.isHittable, "Back must not stop the session")
 
-            XCTAssertTrue(marker.wait(for: \.isHittable, toEqual: true, timeout: 10))
-            marker.tap()
-            let visit = app.buttons["nearby.visitProfile"]
+            let visit = openNearbyMarkerWithPhysicalTap(app, stage: "after-chat")
             let visitReady = visit.waitForExistence(timeout: 10)
             if !visitReady { chatProof(app, name: "live-profile-card-missing-after-chat", tree: true) }
             XCTAssertTrue(visitReady, "The nearby marker must open its profile card after returning from Chat")
@@ -1115,6 +1114,33 @@ final class ShellSmokeTests: XCTestCase {
         let panReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: panDelivered, object: probe)], timeout: 5)
         if panReady != .completed { chatProof(app, name: "map-pan-blocked", tree: true) }
         XCTAssertEqual(panReady, .completed, "Blank map space must receive drags through marker and chrome layers", file: file, line: line)
+    }
+
+    private func openNearbyMarkerWithPhysicalTap(
+        _ app: XCUIApplication, stage: String, file: StaticString = #filePath, line: UInt = #line
+    ) -> XCUIElement {
+        let marker = app.buttons["map.fixture.liveSharer"]
+        XCTAssertTrue(marker.waitForExistence(timeout: 10), file: file, line: line)
+        XCTAssertTrue(marker.wait(for: \.isEnabled, toEqual: true, timeout: 10), file: file, line: line)
+        let frame = marker.frame
+        XCTAssertGreaterThanOrEqual(frame.width, 48 - 0.001, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.height, 48 - 0.001, file: file, line: line)
+        XCTAssertTrue(app.frame.contains(frame), "The nearby marker must be entirely onscreen", file: file, line: line)
+        let probe = app.staticTexts["shell.mapGestureProbe"]
+        XCTAssertTrue(probe.exists, file: file, line: line)
+        let counts = probe.value as? String
+        XCTAssertNotNil(counts, file: file, line: line)
+        print("NEARBY_MARKER_PROBE stage=\(stage) axHittable=\(marker.isHittable) frame=\(frame) mapCounts=\(counts ?? "missing")")
+        // The interactive placeholder can affect AX hit-point reporting. Test
+        // actual event delivery once, without activating an accessibility action.
+        marker.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let visit = app.buttons["nearby.visitProfile"]
+        let opened = visit.waitForExistence(timeout: 10)
+        if !opened { chatProof(app, name: "nearby-physical-tap-\(stage)-failed", tree: true) }
+        XCTAssertTrue(opened, "One nearby-marker press must open its profile card", file: file, line: line)
+        XCTAssertEqual(probe.value as? String, counts,
+            "A nearby-marker press must not reach the map's background gestures", file: file, line: line)
+        return visit
     }
 
     func testMapToolsAppearOnRightAndWorkWithoutBackend() {
