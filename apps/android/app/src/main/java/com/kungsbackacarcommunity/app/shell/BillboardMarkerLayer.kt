@@ -32,9 +32,8 @@ internal object BillboardMarkerLayer {
      * would persist as blank annotations until the marker set happened to
      * change.
      *
-     * There is exactly ONE image for this layer (a billboard has no per-item
-     * variants), so it is rasterised and registered against the style once and
-     * every annotation then references it by name.
+     * Each approved logo version is registered once per Mapbox style. Markers
+     * without a loaded logo share the original generic billboard fallback.
      *
      * The lookup is cleared FIRST and repopulated as annotations are created, so
      * it can never outlive the annotations it describes and hand a click
@@ -61,33 +60,27 @@ internal object BillboardMarkerLayer {
         registeredImages: MutableSet<String>,
         idsByAnnotation: MutableMap<String, String>,
     ): Boolean {
-        val imageId = BillboardMarkerBitmaps.imageId()
         var complete = true
-        if (imageId !in registeredImages) {
-            val bitmap =
-                if (style != null && context != null) {
-                    BillboardMarkerBitmaps.create(
-                        density = context.resources.displayMetrics.density,
-                    )
-                } else {
-                    null
-                }
-            // Only remember it as registered once the upload actually
-            // succeeded, so a transient failure retries on the next redraw
-            // rather than permanently marking the icon as present.
-            val added =
-                bitmap != null &&
-                    style != null &&
-                    runCatching { style.addImage(imageId, bitmap) }.isSuccess
-            if (added) registeredImages.add(imageId) else complete = false
+        val fallbackId = BillboardMarkerBitmaps.imageId()
+        fun imageId(marker: MapBillboardMarker): String =
+            if (marker.logoBitmap == null || marker.logoPath == null) fallbackId
+            else "kcc-billboard-logo-" + java.security.MessageDigest.getInstance("SHA-256")
+                .digest(marker.logoPath.toByteArray()).take(12).joinToString("") { "%02x".format(it) }
+        val requested = markers.associateBy { imageId(it) }
+        for ((id, marker) in requested) {
+            if (id in registeredImages) continue
+            val bitmap = if (style != null && context != null) BillboardMarkerBitmaps.create(
+                density = context.resources.displayMetrics.density,
+                logo = marker.logoBitmap,
+            ) else null
+            val added = bitmap != null && style != null && runCatching { style.addImage(id, bitmap) }.isSuccess
+            if (added) registeredImages.add(id) else complete = false
         }
         runCatching { manager.deleteAll() }
         idsByAnnotation.clear()
-        // Nothing to draw if the image never made it onto the style: the
-        // annotations would reference a name the style does not know and render
-        // as nothing at all.
-        if (imageId !in registeredImages) return false
         for (marker in markers) {
+            val imageId = imageId(marker)
+            if (imageId !in registeredImages) continue
             runCatching {
                 val annotation =
                     manager.create(

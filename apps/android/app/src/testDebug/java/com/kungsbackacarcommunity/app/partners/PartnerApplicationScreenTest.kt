@@ -38,8 +38,8 @@ class PartnerApplicationScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.partners_submitButton)).performScrollTo().performClick()
-        composeTestRule.onNodeWithText(str(R.string.partners_fieldRequired)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partnerPortal_next)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.partnerPortal_invalidFields)).assertIsDisplayed()
     }
 
     @Test
@@ -55,9 +55,15 @@ class PartnerApplicationScreenTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.partners_companyNameLabel)).performTextInput("Bilverkstan")
+        composeTestRule.onNodeWithText(str(R.string.partnerPortal_description)).performScrollTo().performTextInput("Full service")
+        composeTestRule.onNodeWithText(str(R.string.partnerPortal_address)).performScrollTo().performTextInput("Verkstadsvägen 1")
         composeTestRule.onNodeWithText(str(R.string.partners_categoryWorkshop)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.partnerPortal_next)).performScrollTo().performClick()
         composeTestRule.onNodeWithText(str(R.string.partners_contactNameLabel)).performTextInput("Ada")
         composeTestRule.onNodeWithText(str(R.string.partners_contactEmailLabel)).performTextInput("ada@example.com")
+        composeTestRule.onNodeWithText(str(R.string.partnerPortal_next)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.partnerPortal_next)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.partnerPortal_noPayment)).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.partners_submitButton)).performScrollTo().performClick()
         assertNotNull(submitted)
         assertEquals("Bilverkstan", submitted!!.companyName)

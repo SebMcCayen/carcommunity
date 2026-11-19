@@ -55,6 +55,7 @@ struct PartnerCompany: Equatable, Hashable, Sendable, Identifiable {
     let address: String?
     let latitude: Double?
     let longitude: Double?
+    var logoPath: String? = nil
 
     static func fromMap(id: String, map: [String: Any]) -> PartnerCompany? {
         guard !id.isEmpty,
@@ -69,7 +70,8 @@ struct PartnerCompany: Equatable, Hashable, Sendable, Identifiable {
             phone: (map["phone"] as? String)?.trimmedNonempty,
             address: (map["address"] as? String)?.trimmedNonempty,
             latitude: (map["latitude"] as? NSNumber)?.doubleValue,
-            longitude: (map["longitude"] as? NSNumber)?.doubleValue
+            longitude: (map["longitude"] as? NSNumber)?.doubleValue,
+            logoPath: (map["logoPath"] as? String)?.trimmedNonempty
         )
     }
 }
@@ -81,6 +83,7 @@ struct PartnerOffer: Equatable, Hashable, Sendable, Identifiable {
     let title: String
     let teaserText: String
     let offerType: PartnerOfferType
+    var redemptionMode: String? = nil
 
     static func fromMap(id: String, map: [String: Any]) -> PartnerOffer? {
         guard !id.isEmpty,
@@ -93,7 +96,8 @@ struct PartnerOffer: Equatable, Hashable, Sendable, Identifiable {
             partnerCompanyName: (map["partnerCompanyName"] as? String)?.trimmedNonempty,
             title: title,
             teaserText: (map["teaserText"] as? String)?.trimmedNonempty ?? "",
-            offerType: PartnerOfferType(wireValue: map["offerType"] as? String)
+            offerType: PartnerOfferType(wireValue: map["offerType"] as? String),
+            redemptionMode: map["redemptionMode"] as? String
         )
     }
 }

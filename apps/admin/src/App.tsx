@@ -20,7 +20,9 @@ const EventsPage = lazy(() => import('@/app/events/page'));
 const NewEventPage = lazy(() => import('@/app/events/new/page'));
 const EventDetailPage = lazy(() => import('@/app/events/[eventId]/page'));
 const NotificationsPage = lazy(() => import('@/app/notifications/page'));
-const PartnersPage = lazy(() => import('@/app/partners/page'));
+const PartnersPage = lazy(() => import('@/app/partners/company-directory'));
+const PartnerProfilePage = lazy(() => import('@/app/partners/[partnerId]/page'));
+const PartnerStatisticsPage = lazy(() => import('@/app/partners/statistics/page'));
 const PartnerApplicationsPage = lazy(() => import('@/app/partners/applications/page'));
 const PartnerOffersPage = lazy(() => import('@/app/partners/offers/page'));
 const PartnerInsightsPage = lazy(() => import('@/app/partners/[partnerId]/insights/page'));
@@ -71,6 +73,8 @@ export function App() {
         <Route path="/partners" element={<PartnersPage />} />
         <Route path="/partners/applications" element={<PartnerApplicationsPage />} />
         <Route path="/partners/offers" element={<PartnerOffersPage />} />
+        <Route path="/partners/statistics" element={<PartnerStatisticsPage />} />
+        <Route path="/partners/:partnerId" element={<PartnerProfilePage />} />
         <Route path="/partners/drive-heat" element={<PartnerDriveHeatPage />} />
         <Route path="/partners/:partnerId/insights" element={<PartnerInsightsPage />} />
         <Route path="/billboards" element={<BillboardsPage />} />

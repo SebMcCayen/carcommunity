@@ -162,6 +162,23 @@ acceptance command, coverage limits and no-cost TestFlight preparation.
 
 ## Localization
 
+Partner self-service uses the hand-maintained `PartnerPortal.xcstrings` table
+(Swedish/English), accessed by `PortalText` and `portalString`. It is separate
+from the generated contract catalog. The `NSCameraUsageDescription` values in
+`InfoPlist.xcstrings`, `Info.plist`, and `project.yml` describe the optional,
+user-initiated partner QR scanner and must remain synchronized.
+
+The portal calls only `partners-portal` through `KccFunctionsClient`; the wire
+contract is `docs/contracts/partner-portal-v1.md` at the repository root. Customer
+QR images use CoreImage, and staff scanning uses AVFoundation with explicit
+confirmation and online server redemption. No payment or appointment booking
+is performed. Personal QR tokens are in memory only, hidden when the customer
+view leaves the foreground, and never logged. Business statistics use the
+separate aggregate API, not client analytics or reservation lists. Explicit device
+application drafts are account-scoped, file-protected, excluded from backups and
+restorable for seven days. Logos/tokens are not included; successful submission
+clears the draft. Expired files are pruned on the next access.
+
 Swedish is the source language, English is required alongside it. Keys are the
 same semantic names as `contracts/localization` (e.g. `shell.tabMap`).
 `Localizable.xcstrings` is **generated** — edit the contracts, then run
@@ -169,7 +186,7 @@ same semantic names as `contracts/localization` (e.g. `shell.tabMap`).
 drift). Do not edit the catalog by hand, and do not hard-code user-facing text
 in views.
 
-`KCC/Resources/InfoPlist.xcstrings` is the one **hand-written** catalog: it
+`KCC/Resources/InfoPlist.xcstrings` is a **hand-written** catalog: it
 localizes Info.plist values (currently the
 `NSLocationWhenInUseUsageDescription` purpose string), which the generator
 does not own — it only writes `Localizable.xcstrings`. Its values are copied

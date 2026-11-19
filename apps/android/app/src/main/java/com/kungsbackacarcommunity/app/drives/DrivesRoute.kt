@@ -141,7 +141,9 @@ fun DrivesRoute(
             // drive becomes visible once one of the newest 5 is removed), and the
             // hidden-count banner must re-derive. This replaces the old snapshot
             // listener that reconciled the removal automatically.
-            historyCoordinator.reload()
+            // The separate reload effect owns this request. Resetting the
+            // deletion status cancels this effect, so it must not await I/O.
+            reloadKey++
         }
     }
 

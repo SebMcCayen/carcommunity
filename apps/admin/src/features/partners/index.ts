@@ -98,7 +98,10 @@ function toIsoRequired(value: unknown): string {
 // Document → contract mappers
 // ---------------------------------------------------------------------------
 
-function toApplicationSummary(id: string, data: DocumentData): AdminPartnerApplicationSummary {
+export function toApplicationSummary(
+  id: string,
+  data: DocumentData,
+): AdminPartnerApplicationSummary {
   return {
     applicationId: id,
     companyName: (data.companyName as string | undefined) ?? '',
@@ -112,7 +115,7 @@ function toApplicationSummary(id: string, data: DocumentData): AdminPartnerAppli
   };
 }
 
-function toApplicationDetail(id: string, data: DocumentData): AdminPartnerApplicationDetail {
+export function toApplicationDetail(id: string, data: DocumentData): AdminPartnerApplicationDetail {
   return {
     applicationId: id,
     companyName: (data.companyName as string | undefined) ?? '',
@@ -136,7 +139,7 @@ function toApplicationDetail(id: string, data: DocumentData): AdminPartnerApplic
   };
 }
 
-function toCompanySummary(id: string, data: DocumentData): AdminPartnerCompanySummary {
+export function toCompanySummary(id: string, data: DocumentData): AdminPartnerCompanySummary {
   return {
     partnerId: id,
     companyName: (data.name as string | undefined) ?? '',
@@ -153,7 +156,7 @@ function toCompanySummary(id: string, data: DocumentData): AdminPartnerCompanySu
   };
 }
 
-function toCompanyDetail(id: string, data: DocumentData): AdminPartnerCompanyDetail {
+export function toCompanyDetail(id: string, data: DocumentData): AdminPartnerCompanyDetail {
   return {
     partnerId: id,
     applicationId: (data.sourceApplicationId as string | null | undefined) ?? null,
@@ -176,7 +179,7 @@ function toCompanyDetail(id: string, data: DocumentData): AdminPartnerCompanyDet
   };
 }
 
-function toOfferSummary(id: string, data: DocumentData): AdminPartnerOfferSummary {
+export function toOfferSummary(id: string, data: DocumentData): AdminPartnerOfferSummary {
   return {
     offerId: id,
     partnerId: (data.companyId as string | undefined) ?? '',
@@ -192,7 +195,7 @@ function toOfferSummary(id: string, data: DocumentData): AdminPartnerOfferSummar
   };
 }
 
-function toOfferDetail(
+export function toOfferDetail(
   id: string,
   data: DocumentData,
   member: DocumentData | undefined,
@@ -291,10 +294,13 @@ export async function adminApproveApplication(
   applicationId: string,
   _token?: string,
 ): Promise<{ partnerCompanyId: string }> {
-  const result = await callAdmin<{ partnerCompanyId: string | null }>('partners-reviewApplication', {
-    applicationId,
-    action: 'approve',
-  });
+  const result = await callAdmin<{ partnerCompanyId: string | null }>(
+    'partners-reviewApplication',
+    {
+      applicationId,
+      action: 'approve',
+    },
+  );
   // The approve action always creates a draft company server-side; a missing
   // id means an unexpected response shape — surface it instead of propagating
   // an empty id into the post-approve navigation.
@@ -538,10 +544,12 @@ export async function adminUpdatePartnerOffer(
 export async function adminActivatePartnerOffer(
   offerId: string,
   _token?: string,
+  expectedVersion?: number,
 ): Promise<AdminPartnerOfferDetail> {
   await callAdmin<{ offerId: string }>('partners-setOfferStatus', {
     offerId,
     action: 'activate',
+    ...(expectedVersion === undefined ? {} : { expectedVersion }),
   });
   return adminGetPartnerOffer(offerId);
 }

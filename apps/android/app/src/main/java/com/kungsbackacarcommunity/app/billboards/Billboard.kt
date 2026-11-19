@@ -59,6 +59,7 @@ data class Billboard(
     val callToActionValue: String? = null,
     val availableFromMillis: Long? = null,
     val availableUntilMillis: Long? = null,
+    val imagePath: String? = null,
 )
 
 /**

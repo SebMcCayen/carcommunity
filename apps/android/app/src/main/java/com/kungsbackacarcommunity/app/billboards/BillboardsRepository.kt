@@ -170,5 +170,6 @@ private fun DocumentSnapshot.toBillboard(): Billboard? {
         callToActionValue = getString("callToActionValue"),
         availableFromMillis = getTimestamp("availableFrom")?.toDate()?.time,
         availableUntilMillis = getTimestamp("availableUntil")?.toDate()?.time,
+        imagePath = getString("imagePath"),
     )
 }

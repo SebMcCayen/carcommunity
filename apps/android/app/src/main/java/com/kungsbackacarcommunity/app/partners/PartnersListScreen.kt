@@ -57,6 +57,7 @@ fun PartnersRootScreen(
     canLoadMoreCompanies: Boolean = false,
     isLoadingMoreCompanies: Boolean = false,
     didFailLoadingMoreCompanies: Boolean = false,
+    portalActions: @Composable () -> Unit = {},
 ) {
     AeroPage(
         title = stringResource(R.string.partners_screenTitle),
@@ -64,6 +65,7 @@ fun PartnersRootScreen(
         modifier = modifier,
         ownerShortcutEnabled = false,
     ) {
+        portalActions()
         TabRow(selectedTabIndex = section.ordinal) {
             Tab(
                 selected = section == PartnersRootSection.DIRECTORY,
@@ -327,18 +329,7 @@ private fun CompanyCard(company: PartnerCompany, offerCount: Int?, onClick: () -
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // The company model has no image URL: a native symbol is the honest fallback.
-            Surface(
-                shape = RoundedCornerShape(KccRadius.md),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Icon(
-                    Icons.Filled.Storefront,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(KccSpacing.s4).size(KccSpacing.s10),
-                )
-            }
+            PartnerLogo(company.logoPath)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),

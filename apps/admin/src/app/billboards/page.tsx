@@ -13,6 +13,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { p, PartnerLogo } from '../partners/portal-components';
 
 import type {
   AdminActivateBillboardRequest,
@@ -26,7 +28,10 @@ import {
   adminActivateBillboard,
   adminCreateBillboard,
   adminEndBillboard,
-  adminListBillboards,
+  adminListBillboardsCursor,
+  adminUsePartnerBillboardLogo,
+  type BillboardCursor,
+  type AdminBillboardWithLogo,
   adminPauseBillboard,
   adminUpdateBillboard,
   ApiError,
@@ -141,7 +146,14 @@ const CTA_OPTIONS: (BillboardCtaType | '')[] = [
   'partner_profile',
 ];
 
-const BillboardForm = ({ initial, isEdit, onSave, onCancel, isSaving, saveError }: BillboardFormProps) => {
+const BillboardForm = ({
+  initial,
+  isEdit,
+  onSave,
+  onCancel,
+  isSaving,
+  saveError,
+}: BillboardFormProps) => {
   const [form, setForm] = useState<BillboardFormState>(initial);
   const set = (field: keyof BillboardFormState, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -222,9 +234,7 @@ const BillboardForm = ({ initial, isEdit, onSave, onCancel, isSaving, saveError 
       <MapLocationPicker
         latitude={form.latitude}
         longitude={form.longitude}
-        onChange={(latitude, longitude) =>
-          setForm((prev) => ({ ...prev, latitude, longitude }))
-        }
+        onChange={(latitude, longitude) => setForm((prev) => ({ ...prev, latitude, longitude }))}
         labelLat={t('billboards.formLatitudeLabel')}
         labelLng={t('billboards.formLongitudeLabel')}
         helpText={t('map.dragHint')}
@@ -260,7 +270,9 @@ const BillboardForm = ({ initial, isEdit, onSave, onCancel, isSaving, saveError 
           <select
             className={styles.input}
             value={form.callToActionType}
-            onChange={(event) => set('callToActionType', event.target.value as BillboardCtaType | '')}
+            onChange={(event) =>
+              set('callToActionType', event.target.value as BillboardCtaType | '')
+            }
           >
             {CTA_OPTIONS.map((cta) => (
               <option key={cta} value={cta}>
@@ -298,7 +310,12 @@ const BillboardForm = ({ initial, isEdit, onSave, onCancel, isSaving, saveError 
       {saveError && <p className={styles.errorText}>{saveError}</p>}
 
       <div className={styles.formActions}>
-        <button type="button" className={styles.btnSecondary} onClick={onCancel} disabled={isSaving}>
+        <button
+          type="button"
+          className={styles.btnSecondary}
+          onClick={onCancel}
+          disabled={isSaving}
+        >
           {t('billboards.cancel')}
         </button>
         <button type="submit" className={styles.btnPrimary} disabled={isSaving}>
@@ -335,7 +352,13 @@ const EMPTY_CHECKS: SafetyChecks = {
   suitableForMapConfirmed: false,
 };
 
-const ActivateModal = ({ billboard, onConfirm, onCancel, isSaving, saveError }: ActivateModalProps) => {
+const ActivateModal = ({
+  billboard,
+  onConfirm,
+  onCancel,
+  isSaving,
+  saveError,
+}: ActivateModalProps) => {
   const [checks, setChecks] = useState<SafetyChecks>(EMPTY_CHECKS);
   const [approvalReason, setApprovalReason] = useState('');
 
@@ -368,14 +391,16 @@ const ActivateModal = ({ billboard, onConfirm, onCancel, isSaving, saveError }: 
         >
           <p className={styles.label}>{t('billboards.safetyCheckTitle')}</p>
           <div className={styles.form}>
-            {([
-              ['notBusinessLocationConfirmed', t('billboards.safetyCheck1')],
-              ['notRoadLaneConfirmed', t('billboards.safetyCheck2')],
-              ['notRoadSignConfirmed', t('billboards.safetyCheck3')],
-              ['notObstructingMapConfirmed', t('billboards.safetyCheck4')],
-              ['markedAsAdvertisingConfirmed', t('billboards.safetyCheck5')],
-              ['suitableForMapConfirmed', t('billboards.safetyCheck6')],
-            ] as [keyof SafetyChecks, string][]).map(([key, label]) => (
+            {(
+              [
+                ['notBusinessLocationConfirmed', t('billboards.safetyCheck1')],
+                ['notRoadLaneConfirmed', t('billboards.safetyCheck2')],
+                ['notRoadSignConfirmed', t('billboards.safetyCheck3')],
+                ['notObstructingMapConfirmed', t('billboards.safetyCheck4')],
+                ['markedAsAdvertisingConfirmed', t('billboards.safetyCheck5')],
+                ['suitableForMapConfirmed', t('billboards.safetyCheck6')],
+              ] as [keyof SafetyChecks, string][]
+            ).map(([key, label]) => (
               <label key={key} className={styles.checkLabel}>
                 <input type="checkbox" checked={checks[key]} onChange={() => toggle(key)} />
                 <span>{label}</span>
@@ -399,7 +424,12 @@ const ActivateModal = ({ billboard, onConfirm, onCancel, isSaving, saveError }: 
           {saveError && <p className={styles.errorText}>{saveError}</p>}
 
           <div className={styles.formActions}>
-            <button type="button" className={styles.btnSecondary} onClick={onCancel} disabled={isSaving}>
+            <button
+              type="button"
+              className={styles.btnSecondary}
+              onClick={onCancel}
+              disabled={isSaving}
+            >
               {t('billboards.cancel')}
             </button>
             <button type="submit" className={styles.btnPrimary} disabled={!canSubmit || isSaving}>
@@ -450,10 +480,19 @@ const ReasonModal = ({ title, onConfirm, onCancel, isSaving, saveError }: Reason
           {saveError && <p className={styles.errorText}>{saveError}</p>}
 
           <div className={styles.formActions}>
-            <button type="button" className={styles.btnSecondary} onClick={onCancel} disabled={isSaving}>
+            <button
+              type="button"
+              className={styles.btnSecondary}
+              onClick={onCancel}
+              disabled={isSaving}
+            >
               {t('billboards.cancel')}
             </button>
-            <button type="submit" className={styles.btnPrimary} disabled={!reason.trim() || isSaving}>
+            <button
+              type="submit"
+              className={styles.btnPrimary}
+              disabled={!reason.trim() || isSaving}
+            >
               {isSaving ? t('billboards.saving') : t('billboards.confirm')}
             </button>
           </div>
@@ -466,7 +505,11 @@ const ReasonModal = ({ title, onConfirm, onCancel, isSaving, saveError }: Reason
 type View = 'list' | 'create' | 'edit' | 'activate' | 'pause' | 'end';
 
 export default function BillboardsPage() {
-  const [billboards, setBillboards] = useState<AdminBillboardSummary[]>([]);
+  const [params] = useSearchParams();
+  const companyFilter = params.get('partnerCompanyId') ?? '';
+  const cursors = useRef<(BillboardCursor | null)[]>([null]);
+  const generation = useRef(0);
+  const [billboards, setBillboards] = useState<AdminBillboardWithLogo[]>([]);
   const [page, setPage] = useState(1);
   const [hasNext, setHasNext] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -484,26 +527,35 @@ export default function BillboardsPage() {
     };
   }, []);
 
-  const loadBillboards = useCallback(async (nextPage: number) => {
-    if (!isMounted.current) return;
+  const loadBillboards = useCallback(
+    async (nextPage: number) => {
+      if (!isMounted.current) return;
 
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const response = await adminListBillboards(nextPage);
-      if (isMounted.current) {
-        setBillboards(response.data.billboards);
-        setHasNext(response.meta.hasNext);
-        setPage(nextPage);
+      const run = ++generation.current;
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        if (nextPage === 1) cursors.current = [null];
+        const response = await adminListBillboardsCursor(
+          cursors.current[nextPage - 1] ?? null,
+          companyFilter || undefined,
+        );
+        if (isMounted.current && run === generation.current) {
+          cursors.current[nextPage] = response.nextCursor;
+          setBillboards(response.billboards);
+          setHasNext(Boolean(response.nextCursor));
+          setPage(nextPage);
+        }
+      } catch (error) {
+        if (isMounted.current && run === generation.current) {
+          setLoadError(error instanceof ApiError ? error.message : t('billboards.loadError'));
+        }
+      } finally {
+        if (isMounted.current && run === generation.current) setIsLoading(false);
       }
-    } catch (error) {
-      if (isMounted.current) {
-        setLoadError(error instanceof ApiError ? error.message : t('billboards.loadError'));
-      }
-    } finally {
-      if (isMounted.current) setIsLoading(false);
-    }
-  }, []);
+    },
+    [companyFilter],
+  );
 
   useEffect(() => {
     void loadBillboards(1);
@@ -531,9 +583,12 @@ export default function BillboardsPage() {
         availableUntil: localToIso(form.availableUntil),
         callToActionType: (form.callToActionType as BillboardCtaType) || null,
         callToActionValue:
-          (form.callToActionType === 'phone' || form.callToActionType === 'website') && form.callToActionValue.trim()
-            ? form.callToActionValue.trim()
-            : null,
+          form.callToActionType === 'partner_profile'
+            ? form.partnerCompanyId
+            : (form.callToActionType === 'phone' || form.callToActionType === 'website') &&
+                form.callToActionValue.trim()
+              ? form.callToActionValue.trim()
+              : null,
         safetyNote: form.safetyNote || null,
       };
       await adminCreateBillboard(request);
@@ -565,9 +620,12 @@ export default function BillboardsPage() {
         availableUntil: localToIso(form.availableUntil),
         callToActionType: (form.callToActionType as BillboardCtaType) || null,
         callToActionValue:
-          (form.callToActionType === 'phone' || form.callToActionType === 'website') && form.callToActionValue.trim()
-            ? form.callToActionValue.trim()
-            : null,
+          form.callToActionType === 'partner_profile'
+            ? form.partnerCompanyId
+            : (form.callToActionType === 'phone' || form.callToActionType === 'website') &&
+                form.callToActionValue.trim()
+              ? form.callToActionValue.trim()
+              : null,
         safetyNote: form.safetyNote || null,
       };
 
@@ -650,6 +708,8 @@ export default function BillboardsPage() {
             <button className={styles.btnPrimary} onClick={() => setView('create')}>
               {t('billboards.createBillboard')}
             </button>
+            <p>{p('billboardInfo')}</p>
+            <p>{p('fileGuidance')}</p>
           </div>
 
           {isLoading && <p className={styles.loadingText}>{t('billboards.loading')}</p>}
@@ -672,7 +732,15 @@ export default function BillboardsPage() {
                 <tbody>
                   {billboards.map((billboard) => (
                     <tr key={billboard.billboardId}>
-                      <td>{billboard.headline}</td>
+                      <td>
+                        {billboard.imagePath && (
+                          <PartnerLogo
+                            name={billboard.partnerCompanyName}
+                            path={billboard.imagePath}
+                          />
+                        )}{' '}
+                        {billboard.headline}
+                      </td>
                       <td>{billboard.partnerCompanyName}</td>
                       <td>{billboard.placementType}</td>
                       <td>
@@ -689,13 +757,31 @@ export default function BillboardsPage() {
                         at the map, and files a bug.
                       */}
                       <td>
-                        {billboard.mapVisible
-                          ? t('billboards.onMapYes')
-                          : t('billboards.onMapNo')}
+                        {billboard.mapVisible ? t('billboards.onMapYes') : t('billboards.onMapNo')}
                       </td>
                       <td>{formatDate(billboard.availableUntil)}</td>
                       <td>
                         <div className={styles.actions}>
+                          {(billboard.status === 'draft' || billboard.status === 'paused') && (
+                            <button
+                              className={styles.btnSmall}
+                              disabled={isSaving}
+                              onClick={async () => {
+                                setIsSaving(true);
+                                setLoadError(null);
+                                try {
+                                  await adminUsePartnerBillboardLogo(billboard.billboardId);
+                                  await loadBillboards(page);
+                                } catch (err) {
+                                  setLoadError(err instanceof Error ? err.message : p('error'));
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }}
+                            >
+                              {p('applyLogo')}
+                            </button>
+                          )}
                           {(billboard.status === 'draft' || billboard.status === 'paused') && (
                             <button
                               className={styles.btnSmall}
@@ -752,17 +838,26 @@ export default function BillboardsPage() {
                 </tbody>
               </table>
 
-              <div className={styles.actions} style={{ justifyContent: 'space-between', marginTop: '16px' }}>
+              <div
+                className={styles.actions}
+                style={{ justifyContent: 'space-between', marginTop: '16px' }}
+              >
                 <div>
                   {page > 1 && (
-                    <button className={styles.btnSecondary} onClick={() => void loadBillboards(page - 1)}>
+                    <button
+                      className={styles.btnSecondary}
+                      onClick={() => void loadBillboards(page - 1)}
+                    >
                       ← {t('billboards.prevPage')}
                     </button>
                   )}
                 </div>
                 <div>
                   {hasNext && (
-                    <button className={styles.btnSecondary} onClick={() => void loadBillboards(page + 1)}>
+                    <button
+                      className={styles.btnSecondary}
+                      onClick={() => void loadBillboards(page + 1)}
+                    >
                       {t('billboards.nextPage')} →
                     </button>
                   )}
@@ -777,7 +872,11 @@ export default function BillboardsPage() {
         <div className={styles.formContainer}>
           <h2 className={styles.modalTitle}>{t('billboards.createBillboard')}</h2>
           <BillboardForm
-            initial={EMPTY_FORM}
+            initial={{
+              ...EMPTY_FORM,
+              partnerCompanyId: companyFilter,
+              callToActionType: 'partner_profile',
+            }}
             isEdit={false}
             onSave={handleCreate}
             onCancel={resetView}
