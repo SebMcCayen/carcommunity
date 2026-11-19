@@ -500,6 +500,8 @@ struct MapHomeView: View {
     private let featureHealthReporter: FeatureHealthReporter?
     private let markers: AnyView
     @State private var renderWatchdog: MapRenderWatchdog
+    @State private var placeholderTapCount = 0
+    @State private var placeholderPanCount = 0
 
     init(
         surface: StubMapSurface,
@@ -594,7 +596,32 @@ struct MapHomeView: View {
         }
     }
 
-    private var mapPlaceholder: some View {
+    @ViewBuilder private var mapPlaceholder: some View {
+        if ProcessInfo.processInfo.arguments.contains("-KCCUITestMapGestures") {
+            // Opt-in config-less acceptance surface, in the same position as
+            // Mapbox and underneath every real marker/chrome overlay. Sending
+            // coordinate events here checks touch delivery rather than the AX
+            // hit point of the decorative "Map" label.
+            mapPlaceholderContent
+                .contentShape(Rectangle())
+                .onTapGesture { placeholderTapCount += 1 }
+                .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { _ in
+                    surface.suspendConvoyFitForInteraction()
+                    surface.suspendSelfFollowForInteraction()
+                    placeholderPanCount += 1
+                })
+                .overlay(alignment: .bottomLeading) {
+                    Text(verbatim: "\(placeholderTapCount)|\(placeholderPanCount)")
+                        .accessibilityIdentifier("shell.mapGestureProbe")
+                        .accessibilityValue(Text(verbatim: "\(placeholderTapCount)|\(placeholderPanCount)"))
+                        .allowsHitTesting(false)
+                }
+        } else {
+            mapPlaceholderContent
+        }
+    }
+
+    private var mapPlaceholderContent: some View {
         ZStack {
             KccTheme.subtle
                 .ignoresSafeArea()

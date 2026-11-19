@@ -2504,6 +2504,9 @@
     "next": "Next",
     "page": "Showing %1$d–%2$d of %3$d"
   },
+  "liveDriverPhoto": {
+    "membershipRing": "Membership gold ring"
+  },
   "partnerPortal": {
     "manage": "Manage business",
     "reservations": "My reservations",

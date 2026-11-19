@@ -68,6 +68,7 @@ struct ShellView: View {
     /// keeping this one instance for the shell's lifetime. Covered pages only
     /// stand it down via ``MapSurface/setActive(_:)`` (see the map-cover
     /// effect below), never recreate it.
+    @State private var mapDriverControlFrames: [String: CGRect] = [:]
     @State private var mapSurface = StubMapSurface()
     @State private var mapLayerPreferences = MapLayerPreferences.shared
     @State private var showMapLayers = false
@@ -856,7 +857,7 @@ struct ShellView: View {
     // A computed `some View` property alone does not bound the concrete type:
     // Release must still decode every nested generic modifier at first render.
     private var mapOverlayContent: AnyView {
-        Color.clear.ignoresSafeArea()
+        Color.clear.allowsHitTesting(false).ignoresSafeArea()
             .overlay { mapChromeContent }
             .eraseToAnyView()
     }
@@ -911,23 +912,28 @@ struct ShellView: View {
                 )
             }
             if liveLocationFeatureEnabled {
-                ConvoyMapAwarenessOverlay(
-                    members: convoyAwareness.visibleMembers,
-                    imageURLs: convoyAwareness.imageURLs,
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                LiveDriverMapOverlay(
+                    convoy: convoyAwareness.visibleMembers,
+                    nearby: nearbyLive.visibleMarkers(at: context.date),
+                    convoyImageURLs: convoyAwareness.imageURLs,
+                    nearbyImageURLs: nearbyLive.imageURLs,
                     projection: mapSurface,
-                    onSelect: { uid in selectMapReading(.convoyMember(uid)) },
-                    clubBadges: liveClubBadges,
-                    badgeViewerID: liveClubBadgeViewerID,
-                    onDrawnUIDsChanged: { convoyDrawnUIDs = $0 }
+                    onSelect: { uid, isConvoy in
+                        if isConvoy {
+                            guard convoyAwareness.profileTarget(uid: uid) != nil else { return }
+                            selectMapReading(.convoyMember(uid))
+                        } else {
+                            guard nearbyLive.profileTarget(uid: uid) != nil else { return }
+                            selectMapReading(.nearby(uid))
+                        }
+                    },
+                    clubBadges: liveClubBadges, badgeViewerID: liveClubBadgeViewerID,
+                    controlFrames: Array(mapDriverControlFrames.values),
+                    onConvoyDrawn: { convoyDrawnUIDs = $0 },
+                    onNearbyDrawn: { nearbyDrawnUIDs = $0 }
                 )
-                NearbyLiveOverlay(
-                    coordinator: nearbyLive,
-                    projection: mapSurface,
-                    onSelect: { uid in selectMapReading(.nearby(uid)) },
-                    clubBadges: liveClubBadges,
-                    badgeViewerID: liveClubBadgeViewerID,
-                    onDrawnUIDsChanged: { nearbyDrawnUIDs = $0 }
-                )
+                }
             }
         }
 
@@ -941,8 +947,18 @@ struct ShellView: View {
     }
 
 
+    private func recordDriverControl(_ id: String, _ bounds: CGRect?) {
+        if let bounds, bounds.width > 0, bounds.height > 0 {
+            guard mapDriverControlFrames[id] != bounds else { return }
+            mapDriverControlFrames[id] = bounds
+        } else if mapDriverControlFrames[id] != nil {
+            mapDriverControlFrames.removeValue(forKey: id)
+        }
+    }
+
     private var mapChromeContent: AnyView {
         Color.clear
+            .allowsHitTesting(false)
             // Account entries require a real session. Public Settings
             // (including legal links) also remain usable without config.
             .overlay(alignment: .topTrailing) {
@@ -1285,6 +1301,7 @@ struct ShellView: View {
             )
         }
         .accessibilityIdentifier("shell.menu")
+        .driverPhotoObstacle("profile", update: recordDriverControl)
         .padding(KccSpacing.s4)
     }
 
@@ -1357,6 +1374,7 @@ struct ShellView: View {
                 .background { GeometryReader { proxy in
                     Color.clear.preference(key: MapDockHeightKey.self, value: proxy.size.height)
                 } }
+                .driverPhotoObstacle("dock", update: recordDriverControl)
             }
             .onPreferenceChange(MapSessionHeightKey.self) { mapSessionHeight = $0 }
         }
@@ -1557,6 +1575,7 @@ struct ShellView: View {
             // Keep the tools fixed when the nearby-wave control appears.
             if nearbyWaveUid != nil, groupDriveMapUids.isEmpty, let nearbyWaveCoordinator {
                 NearbyWaveButton(coordinator: nearbyWaveCoordinator, rangeAt: nearbyWaveRange(at:))
+                    .driverPhotoObstacle("wave", update: recordDriverControl)
             }
         }
         .font(.system(size: 20, weight: .semibold))
@@ -1575,6 +1594,7 @@ struct ShellView: View {
                         .kccMapControl()
                 }
                 .accessibilityLabel(Text("incidents.reportButton"))
+                .driverPhotoObstacle("report", update: recordDriverControl)
             }
 
             MapLayersButton(isPresented: $showMapLayers, isActive:
@@ -1583,12 +1603,15 @@ struct ShellView: View {
                 (mapLayerPreferences.mapModeOverride != nil &&
                  mapLayerPreferences.mapModeOverride != (colorScheme == .dark ? .night : .day)))
                 .accessibilityIdentifier("shell.mapLayers")
+                .driverPhotoObstacle("layers", update: recordDriverControl)
             MapCompassButton(mode: mapSurface.compassMode, bearing: mapSurface.bearing) {
                 mapSurface.setCompassMode($0)
             }
+            .driverPhotoObstacle("compass", update: recordDriverControl)
 
             if let coordinator = crownHuntComposition?.perkMapCoordinator, coordinator.isAvailable {
                 CrownPerkMapControl(coordinator: coordinator)
+                    .driverPhotoObstacle("perks", update: recordDriverControl)
             }
         }
     }
@@ -1607,6 +1630,7 @@ struct ShellView: View {
         .accessibilityLabel(Text("shell.searchExpand"))
         .accessibilityIdentifier("shell.search")
         .accessibilityFocused($searchLauncherFocused)
+        .driverPhotoObstacle("search", update: recordDriverControl)
     }
 
     private var primaryNavigation: some View {
@@ -3496,5 +3520,36 @@ struct MapProfileAvatarContent: View {
                 .allowsHitTesting(false)
             }
         }
+    }
+}
+
+
+private struct DriverPhotoObstacle: ViewModifier {
+    let id: String
+    let update: @MainActor (String, CGRect?) -> Void
+    func body(content: Content) -> some View {
+        content
+            // Measurement must not introduce an interactive layer around a
+            // control: the surrounding map still owns taps and pans.
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: DriverPhotoObstacleFrameKey.self,
+                        value: geometry.frame(in: .global))
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+            .onPreferenceChange(DriverPhotoObstacleFrameKey.self) { update(id, $0) }
+            .onDisappear { update(id, nil) }
+    }
+}
+
+private struct DriverPhotoObstacleFrameKey: PreferenceKey {
+    static var defaultValue: CGRect { .zero }
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+}
+private extension View {
+    func driverPhotoObstacle(_ id: String, update: @escaping @MainActor (String, CGRect?) -> Void) -> some View {
+        modifier(DriverPhotoObstacle(id: id, update: update))
     }
 }

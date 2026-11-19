@@ -35,6 +35,18 @@ final class FirebaseLiveClubBadgeRepository: LiveClubBadgeRepository {
             continuation.onTermination = { _ in box.listener.remove() }
         }
     }
+    func appearanceUpdates(uid: String) -> AsyncStream<LiveDriverAppearance?> {
+        let viewerID = viewerID
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let listener = firestore.collection("users").document(uid).addSnapshotListener { snapshot, error in
+                let authorized = error == nil && Auth.auth().currentUser?.uid == viewerID
+                continuation.yield(authorized ? LiveDriverAppearance.decode(snapshot?.data()) : nil)
+            }
+            let box = LiveClubBadgeListenerBox(listener: listener)
+            continuation.onTermination = { _ in box.listener.remove() }
+        }
+    }
+
 }
 
 private final class LiveClubBadgeListenerBox: @unchecked Sendable {

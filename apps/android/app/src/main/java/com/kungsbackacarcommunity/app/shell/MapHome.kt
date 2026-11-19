@@ -72,8 +72,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -92,6 +94,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -358,6 +363,8 @@ fun MapHome(
     trapDrainOverlay: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
+    var chromeOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val driverControlBounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
     var topChromeHeightPx by remember { mutableIntStateOf(0) }
     var bottomChromeHeightPx by remember { mutableIntStateOf(0) }
     val chromeDensity = LocalDensity.current
@@ -537,7 +544,8 @@ fun MapHome(
     // the blank-flash bug (see MapSurface.Content). Everything here reaches the
     // map through the [mapSurface] hooks instead. The Box stays transparent so
     // the shell's map shows through.
-    BoxWithConstraints(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)
+        .onGloballyPositioned { chromeOrigin = it.positionInRoot() }) {
         // On wide windows the capped reaction row leaves the tool rail beside
         // it. Narrow windows reserve the row's height to prevent overlap.
         val toolsBesideReactions = maxWidth >= 640.dp
@@ -547,12 +555,15 @@ fun MapHome(
         // control composed below this point draws over it rather than being
         // covered by a car photo pinned to a screen edge.
         MapDensityOverlay(mapSurface, densityIncidents, covered)
-        convoyOverlay?.invoke()
-
-        // Nearby-public live sharers (discovered via live.listNearby), on the
-        // same map layer, just above the convoy layer and still UNDER all the
-        // floating chrome.
-        nearbyOverlay?.invoke()
+        val driverExclusions = driverControlBounds.values.filter { it.width > 0 && it.height > 0 }.map { rect ->
+            com.kungsbackacarcommunity.app.map.DriverPhotoRect(
+                (rect.left - chromeOrigin.x).toDouble(), (rect.top - chromeOrigin.y).toDouble(),
+                (rect.right - chromeOrigin.x).toDouble(), (rect.bottom - chromeOrigin.y).toDouble())
+        }
+        CompositionLocalProvider(com.kungsbackacarcommunity.app.live.LocalDriverPhotoExclusions provides driverExclusions) {
+            convoyOverlay?.invoke()
+            nearbyOverlay?.invoke()
+        }
 
         // Kronjakt perk map layer: the placer-only hidden spike-strip markers and
         // the own-dot shield / double-points effects. Same map layer as the live
@@ -621,6 +632,7 @@ fun MapHome(
                 ),
                 moreMenuOpen = moreOpen,
                 onDismissMore = { moreOpen = false },
+                onChromeBounds = { id, rect -> driverControlBounds[id] = rect },
             )
             if (loadState == MapLoadState.Loading) {
                 LoadingRoadsChip()
@@ -673,6 +685,10 @@ fun MapHome(
                 crownHuntPerksEnabled,
                 savedPlacesInProfileMenu = true,
             ).forEach { control ->
+                androidx.compose.runtime.DisposableEffect(control) {
+                    onDispose { driverControlBounds.remove("tool-${control.name}") }
+                }
+                Box(Modifier.onGloballyPositioned { driverControlBounds["tool-${control.name}"] = it.boundsInRoot() }) {
                 when (control) {
                     // Report-incident control — opens the type picker. Present
                     // only when incident reporting is available (a repository
@@ -756,11 +772,15 @@ fun MapHome(
                     MapCircleControlKind.Perks ->
                         PerkDeployCircleControl(onClick = onOpenPerks, active = perkActive)
                 }
+                }
             }
 
             // Keep the transient wave below the tools so its appearance does not
             // move their tap targets. The host owns visibility and animation.
-            waveControl?.invoke()
+            if (waveControl != null) {
+                androidx.compose.runtime.DisposableEffect(Unit) { onDispose { driverControlBounds.remove("wave") } }
+                Box(Modifier.onGloballyPositioned { driverControlBounds["wave"] = it.boundsInRoot() }) { waveControl.invoke() }
+            }
         }
 
         // Convoy reactions (buttons bottom-centre + the mid-screen pop), composed
@@ -773,12 +793,13 @@ fun MapHome(
 
         if (!searchExpanded && (liveSessionBar != null || convoyBar != null)) {
             androidx.compose.runtime.DisposableEffect(Unit) {
-                onDispose { onSessionDockHeightChanged(0) }
+                onDispose { onSessionDockHeightChanged(0); driverControlBounds.remove("dock") }
             }
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .onSizeChanged { bottomChromeHeightPx = it.height; onSessionDockHeightChanged(it.height) }
                     .testTag("map_home_session_dock")
+                    .onGloballyPositioned { driverControlBounds["dock"] = it.boundsInRoot() }
                     .padding(horizontal = 12.dp)
                     .padding(top = KccSpacing.s1, bottom = KccSpacing.s2),
                 verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
@@ -1745,7 +1766,11 @@ private fun SearchBarRow(
     onDismissMore: () -> Unit,
     clubBadge: com.kungsbackacarcommunity.app.profile.ClubBadge? = null,
     liveSessionBar: (@Composable () -> Unit)? = null,
+    onChromeBounds: (String, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
 ) {
+    androidx.compose.runtime.DisposableEffect(searchExpanded) {
+        onDispose { onChromeBounds(if (searchExpanded) "search-expanded" else "search", androidx.compose.ui.geometry.Rect.Zero) }
+    }
     val haptics = LocalHapticFeedback.current
     val unreadMenuLabel = stringResource(R.string.chatHub_tabUnread)
     Row(
@@ -1792,7 +1817,8 @@ private fun SearchBarRow(
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onExpandSearch()
                         },
-                        modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_SEARCH_TAG),
+                        modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_SEARCH_TAG)
+                            .onGloballyPositioned { onChromeBounds("search", it.boundsInRoot()) },
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -1860,7 +1886,8 @@ private fun SearchBarRow(
                 exit = searchBarExit,
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().height(KccSpacing.s12),
+                    modifier = Modifier.fillMaxWidth().height(KccSpacing.s12)
+                        .onGloballyPositioned { onChromeBounds("search-expanded", it.boundsInRoot()) },
                     shape = RoundedCornerShape(KccRadius.full),
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 3.dp,
@@ -1912,6 +1939,7 @@ private fun SearchBarRow(
                     Modifier
                         .size(KccSpacing.s12)
                         .testTag(MAP_HOME_MORE_TAG)
+                        .onGloballyPositioned { onChromeBounds("profile", it.boundsInRoot()) }
                         .semantics {
                             if (hasUnreadNotifications) stateDescription = unreadMenuLabel
                         }

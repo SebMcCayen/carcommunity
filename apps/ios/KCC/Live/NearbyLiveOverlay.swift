@@ -196,3 +196,136 @@ struct NearbySharerIdentity: View {
         }
     }
 }
+
+/// The selected photo + true-position-dot + leader design. One roster and one
+/// layout serve nearby and convoy drivers, including dense longer-line cases.
+struct LiveDriverMapOverlay: View {
+    let convoy: [ConvoyMemberPosition]
+    let nearby: [LiveMarker]
+    let convoyImageURLs: [String: URL]
+    let nearbyImageURLs: [String: URL]
+    let projection: any MapProjection
+    let onSelect: (String, Bool) -> Void
+    var clubBadges: LiveClubBadgeCoordinator? = nil
+    var badgeViewerID: String? = nil
+    var controlFrames: [CGRect] = [] // Global UIKit coordinates, measured from actual controls.
+    var onConvoyDrawn: (Set<String>) -> Void = { _ in }
+    var onNearbyDrawn: (Set<String>) -> Void = { _ in }
+    @State private var motion = DriverMotionRoster()
+    @State private var presented: [ConvoyMemberPosition] = []
+    @State private var layout = DriverPhotoLayout()
+    @State private var arrowUIDs = Set<String>()
+
+    private var convoyUIDs: Set<String> { Set(convoy.map(\.uid)) }
+    private var roster: [ConvoyMemberPosition] {
+        var seen = Set<String>()
+        return (convoy + nearby.filter { !convoyUIDs.contains($0.uid) }.map(ConvoyMemberPosition.init(marker:)))
+            .filter { seen.insert($0.uid).inserted }
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let originals = Dictionary(uniqueKeysWithValues: roster.map { ($0.uid, $0) })
+            let visible = presented.filter { originals[$0.uid] != nil }
+            let anchors = visible.compactMap { member -> DriverPhotoAnchor? in
+                guard projection.cameraSnapshot != nil,
+                      let point = projection.screenPositionFor(latitude: member.latitude, longitude: member.longitude),
+                      point.trustworthy, point.x >= 0, point.y >= 0,
+                      point.x <= Double(geometry.size.width), point.y <= Double(geometry.size.height) else { return nil }
+                return DriverPhotoAnchor(uid: member.uid, point: .init(x: point.x, y: point.y))
+            }
+            let own = projection.renderedOwnPoint.flatMap {
+                projection.screenPositionFor(latitude: $0.latitude, longitude: $0.longitude)
+            }.flatMap { $0.trustworthy ? DriverPhotoPoint(x: $0.x, y: $0.y) : nil }
+            let origin = geometry.frame(in: .global)
+            let exclusions = controlFrames.filter { $0.width > 0 && $0.height > 0 }.map {
+                DriverPhotoRect(left: Double($0.minX - origin.minX), top: Double($0.minY - origin.minY),
+                                right: Double($0.maxX - origin.minX), bottom: Double($0.maxY - origin.minY))
+            }
+            let plan = layout.layout(anchors, width: Double(geometry.size.width), height: Double(geometry.size.height), ownPoint: own, exclusions: exclusions)
+            let photoUIDs = Set(plan.placed.map(\.uid))
+            ZStack {
+                ConvoyMapAwarenessOverlay(members: visible.filter { convoyUIDs.contains($0.uid) },
+                    imageURLs: convoyImageURLs, projection: projection,
+                    clubBadges: clubBadges, badgeViewerID: badgeViewerID,
+                    onDrawnUIDsChanged: { arrowUIDs = $0 }, presentationProvided: true,
+                    showsOnScreenPhotos: false, suppressedArrowUIDs: Set(anchors.map(\.uid)))
+                    // This child only draws offscreen arrows. Photo Buttons
+                    // below own selection; empty map space belongs to Mapbox.
+                    .allowsHitTesting(false)
+                Canvas { context, _ in
+                    for item in plan.placed {
+                        for segment in item.lines {
+                            var path = Path()
+                            path.move(to: CGPoint(x: segment.start.x, y: segment.start.y))
+                            path.addLine(to: CGPoint(x: segment.end.x, y: segment.end.y))
+                            context.stroke(path, with: .color(KccTheme.text), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                        }
+                        if item.showAnchor {
+                            let rect = CGRect(x: item.anchor.x - 3, y: item.anchor.y - 3, width: 6, height: 6)
+                            context.fill(Path(ellipseIn: rect), with: .color(KccTheme.driver))
+                            context.stroke(Path(ellipseIn: rect), with: .color(KccTheme.text), lineWidth: 1)
+                        }
+                    }
+                }.allowsHitTesting(false).accessibilityHidden(true)
+                ForEach(plan.placed) { item in
+                    if let member = originals[item.uid] {
+                        Button { onSelect(item.uid, convoyUIDs.contains(item.uid)) } label: {
+                            LiveCarPhotoBadge(imageURL: member.imagePath.flatMap {
+                                convoyUIDs.contains(item.uid) ? convoyImageURLs[$0] : nearbyImageURLs[$0]
+                            }, badge: clubBadges?.badge(for: item.uid, viewerID: badgeViewerID),
+                                showMembershipMapRing: clubBadges?.showsMembershipRing(for: item.uid, viewerID: badgeViewerID) == true)
+                                .frame(width: 48, height: 48).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(spokenLabel(member))
+                        .accessibilityIdentifier("driver.photo.\(item.uid)")
+                        .position(x: item.photo.x, y: item.photo.y)
+                    }
+                }
+            }
+            // The geometry/timeline host spans the entire map, even with an
+            // empty roster. Restrict its interaction region to the photo
+            // buttons; leader lines and the spaces between photos must pass
+            // taps and pans through to the retained native map.
+            .contentShape(.interaction, DriverPhotoInteractionShape(bounds: plan.placed.map {
+                CGRect(x: $0.photo.x - 24, y: $0.photo.y - 24, width: 48, height: 48)
+            }))
+            .onChange(of: [photoUIDs, convoyUIDs, arrowUIDs], initial: true) { _, _ in
+                onConvoyDrawn(photoUIDs.intersection(convoyUIDs).union(arrowUIDs).intersection(Set(originals.keys)))
+                onNearbyDrawn(photoUIDs.subtracting(convoyUIDs).intersection(Set(originals.keys)))
+            }
+        }
+        .task(id: roster) {
+            let now = ProcessInfo.processInfo.systemUptime
+            motion.update(roster, now: now, wallNow: Date())
+            presented = motion.rendered(roster, at: now)
+            while motion.isAnimating(at: ProcessInfo.processInfo.systemUptime), !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(DriverMotionPolicy.frameInterval)) } catch { return }
+                presented = motion.rendered(roster, at: ProcessInfo.processInfo.systemUptime)
+            }
+        }
+        .onDisappear { onConvoyDrawn([]); onNearbyDrawn([]) }
+    }
+
+    private func spokenLabel(_ member: ConvoyMemberPosition) -> String {
+        let name = member.displayName ?? String(localized: "nearby.unknownSharer")
+        let key = convoyUIDs.contains(member.uid) ? "convoy.awarenessMemberOnMap" : "nearby.liveSharerOnMap"
+        var parts = [String.localizedStringWithFormat(NSLocalizedString(key, comment: "Driver photo on map"), name)]
+        if let badge = clubBadges?.badge(for: member.uid, viewerID: badgeViewerID) { parts.append(badge.accessibilityLabel) }
+        if clubBadges?.showsMembershipRing(for: member.uid, viewerID: badgeViewerID) == true {
+            parts.append(String(localized: "liveDriverPhoto.membershipRing"))
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+private struct DriverPhotoInteractionShape: Shape {
+    let bounds: [CGRect]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for bounds in bounds { path.addRect(bounds) }
+        return path
+    }
+}
