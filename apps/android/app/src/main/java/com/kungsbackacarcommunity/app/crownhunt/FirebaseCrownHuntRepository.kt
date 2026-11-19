@@ -124,8 +124,8 @@ private fun Map<String, Any?>.toClaimOutcome(): ClaimOutcome? {
     val result = CrownHuntClaimResult.fromWire(this["result"] as? String) ?: return null
     return ClaimOutcome(
         result = result,
-        pointsAwarded = (this["pointsAwarded"] as? Number)?.toInt(),
-        newBalance = (this["newBalance"] as? Number)?.toInt(),
+        pointsAwarded = crownReceiptInteger(this["pointsAwarded"]),
+        newBalance = crownReceiptInteger(this["newBalance"]),
         allowance = CrownAllowance.fromWire(this["allowance"]),
     )
 }

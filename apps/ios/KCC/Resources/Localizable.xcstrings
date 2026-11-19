@@ -2438,13 +2438,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din ställning räknas på servern – nivån dyker upp här så fort den är klar."
+            "value": "Märket visas här när du har uppfyllt kraven."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your standing is counted on the server – the tier appears here as soon as it is earned."
+            "value": "The badge appears here when you have met its requirements."
           }
         }
       }
@@ -11006,13 +11006,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dagens KP-gräns för Kronjakt är nådd. Kronan har inte samlats in."
+            "value": "Du har nått dagens KP-gräns för Kronjakt. Kronan hämtades inte."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Today's Crown Hunt KP allowance is used up. The crown has not been collected."
+            "value": "Today's Crown Hunt CP limit is reached. This crown was not collected."
           }
         }
       }
@@ -11023,13 +11023,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld av %2$lld KP kvar för Kronjakt vid insamlingen. Ny dagsgräns %3$@ (Stockholm)."
+            "value": "Efter hämtningen: %1$lld av %2$lld KP kvar idag."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld of %2$lld Crown Hunt KP remaining at collection time. Resets %3$@ (Stockholm)."
+            "value": "After collection: %1$lld of %2$lld CP left today."
           }
         }
       }
@@ -11380,13 +11380,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Community: 2 250 KP per dag. Plus och Supporter: 3 000 KP per dag. Återställs vid midnatt svensk tid. Servern bekräftar din återstående budget och hur många poäng du får."
+            "value": "Community: 2 250 KP per dag. Plus och Supporter: 3 000 KP per dag. En ny dagsgräns börjar vid midnatt svensk tid."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Community: 2,250 CP per day. Plus and Supporter: 3,000 CP per day. Resets at midnight in Sweden. The server confirms your remaining budget and awarded points."
+            "value": "Community: 2,250 CP per day. Plus and Supporter: 3,000 CP per day. A new daily limit starts at midnight in Sweden."
           }
         }
       }
@@ -12094,13 +12094,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ju fler kronor du samlar totalt, desto högre Kronjägar-nivå låser du upp: Brons vid 10 kronor, Silver vid 50, Guld vid 250 och Platina vid 1 000. Nivån räknas på servern utifrån alla kronor du plockat – den dyker upp automatiskt så fort du når den."
+            "value": "Ju fler kronor du samlar totalt, desto högre Kronjägar-nivå låser du upp: Brons vid 10 kronor, Silver vid 50, Guld vid 250 och Platina vid 1 000. Den nya nivån visas här när du når den."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The more crowns you collect in total, the higher the Crown Hunter rank you unlock: Bronze at 10 crowns, Silver at 50, Gold at 250 and finally Platinum at 1,000. The rank is tallied on the server from all the crowns you've collected – it appears automatically as soon as you reach it."
+            "value": "The more crowns you collect in total, the higher the Crown Hunter rank you unlock: Bronze at 10 crowns, Silver at 50, Gold at 250 and Platinum at 1,000. Your new rank appears here when you reach it."
           }
         }
       }
@@ -13335,13 +13335,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Du rör dig för snabbt för att samla in."
+            "value": "Stanna på en säker plats innan du hämtar kronan."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You are moving too fast to collect."
+            "value": "Stop somewhere safe before collecting the crown."
           }
         }
       }
@@ -13403,13 +13403,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din position är för gammal. Försök igen."
+            "value": "Vänta ett ögonblick på en aktuell position och försök igen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your position is too old. Please try again."
+            "value": "Wait a moment for your current position, then try again."
           }
         }
       }
@@ -13420,13 +13420,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Claimen behöver granskas och inga poäng har delats ut ännu."
+            "value": "Din position kunde inte bekräftas. Inga poäng delades ut. Försök från en plats med fri sikt mot himlen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The claim needs review and no points have been awarded yet."
+            "value": "Your position could not be confirmed. No points were awarded. Try somewhere with a clear view of the sky."
           }
         }
       }
@@ -13590,13 +13590,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Serverbekräftad"
+            "value": "Poängen har lagts till"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Server confirmed"
+            "value": "Points added"
           }
         }
       }
@@ -14134,13 +14134,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stå stilla några sekunder så vi hinner se att du står still."
+            "value": "Vänta ett ögonblick på din aktuella position."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stay put for a few seconds so we can confirm you are standing still."
+            "value": "Wait a moment for your current position."
           }
         }
       }
@@ -14372,13 +14372,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din position är lite gammal. Vänta en stund och försök igen."
+            "value": "Vänta ett ögonblick på en aktuell position och försök igen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your position is a little old. Wait a moment and try again."
+            "value": "Wait a moment for your current position, then try again."
           }
         }
       }
@@ -14695,13 +14695,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din ställning räknas på servern – nästa nivå dyker upp här så fort du når den."
+            "value": "Nästa nivå visas här när du har samlat tillräckligt många kronor."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your standing is tallied on the server — the next rank appears here as soon as you reach it."
+            "value": "Your next rank appears here when you have collected enough crowns."
           }
         }
       }
@@ -14786,7 +14786,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You hit a Spike Strip! −%1$lld KP"
+            "value": "You hit a Spike Strip! −%1$lld CP"
           }
         }
       }
@@ -23212,13 +23212,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din position delas bara under den tid du väljer."
+            "value": "Din position delas bara under en aktiv delning, som avslutas automatiskt."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your location is shared only for the time you select."
+            "value": "Your location is shared only during an active session, which ends automatically."
           }
         }
       }
@@ -23586,13 +23586,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Backend avgör alltid vem som får dela och se live-positioner."
+            "value": "När du delar kan andra inloggade användare se din liveposition, även utanför din konvoj. Personer som du har blockerat, eller som har blockerat dig, kan inte se den."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The backend always determines who can share and see live locations."
+            "value": "When sharing is on, other signed-in users can see your live location, including people outside your convoy. People you have blocked, or who have blocked you, cannot see it."
           }
         }
       }
@@ -36557,13 +36557,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Följ din riktning"
+            "value": "Färdriktning uppåt"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Follow your direction"
+            "value": "Direction of travel up"
           }
         }
       }
@@ -36581,6 +36581,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "North up"
+          }
+        }
+      }
+    },
+    "shell.compassSwitchToCourse": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Växla till färdriktning uppåt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to direction of travel up"
+          }
+        }
+      }
+    },
+    "shell.compassSwitchToNorth": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Växla till norr uppåt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to north up"
           }
         }
       }
@@ -38654,7 +38688,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Always free: social features, event details and RSVP, driving statistics, up to 2 garage vehicles, your 5 newest saved drives and 2,250 Crown Hunt KP per day."
+            "value": "Always free: social features, event details and RSVP, driving statistics, up to 2 garage vehicles, your 5 newest saved drives and 2,250 Crown Hunt CP per day."
           }
         }
       }
@@ -38977,7 +39011,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Event check-in, attendee names, member partner offers, up to 5 garage vehicles, 90 days of drive history and 3,000 Crown Hunt KP per day (Community: 2,250)."
+            "value": "Event check-in, attendee names, member partner offers, up to 5 garage vehicles, 90 days of drive history and 3,000 Crown Hunt CP per day (Community: 2,250)."
           }
         }
       }

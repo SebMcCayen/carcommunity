@@ -220,8 +220,8 @@ private fun Map<String, Any?>.toClaimOutcome(): CrownSpawnClaimOutcome? {
     val result = CrownSpawnClaimResult.fromWire(this["result"] as? String) ?: return null
     return CrownSpawnClaimOutcome(
         result = result,
-        pointsAwarded = (this["pointsAwarded"] as? Number)?.toInt(),
-        newBalance = (this["newBalance"] as? Number)?.toInt(),
+        pointsAwarded = crownReceiptInteger(this["pointsAwarded"]),
+        newBalance = crownReceiptInteger(this["newBalance"]),
         allowance = CrownAllowance.fromWire(this["allowance"]),
         rarity = CrownRarity.fromWire(this["rarity"] as? String),
     )

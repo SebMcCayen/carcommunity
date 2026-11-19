@@ -1095,9 +1095,14 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(compass.isHittable)
         XCTAssertGreaterThan(layers.frame.midX, app.frame.midX)
         XCTAssertGreaterThan(compass.frame.minY, layers.frame.maxY)
-        XCTAssertEqual(compass.value as? String, "NorthUp")
-        XCTAssertEqual(compass.label, "North up")
-        for mode in ["CourseUp", "NorthUp"] {
+        // VoiceOver announces the localized current state as the value and
+        // the next available action as the label.
+        XCTAssertEqual(compass.value as? String, "North up")
+        XCTAssertEqual(compass.label, "Switch to direction of travel up")
+        for (mode, action) in [
+            ("Direction of travel up", "Switch to north up"),
+            ("North up", "Switch to direction of travel up")
+        ] {
             compass.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
                 compass.exists && (compass.value as? String) == mode
@@ -1107,7 +1112,7 @@ final class ShellSmokeTests: XCTestCase {
                 chatProof(app, name: "compass-\(mode)-center-tap-failure", tree: true)
             }
             XCTAssertEqual(result, .completed, "One tap at the center of Compass must switch to \(mode)")
-            XCTAssertEqual(compass.label, mode == "NorthUp" ? "North up" : "Follow your direction")
+            XCTAssertEqual(compass.label, action)
         }
         layers.tap()
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))

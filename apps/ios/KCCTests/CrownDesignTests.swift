@@ -396,6 +396,29 @@ final class CrownDesignTests: XCTestCase {
         }
     }
 
+    func testRewardReceiptWrapsAtLargeTextWithOptionalOlderResponseFields() {
+        let allowance = CrownAllowance(cap: 3000, remaining: 2993, resetsAt: Date())
+        assertWrapping(CrownRewardReceipt(pointsAwarded: 7, newBalance: 207, allowance: allowance))
+        assertWrapping(CrownRewardReceipt(pointsAwarded: nil, newBalance: 207, allowance: nil))
+    }
+
+    func testAccessibleProgressUsesDiscreteStatesAndPreservesAwardOverExpiry() {
+        func feedback(_ state: CrownCollectState, _ status: CrownMapClaimStatus = .idle) -> CrownCollectFeedback {
+            CrownCollectFeedback(state: state, status: status)
+        }
+        XCTAssertNil(feedback(.tooFar(500)).announcementKey)
+        XCTAssertNil(feedback(.tooFar(450)).announcementKey, "Distance updates must not repeatedly interrupt VoiceOver")
+        XCTAssertNotEqual(feedback(.moving).announcementKey, feedback(.confirming).announcementKey)
+        XCTAssertNotEqual(feedback(.confirming).announcementKey, feedback(.ready).announcementKey)
+        XCTAssertEqual(feedback(.ready, .collecting).announcementKey, feedback(.moving, .collecting).announcementKey,
+                       "In-flight result status takes precedence over changing GPS")
+        let award = CrownMapClaimStatus.spawn(CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7,
+                                                                   newBalance: 207, rarity: nil))
+        let result = CrownCollectFeedback(state: .noPosition, status: award, collected: true, expired: true)
+        XCTAssertEqual(result.announcementKey, feedback(.ready, award).announcementKey)
+        assertWrapping(feedback(.confirming))
+    }
+
     private func makeCoordinator(_ repository: Repository, _ provider: StubLocationProvider) -> CrownHuntMapCoordinator {
         CrownHuntMapCoordinator(repository: repository, locationProvider: provider, crownHuntEnabled: true,
             spawnEnabled: true, passesMemberGate: true, uid: "synthetic")

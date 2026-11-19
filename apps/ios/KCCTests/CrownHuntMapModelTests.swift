@@ -3,6 +3,63 @@ import XCTest
 @testable import KCC
 
 final class CrownHuntMapModelTests: XCTestCase {
+    func testOptionalReceiptAmountsPreserveIntegersAndRejectTruncationOrFabrication() {
+        for value in [NSNumber(value: 0), NSNumber(value: 7), NSNumber(value: 207.0), NSNumber(value: Int32.max)] {
+            XCTAssertEqual(CrownReceiptMetadata.integer(value), value.intValue)
+        }
+        let malformed: [Any] = [true, "7", -1, 0.5, Double.nan, Double.infinity, Double(Int32.max) + 1]
+        for value in malformed {
+            XCTAssertNil(CrownReceiptMetadata.integer(value))
+        }
+        XCTAssertNil(CrownReceiptMetadata.integer(nil))
+    }
+
+    func testOptionalAllowanceAcceptsBothCapsAndRejectsMalformedSnapshots() throws {
+        let payload: [String: Any] = ["cap": 2250, "remaining": 2193, "resetsAt": "2026-03-29T22:00:00Z"]
+        let allowance = try XCTUnwrap(CrownAllowance.fromWire(payload))
+        XCTAssertEqual(allowance.cap, 2250)
+        XCTAssertEqual(allowance.remaining, 2193)
+        XCTAssertEqual(allowance.resetsAt.timeIntervalSince1970, 1774821600)
+        var updated = payload
+        updated["cap"] = 3000
+        updated["resetsAt"] = "2026-03-29T22:00:00.000Z"
+        XCTAssertEqual(CrownAllowance.fromWire(updated)?.cap, 3000)
+        XCTAssertNil(CrownAllowance.fromWire(nil))
+        for (key, value) in [("cap", 2251 as Any), ("remaining", -1 as Any), ("remaining", 2251 as Any),
+                             ("remaining", 0.5 as Any), ("remaining", true as Any),
+                             ("remaining", Double.nan as Any), ("resetsAt", "invalid" as Any)] {
+            var malformed = payload
+            malformed[key] = value
+            XCTAssertNil(CrownAllowance.fromWire(malformed), key)
+        }
+        let legacy = CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7, newBalance: nil, rarity: nil)
+        XCTAssertEqual(legacy.pointsAwarded, 7)
+        XCTAssertNil(legacy.allowance)
+    }
+
+    func testReceiptFormatsActualValuesAndLocaleCurrencyWithoutResetMetadata() throws {
+        let allowance = CrownAllowance(cap: 2250, remaining: 2193, resetsAt: Date(timeIntervalSince1970: 1774821600))
+        for language in ["sv", "en"] {
+            let locale = Locale(identifier: language)
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            let currency = language == "sv" ? "KP" : "CP"
+            let credit = CrownRewardText.amount("crownHunt.spawnResultAwardedPoints", 7, locale: locale, bundle: bundle)
+            let balance = CrownRewardText.amount("crownHunt.kpValue", 207, locale: locale, bundle: bundle)
+            let remaining = CrownRewardText.remaining(allowance, locale: locale, bundle: bundle)
+            XCTAssertTrue(credit.contains("7") && credit.contains(currency))
+            XCTAssertTrue(balance.contains("207") && balance.contains(currency))
+            // Locale-aware integer formatting may group thousands with commas
+            // or nonbreaking spaces. Check the actual amounts independently of
+            // those presentation separators.
+            XCTAssertEqual(String(remaining.filter(\.isNumber)), "21932250")
+            XCTAssertTrue(remaining.contains(currency))
+            XCTAssertFalse(remaining.contains("Stockholm"))
+            XCTAssertFalse(remaining.contains("2026"))
+            XCTAssertFalse(remaining.contains("%"), "Every native format placeholder must be substituted")
+        }
+    }
+
     func testProximityMeasuresToTheRingAndMatchesAndroidApproachWindow() throws {
         for radius in [30.0, 75.0, 150.0] {
             for (gap, fraction) in [(-1.0, 1.0), (0.0, 1.0), (1.0, 0.998),
