@@ -244,6 +244,8 @@ data class MapBillboardMarker(
     val id: String,
     val longitude: Double,
     val latitude: Double,
+    val logoPath: String? = null,
+    val logoBitmap: android.graphics.Bitmap? = null,
 )
 
 /**

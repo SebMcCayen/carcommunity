@@ -17,6 +17,15 @@ data class PartnerApplicationForm(
     val contactPhone: String = "",
     val websiteUrl: String = "",
     val message: String = "",
+    val organizationNumber: String = "",
+    val description: String = "",
+    val address: String = "",
+    val publicPhone: String = "",
+    val selfServiceRequested: Boolean = false,
+    val billboardRequested: Boolean = false,
+    val billboardPlacementRequest: String = "",
+    val logoBase64: String? = null,
+    val logoRightsConfirmed: Boolean = false,
 )
 
 data class PartnerApplicationInput(
@@ -27,6 +36,15 @@ data class PartnerApplicationInput(
     val contactPhone: String?,
     val websiteUrl: String?,
     val message: String?,
+    val organizationNumber: String? = null,
+    val description: String? = null,
+    val address: String? = null,
+    val publicPhone: String? = null,
+    val selfServiceRequested: Boolean = false,
+    val billboardRequested: Boolean = false,
+    val billboardPlacementRequest: String? = null,
+    val logoBase64: String? = null,
+    val logoRightsConfirmed: Boolean = false,
 )
 
 /** First invalid field, or null when the form is submittable. */
@@ -77,6 +95,15 @@ object PartnerApplications {
             contactPhone = form.contactPhone.trim().takeIf { it.isNotEmpty() },
             websiteUrl = normalizeWebsiteUrl(form.websiteUrl),
             message = form.message.trim().takeIf { it.isNotEmpty() },
+            organizationNumber = form.organizationNumber.trim().ifBlank { null },
+            description = form.description.trim().ifBlank { null },
+            address = form.address.trim().ifBlank { null },
+            publicPhone = form.publicPhone.trim().ifBlank { null },
+            selfServiceRequested = form.selfServiceRequested,
+            billboardRequested = form.billboardRequested,
+            billboardPlacementRequest = form.billboardPlacementRequest.trim().ifBlank { null },
+            logoBase64 = form.logoBase64,
+            logoRightsConfirmed = form.logoBase64 != null && form.logoRightsConfirmed,
         )
     }
 }

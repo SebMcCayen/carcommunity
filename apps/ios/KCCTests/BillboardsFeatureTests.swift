@@ -127,6 +127,105 @@ final class BillboardsFeatureTests: XCTestCase {
     }
 
     @MainActor
+    func testExplicitPartnerNavigationKeepsPopupAndLegacyActionUntilDestinationAcceptsIt() async throws {
+        let repository = FakeRepository()
+        let coordinator = BillboardsCoordinator(repository: repository)
+        let billboard = Self.billboard(type: .website, value: "https://example.com/offers")
+        coordinator.start()
+        repository.emit(.loaded([billboard]))
+        await waitUntil { coordinator.markers.count == 1 }
+        var destinations: [String] = []
+
+        for availability in [(enabled: false, coordinator: true), (enabled: true, coordinator: false)] {
+            coordinator.open(billboardId: billboard.id)
+            let accepted = coordinator.openPartner(for: billboard.id) { companyId in
+                BillboardPartnerNavigation.open(
+                    companyId: companyId,
+                    partnersEnabled: availability.enabled,
+                    coordinatorAvailable: availability.coordinator
+                ) { destinations.append($0) }
+            }
+            XCTAssertFalse(accepted)
+            let retained = try XCTUnwrap(coordinator.selectedBillboard)
+            XCTAssertEqual(retained, billboard)
+            XCTAssertEqual(BillboardCallToAction.resolve(retained)?.url.absoluteString,
+                "https://example.com/offers")
+            XCTAssertTrue(destinations.isEmpty)
+        }
+
+        XCTAssertFalse(coordinator.openPartner(for: billboard.id, using: nil))
+        XCTAssertEqual(coordinator.selectedBillboard, billboard)
+        XCTAssertTrue(coordinator.openPartner(for: billboard.id) { companyId in
+            BillboardPartnerNavigation.open(companyId: companyId, partnersEnabled: true,
+                coordinatorAvailable: true) { destinations.append($0) }
+        })
+        XCTAssertEqual(destinations, ["company-1"])
+        XCTAssertNil(coordinator.selectedBillboard)
+        coordinator.stop()
+    }
+
+    @MainActor
+    func testMarkerPreservesLegacyActionsAndOnlyDirectsDefaultOrPartnerProfile() async throws {
+        let repository = FakeRepository()
+        let coordinator = BillboardsCoordinator(repository: repository)
+        let website = Self.billboard(id: "website", type: .website, value: "https://example.com/offers")
+        let phone = Self.billboard(id: "phone", type: .phone, value: "+463001234")
+        let placements = [website, phone, Self.billboard(id: "default"),
+            Self.billboard(id: "profile", type: .partnerProfile)]
+        coordinator.start()
+        repository.emit(.loaded(placements))
+        await waitUntil { coordinator.markers.count == placements.count }
+        var destinations: [String] = []
+        let navigate: (String) -> Bool = { companyId in
+            BillboardPartnerNavigation.open(companyId: companyId, partnersEnabled: true,
+                coordinatorAvailable: true) { destinations.append($0) }
+        }
+
+        for billboard in [website, phone] {
+            coordinator.open(billboardId: billboard.id, onOpenPartner: navigate)
+            let retained = try XCTUnwrap(coordinator.selectedBillboard)
+            XCTAssertEqual(retained, billboard)
+            XCTAssertNotNil(BillboardCallToAction.resolve(retained))
+            XCTAssertTrue(destinations.isEmpty, "Explicit legacy actions must not auto-navigate")
+        }
+        for billboard in placements.suffix(2) {
+            let count = destinations.count
+            coordinator.open(billboardId: billboard.id, onOpenPartner: navigate)
+            XCTAssertEqual(destinations.count, count + 1)
+            XCTAssertEqual(destinations.last, "company-1")
+            XCTAssertNil(coordinator.selectedBillboard)
+        }
+        coordinator.stop()
+    }
+
+    @MainActor
+    func testMarkerKeepsDefaultAndProfilePopupsWhenPartnerNavigationIsUnavailable() async {
+        let repository = FakeRepository()
+        let coordinator = BillboardsCoordinator(repository: repository)
+        let placements = [Self.billboard(id: "default"),
+            Self.billboard(id: "profile", type: .partnerProfile)]
+        coordinator.start()
+        repository.emit(.loaded(placements))
+        await waitUntil { coordinator.markers.count == placements.count }
+        var destinations: [String] = []
+
+        for billboard in placements {
+            for availability in [(enabled: false, coordinator: true), (enabled: true, coordinator: false)] {
+                coordinator.open(billboardId: billboard.id) { companyId in
+                    BillboardPartnerNavigation.open(companyId: companyId,
+                        partnersEnabled: availability.enabled,
+                        coordinatorAvailable: availability.coordinator) { destinations.append($0) }
+                }
+                XCTAssertEqual(coordinator.selectedBillboard, billboard)
+                XCTAssertTrue(destinations.isEmpty)
+            }
+            coordinator.open(billboardId: billboard.id, onOpenPartner: nil)
+            XCTAssertEqual(coordinator.selectedBillboard, billboard)
+        }
+        coordinator.stop()
+    }
+
+    @MainActor
     private func waitUntil(
         timeout: TimeInterval = 2,
         _ predicate: () -> Bool

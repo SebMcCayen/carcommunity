@@ -54,6 +54,7 @@ fun BillboardMapPopup(
     ctaLabel: String?,
     onCallToAction: () -> Unit,
     onDismiss: () -> Unit,
+    imagePath: String? = null,
 ) {
     MapDetailSheet(
         title = stringResource(R.string.billboard_sponsoredLabel),
@@ -63,6 +64,7 @@ fun BillboardMapPopup(
             Icon(Icons.Filled.Campaign, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
         },
     ) {
+        imagePath?.let { com.kungsbackacarcommunity.app.partners.PartnerLogo(it) }
         BillboardBody(headline = headline, message = message)
         if (ctaLabel != null) {
             Button(

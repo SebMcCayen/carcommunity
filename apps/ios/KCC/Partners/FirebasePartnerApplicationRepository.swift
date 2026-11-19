@@ -8,7 +8,7 @@ final class FirebasePartnerApplicationRepository: PartnerApplicationRepository, 
     }
 
     func submit(_ input: PartnerApplicationInput) async throws {
-        _ = try await functions.call("partners-submitApplication", payload: input.payload)
+        _ = try await functions.call("partners-portal", payload: input.portalPayload)
     }
 
     /// Config-less builds intentionally omit this feature entry instead of

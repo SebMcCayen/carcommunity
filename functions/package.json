@@ -60,17 +60,19 @@
     "firebase-functions": "^7.4.0",
     "google-auth-library": "^11.1.0",
     "h3-js": "^4.2.1",
+    "pngjs": "7.0.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^24.19.1",
+    "@types/pngjs": "^6.0.5",
     "eslint": "^10.11.0",
     "firebase": "^12.19.0",
     "firebase-tools": "^15.32.1",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.0",
-    "vitest": "^5.0.3",
-    "vite": "^7.3.7"
+    "vite": "^7.3.7",
+    "vitest": "^5.0.3"
   }
 }

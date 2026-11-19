@@ -170,7 +170,11 @@ const offerFieldsSchema = z.object({
   discountCode: z.string().trim().min(1).max(MAX_OFFER_DISCOUNT_CODE_LENGTH).nullable().optional(),
   percentageDiscount: z.number().min(0).max(MAX_OFFER_PERCENTAGE_DISCOUNT).nullable().optional(),
   fixedDiscountMinorUnits: z.number().int().positive().nullable().optional(),
-  currencyCode: z.string().regex(/^[A-Z]{3}$/).nullable().optional(),
+  currencyCode: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .nullable()
+    .optional(),
   availableFrom: z.string().datetime().nullable().optional(),
   availableUntil: z.string().datetime().nullable().optional(),
 });
@@ -228,6 +232,7 @@ const setOfferStatusInputSchema = z
     offerId: firestoreIdSchema,
     action: z.enum(['activate', 'pause', 'end']),
     reason: z.string().trim().max(2000).optional(),
+    expectedVersion: z.number().int().min(1).optional(),
   })
   .strict();
 
@@ -270,7 +275,11 @@ export const parseCreateCompanyInput = (d: unknown) =>
 export const parseUpdateCompanyInput = (d: unknown) =>
   parse(updateCompanyInputSchema, d, 'Expected { companyId } plus company fields.');
 export const parseSetCompanyStatusInput = (d: unknown) =>
-  parse(setCompanyStatusInputSchema, d, 'Expected { companyId, action: activate|pause|end, reason? }.');
+  parse(
+    setCompanyStatusInputSchema,
+    d,
+    'Expected { companyId, action: activate|pause|end, reason? }.',
+  );
 export const parseCreateOfferInput = (d: unknown) =>
   parse(
     createOfferInputSchema,
@@ -305,10 +314,7 @@ const TRANSITIONABLE_STATUSES: ReadonlySet<string> = new Set(['draft', 'active',
  * parity). Unknown/corrupted statuses are rejected too — a transition must
  * never silently "heal" bad data into a live record.
  */
-export function guardStatusTransition(
-  current: string,
-  action: StatusAction,
-): GuardResult {
+export function guardStatusTransition(current: string, action: StatusAction): GuardResult {
   if (!TRANSITIONABLE_STATUSES.has(current)) {
     return {
       ok: false,
@@ -339,9 +345,7 @@ export function guardEditableStatus(current: string): GuardResult {
 export function guardAvailabilityWindow(
   availableFrom: string | null | undefined,
   availableUntil: string | null | undefined,
-):
-  | { ok: true }
-  | { ok: false; code: 'invalid-argument'; message: string } {
+): { ok: true } | { ok: false; code: 'invalid-argument'; message: string } {
   if (availableFrom && availableUntil && new Date(availableUntil) <= new Date(availableFrom)) {
     return {
       ok: false,
