@@ -178,35 +178,22 @@ object CrownSpawnLimits {
     const val COLLECT_RADIUS_METERS: Double = 75.0
 
     /**
-     * `MAX_COLLECT_SPEED_MPS` — 2.0 m/s (7.2 km/h).
+     * `MAX_COLLECT_SPEED_MPS` — near-stationary GPS tolerance, 0.5 m/s.
      *
      * The ONLY use of speed anywhere in this feature. It is a safety gate, not a
      * score: nothing is faster, better or worth more for having moved quickly,
      * and no speed value is ever shown to the user. See [CrownCollectGate].
      */
-    const val MAX_COLLECT_SPEED_MPS: Double = 2.0
+    const val MAX_COLLECT_SPEED_MPS: Double = 0.5
 
     /** `MIN_DWELL_SECONDS` — the two proof fixes must be at least this far apart. */
     const val MIN_DWELL_SECONDS: Long = 4
 
     /** `MAX_DWELL_SECONDS` — beyond this the earlier fix says nothing about now. */
-    const val MAX_DWELL_SECONDS: Long = 300
+    const val MAX_DWELL_SECONDS: Long = 12
 
-    /**
-     * `MAX_POSITION_AGE_SECONDS` — how old the CURRENT fix may be and still be
-     * accepted. Mirrored from `MAX_POSITION_AGE_SECONDS` in
-     * `functions/src/crownHunt/crownhunt-core.ts` (the value `isPositionFresh` in
-     * `crown-hunt-geo.ts` enforces on `crownHunt.claimSpawn`).
-     *
-     * Only the CURRENT half is bound by this — the earlier proof fix is allowed to
-     * be up to [MAX_DWELL_SECONDS] old, which is the whole point of the dwell
-     * window. The client uses it to reject a genuinely STALE leftover fix (minutes
-     * old, from before a long idle) while still treating a normal slightly-old
-     * sample as usable, so the client's "is there a current position" answer
-     * agrees with the server's rather than being stricter and re-blocking a
-     * collect the server would accept.
-     */
-    const val MAX_POSITION_AGE_SECONDS: Long = 60
+    /** Current automatic-crown fix age, matching MAX_SPAWN_POSITION_AGE_SECONDS. */
+    const val MAX_POSITION_AGE_SECONDS: Long = 10
 
     /**
      * `MAX_STORED_COLLECT_RADIUS_METERS` — the widest gate a crown DOCUMENT is

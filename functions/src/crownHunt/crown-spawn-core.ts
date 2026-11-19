@@ -673,14 +673,14 @@ export function resolveCollectRadiusMeters(stored: unknown): number {
 }
 
 /**
- * Collection speed ceiling: 2.0 m/s = 7.2 km/h.
- *
- * Slightly more permissive than the hand-placed points' 1.4 m/s so a member
- * shuffling around a car park is not rejected, but far below any speed at
- * which a person is DRIVING. The point of the whole rule is that nobody ever
- * has a reason to reach for their phone while the car is moving.
+ * Near-stationary tolerance: 0.5 m/s (1.8 km/h), not walking pace.
+ * GPS cannot prove mechanical standstill; this small allowance accommodates
+ * minor coordinate scatter without intentionally allowing a rolling collection.
  */
-export const MAX_COLLECT_SPEED_MPS = 2.0;
+export const MAX_COLLECT_SPEED_MPS = 0.5;
+
+/** Current automatic-crown evidence must describe now, not a previous stop. */
+export const MAX_SPAWN_POSITION_AGE_SECONDS = 10;
 
 /**
  * The dwell window: two position fixes must be at least this far apart in time.
@@ -698,7 +698,7 @@ export const MIN_DWELL_SECONDS = 4;
  * too old to say anything about where the member is now — someone could park,
  * drive away, and still hold a "valid" pair.
  */
-export const MAX_DWELL_SECONDS = 300;
+export const MAX_DWELL_SECONDS = 12;
 
 export interface CrownFix {
   /** Server-computed metres from this fix to the crown. Never client-supplied. */

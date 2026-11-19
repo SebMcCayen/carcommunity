@@ -227,13 +227,8 @@ private fun CrownCollectBody(
     // it is confirming. The label choice for every OTHER case lives in
     // [CrownSpawnMessages.collectActionLabelRes], so it is unit-tested.
     //
-    // The numeric "(N s)" countdown is chosen ONLY for [CrownCollectState.Confirming]
-    // (the dwell-not-aged-in wait, which has a defined seconds-remaining). An in-range
-    // [CrownCollectState.Moving] — the speed-still-settling moment — has no defined N,
-    // so it falls through to the indeterminate "confirming you're stopped…" label from
-    // [CrownSpawnMessages.collectActionLabelRes]. That fold is deliberate: both are the
-    // same in-range "stand still a moment" wait, so a crown never flips between a calm
-    // countdown and a blunt "stop the car first" from one approach to the next.
+    // A countdown is only meaningful while a stopped-proof window is forming.
+    // Moving carries a stop instruction, never a promise that only a timer remains.
     val confirmingSeconds =
         (state as? CrownCollectState.Confirming)?.secondsRemaining?.takeIf { it > 0 }
     val buttonText =

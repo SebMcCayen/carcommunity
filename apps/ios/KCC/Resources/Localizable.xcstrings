@@ -11924,13 +11924,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. Kör i närheten av en krona på kartan.\n2. Stanna eller sakta ner rejält – du kan samla in en krona när du står stilla eller rör dig mycket långsamt. Kör aldrig ovarsamt för att hinna.\n3. Tryck på kronan och sedan på Samla in. Appen bekräftar snabbt att du står stilla innan kronan blir din – det finns ingen tidsgräns, så ta det lugnt.\nHåll koll på kartan medan du kör, så ser du kronorna dyka upp runt omkring dig."
+            "value": "1. Kör nära en krona på kartan.\n2. Stanna på en säker plats innan du hämtar kronan. Hämta aldrig medan bilen rullar.\n3. Tryck på kronan och låt kortet vara öppet. När du har stått stilla en kort stund aktiveras Hämta. Det är ingen brådska.\nHåll uppmärksamheten på trafiken när du kör."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. Drive near a crown on the map.\n2. Stop or slow right down – you can collect a crown while stationary or moving very slowly. Never drive carelessly to reach one.\n3. Tap the crown, then tap Collect. The app quickly confirms you're stopped before the crown is yours – there's no timer, so take your time.\nKeep an eye on the map as you drive and you'll see crowns appear around you."
+            "value": "1. Drive near a crown on the map.\n2. Stop somewhere safe before collecting. Never collect while the car is rolling.\n3. Tap the crown and leave its card open. Collect becomes available after you have stayed still a moment. There is no rush.\nKeep your attention on traffic while driving."
           }
         }
       }
@@ -13488,13 +13488,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kronjakt kan endast användas när du står stilla eller rör dig mycket långsamt."
+            "value": "Hämta bara kronor när du har stannat på en säker plats."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crown Hunt may only be used when you are stationary or moving very slowly."
+            "value": "Collect crowns only after stopping somewhere safe."
           }
         }
       }
@@ -13947,13 +13947,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bekräftar att du står stilla…"
+            "value": "Stå kvar en kort stund…"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Confirming you're stopped…"
+            "value": "Stay still a moment…"
           }
         }
       }
@@ -13964,13 +13964,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bekräftar att du står stilla… (%1$lld s)"
+            "value": "Stå kvar en kort stund… (%1$lld s)"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Confirming you're stopped… (%1$lld s)"
+            "value": "Stay still a moment… (%1$lld s)"
           }
         }
       }
@@ -14423,13 +14423,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stanna bilen först"
+            "value": "Stanna säkert för att hämta"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stop the car first"
+            "value": "Stop safely to collect"
           }
         }
       }

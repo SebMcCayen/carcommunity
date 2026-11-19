@@ -327,6 +327,22 @@ object CrownCollectGate {
     }
 
     /**
+     * Judge the newest evidence as well as the selected accuracy-ranked pair.
+     * Otherwise an older, precise parked pair can keep Ready after driving off.
+     * The single-speed fallback only names the wait before a pair exists; it
+     * cannot enable collection. With a pair, one reported GPS spike is tolerated.
+     */
+    fun liveMovementSpeedMps(current: CrownFix?, previous: CrownFix?, latest: CrownFix?): Double? {
+        val selectedSpeed = movementSpeedMps(current, previous)
+        if (selectedSpeed == null) return latest?.speedMetersPerSecond
+        if (latest == null || current == null || previous == null ||
+            latest.recordedAtMillis <= current.recordedAtMillis
+        ) return selectedSpeed
+        val liveSpeed = movementSpeedMps(latest, current) ?: return selectedSpeed
+        return maxOf(selectedSpeed, liveSpeed)
+    }
+
+    /**
      * Whether two fixes are a usable stationary PROOF for
      * `crownHunt.claimSpawn` — both inside the dwell window, in order.
      *

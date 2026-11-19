@@ -1252,7 +1252,7 @@
     <string name="crownHunt_rewardLabel">Belöning: {points} KP</string>
     <string name="crownHunt_pointCollectHint">Samla in kronan när du står på dess plats.</string>
     <string name="crownHunt_safetyStop">Stanna säkert innan du samlar in belöningen.</string>
-    <string name="crownHunt_safetySlowOnly">Kronjakt kan endast användas när du står stilla eller rör dig mycket långsamt.</string>
+    <string name="crownHunt_safetySlowOnly">Hämta bara kronor när du har stannat på en säker plats.</string>
     <string name="crownHunt_movingTooFast">Du rör dig för snabbt för att samla in.</string>
     <string name="crownHunt_tooFarAway">Du är för långt från platsen.</string>
     <string name="crownHunt_alreadyClaimed">Du har redan samlat in denna belöning.</string>
@@ -1317,12 +1317,12 @@
     <string name="crownHunt_spawnReadyToCollect">Inom räckhåll – du kan hämta kronan.</string>
     <string name="crownHunt_spawnProximityLabel">Kom närmare</string>
     <string name="crownHunt_spawnProximityRemaining">%1$s kvar</string>
-    <string name="crownHunt_spawnStopFirst">Stanna bilen först</string>
+    <string name="crownHunt_spawnStopFirst">Stanna säkert för att hämta</string>
     <string name="crownHunt_spawnStopFirstDetail">Kronor kan bara hämtas när du står parkerad. Parkera på ett säkert ställe och hämta sedan — det är ingen brådska och ingen tid som tickar.</string>
     <string name="crownHunt_spawnNoPosition">Väntar på din position</string>
     <string name="crownHunt_spawnNoPositionDetail">Stå stilla några sekunder så vi hinner se att du står still.</string>
-    <string name="crownHunt_spawnConfirming">Bekräftar att du står stilla…</string>
-    <string name="crownHunt_spawnConfirmingSeconds">Bekräftar att du står stilla… (%1$d s)</string>
+    <string name="crownHunt_spawnConfirming">Stå kvar en kort stund…</string>
+    <string name="crownHunt_spawnConfirmingSeconds">Stå kvar en kort stund… (%1$d s)</string>
     <string name="crownHunt_spawnWaitingForSignal">Väntar på bättre GPS-signal…</string>
     <string name="crownHunt_spawnResultAwarded">Kronan är din!</string>
     <string name="crownHunt_spawnResultAwardedPoints">+%1$d KP</string>
@@ -1438,7 +1438,7 @@
     <string name="crownHunt_instrIntroTitle">Vad är Kronjakten?</string>
     <string name="crownHunt_instrIntroBody">Kronjakten är en jakt på kronor som dyker upp på kartan runt om i området. Kör i närheten av en krona, stanna och plocka den – så samlar du Kronpoäng (KP), klättrar på topplistan och låser upp Kronjägar-nivåer.</string>
     <string name="crownHunt_instrCollectTitle">Så samlar du en krona</string>
-    <string name="crownHunt_instrCollectBody">1. Kör i närheten av en krona på kartan.\n2. Stanna eller sakta ner rejält – du kan samla in en krona när du står stilla eller rör dig mycket långsamt. Kör aldrig ovarsamt för att hinna.\n3. Tryck på kronan och sedan på Samla in. Appen bekräftar snabbt att du står stilla innan kronan blir din – det finns ingen tidsgräns, så ta det lugnt.\nHåll koll på kartan medan du kör, så ser du kronorna dyka upp runt omkring dig.</string>
+    <string name="crownHunt_instrCollectBody">1. Kör nära en krona på kartan.\n2. Stanna på en säker plats innan du hämtar kronan. Hämta aldrig medan bilen rullar.\n3. Tryck på kronan och låt kortet vara öppet. När du har stått stilla en kort stund aktiveras Hämta. Det är ingen brådska.\nHåll uppmärksamheten på trafiken när du kör.</string>
     <string name="crownHunt_instrRaritiesTitle">Kronor i olika sällsynthet</string>
     <string name="crownHunt_instrRaritiesIntro">Kronor finns i fyra sällsyntheter. Ju ovanligare krona, desto mer poäng ger den.</string>
     <string name="crownHunt_instrRarityCommonBody">Vanligast av alla och ger minst poäng. Flera medlemmar kan plocka samma krona var för sig.</string>

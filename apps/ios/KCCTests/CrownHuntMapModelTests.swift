@@ -130,21 +130,41 @@ final class CrownHuntMapModelTests: XCTestCase {
         XCTAssertEqual(CrownSpawnLimits.collectRadius(120), 120)
     }
 
-    func testProofRequiresTwoInRangeFixesAtLeastFourSecondsApart() {
+    func testProofRequiresTwoInRangeFixesAtLeastFourSecondsApart() throws {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        var tracker = CrownFixTracker()
+        tracker.record(fix(at: now.addingTimeInterval(-4)))
+        tracker.record(fix(at: now.addingTimeInterval(-3)))
+        XCTAssertNil(tracker.proof(for: spawn, now: now))
+
+        tracker.record(fix(at: now))
+        let proof = try XCTUnwrap(tracker.proof(for: spawn, now: now))
+        XCTAssertEqual(proof.current.timestamp, now)
+        XCTAssertEqual(
+            proof.current.timestamp.timeIntervalSince(proof.previous.timestamp),
+            CrownSpawnLimits.minimumDwell
+        )
+        XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(11)))
+    }
+
+    func testOutOfOrderFixCannotBackfillDwellEvidence() throws {
         let now = Date(timeIntervalSince1970: 2_000)
         let spawn = makeSpawn()
         var tracker = CrownFixTracker()
         tracker.record(fix(at: now.addingTimeInterval(-3)))
+        tracker.record(fix(at: now.addingTimeInterval(-5)))
+        XCTAssertEqual(tracker.fixes.count, 1)
+        XCTAssertEqual(tracker.latest(now: now)?.timestamp, now.addingTimeInterval(-3))
+
         tracker.record(fix(at: now))
         XCTAssertNil(tracker.proof(for: spawn, now: now))
 
-        tracker.record(fix(at: now.addingTimeInterval(-5)))
-        let proof = tracker.proof(for: spawn, now: now)
-        XCTAssertNotNil(proof)
-        XCTAssertGreaterThanOrEqual(
-            proof!.current.timestamp.timeIntervalSince(proof!.previous.timestamp),
-            CrownSpawnLimits.minimumDwell
-        )
+        let next = now.addingTimeInterval(1)
+        tracker.record(fix(at: next))
+        let proof = try XCTUnwrap(tracker.proof(for: spawn, now: next))
+        XCTAssertEqual(proof.current.timestamp, next)
+        XCTAssertEqual(proof.previous.timestamp, now.addingTimeInterval(-3))
     }
 
     func testProofRejectsOutOfRangeEarlierFix() {
@@ -336,6 +356,66 @@ final class CrownHuntMapModelTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(10))
         }
         XCTFail("Perk state did not update")
+    }
+
+    func testShortDepartureRejectsZeroAndAbsentReportedSpeed() {
+        let now = Date(timeIntervalSince1970: 2000)
+        let spawn = makeSpawn()
+        for speed in [1.0, 0.0, nil] as [Double?] {
+            var tracker = CrownFixTracker()
+            tracker.record(fix(at: now.addingTimeInterval(-4)))
+            tracker.record(fix(at: now))
+            XCTAssertNotNil(tracker.proof(for: spawn, now: now))
+            tracker.record(LocationFix.of(latitude: spawn.latitude + 2 / 111195.0,
+                longitude: spawn.longitude, timestamp: now.addingTimeInterval(2),
+                accuracyMeters: 5, speedMetersPerSecond: speed)!)
+            XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(2)))
+        }
+    }
+
+    func testSlowRollingAndNewDepartureCannotUseAnOldParkedProof() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        let previous = fix(at: now.addingTimeInterval(-4))
+        let current = fix(at: now)
+        let proof = CrownFixPair(previous: previous, current: current)
+        let moved = LocationFix.of(latitude: current.latitude + 2 / 111195.0,
+                                   longitude: current.longitude, timestamp: now.addingTimeInterval(2),
+                                   accuracyMeters: 5, speedMetersPerSecond: 1)!
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: current, proof: proof,
+                                                enabled: true, now: now), .ready)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: moved, proof: proof,
+                                                enabled: true, now: moved.timestamp), .moving)
+        var tracker = CrownFixTracker()
+        tracker.record(previous)
+        tracker.record(current)
+        tracker.record(moved)
+        XCTAssertNil(tracker.proof(for: spawn, now: moved.timestamp))
+        tracker.record(LocationFix.of(latitude: current.latitude + 4 / 111195.0,
+                                      longitude: current.longitude, timestamp: now.addingTimeInterval(4),
+                                      accuracyMeters: 5, speedMetersPerSecond: 1)!)
+        XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(4)))
+    }
+
+    func testOpenCrownGateAdvancesWithoutReselectionAndToleratesStationaryNoise() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        var tracker = CrownFixTracker()
+        tracker.record(fix(at: now))
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: now),
+                                                proof: tracker.proof(for: spawn, now: now),
+                                                enabled: true, now: now), .confirming)
+        tracker.record(LocationFix.of(latitude: spawn.latitude + 0.5 / 111195.0,
+                                      longitude: spawn.longitude, timestamp: now.addingTimeInterval(2),
+                                      accuracyMeters: 5, speedMetersPerSecond: 6)!)
+        tracker.record(fix(at: now.addingTimeInterval(4)))
+        let later = now.addingTimeInterval(4)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: later),
+                                                proof: tracker.proof(for: spawn, now: later),
+                                                enabled: true, now: later), .ready)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: later),
+                                                proof: tracker.proof(for: spawn, now: later),
+                                                enabled: true, now: later.addingTimeInterval(11)), .noPosition)
     }
 
     private func makeSpawn() -> CrownSpawn {

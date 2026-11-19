@@ -41,6 +41,37 @@ final class CrownDesignTests: XCTestCase {
         }
     }
 
+    func testOpenSpawnFollowsStopAndDepartureWithoutDismissOrSelectAgain() async throws {
+        let now = Date(timeIntervalSince1970: 2000)
+        let repository = Repository(now: now)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository, provider)
+        await coordinator.refresh(camera: .of(latitude: 57, longitude: 12, zoom: 14, bearing: 0, pitch: 0),
+                                  visibleRadiusMeters: 200)
+        coordinator.select(markerId: "spawn:spawn")
+        let selected = coordinator.selectedTarget
+        coordinator.start()
+        defer { coordinator.stop() }
+        let moving = LocationFix.of(latitude: 57 + 10 / 111195.0, longitude: 12,
+                                    timestamp: now, accuracyMeters: 3, speedMetersPerSecond: 1)!
+        provider.emitFix(moving)
+        try await waitForFix(coordinator, timestamp: now)
+        XCTAssertEqual(coordinator.collectState(now: now), .moving)
+        provider.emitFix(fix(now.addingTimeInterval(2)))
+        try await waitForFix(coordinator, timestamp: now.addingTimeInterval(2))
+        XCTAssertEqual(coordinator.collectState(now: now.addingTimeInterval(2)), .confirming)
+        provider.emitFix(fix(now.addingTimeInterval(6)))
+        try await waitForFix(coordinator, timestamp: now.addingTimeInterval(6))
+        XCTAssertEqual(coordinator.collectState(now: now.addingTimeInterval(6)), .ready)
+        let departure = LocationFix.of(latitude: 57 + 2 / 111195.0, longitude: 12,
+                                       timestamp: now.addingTimeInterval(8), accuracyMeters: 3,
+                                       speedMetersPerSecond: 1)!
+        provider.emitFix(departure)
+        try await waitForFix(coordinator, timestamp: now.addingTimeInterval(8))
+        XCTAssertEqual(coordinator.collectState(now: now.addingTimeInterval(8)), .moving)
+        XCTAssertEqual(coordinator.selectedTarget, selected)
+    }
+
     func testReportPlacementWithoutLocationAndRemoveOnRefresh() async throws {
         let repository = Repository(now: Date())
         let provider = StubLocationProvider(authorization: .denied)

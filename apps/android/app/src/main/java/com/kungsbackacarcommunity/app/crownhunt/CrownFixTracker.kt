@@ -65,7 +65,17 @@ class CrownFixTracker {
      */
     fun record(fix: CrownFix) {
         val current = latest
-        if (current != null && fix.recordedAtMillis < current.recordedAtMillis) return
+        if (current != null && fix.recordedAtMillis <= current.recordedAtMillis) return
+        // A proof belongs to one continuous stop. Never let an accuracy-ranked
+        // parked pair survive a later, corroborated departure.
+        val movementAnchor = recent.lastOrNull {
+            val gap = fix.recordedAtMillis - it.recordedAtMillis
+            gap in CrownSpawnLimits.MIN_DWELL_SECONDS * 1000..CrownSpawnLimits.MAX_DWELL_SECONDS * 1000
+        }
+        val recentMotion = CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(fix, current))
+        if (recentMotion || CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(fix, movementAnchor))) {
+            recent.clear()
+        }
         latest = fix
         recent.addLast(fix)
         val cutoff = fix.recordedAtMillis - CrownSpawnLimits.MAX_DWELL_SECONDS * 1000
@@ -104,10 +114,8 @@ class CrownFixTracker {
      * (and the pair built on it) would otherwise still read as usable — which is
      * exactly the wrong-state class of bug this feature is trying to remove:
      * seeding a popup, and enabling/labelling Collect, off a minutes-old position.
-     * But the threshold must NOT be stricter than the server's, or a device with a
-     * slow location cadence whose newest fix is a routine 10–30 s old would be
-     * blocked from a collect the server would happily accept — re-creating the very
-     * lag this PR fixes. So it rejects only genuinely stale (minutes-old) leftovers.
+     * The ten-second bound matches the server: an old parking fix must not be
+     * reused after departure or resuming the app. Poll time never refreshes its age.
      *
      * The freshness filter is applied to the sample actually RETURNED, not just to
      * [latest]: [bestRecent] may prefer a more-accurate EARLIER sample from the
@@ -118,7 +126,7 @@ class CrownFixTracker {
         val current = latest ?: return null
         val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
         // A stale newest fix means there is no trustworthy current position at all.
-        if (current.recordedAtMillis < freshCutoff) return null
+        if (current.recordedAtMillis < freshCutoff || current.recordedAtMillis > nowMillis) return null
         val settleStart = current.recordedAtMillis - SETTLE_WINDOW_SECONDS * 1000
         return recent
             .asReversed()
@@ -199,7 +207,7 @@ class CrownFixTracker {
         var best: CrownProofPair? = null
         // Newest first, so equal-accuracy currents resolve to the newest.
         for (current in recent.asReversed()) {
-            if (current.recordedAtMillis < freshCutoff) continue
+            if (current.recordedAtMillis < freshCutoff || current.recordedAtMillis > nowMillis) continue
             if (!inRange(current)) continue
             val partner = proofPartnerFor(current, inRange) ?: continue
             if (best == null || accuracyRank(current) < accuracyRank(best.current)) {
