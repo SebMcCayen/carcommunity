@@ -59,6 +59,9 @@ class KccApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // Local partner application drafts never enter backup and expire after seven days.
+        Thread({ runCatching { com.kungsbackacarcommunity.app.partners.PartnerApplicationDraftStore.forContext(this).purgeExpired() } }, "PartnerDraftCleanup")
+            .apply { priority = Thread.MIN_PRIORITY }.start()
 
         // Notification channels are pure Android (no Firebase) — created
         // unconditionally so they exist before the first FCM delivery

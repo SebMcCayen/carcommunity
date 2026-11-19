@@ -66,6 +66,8 @@ enum ShellRoute: Sendable {
     /// Back returns to the profile.
     case points
     case partnerApplication
+    case partnerWorkspace
+    case partnerReservations
     /// Digital billboards. Kept wired on Android but intentionally unreferenced
     /// from the UI (billboards are meant to be map pins); mirrored here for
     /// route parity.

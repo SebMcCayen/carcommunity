@@ -63,6 +63,8 @@ fun PartnerDetailScreen(
     canLoadMoreOffers: Boolean = false,
     isLoadingMoreOffers: Boolean = false,
     didFailLoadingMoreOffers: Boolean = false,
+    onReserveOffer: ((String) -> Unit)? = null,
+    sponsoredPlacement: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -72,6 +74,7 @@ fun PartnerDetailScreen(
         modifier = modifier,
         ownerShortcutEnabled = false,
     ) {
+        if (sponsoredPlacement) Text(stringResource(R.string.billboard_sponsoredLabel), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         when (companyState) {
             CompanyState.Loading -> {
                 Text(
@@ -106,11 +109,7 @@ fun PartnerDetailScreen(
 
         OutlinedCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(
-                    Icons.Filled.Storefront,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
+                PartnerLogo(company.logoPath)
                 Text(
                     text = stringResource(company.category.labelRes()),
                     style = MaterialTheme.typography.labelMedium,
@@ -220,6 +219,7 @@ fun PartnerDetailScreen(
                     onToggleExpand = { onToggleExpand(offer.id) },
                     onShowCode = { onShowCode(offer.id) },
                     onToggleSave = { onToggleSave(offer.id, !savedOfferIds.contains(offer.id)) },
+                    onReserve = onReserveOffer?.let { { it(offer.id) } },
                 )
             }
             if (canLoadMoreOffers) {
@@ -284,6 +284,7 @@ private fun OfferCard(
     onToggleExpand: () -> Unit,
     onShowCode: () -> Unit,
     onToggleSave: () -> Unit,
+    onReserve: (() -> Unit)? = null,
 ) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -332,6 +333,13 @@ private fun OfferCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                return@Column
+            }
+
+            if (offer.redemptionMode == "reservation" && onReserve != null) {
+                if (offer.capacity != null && offer.remainingCount != null) Text(stringResource(R.string.partnerPortal_remaining, offer.remainingCount, offer.capacity))
+                Text(stringResource(R.string.partnerPortal_noPayment))
+                Button(onClick = onReserve, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_reserve)) }
                 return@Column
             }
 

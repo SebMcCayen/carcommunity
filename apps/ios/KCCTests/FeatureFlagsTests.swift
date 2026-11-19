@@ -9,10 +9,11 @@ final class FeatureFlagsTests: XCTestCase {
             "digitalBillboards", "partnerInsightsPassBy", "crownHuntPerks",
             "crownHuntLiveShareScoring", "reportTicketsBrowser", "chatReplies", "chatReactions",
             "eventDetailsRequirePaid", "partnerMemberOffersRequirePaid",
-            "crownHuntRequirePaid"
+            "crownHuntRequirePaid", "partnerSelfService"
         ])
         let defaults = FeatureFlags.contractDefaults
         XCTAssertFalse(defaults.isEnabled(.chatReactions))
+        XCTAssertFalse(defaults.isEnabled(.partnerSelfService))
         for flag in FeatureFlag.allCases {
             XCTAssertEqual(defaults.isEnabled(flag), flag.contractDefault)
         }

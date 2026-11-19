@@ -3,6 +3,8 @@ package com.kungsbackacarcommunity.app.live
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -114,14 +116,45 @@ class StartDrivingCarPickerTest {
         composeTestRule.onNodeWithText("Volvo model0 (1988)").assertIsDisplayed()
         composeTestRule.onNodeWithText("Volvo model3 (1988)").assertIsDisplayed()
         composeTestRule.onNodeWithText("Volvo model1 (1988)").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Volvo model4 (1988)").assertIsSelected().assertHasClickAction()
+        composeTestRule.onNodeWithTag("start-driving-photo-v4", useUnmergedTree = true).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_createChooserAllVehicles)).performClick()
         composeTestRule.onNodeWithText("Volvo model4 (1988)").assertIsSelected()
         composeTestRule.onNodeWithText("Volvo model1 (1988)").performClick()
         assertEquals("v1", selected)
-        val summary = InstrumentationRegistry.getInstrumentation().targetContext
-            .getString(R.string.shell_createChooserSelectedVehicle, "Volvo model1 (1988)")
-        composeTestRule.onNodeWithText(summary).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Volvo model1 (1988)")
+            .assertIsDisplayed().assertIsSelected().assertHasClickAction()
+        composeTestRule.onNodeWithTag("start-driving-photo-v1", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun rowsAndPhotosAreVisibleBeforeRecentOrderArrives() {
+        val vehicles = (0..4).map { i -> car("v$i", "model$i", isMainCar = i == 0) }
+        var recentIds by mutableStateOf(emptyList<String>())
+        composeTestRule.setContent {
+            KccTheme {
+                StartDrivingCarPicker(
+                    vehicles = vehicles, selectedVehicleId = "v0", onSelectVehicle = {},
+                    rankedVehicleIds = recentIds,
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("Volvo model0 (1988)").assertIsSelected()
+        composeTestRule.onNodeWithTag("start-driving-photo-v0", useUnmergedTree = true).assertIsDisplayed()
+        val selectedPhotoNodeId = composeTestRule.onNodeWithTag("start-driving-photo-v0", useUnmergedTree = true)
+            .fetchSemanticsNode().id
+        composeTestRule.onNodeWithText("Volvo model1 (1988)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Volvo model4 (1988)").assertDoesNotExist()
+        composeTestRule.runOnIdle { recentIds = listOf("v4", "v3", "v2") }
+        composeTestRule.onNodeWithText("Volvo model4 (1988)").assertIsDisplayed()
         composeTestRule.onNodeWithText("Volvo model1 (1988)").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Volvo model0 (1988)").assertIsSelected()
+        composeTestRule.onNodeWithTag("start-driving-photo-v0", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(
+            "Keep the selected photo's composition so pending image resolution is not restarted",
+            selectedPhotoNodeId,
+            composeTestRule.onNodeWithTag("start-driving-photo-v0", useUnmergedTree = true).fetchSemanticsNode().id,
+        )
     }
 
     @Test

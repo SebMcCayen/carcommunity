@@ -21,18 +21,24 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import {
+  listOffers,
+  getOffer,
+  submitManagedOffer,
+  type PortalCursor,
+  type PortalOffer,
+} from '@/features/partners/portal';
+import { p } from '../portal-components';
+import portalStyles from '../portal.module.css';
 
 import type {
   AdminPartnerOfferSummary,
-  AdminPartnerOfferDetail,
   CreatePartnerOfferRequest,
-  UpdatePartnerOfferRequest,
   PartnerOfferStatus,
   PartnerOfferType,
 } from '@/features/partners';
 import {
-  adminListPartnerOffers,
-  adminGetPartnerOffer,
   adminCreatePartnerOffer,
   adminUpdatePartnerOffer,
   adminActivatePartnerOffer,
@@ -42,6 +48,7 @@ import {
   PARTNER_OFFER_TYPES,
   ApiError,
 } from '@/features/partners';
+import { ActionDialog } from '@/components/ui/ActionDialog';
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import { translate } from '@/i18n';
 import { localToIso, toLocalDateTimeValue } from '@/lib/datetime';
@@ -82,6 +89,9 @@ function offerTypeLabel(type: PartnerOfferType): string {
 // ---------------------------------------------------------------------------
 
 interface OfferFormState {
+  personalQr: boolean;
+  capacity: string;
+  reservationDays: string;
   title: string;
   teaserText: string;
   description: string;
@@ -97,6 +107,9 @@ interface OfferFormState {
 }
 
 const EMPTY_FORM: OfferFormState = {
+  personalQr: true,
+  capacity: '',
+  reservationDays: '7',
   title: '',
   teaserText: '',
   description: '',
@@ -111,8 +124,11 @@ const EMPTY_FORM: OfferFormState = {
   availableUntil: '',
 };
 
-function offerDetailToForm(offer: AdminPartnerOfferDetail): OfferFormState {
+function offerDetailToForm(offer: PortalOffer): OfferFormState {
   return {
+    personalQr: offer.redemptionMode === 'reservation',
+    capacity: offer.capacity != null ? String(offer.capacity) : '',
+    reservationDays: String(offer.reservationDays),
     title: offer.title,
     teaserText: offer.teaserText,
     description: offer.description ?? '',
@@ -155,16 +171,15 @@ function formToRequest(form: OfferFormState): CreatePartnerOfferRequest {
 interface OfferFormProps {
   initial: OfferFormState;
   onSave: (form: OfferFormState) => Promise<void>;
-  onCancel: () => void;
   isSaving: boolean;
   saveError: string | null;
   isEdit?: boolean;
 }
 
-const OfferForm = ({ initial, onSave, onCancel, isSaving, saveError, isEdit = false }: OfferFormProps) => {
+const OfferForm = ({ initial, onSave, isSaving, saveError, isEdit = false }: OfferFormProps) => {
   const [form, setForm] = useState<OfferFormState>(initial);
 
-  const set = (field: keyof OfferFormState, value: string) =>
+  const set = (field: Exclude<keyof OfferFormState, 'personalQr'>, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   return (
@@ -175,7 +190,54 @@ const OfferForm = ({ initial, onSave, onCancel, isSaving, saveError, isEdit = fa
       }}
       className={styles.form}
     >
-      <p className={styles.safetyWarning}>{t('partnerOffers.codeNeverShownInList')}</p>
+      <p className={styles.safetyWarning}>{p('offerReviewNote')}</p>
+      {!isEdit && (
+        <label className={portalStyles.check}>
+          <input
+            type="checkbox"
+            checked={form.personalQr}
+            onChange={(event) =>
+              setForm((previous) => ({
+                ...previous,
+                personalQr: event.target.checked,
+                offerType: 'member_benefit',
+              }))
+            }
+          />
+          {p('personalQr')}
+        </label>
+      )}
+      {form.personalQr && (
+        <div className={styles.formRowGrid}>
+          <label className={styles.label}>
+            {p('offerCapacity')}
+            <input
+              className={styles.input}
+              type="number"
+              min="1"
+              max="100000"
+              step="1"
+              placeholder={p('unlimited')}
+              value={form.capacity}
+              onChange={(event) => set('capacity', event.target.value)}
+            />
+          </label>
+          <label className={styles.label}>
+            {p('reservationDays')}
+            <input
+              className={styles.input}
+              type="number"
+              min="1"
+              max="30"
+              step="1"
+              required
+              value={form.reservationDays}
+              onChange={(event) => set('reservationDays', event.target.value)}
+            />
+          </label>
+          <p>{p('onePerPerson')}</p>
+        </div>
+      )}
 
       <div className={styles.formRow}>
         <label className={styles.label}>
@@ -184,7 +246,7 @@ const OfferForm = ({ initial, onSave, onCancel, isSaving, saveError, isEdit = fa
             className={styles.input}
             value={form.title}
             onChange={(e) => set('title', e.target.value)}
-            maxLength={150}
+            maxLength={form.personalQr ? 120 : 150}
             required
           />
         </label>
@@ -225,7 +287,10 @@ const OfferForm = ({ initial, onSave, onCancel, isSaving, saveError, isEdit = fa
             value={form.offerType}
             onChange={(e) => set('offerType', e.target.value as PartnerOfferType)}
           >
-            {PARTNER_OFFER_TYPES.map((type) => (
+            {(form.personalQr
+              ? (['member_benefit', 'percentage_discount'] as const)
+              : PARTNER_OFFER_TYPES
+            ).map((type) => (
               <option key={type} value={type}>
                 {offerTypeLabel(type)}
               </option>
@@ -234,18 +299,20 @@ const OfferForm = ({ initial, onSave, onCancel, isSaving, saveError, isEdit = fa
         </label>
       </div>
 
-      <div className={styles.formRow}>
-        <label className={styles.label}>
-          {t('partnerOffers.formRedemptionInstructionsLabel')}
-          <textarea
-            className={styles.input}
-            value={form.redemptionInstructions}
-            onChange={(e) => set('redemptionInstructions', e.target.value)}
-            maxLength={1000}
-            rows={3}
-          />
-        </label>
-      </div>
+      {!form.personalQr && (
+        <div className={styles.formRow}>
+          <label className={styles.label}>
+            {t('partnerOffers.formRedemptionInstructionsLabel')}
+            <textarea
+              className={styles.input}
+              value={form.redemptionInstructions}
+              onChange={(e) => set('redemptionInstructions', e.target.value)}
+              maxLength={1000}
+              rows={3}
+            />
+          </label>
+        </div>
+      )}
 
       <div className={styles.formRow}>
         <label className={styles.label}>
@@ -255,59 +322,68 @@ const OfferForm = ({ initial, onSave, onCancel, isSaving, saveError, isEdit = fa
             value={form.terms}
             onChange={(e) => set('terms', e.target.value)}
             maxLength={2000}
+            required={form.personalQr}
             rows={3}
           />
         </label>
       </div>
 
-      <div className={styles.formRow}>
-        <label className={styles.label}>
-          {t('partnerOffers.formDiscountCodeLabel')}
-          <input
-            className={styles.input}
-            type="text"
-            value={form.discountCode}
-            onChange={(e) => set('discountCode', e.target.value)}
-            maxLength={100}
-            autoComplete="off"
-          />
-        </label>
-      </div>
+      {!form.personalQr && (
+        <div className={styles.formRow}>
+          <label className={styles.label}>
+            {t('partnerOffers.formDiscountCodeLabel')}
+            <input
+              className={styles.input}
+              type="text"
+              value={form.discountCode}
+              onChange={(e) => set('discountCode', e.target.value)}
+              maxLength={100}
+              autoComplete="off"
+            />
+          </label>
+        </div>
+      )}
 
       <div className={styles.formRowGrid}>
-        <label className={styles.label}>
-          {t('partnerOffers.formPercentageDiscountLabel')}
-          <input
-            className={styles.input}
-            type="number"
-            min="0"
-            max="100"
-            step="0.1"
-            value={form.percentageDiscount}
-            onChange={(e) => set('percentageDiscount', e.target.value)}
-          />
-        </label>
-        <label className={styles.label}>
-          {t('partnerOffers.formFixedDiscountLabel')}
-          <input
-            className={styles.input}
-            type="number"
-            min="0"
-            step="1"
-            value={form.fixedDiscountMinorUnits}
-            onChange={(e) => set('fixedDiscountMinorUnits', e.target.value)}
-          />
-        </label>
-        <label className={styles.label}>
-          {t('partnerOffers.formCurrencyCodeLabel')}
-          <input
-            className={styles.input}
-            type="text"
-            value={form.currencyCode}
-            onChange={(e) => set('currencyCode', e.target.value.toUpperCase())}
-            maxLength={3}
-          />
-        </label>
+        {(!form.personalQr || form.offerType === 'percentage_discount') && (
+          <label className={styles.label}>
+            {t('partnerOffers.formPercentageDiscountLabel')}
+            <input
+              className={styles.input}
+              type="number"
+              min={form.personalQr ? '1' : '0'}
+              max="100"
+              step={form.personalQr ? '1' : '0.1'}
+              required={form.personalQr}
+              value={form.percentageDiscount}
+              onChange={(event) => set('percentageDiscount', event.target.value)}
+            />
+          </label>
+        )}
+        {!form.personalQr && (
+          <>
+            <label className={styles.label}>
+              {t('partnerOffers.formFixedDiscountLabel')}
+              <input
+                className={styles.input}
+                type="number"
+                min="0"
+                step="1"
+                value={form.fixedDiscountMinorUnits}
+                onChange={(event) => set('fixedDiscountMinorUnits', event.target.value)}
+              />
+            </label>
+            <label className={styles.label}>
+              {t('partnerOffers.formCurrencyCodeLabel')}
+              <input
+                className={styles.input}
+                value={form.currencyCode}
+                maxLength={3}
+                onChange={(event) => set('currencyCode', event.target.value.toUpperCase())}
+              />
+            </label>
+          </>
+        )}
       </div>
 
       <div className={styles.formRowGrid}>
@@ -332,9 +408,6 @@ const OfferForm = ({ initial, onSave, onCancel, isSaving, saveError, isEdit = fa
       {saveError !== null && <p className={styles.errorText}>{saveError}</p>}
 
       <div className={styles.formActions}>
-        <button type="button" className={styles.btnSecondary} onClick={onCancel} disabled={isSaving}>
-          {t('partnerOffers.cancel')}
-        </button>
         <button type="submit" className={styles.btnPrimary} disabled={isSaving}>
           {isSaving ? t('partnerOffers.loading') : t('partnerOffers.saveOffer')}
         </button>
@@ -369,38 +442,31 @@ const ReasonModal = ({
   const [reason, setReason] = useState('');
 
   return (
-    <div className={styles.modalOverlay} role="dialog" aria-modal="true">
-      <div className={styles.modal}>
-        <h2 className={styles.modalTitle}>{title}</h2>
+    <ActionDialog title={title} onCancel={onCancel} cancelDisabled={isConfirming}>
+      <label className={styles.label}>
+        {reasonLabel}
+        <textarea
+          className={styles.input}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={reasonPlaceholder}
+          rows={3}
+          required
+        />
+      </label>
 
-        <label className={styles.label}>
-          {reasonLabel}
-          <textarea
-            className={styles.input}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder={reasonPlaceholder}
-            rows={3}
-            required
-          />
-        </label>
+      {error !== null && <p className={styles.errorText}>{error}</p>}
 
-        {error !== null && <p className={styles.errorText}>{error}</p>}
-
-        <div className={styles.formActions}>
-          <button className={styles.btnSecondary} onClick={onCancel} disabled={isConfirming}>
-            {t('partnerOffers.cancel')}
-          </button>
-          <button
-            className={styles.btnPrimary}
-            onClick={() => void onConfirm(reason)}
-            disabled={isConfirming || reason.trim().length < 1}
-          >
-            {isConfirming ? t('partnerOffers.loading') : t('partnerOffers.confirm')}
-          </button>
-        </div>
+      <div className={styles.formActions}>
+        <button
+          className={styles.btnPrimary}
+          onClick={() => void onConfirm(reason)}
+          disabled={isConfirming || reason.trim().length < 1}
+        >
+          {isConfirming ? t('partnerOffers.loading') : t('partnerOffers.confirm')}
+        </button>
       </div>
-    </div>
+    </ActionDialog>
   );
 };
 
@@ -416,41 +482,41 @@ interface ActivateModalProps {
   error: string | null;
 }
 
-const ActivateModal = ({ offerTitle, onConfirm, onCancel, isConfirming, error }: ActivateModalProps) => {
+const ActivateModal = ({
+  offerTitle,
+  onConfirm,
+  onCancel,
+  isConfirming,
+  error,
+}: ActivateModalProps) => {
   const [checked, setChecked] = useState(false);
 
   return (
-    <div className={styles.modalOverlay} role="dialog" aria-modal="true">
-      <div className={styles.modal}>
-        <h2 className={styles.modalTitle}>{t('partnerOffers.activateConfirmTitle')}</h2>
-        <p className={styles.modalBody}>{offerTitle}</p>
-        <p className={styles.safetyWarning}>{t('partnerOffers.activateConfirmBody')}</p>
+    <ActionDialog
+      title={t('partnerOffers.activateConfirmTitle')}
+      onCancel={onCancel}
+      cancelDisabled={isConfirming}
+    >
+      <p className={styles.modalBody}>{offerTitle}</p>
+      <p className={styles.safetyWarning}>{t('partnerOffers.activateConfirmBody')}</p>
 
-        <label className={styles.label}>
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => setChecked(e.target.checked)}
-          />
-          {' '}{t('partnerOffers.confirm')}
-        </label>
+      <label className={styles.label}>
+        <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />{' '}
+        {t('partnerOffers.confirm')}
+      </label>
 
-        {error !== null && <p className={styles.errorText}>{error}</p>}
+      {error !== null && <p className={styles.errorText}>{error}</p>}
 
-        <div className={styles.formActions}>
-          <button className={styles.btnSecondary} onClick={onCancel} disabled={isConfirming}>
-            {t('partnerOffers.cancel')}
-          </button>
-          <button
-            className={styles.btnPrimary}
-            onClick={() => void onConfirm()}
-            disabled={isConfirming || !checked}
-          >
-            {isConfirming ? t('partnerOffers.loading') : t('partnerOffers.activateOffer')}
-          </button>
-        </div>
+      <div className={styles.formActions}>
+        <button
+          className={styles.btnPrimary}
+          onClick={() => void onConfirm()}
+          disabled={isConfirming || !checked}
+        >
+          {isConfirming ? t('partnerOffers.loading') : t('partnerOffers.activateOffer')}
+        </button>
       </div>
-    </div>
+    </ActionDialog>
   );
 };
 
@@ -461,12 +527,19 @@ const ActivateModal = ({ offerTitle, onConfirm, onCancel, isConfirming, error }:
 type ModalState =
   | { type: 'none' }
   | { type: 'create'; partnerId: string }
-  | { type: 'edit'; offer: AdminPartnerOfferDetail }
-  | { type: 'activate'; offer: AdminPartnerOfferSummary }
+  | { type: 'edit'; offer: PortalOffer }
+  | { type: 'review'; offer: PortalOffer }
+  | { type: 'activate'; offer: PortalOffer }
   | { type: 'pause'; offer: AdminPartnerOfferSummary }
   | { type: 'end'; offer: AdminPartnerOfferSummary };
 
 export default function PartnerOffersPage() {
+  const [params] = useSearchParams();
+  const [cursors, setCursors] = useState<(PortalCursor | null)[]>([null]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [nextCursor, setNextCursor] = useState<PortalCursor | null>(null);
+  const loadGeneration = useRef(0);
+  const actionFlight = useRef(false);
   const [offers, setOffers] = useState<AdminPartnerOfferSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -475,10 +548,10 @@ export default function PartnerOffersPage() {
   const [isActing, setIsActing] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Client-side filters
-  const [filterPartnerId, setFilterPartnerId] = useState('');
+  // Filters run on Firestore before cursor pagination.
+  const [filterPartnerId, setFilterPartnerId] = useState(params.get('partnerId') ?? '');
   const [filterStatus, setFilterStatus] = useState<PartnerOfferStatus | ''>('');
-  const [newPartnerIdInput, setNewPartnerIdInput] = useState('');
+  const [newPartnerIdInput, setNewPartnerIdInput] = useState(params.get('partnerId') ?? '');
 
   const isMounted = useRef(true);
   useEffect(() => {
@@ -489,24 +562,46 @@ export default function PartnerOffersPage() {
   }, []);
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setIsLoading(true);
     setError(null);
     try {
-      const result = await adminListPartnerOffers({
-        partnerId: filterPartnerId.trim() || undefined,
-        status: filterStatus || undefined,
-      });
-      if (isMounted.current) setOffers(result.data.offers);
+      const result = await listOffers(
+        cursors[pageIndex],
+        filterPartnerId.trim() || undefined,
+        filterStatus || undefined,
+      );
+      if (isMounted.current && generation === loadGeneration.current) {
+        setOffers(result.items);
+        setNextCursor(result.nextCursor);
+      }
     } catch {
-      if (isMounted.current) setError(t('partnerOffers.error'));
+      if (isMounted.current && generation === loadGeneration.current)
+        setError(t('partnerOffers.error'));
     } finally {
-      if (isMounted.current) setIsLoading(false);
+      if (isMounted.current && generation === loadGeneration.current) setIsLoading(false);
     }
-  }, [filterPartnerId, filterStatus]);
+  }, [filterPartnerId, filterStatus, cursors, pageIndex]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const offerId = params.get('offerId');
+    if (!offerId) return;
+    let active = true;
+    getOffer(offerId)
+      .then((offer) => {
+        if (active) setModal({ type: 'review', offer });
+      })
+      .catch(() => {
+        if (active) setError(t('partnerOffers.error'));
+      });
+    return () => {
+      active = false;
+    };
+  }, [params]);
 
   const showSuccess = (message: string) => {
     setSuccessMessage(message);
@@ -516,40 +611,79 @@ export default function PartnerOffersPage() {
   };
 
   const handleCreate = async (form: OfferFormState) => {
+    if (actionFlight.current) return;
     if (modal.type !== 'create') return;
+    actionFlight.current = true;
     setIsActing(true);
     setModalError(null);
     try {
-      await adminCreatePartnerOffer(modal.partnerId, formToRequest(form));
+      if (form.personalQr)
+        await submitManagedOffer({
+          companyId: modal.partnerId,
+          title: form.title.trim(),
+          teaserText: form.teaserText.trim(),
+          description: form.description.trim(),
+          terms: form.terms.trim(),
+          percentageDiscount:
+            form.offerType === 'percentage_discount' ? Number(form.percentageDiscount) : null,
+          availableFrom: localToIso(form.availableFrom),
+          availableUntil: localToIso(form.availableUntil),
+          capacity: form.capacity ? Number(form.capacity) : null,
+          reservationDays: Number(form.reservationDays),
+        });
+      else await adminCreatePartnerOffer(modal.partnerId, formToRequest(form));
       setModal({ type: 'none' });
       showSuccess(t('partnerOffers.createSuccess'));
       void load();
     } catch (err) {
       setModalError(err instanceof ApiError ? err.message : t('partnerOffers.error'));
     } finally {
+      actionFlight.current = false;
       setIsActing(false);
     }
   };
 
   const handleUpdate = async (form: OfferFormState) => {
+    if (actionFlight.current) return;
     if (modal.type !== 'edit') return;
+    actionFlight.current = true;
     setIsActing(true);
     setModalError(null);
     try {
-      await adminUpdatePartnerOffer(modal.offer.offerId, formToRequest(form));
+      if (form.personalQr)
+        await submitManagedOffer({
+          companyId: modal.offer.partnerId,
+          offerId: modal.offer.offerId,
+          title: form.title.trim(),
+          teaserText: form.teaserText.trim(),
+          description: form.description.trim(),
+          terms: form.terms.trim(),
+          percentageDiscount:
+            form.offerType === 'percentage_discount' ? Number(form.percentageDiscount) : null,
+          availableFrom: localToIso(form.availableFrom),
+          availableUntil: localToIso(form.availableUntil),
+          capacity: form.capacity ? Number(form.capacity) : null,
+          reservationDays: Number(form.reservationDays),
+        });
+      else await adminUpdatePartnerOffer(modal.offer.offerId, formToRequest(form));
       setModal({ type: 'none' });
       showSuccess(t('partnerOffers.updateSuccess'));
       void load();
     } catch (err) {
       setModalError(err instanceof ApiError ? err.message : t('partnerOffers.error'));
     } finally {
+      actionFlight.current = false;
       setIsActing(false);
     }
   };
 
   const handleEdit = async (offer: AdminPartnerOfferSummary) => {
     try {
-      const detail = await adminGetPartnerOffer(offer.offerId);
+      const detail = await getOffer(offer.offerId);
+      if (detail.redemptionMode === 'reservation' && detail.issuedCount > 0) {
+        setError(p('immutableOffer'));
+        return;
+      }
       setModalError(null);
       setModal({ type: 'edit', offer: detail });
     } catch {
@@ -558,27 +692,36 @@ export default function PartnerOffersPage() {
   };
 
   const handleActivate = async () => {
+    if (actionFlight.current) return;
     if (modal.type !== 'activate') return;
+    actionFlight.current = true;
     setIsActing(true);
     setModalError(null);
     try {
-      await adminActivatePartnerOffer(modal.offer.offerId);
+      await adminActivatePartnerOffer(
+        modal.offer.offerId,
+        undefined,
+        modal.offer.redemptionMode === 'reservation' ? modal.offer.version : undefined,
+      );
       setModal({ type: 'none' });
       showSuccess(t('partnerOffers.activateSuccess'));
       void load();
     } catch (err) {
       setModalError(err instanceof ApiError ? err.message : t('partnerOffers.error'));
     } finally {
+      actionFlight.current = false;
       setIsActing(false);
     }
   };
 
   const handlePause = async (reason: string) => {
+    if (actionFlight.current) return;
     if (modal.type !== 'pause') return;
     if (!reason.trim()) {
       setModalError(t('partnerOffers.reasonRequired'));
       return;
     }
+    actionFlight.current = true;
     setIsActing(true);
     setModalError(null);
     try {
@@ -589,16 +732,19 @@ export default function PartnerOffersPage() {
     } catch (err) {
       setModalError(err instanceof ApiError ? err.message : t('partnerOffers.error'));
     } finally {
+      actionFlight.current = false;
       setIsActing(false);
     }
   };
 
   const handleEnd = async (reason: string) => {
+    if (actionFlight.current) return;
     if (modal.type !== 'end') return;
     if (!reason.trim()) {
       setModalError(t('partnerOffers.reasonRequired'));
       return;
     }
+    actionFlight.current = true;
     setIsActing(true);
     setModalError(null);
     try {
@@ -609,6 +755,7 @@ export default function PartnerOffersPage() {
     } catch (err) {
       setModalError(err instanceof ApiError ? err.message : t('partnerOffers.error'));
     } finally {
+      actionFlight.current = false;
       setIsActing(false);
     }
   };
@@ -626,9 +773,7 @@ export default function PartnerOffersPage() {
         <p className={styles.description}>{t('partnerOffers.pageDescription')}</p>
       </div>
 
-      {successMessage !== null && (
-        <p className={offerStyles.successText}>{successMessage}</p>
-      )}
+      {successMessage !== null && <p className={offerStyles.successText}>{successMessage}</p>}
 
       {/* Filters */}
       <div className={offerStyles.filterRow}>
@@ -637,7 +782,11 @@ export default function PartnerOffersPage() {
           <select
             className={`${styles.input} ${offerStyles.filterInput}`}
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as PartnerOfferStatus | '')}
+            onChange={(e) => {
+              setCursors([null]);
+              setPageIndex(0);
+              setFilterStatus(e.target.value as PartnerOfferStatus | '');
+            }}
           >
             <option value="">{t('partnerOffers.allStatuses')}</option>
             {PARTNER_OFFER_STATUSES.map((s) => (
@@ -655,7 +804,11 @@ export default function PartnerOffersPage() {
             type="text"
             placeholder={t('partnerOffers.formPartnerLabel')}
             value={filterPartnerId}
-            onChange={(e) => setFilterPartnerId(e.target.value)}
+            onChange={(e) => {
+              setCursors([null]);
+              setPageIndex(0);
+              setFilterPartnerId(e.target.value);
+            }}
           />
         </label>
       </div>
@@ -716,7 +869,22 @@ export default function PartnerOffersPage() {
             {offers.map((offer) => (
               <tr key={offer.offerId}>
                 <td title={offer.partnerId}>{offer.partnerCompanyName}</td>
-                <td>{offer.title}</td>
+                <td>
+                  <button
+                    className={styles.linkButton}
+                    onClick={async () => {
+                      try {
+                        const detail = await getOffer(offer.offerId);
+                        setModalError(null);
+                        setModal({ type: 'review', offer: detail });
+                      } catch {
+                        setError(t('partnerOffers.error'));
+                      }
+                    }}
+                  >
+                    {offer.title}
+                  </button>
+                </td>
                 <td>{offerTypeLabel(offer.offerType)}</td>
                 <td>
                   <span className={`${styles.badge} ${styles[`badge_${offer.status}`] ?? ''}`}>
@@ -737,7 +905,9 @@ export default function PartnerOffersPage() {
                       className={styles.btnSmallPrimary}
                       onClick={() => {
                         setModalError(null);
-                        setModal({ type: 'activate', offer });
+                        void getOffer(offer.offerId)
+                          .then((detail) => setModal({ type: 'review', offer: detail }))
+                          .catch(() => setError(t('partnerOffers.error')));
                       }}
                     >
                       {t('partnerOffers.activateOffer')}
@@ -772,37 +942,93 @@ export default function PartnerOffersPage() {
         </table>
       )}
 
+      <div className={portalStyles.pager}>
+        <button
+          className={portalStyles.secondary}
+          disabled={isLoading || !pageIndex}
+          onClick={() => setPageIndex((i) => i - 1)}
+        >
+          {p('previous')}
+        </button>
+        <span>{pageIndex + 1}</span>
+        <button
+          className={portalStyles.secondary}
+          disabled={isLoading || !nextCursor}
+          onClick={() => {
+            setCursors((previous) => [...previous.slice(0, pageIndex + 1), nextCursor]);
+            setPageIndex((i) => i + 1);
+          }}
+        >
+          {p('next')}
+        </button>
+      </div>
+      {modal.type === 'review' && (
+        <ActionDialog title={modal.offer.title} onCancel={closeModal}>
+          <p>{modal.offer.description}</p>
+          <h3>{p('publishedTerms')}</h3>
+          <p style={{ whiteSpace: 'pre-wrap' }}>{modal.offer.terms || '—'}</p>
+          <dl>
+            <dt>{p('offerCapacity')}</dt>
+            <dd>{modal.offer.capacity ?? p('unlimited')}</dd>
+            <dt>{p('reservationDays')}</dt>
+            <dd>{modal.offer.reservationDays}</dd>
+            <dt>{p('offerMode')}</dt>
+            <dd>{p(modal.offer.redemptionMode === 'reservation' ? 'personalQr' : 'sharedCode')}</dd>
+            <dt>{t('partnerOffers.formAvailableFromLabel')}</dt>
+            <dd>{formatDate(modal.offer.availableFrom)}</dd>
+            <dt>{t('partnerOffers.formAvailableUntilLabel')}</dt>
+            <dd>{formatDate(modal.offer.availableUntil)}</dd>
+          </dl>
+          <p>{p('paymentNotice')}</p>
+          <Link
+            className={styles.linkButton}
+            to={`/partners/statistics?partnerId=${encodeURIComponent(modal.offer.partnerId)}`}
+          >
+            {p('statistics')}
+          </Link>
+          <div className={styles.formActions}>
+            {(modal.offer.status === 'draft' || modal.offer.status === 'paused') && (
+              <button
+                className={styles.btnPrimary}
+                onClick={() => setModal({ type: 'activate', offer: modal.offer })}
+              >
+                {t('partnerOffers.activateOffer')}
+              </button>
+            )}
+          </div>
+        </ActionDialog>
+      )}
       {/* Create modal */}
       {modal.type === 'create' && (
-        <div className={styles.modalOverlay} role="dialog" aria-modal="true">
-          <div className={styles.modal}>
-            <h2 className={styles.modalTitle}>{t('partnerOffers.createOffer')}</h2>
-            <OfferForm
-              initial={EMPTY_FORM}
-              onSave={handleCreate}
-              onCancel={closeModal}
-              isSaving={isActing}
-              saveError={modalError}
-            />
-          </div>
-        </div>
+        <ActionDialog
+          title={t('partnerOffers.createOffer')}
+          onCancel={closeModal}
+          cancelDisabled={isActing}
+        >
+          <OfferForm
+            initial={EMPTY_FORM}
+            onSave={handleCreate}
+            isSaving={isActing}
+            saveError={modalError}
+          />
+        </ActionDialog>
       )}
 
       {/* Edit modal */}
       {modal.type === 'edit' && (
-        <div className={styles.modalOverlay} role="dialog" aria-modal="true">
-          <div className={styles.modal}>
-            <h2 className={styles.modalTitle}>{t('partnerOffers.editOffer')}</h2>
-            <OfferForm
-              initial={offerDetailToForm(modal.offer)}
-              onSave={handleUpdate}
-              onCancel={closeModal}
-              isSaving={isActing}
-              saveError={modalError}
-              isEdit
-            />
-          </div>
-        </div>
+        <ActionDialog
+          title={t('partnerOffers.editOffer')}
+          onCancel={closeModal}
+          cancelDisabled={isActing}
+        >
+          <OfferForm
+            initial={offerDetailToForm(modal.offer)}
+            onSave={handleUpdate}
+            isSaving={isActing}
+            saveError={modalError}
+            isEdit
+          />
+        </ActionDialog>
       )}
 
       {/* Activate modal */}

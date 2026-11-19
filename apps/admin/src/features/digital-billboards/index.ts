@@ -19,6 +19,11 @@
 import {
   collection,
   doc,
+  documentId,
+  startAfter,
+  where,
+  type QueryDocumentSnapshot,
+  type QueryConstraint,
   getDoc,
   getDocs,
   limit as fsLimit,
@@ -107,8 +112,9 @@ function toAdminBillboardSummary(
   id: string,
   data: DocumentData,
   partnerCompanyName: string,
-): AdminBillboardSummary {
+): AdminBillboardWithLogo {
   return {
+    imagePath: (data.imagePath as string | undefined) ?? null,
     billboardId: id,
     partnerId: (data.partnerCompanyId as string | undefined) ?? '',
     partnerCompanyName,
@@ -157,7 +163,11 @@ export async function adminListBillboards(
   const billboards = await Promise.all(
     snapshot.docs.map(async (d) => {
       const data = d.data();
-      const name = await resolveCompanyName(db, (data.partnerCompanyId as string | undefined) ?? '', cache);
+      const name = await resolveCompanyName(
+        db,
+        (data.partnerCompanyId as string | undefined) ?? '',
+        cache,
+      );
       return toAdminBillboardSummary(d.id, data, name);
     }),
   );
@@ -254,4 +264,38 @@ export async function adminEndBillboard(
   });
   const { data } = await adminGetBillboard(billboardId);
   return { ok: true, data };
+}
+
+export type AdminBillboardWithLogo = AdminBillboardSummary & { imagePath: string | null };
+export type BillboardCursor = QueryDocumentSnapshot<DocumentData>;
+export async function adminListBillboardsCursor(
+  cursor: BillboardCursor | null = null,
+  companyId?: string,
+): Promise<{ billboards: AdminBillboardWithLogo[]; nextCursor: BillboardCursor | null }> {
+  const db = getAdminFirestore();
+  const constraints: QueryConstraint[] = [
+    ...(companyId ? [where('partnerCompanyId', '==', companyId)] : []),
+    orderBy('createdAt', 'desc'),
+    orderBy(documentId(), 'desc'),
+  ];
+  if (cursor) constraints.push(startAfter(cursor));
+  const snapshot = await getDocs(query(collection(db, 'billboards'), ...constraints, fsLimit(21)));
+  const visible = snapshot.docs.slice(0, 20);
+  const cache = new Map<string, string>();
+  const billboards = await Promise.all(
+    visible.map(async (d) =>
+      toAdminBillboardSummary(
+        d.id,
+        d.data(),
+        await resolveCompanyName(db, d.data().partnerCompanyId as string, cache),
+      ),
+    ),
+  );
+  return { billboards, nextCursor: snapshot.docs.length > 20 ? visible.at(-1)! : null };
+}
+export function adminUsePartnerBillboardLogo(billboardId: string) {
+  return callAdmin<{ imagePath: string }>('partners-portal', {
+    action: 'billboardLogo',
+    billboardId,
+  });
 }

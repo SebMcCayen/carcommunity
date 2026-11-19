@@ -12,6 +12,15 @@ struct PartnerApplicationForm: Equatable, Sendable {
     var contactPhone = ""
     var websiteURL = ""
     var message = ""
+    var organizationNumber = ""
+    var proposedDescription = ""
+    var proposedAddress = ""
+    var publicPhone = ""
+    var selfServiceRequested = false
+    var billboardRequested = false
+    var billboardPlacementRequest = ""
+    var logoBase64: String?
+    var logoRightsConfirmed = false
 }
 
 struct PartnerApplicationInput: Equatable, Sendable {
@@ -22,6 +31,29 @@ struct PartnerApplicationInput: Equatable, Sendable {
     let contactPhone: String?
     let websiteURL: String?
     let message: String?
+    var organizationNumber: String? = nil
+    var proposedDescription: String? = nil
+    var proposedAddress: String? = nil
+    var publicPhone: String? = nil
+    var selfServiceRequested = false
+    var billboardRequested = false
+    var billboardPlacementRequest: String? = nil
+    var logoBase64: String? = nil
+    var logoRightsConfirmed = false
+
+    var portalPayload: [String: Any] {
+        var value = payload
+        value["action"] = "submitApplication"
+        value["website"] = value.removeValue(forKey: "websiteUrl")
+        value["description"] = value.removeValue(forKey: "proposedDescription")
+        value["address"] = value.removeValue(forKey: "proposedAddress")
+        value["selfServiceRequested"] = selfServiceRequested
+        value["billboardRequested"] = billboardRequested
+        if let publicPhone { value["publicPhone"] = publicPhone }
+        if let billboardPlacementRequest { value["billboardPlacementRequest"] = billboardPlacementRequest }
+        if let logoBase64 { value["logoBase64"] = logoBase64; value["logoRightsConfirmed"] = logoRightsConfirmed }
+        return value
+    }
 
     var payload: [String: Any] {
         var payload: [String: Any] = [
@@ -33,6 +65,9 @@ struct PartnerApplicationInput: Equatable, Sendable {
         if let contactPhone { payload["contactPhone"] = contactPhone }
         if let websiteURL { payload["websiteUrl"] = websiteURL }
         if let message { payload["message"] = message }
+        if let organizationNumber { payload["organizationNumber"] = organizationNumber }
+        if let proposedDescription { payload["proposedDescription"] = proposedDescription }
+        if let proposedAddress { payload["proposedAddress"] = proposedAddress }
         return payload
     }
 }
@@ -76,7 +111,12 @@ enum PartnerApplications {
               email.utf16.count <= emailLimit,
               form.contactPhone.partnerTrimmed.utf16.count <= phoneLimit,
               (website?.utf16.count ?? 0) <= websiteLimit,
-              form.message.partnerTrimmed.utf16.count <= messageLimit
+              form.message.partnerTrimmed.utf16.count <= messageLimit,
+              form.organizationNumber.partnerTrimmed.utf16.count <= 20,
+              form.proposedDescription.partnerTrimmed.utf16.count <= 4_000,
+              form.proposedAddress.partnerTrimmed.utf16.count <= 300,
+              form.publicPhone.partnerTrimmed.utf16.count <= phoneLimit,
+              form.billboardPlacementRequest.partnerTrimmed.utf16.count <= 1_000
         else { return .fieldTooLong }
         return nil
     }
@@ -90,7 +130,16 @@ enum PartnerApplications {
             contactEmail: form.contactEmail.partnerTrimmed,
             contactPhone: form.contactPhone.partnerTrimmed.partnerNilIfEmpty,
             websiteURL: normalizedWebsiteURL(form.websiteURL),
-            message: form.message.partnerTrimmed.partnerNilIfEmpty
+            message: form.message.partnerTrimmed.partnerNilIfEmpty,
+            organizationNumber: form.organizationNumber.partnerTrimmed.partnerNilIfEmpty,
+            proposedDescription: form.proposedDescription.partnerTrimmed.partnerNilIfEmpty,
+            proposedAddress: form.proposedAddress.partnerTrimmed.partnerNilIfEmpty,
+            publicPhone: form.publicPhone.partnerTrimmed.partnerNilIfEmpty,
+            selfServiceRequested: form.selfServiceRequested,
+            billboardRequested: form.billboardRequested,
+            billboardPlacementRequest: form.billboardPlacementRequest.partnerTrimmed.partnerNilIfEmpty,
+            logoBase64: form.logoBase64,
+            logoRightsConfirmed: form.logoRightsConfirmed
         )
     }
 

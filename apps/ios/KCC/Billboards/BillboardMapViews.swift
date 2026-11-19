@@ -4,11 +4,12 @@ struct BillboardMapOverlay: View {
     @Environment(\.openURL) private var openURL
     @Bindable var coordinator: BillboardsCoordinator
     let projection: any MapProjection
+    var onOpenPartner: ((String) -> Bool)? = nil
 
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-                MapPresenceLayer(items: Dictionary(uniqueKeysWithValues: coordinator.markers.map { ($0.id, $0) }),
+                MapPresenceLayer(items: Dictionary(uniqueKeysWithValues: coordinator.visibleBillboards.map { ($0.id, $0) }),
                     retainRemovedPublicItems: true) { present in
                     let marker = present.value
                     if let point = projection.screenPositionFor(
@@ -18,8 +19,12 @@ struct BillboardMapOverlay: View {
                        point.x >= -32, point.y >= -32,
                        point.x <= Double(geometry.size.width + 32),
                        point.y <= Double(geometry.size.height + 32) {
-                        Button { coordinator.open(billboardId: marker.id) } label: {
-                            BillboardMarker()
+                        Button {
+                            coordinator.open(billboardId: marker.id, onOpenPartner: onOpenPartner)
+                        } label: {
+                            if let path = marker.imagePath {
+                                PartnerLogoView(path: path, size: 42)
+                            } else { BillboardMarker() }
                         }
                         .buttonStyle(.plain)
                         .frame(minWidth: 44, minHeight: 44)
@@ -38,7 +43,8 @@ struct BillboardMapOverlay: View {
                             openURL(action.url)
                             coordinator.dismiss()
                         },
-                        onDismiss: coordinator.dismiss
+                        onDismiss: coordinator.dismiss,
+                        onOpenPartner: partnerAction(for: billboard)
                     )
                     .frame(maxHeight: min(420, geometry.size.height * 0.65))
                     .padding(KccSpacing.s4)
@@ -46,6 +52,11 @@ struct BillboardMapOverlay: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .bottom)
         }
+    }
+
+    private func partnerAction(for billboard: Billboard) -> (() -> Void)? {
+        guard billboard.companyId != nil, let onOpenPartner else { return nil }
+        return { _ = coordinator.openPartner(for: billboard.id, using: onOpenPartner) }
     }
 }
 
@@ -73,6 +84,7 @@ private struct BillboardMapPopup: View {
     let action: BillboardAction?
     let onAction: (BillboardAction) -> Void
     let onDismiss: () -> Void
+    var onOpenPartner: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s2) {
@@ -89,8 +101,15 @@ private struct BillboardMapPopup: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KccSpacing.s2) {
                     PublicContentReportButton(target: PublicContentTarget(surface: "billboard", itemID: billboard.id))
-                    Text(billboard.headline).font(.headline)
+                    HStack(spacing: KccSpacing.s3) {
+                        PartnerLogoView(path: billboard.imagePath, size: 48)
+                        Text(billboard.headline).font(.headline)
+                    }
                     if let message = billboard.message { Text(message).foregroundStyle(.secondary) }
+                    if let onOpenPartner {
+                        Button(action: onOpenPartner) { PortalText("portal.openPartner") }
+                            .buttonStyle(.borderedProminent).frame(minHeight: 48)
+                    }
                     if let action {
                         Button { onAction(action) } label: {
                             Text(LocalizedStringKey(action.labelKey))

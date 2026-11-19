@@ -36,8 +36,8 @@ class FirebaseGarageRepository private constructor(
         awaitClose { registration.remove() }
     }
 
-    override suspend fun rankedDrivingVehicleIds(): List<String> =
-        (call("garage-rankedDrivingVehicleIds", emptyMap())?.get("vehicleIds") as? List<*>)
+    override suspend fun recentDrivingVehicleIds(): List<String> =
+        (call("garage-rankedDrivingVehicleIds", emptyMap())?.get("recentVehicleIds") as? List<*>)
             ?.filterIsInstance<String>().orEmpty()
 
     override suspend fun addVehicle(input: VehicleInput): String {

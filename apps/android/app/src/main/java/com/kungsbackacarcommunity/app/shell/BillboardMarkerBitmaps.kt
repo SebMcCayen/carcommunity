@@ -62,6 +62,7 @@ internal object BillboardMarkerBitmaps {
     fun create(
         density: Float,
         plaqueColorArgb: Int = BillboardMarkerStyle.PLAQUE_COLOR,
+        logo: Bitmap? = null,
     ): Bitmap? {
         if (!density.isFinite() || density <= 0f) return null
         fun px(dp: Float) = dp * density
@@ -126,6 +127,20 @@ internal object BillboardMarkerBitmaps {
         // 3. The marker proper. The post keeps the light ring's colour so it
         // stays a visible stalk against the plaque above it.
         drawSilhouette(border, plaqueColorArgb, BillboardMarkerStyle.PLAQUE_CONTENT_COLOR)
+
+        if (logo != null && !logo.isRecycled && logo.width > 0 && logo.height > 0) {
+            val padding = px(2f)
+            val boxWidth = (plaqueWidth - padding * 2).coerceAtLeast(1f)
+            val boxHeight = (plaqueHeight - padding * 2).coerceAtLeast(1f)
+            val scale = minOf(boxWidth / logo.width, boxHeight / logo.height)
+            val logoWidth = logo.width * scale
+            val logoHeight = logo.height * scale
+            val left = border + (plaqueWidth - logoWidth) / 2f
+            val top = border + (plaqueHeight - logoHeight) / 2f
+            paint.isFilterBitmap = true
+            canvas.drawBitmap(logo, null, RectF(left, top, left + logoWidth, top + logoHeight), paint)
+            return bitmap
+        }
 
         // 4. The two content bars — "there is a message on this panel". Sized
         // from the plaque's INNER box so they scale with the border, and drawn
