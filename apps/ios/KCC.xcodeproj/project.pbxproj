@@ -475,6 +475,13 @@
 		FF5DAD303A0C20F13A16B67D /* changelog.json in Resources */ = {isa = PBXBuildFile; fileRef = 18ACC38A3554DF9334B4815F /* changelog.json */; };
 		FFAF1EAA160AFCF84E155B6C /* EventAttendeesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B00397E45AB94249025E8C0 /* EventAttendeesSheet.swift */; };
 		FFC620D8B53E1BB6BFEBB181 /* EventChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B12FAC506B254D502CA6177 /* EventChatRepository.swift */; };
+		E4E28E5510ACB9DD610A425C /* PartnerLogoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 041AE965323F38573BA289F3 /* PartnerLogoView.swift */; };
+		97673D2475814E1711A3F03D /* PartnerPortalClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D57050238C4B56EBF42738 /* PartnerPortalClient.swift */; };
+		DDAB4D5F766A0811DCB2CAB1 /* PartnerPortalModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F02A0F1B909AA21491076EA4 /* PartnerPortalModels.swift */; };
+		3668EB40CB9AC7B8B054431A /* PartnerPortalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D49E399C469BE10A0ABF370 /* PartnerPortalViews.swift */; };
+		ED27A1E471A4323C49C03123 /* PartnerQRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096BE0E843B02B5C3CF4AAE2 /* PartnerQRScanner.swift */; };
+		D95A25198240B8451C7CE49F /* PartnerReservationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73D36B8F75ABD64D25D2EE3 /* PartnerReservationViews.swift */; };
+		5D8EB3E54A292A8922887251 /* PartnerPortal.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 637DDA202B0465239DFAEBDD /* PartnerPortal.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -957,6 +964,13 @@
 		FEA57282CD5C314FBB90F9E5 /* PointsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointsModels.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
 		FFB6A2C05BDF69FB106D0F24 /* SubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
+		041AE965323F38573BA289F3 /* PartnerLogoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerLogoView.swift; sourceTree = "<group>"; };
+		A2D57050238C4B56EBF42738 /* PartnerPortalClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerPortalClient.swift; sourceTree = "<group>"; };
+		F02A0F1B909AA21491076EA4 /* PartnerPortalModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerPortalModels.swift; sourceTree = "<group>"; };
+		9D49E399C469BE10A0ABF370 /* PartnerPortalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerPortalViews.swift; sourceTree = "<group>"; };
+		096BE0E843B02B5C3CF4AAE2 /* PartnerQRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerQRScanner.swift; sourceTree = "<group>"; };
+		B73D36B8F75ABD64D25D2EE3 /* PartnerReservationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerReservationViews.swift; sourceTree = "<group>"; };
+		637DDA202B0465239DFAEBDD /* PartnerPortal.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = PartnerPortal.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1232,6 +1246,7 @@
 		3C9357116487CACE984AFAEC /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				637DDA202B0465239DFAEBDD /* PartnerPortal.xcstrings */,
 				515D01DDB9677DC69CCD108E /* AppStore.xcstrings */,
 				9E1FC51BD62B99213AD6AD17 /* ContentSafety.xcstrings */,
 				24ACA4339607DCEEA56FA0CC /* InfoPlist.xcstrings */,
@@ -1403,6 +1418,12 @@
 		676B4A23AA9DE996C08A533A /* Partners */ = {
 			isa = PBXGroup;
 			children = (
+				B73D36B8F75ABD64D25D2EE3 /* PartnerReservationViews.swift */,
+				096BE0E843B02B5C3CF4AAE2 /* PartnerQRScanner.swift */,
+				9D49E399C469BE10A0ABF370 /* PartnerPortalViews.swift */,
+				F02A0F1B909AA21491076EA4 /* PartnerPortalModels.swift */,
+				A2D57050238C4B56EBF42738 /* PartnerPortalClient.swift */,
+				041AE965323F38573BA289F3 /* PartnerLogoView.swift */,
 				846F570710B4634050890322 /* FirebasePartnerApplicationRepository.swift */,
 				0A0AECAFE48DCEEB1CE2EA05 /* FirebasePartnersRepository.swift */,
 				D1A94A53728C09C87E2CF745 /* PartnerApplication.swift */,
@@ -1973,6 +1994,7 @@
 				A32288F494E184A0E8C0578C /* EmojiCatalog.json in Resources */,
 				D82FBCB9FF439B2E1275434C /* InfoPlist.xcstrings in Resources */,
 				E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */,
+				5D8EB3E54A292A8922887251 /* PartnerPortal.xcstrings in Resources */,
 				93C55D774DE8ADB3773B041B /* PrivacyInfo.xcprivacy in Resources */,
 				FF5DAD303A0C20F13A16B67D /* changelog.json in Resources */,
 			);
@@ -2320,6 +2342,12 @@
 				DA178F599AACBD13B6174E99 /* PartnersModels.swift in Sources */,
 				18F392488ADE5F64038B4509 /* PartnersRepository.swift in Sources */,
 				BA946E8E3AB562159EB5606E /* PartnersScreen.swift in Sources */,
+				D95A25198240B8451C7CE49F /* PartnerReservationViews.swift in Sources */,
+				ED27A1E471A4323C49C03123 /* PartnerQRScanner.swift in Sources */,
+				3668EB40CB9AC7B8B054431A /* PartnerPortalViews.swift in Sources */,
+				DDAB4D5F766A0811DCB2CAB1 /* PartnerPortalModels.swift in Sources */,
+				97673D2475814E1711A3F03D /* PartnerPortalClient.swift in Sources */,
+				E4E28E5510ACB9DD610A425C /* PartnerLogoView.swift in Sources */,
 				3FAE9497EE7C18118B9006B6 /* PerkBalanceRepository.swift in Sources */,
 				84D1B89215AE0625F4921A27 /* PerkShopCoordinator.swift in Sources */,
 				D659C88AFC97CAF9AB1DCB5A /* PerkShopModels.swift in Sources */,

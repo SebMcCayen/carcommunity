@@ -28,6 +28,8 @@
 	<false/>
 	<key>MBXAccessToken</key>
 	<string>$(MAPBOX_ACCESS_TOKEN)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Kameran används när du väljer att skanna kundens personliga QR-kod för ett partnererbjudande.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar, körinspelning och livedelning fungerar inte.</string>
 	<key>UIBackgroundModes</key>

@@ -98,13 +98,22 @@ class FirebasePartnerApplicationRepository private constructor(
     override suspend fun submit(input: PartnerApplicationInput) {
         val data =
             buildMap<String, Any> {
+                put("action", "submitApplication")
                 put("companyName", input.companyName)
                 put("category", input.category.wire)
                 put("contactName", input.contactName)
                 put("contactEmail", input.contactEmail)
                 input.contactPhone?.let { put("contactPhone", it) }
-                input.websiteUrl?.let { put("websiteUrl", it) }
+                input.websiteUrl?.let { put("website", it) }
                 input.message?.let { put("message", it) }
+                input.organizationNumber?.let { put("organizationNumber", it) }
+                input.description?.let { put("description", it) }
+                input.address?.let { put("address", it) }
+                input.publicPhone?.let { put("publicPhone", it) }
+                put("selfServiceRequested", input.selfServiceRequested)
+                put("billboardRequested", input.billboardRequested)
+                input.billboardPlacementRequest?.let { put("billboardPlacementRequest", it) }
+                input.logoBase64?.let { put("logoBase64", it); put("logoRightsConfirmed", input.logoRightsConfirmed) }
             }
         suspendCancellableCoroutine { continuation ->
             functions
@@ -125,7 +134,7 @@ class FirebasePartnerApplicationRepository private constructor(
 
     companion object {
         private const val REGION = "europe-west1"
-        private const val CALLABLE = "partners-submitApplication"
+        private const val CALLABLE = "partners-portal"
 
         fun createIfAvailable(context: Context): PartnerApplicationRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null

@@ -33,10 +33,7 @@ struct PartnerCompanySummary: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
             HStack(alignment: .top, spacing: KccSpacing.s3) {
-                Image(systemName: "building.2.fill").font(.system(size: 20))
-                    .foregroundStyle(KccTheme.driver).frame(width: 40, height: 40)
-                    .background(KccTheme.subtle, in: RoundedRectangle(cornerRadius: KccRadius.sm))
-                    .accessibilityHidden(true)
+                PartnerLogoView(path: company.logoPath, size: 40)
                 Text(verbatim: company.name).font(.title3.bold())
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)

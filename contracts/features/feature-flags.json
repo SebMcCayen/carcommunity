@@ -134,6 +134,13 @@
       "label": "Chat message reactions",
       "sensitivity": "standard",
       "description": "Persistent message reactions on both native platforms and shared clubs. Off rejects mutations and hides the new reaction UI; cleanup remains active."
+    },
+    {
+      "key": "partnerSelfService",
+      "default": false,
+      "label": "Partner self-service and new reservations",
+      "sensitivity": "standard",
+      "description": "Enables company-scoped partner profile/logo/offer changes and new personal offer reservations. Default OFF until the portal, rules, indexes and both native apps have been reviewed and deployed. Turning it off stops new changes/reservations; existing reservations can still be cancelled and safely redeemed, subject to current account, company, membership and offer checks."
     }
   ]
 }

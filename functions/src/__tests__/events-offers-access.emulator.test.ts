@@ -117,7 +117,12 @@ beforeAll(async () => {
   await db
     .doc('events/access-event/rsvps/plus')
     .set({ status: 'going', updatedAt: Timestamp.now() });
-  await db.doc('offers/access-offer').set({ status: 'active', title: 'Free teaser' });
+  await db.doc('companies/access-partner').set({ name: 'Access fixture', status: 'active' });
+  await db.doc('offers/access-offer').set({
+    status: 'active',
+    title: 'Free teaser',
+    companyId: 'access-partner',
+  });
   await db.doc('offers/access-offer/details/member').set({ description: 'Paid terms' });
   await db.doc('offers/access-offer/secret/code').set({ discountCode: 'PAIDCODE' });
   await db
@@ -204,6 +209,28 @@ describe('events/offers permanent access policy', () => {
       });
     },
   );
+
+  it('hides shared-code offers with missing, invalid or inactive companies', async () => {
+    await db.doc('companies/access-paused-partner').set({ status: 'paused' });
+    const offerId = 'access-unavailable-company-offer';
+    for (const companyId of [
+      undefined,
+      '',
+      '.',
+      '..',
+      'invalid/path',
+      'access-missing-partner',
+      'access-paused-partner',
+    ]) {
+      await db.doc(`offers/${offerId}`).set({
+        status: 'active',
+        ...(companyId === undefined ? {} : { companyId }),
+      });
+      await expect(showOfferCode.run(request('admin', { offerId }))).rejects.toMatchObject({
+        code: 'not-found',
+      });
+    }
+  });
 
   it('enforces entitlement again between the arrival and confirmation stages', async () => {
     const uid = 'downgrade';

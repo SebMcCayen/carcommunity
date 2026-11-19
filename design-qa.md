@@ -1,5 +1,10 @@
 # Native redesign visual acceptance
 
+The scoped partner-portal admin review for the 2026-11-17 change is recorded in
+[partner-portal-design-qa.md](docs/design/partner-portal-design-qa.md). That review
+passed after desktop/mobile fixes. It does not resolve the unrelated full native
+catalogue acceptance tracked below.
+
 final result: blocked
 
 This is a production native-app migration, not a web prototype. The user asked

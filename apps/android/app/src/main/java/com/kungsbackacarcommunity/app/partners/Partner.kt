@@ -55,6 +55,7 @@ data class PartnerCompany(
     val latitude: Double?,
     val longitude: Double?,
     val address: String? = null,
+    val logoPath: String? = null,
 )
 
 /** Offer teaser (offers/{id}) — visible to any authenticated user. */
@@ -65,6 +66,9 @@ data class PartnerOffer(
     val teaserText: String,
     val offerType: PartnerOfferType,
     val partnerCompanyName: String? = null,
+    val redemptionMode: String? = null,
+    val capacity: Int? = null,
+    val remainingCount: Int? = null,
 )
 
 /** Member-gated offer detail (offers/{id}/details/member). */

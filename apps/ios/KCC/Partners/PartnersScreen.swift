@@ -14,11 +14,14 @@ enum PartnersSection: String, CaseIterable, Identifiable {
 private struct PartnerDestination: Hashable {
     let companyId: String
     let focusedOfferId: String?
+    var sponsored = false
 }
 
 struct PartnersScreen: View {
     @Bindable var coordinator: PartnersCoordinator
     let onBack: () -> Void
+    var initialCompanyId: String? = nil
+    var sponsoredEntry = false
 
     @State private var section: PartnersSection = .directory
     @State private var path: [PartnerDestination] = []
@@ -53,7 +56,12 @@ struct PartnersScreen: View {
         }
         .kccReadingSurface(pageBackground: true)
         .tint(KccTheme.driver)
-        .onAppear { coordinator.start() }
+        .onAppear {
+            coordinator.start()
+            if let initialCompanyId, path.isEmpty {
+                path = [PartnerDestination(companyId: initialCompanyId, focusedOfferId: nil, sponsored: sponsoredEntry)]
+            }
+        }
         .onDisappear { coordinator.stop() }
     }
 
@@ -178,7 +186,8 @@ private struct PartnerDestinationScreen: View {
                 PartnerDetailScreen(
                     coordinator: coordinator,
                     company: company,
-                    focusedOfferId: destination.focusedOfferId
+                    focusedOfferId: destination.focusedOfferId,
+                    sponsoredEntry: destination.sponsored
                 )
             } else {
                 switch coordinator.companyLookupState {
@@ -213,10 +222,16 @@ private struct PartnerDetailScreen: View {
     @Bindable var coordinator: PartnersCoordinator
     let company: PartnerCompany
     let focusedOfferId: String?
+    var sponsoredEntry = false
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: KccSpacing.s4) {
+                if sponsoredEntry {
+                    Label(portalString("portal.sponsoredPlacement"), systemImage: "megaphone")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("partnerPortal.sponsoredEntry")
+                }
                 VStack(alignment: .leading, spacing: KccSpacing.s3) {
                     PartnerCompanySummary(company: company, offerCount: nil, showsChevron: false)
                     if let description = company.description { Text(verbatim: description).font(.body).fixedSize(horizontal: false, vertical: true) }
@@ -309,6 +324,7 @@ private struct PartnerDetailScreen: View {
 struct PartnerOfferCard: View {
     @Bindable var coordinator: PartnersCoordinator
     let offer: PartnerOffer
+    @State private var showReservation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: KccSpacing.s3) {
@@ -346,6 +362,10 @@ struct PartnerOfferCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .kccContentCard()
+        .sheet(isPresented: $showReservation) { PartnerReservationSheet(offerId: offer.id) }
+        .onChange(of: coordinator.canAccessMemberOffers) { _, allowed in
+            if !allowed { showReservation = false }
+        }
     }
 
     @ViewBuilder private var detailContent: some View {
@@ -370,12 +390,19 @@ struct PartnerOfferCard: View {
                 Label("partnerOffers.drivingSafetyWarning", systemImage: "car.side")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Button { Task { await coordinator.revealCode(offerId: offer.id) } } label: {
-                    Text("partnerOffers.showCode").frame(minHeight: 48).fixedSize(horizontal: false, vertical: true)
+                if offer.redemptionMode == "reservation" {
+                    Button { showReservation = true } label: {
+                        PortalText("portal.reserve").frame(minHeight: 48).fixedSize(horizontal: false, vertical: true)
+                    }.kccPrimaryAction()
+                    PortalText("portal.noAppointments").font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    Button { Task { await coordinator.revealCode(offerId: offer.id) } } label: {
+                        Text("partnerOffers.showCode").frame(minHeight: 48).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .kccPrimaryAction()
+                    .disabled(codeIsLoading)
+                    codeContent
                 }
-                .kccPrimaryAction()
-                .disabled(codeIsLoading)
-                codeContent
             }
         }
     }
