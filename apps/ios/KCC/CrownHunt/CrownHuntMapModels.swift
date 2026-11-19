@@ -159,6 +159,7 @@ enum CrownSpawnLimits {
     static let maximumDwell: TimeInterval = 12
     static let maximumPositionAge: TimeInterval = 60
     static let maximumSpawnPositionAge: TimeInterval = 10
+    static let maximumInteractionPositionAge: TimeInterval = 2
 
     static func collectRadius(_ stored: Double?) -> Double {
         guard let stored, stored.isFinite, stored > 0,
@@ -298,7 +299,16 @@ struct CrownFixTracker: Equatable, Sendable {
                     && gap <= CrownSpawnLimits.maximumDwell
                     && inRange(previous, of: spawn)
             }
-            if let previous = candidates.min(by: { accuracyRank($0) < accuracyRank($1) }) {
+            let stationary = candidates.filter { previous in
+                let pair = CrownFixPair(previous: previous, current: current)
+                guard pair.movementSpeedMetersPerSecond <= CrownSpawnLimits.maximumSpeedMetersPerSecond else { return false }
+                if let latest = latest(now: now), latest.timestamp > current.timestamp {
+                    return CrownFixPair(previous: current, current: latest).movementSpeedMetersPerSecond
+                        <= CrownSpawnLimits.maximumSpeedMetersPerSecond
+                }
+                return true
+            }
+            if let previous = stationary.min(by: { accuracyRank($0) < accuracyRank($1) }) {
                 return CrownFixPair(previous: previous, current: current)
             }
         }

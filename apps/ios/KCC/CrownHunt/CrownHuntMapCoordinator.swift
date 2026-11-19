@@ -18,9 +18,17 @@ final class CrownHuntMapCoordinator {
     private let spawnEnabled: Bool
     private let passesMemberGate: Bool
     private let uid: String?
+    private let clock: () -> Date
 
     @ObservationIgnored private var fixTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var evidenceTask: Task<Void, Never>?
+    @ObservationIgnored private var readinessTask: Task<Void, Never>?
+    @ObservationIgnored private var evidenceStartedAt: Date?
+    @ObservationIgnored private var evidenceRelevant = false
+    @ObservationIgnored private var evidenceRetryAt = Date.distantPast
+    @ObservationIgnored private var claimIdempotencyKey = UUID().uuidString.lowercased()
+    private(set) var readinessState: CrownCollectState = .noPosition
     @ObservationIgnored private var tracker = CrownFixTracker()
     @ObservationIgnored private var lastCellKeys: [String]?
     @ObservationIgnored private var pointsLoaded = false
@@ -32,7 +40,17 @@ final class CrownHuntMapCoordinator {
     private(set) var claimStatus: CrownMapClaimStatus = .idle
     private(set) var collectedSpawnIds: Set<String> = []
     private(set) var reportedPlacements: Set<String> = []
-    var selectedTarget: CrownMapTarget?
+    var selectedTarget: CrownMapTarget? {
+        didSet {
+            guard selectedTarget?.id != oldValue?.id else { return }
+            claimIdempotencyKey = UUID().uuidString.lowercased()
+            evidenceTask?.cancel()
+            evidenceTask = nil
+            evidenceStartedAt = nil
+            evidenceRetryAt = .distantPast
+            refreshReadiness(now: clock())
+        }
+    }
 
     init(
         repository: CrownHuntMapRepository?,
@@ -40,7 +58,8 @@ final class CrownHuntMapCoordinator {
         crownHuntEnabled: Bool,
         spawnEnabled: Bool,
         passesMemberGate: Bool,
-        uid: String? = nil
+        uid: String? = nil,
+        nowProvider: @escaping () -> Date = Date.init
     ) {
         self.repository = repository
         self.locationProvider = locationProvider
@@ -48,11 +67,14 @@ final class CrownHuntMapCoordinator {
         self.spawnEnabled = spawnEnabled
         self.passesMemberGate = passesMemberGate
         self.uid = uid
+        clock = nowProvider
     }
 
     deinit {
         fixTask?.cancel()
         refreshTask?.cancel()
+        evidenceTask?.cancel()
+        readinessTask?.cancel()
     }
 
     var isAvailable: Bool {
@@ -116,8 +138,67 @@ final class CrownHuntMapCoordinator {
         fixTask = Task { [weak self] in
             for await fix in stream {
                 guard !Task.isCancelled, let self else { return }
-                tracker.record(fix)
-                latestFix = fix
+                accept(fix)
+            }
+        }
+        readinessTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                refreshReadiness(now: clock())
+                do { try await Task.sleep(for: .milliseconds(evidenceRelevant ? 250 : 2000)) } catch { return }
+            }
+        }
+    }
+
+    /// Observation is driven by accepted physical samples, not receipt timestamps.
+    private func accept(_ fix: LocationFix) {
+        let before = tracker.fixes.last?.timestamp
+        tracker.record(fix)
+        if tracker.fixes.last?.timestamp != before { latestFix = tracker.fixes.last }
+        refreshReadiness(now: clock())
+    }
+
+    private func refreshReadiness(now: Date) {
+        let next = collectState(now: now)
+        if readinessState != next { readinessState = next }
+        reconcileEvidenceDemand(now: now)
+    }
+
+    private func reconcileEvidenceDemand(now: Date) {
+        guard fixTask != nil else { return }
+        let answered: Bool
+        switch claimStatus { case .point, .spawn: answered = true; default: answered = false }
+        let open = selectedTarget != nil && !answered
+        let nearby = spawns.filter { spawn in
+            guard !collectedSpawnIds.contains(spawn.id), let latest = tracker.latest(now: now) else { return false }
+            return CrownGeo.distanceMeters(latitude: latest.latitude, longitude: latest.longitude,
+                toLatitude: spawn.latitude, toLongitude: spawn.longitude) <= spawn.collectRadiusMeters
+        }
+        evidenceRelevant = open || !nearby.isEmpty
+        let warm = nearby.contains { spawn in
+            guard let proof = tracker.proof(for: spawn, now: now),
+                  now.timeIntervalSince(proof.current.timestamp) < 8 else { return false }
+            return CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: now), proof: proof,
+                                              enabled: spawnEnabled, now: now) == .ready
+        }
+        let wantsBurst = !open && !nearby.isEmpty && !warm && now >= evidenceRetryAt
+        let burstExpired = !open && evidenceStartedAt.map { now.timeIntervalSince($0) >= 8 } == true
+        if (!open && !wantsBurst) || burstExpired {
+            if evidenceTask != nil {
+                evidenceTask?.cancel()
+                evidenceTask = nil
+                evidenceStartedAt = nil
+                if burstExpired { evidenceRetryAt = now.addingTimeInterval(3) }
+            }
+            return
+        }
+        guard evidenceTask == nil else { return }
+        evidenceStartedAt = now
+        let stream = locationProvider.crownCollectionFixes()
+        evidenceTask = Task { [weak self] in
+            for await fix in stream {
+                guard !Task.isCancelled, let self else { return }
+                accept(fix)
             }
         }
     }
@@ -127,6 +208,14 @@ final class CrownHuntMapCoordinator {
         fixTask = nil
         refreshTask?.cancel()
         refreshTask = nil
+        evidenceTask?.cancel()
+        evidenceTask = nil
+        readinessTask?.cancel()
+        readinessTask = nil
+        evidenceStartedAt = nil
+        evidenceRelevant = false
+        evidenceRetryAt = .distantPast
+        readinessState = .noPosition
         points = []
         spawns = []
         selectedTarget = nil
@@ -220,7 +309,13 @@ final class CrownHuntMapCoordinator {
     }
 
     func collectState(now: Date = Date()) -> CrownCollectState {
+        _ = latestFix
+        _ = readinessState
         guard let selectedTarget else { return .noPosition }
+        guard let liveFix = tracker.latest(now: now),
+              now.timeIntervalSince(liveFix.timestamp) <= CrownSpawnLimits.maximumInteractionPositionAge else {
+            return .noPosition
+        }
         switch selectedTarget {
         case .spawn(let spawn):
             return CrownCollectGate.evaluate(
@@ -266,7 +361,7 @@ final class CrownHuntMapCoordinator {
                 let outcome = try await repository.submitPointClaim(
                     pointId: point.id,
                     fix: fix,
-                    idempotencyKey: UUID().uuidString.lowercased()
+                    idempotencyKey: claimIdempotencyKey
                 )
                 claimStatus = .point(outcome)
             case .spawn(let spawn):
@@ -274,11 +369,29 @@ final class CrownHuntMapCoordinator {
                     claimStatus = .idle
                     return
                 }
-                let outcome = try await repository.submitSpawnClaim(
-                    spawnId: spawn.id,
-                    proof: proof,
-                    idempotencyKey: UUID().uuidString.lowercased()
+                var outcome = try await repository.submitSpawnClaim(
+                    spawnId: spawn.id, proof: proof, idempotencyKey: claimIdempotencyKey
                 )
+                if outcome.result == .positionTooOld {
+                    // The first response is a definitive non-award. A new key is
+                    // safe here; transport errors continue to reuse their key.
+                    claimIdempotencyKey = UUID().uuidString.lowercased()
+                    let retryNow = clock()
+                    if selectedTarget?.id == target.id,
+                       collectState(now: retryNow) == .ready,
+                       let fresh = tracker.proof(for: spawn, now: retryNow),
+                       fresh.current.timestamp > proof.current.timestamp {
+                        outcome = try await repository.submitSpawnClaim(
+                            spawnId: spawn.id, proof: fresh, idempotencyKey: claimIdempotencyKey
+                        )
+                    }
+                    if outcome.result == .positionTooOld {
+                        claimIdempotencyKey = UUID().uuidString.lowercased()
+                        claimStatus = .idle
+                        refreshReadiness(now: clock())
+                        return
+                    }
+                }
                 claimStatus = .spawn(outcome)
                 if outcome.result == .awarded {
                     collectedSpawnIds.insert(spawn.id)

@@ -358,6 +358,43 @@ final class CrownHuntMapModelTests: XCTestCase {
         XCTFail("Perk state did not update")
     }
 
+    func testReadinessUsesPhysicalFixPhasesAndNeverCountsACachedSampleTwice() {
+        let base = Date(timeIntervalSince1970: 2000)
+        let spawn = makeSpawn()
+        for phase in [0.0, 0.125, 0.9] {
+            var tracker = CrownFixTracker()
+            for second in 0...4 {
+                let now = base.addingTimeInterval(phase + Double(second))
+                tracker.record(fix(at: now))
+                let state = CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: now),
+                    proof: tracker.proof(for: spawn, now: now), enabled: true, now: now)
+                XCTAssertEqual(state, second < 4 ? .confirming : .ready)
+            }
+        }
+        var cached = CrownFixTracker()
+        for _ in 0..<20 { cached.record(fix(at: base)) }
+        XCTAssertEqual(cached.fixes.count, 1)
+        XCTAssertNil(cached.proof(for: spawn, now: base.addingTimeInterval(4)))
+    }
+
+    func testImprovingAccuracyUsesAnExistingPartnerWithoutAnotherDwell() {
+        let base = Date(timeIntervalSince1970: 2000)
+        let spawn = makeSpawn()
+        var tracker = CrownFixTracker()
+        for second in 0...4 {
+            tracker.record(LocationFix.of(latitude: spawn.latitude, longitude: spawn.longitude,
+                timestamp: base.addingTimeInterval(Double(second)), accuracyMeters: 100,
+                speedMetersPerSecond: 0)!)
+        }
+        let coarseNow = base.addingTimeInterval(4)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: coarseNow),
+            proof: tracker.proof(for: spawn, now: coarseNow), enabled: true, now: coarseNow), .waitingForSignal)
+        let clearNow = base.addingTimeInterval(5)
+        tracker.record(fix(at: clearNow))
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: clearNow),
+            proof: tracker.proof(for: spawn, now: clearNow), enabled: true, now: clearNow), .ready)
+    }
+
     func testShortDepartureRejectsZeroAndAbsentReportedSpeed() {
         let now = Date(timeIntervalSince1970: 2000)
         let spawn = makeSpawn()

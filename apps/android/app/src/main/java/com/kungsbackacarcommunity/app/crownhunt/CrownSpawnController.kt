@@ -91,6 +91,7 @@ class CrownSpawnController(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val nearbyFlow = MutableStateFlow<List<CrownSpawn>>(emptyList())
+    private val activeClaimKeys = mutableMapOf<String, String>()
 
     /** Live crowns around the last refreshed centre, for the map layer. */
     val nearbySpawns: StateFlow<List<CrownSpawn>> = nearbyFlow.asStateFlow()
@@ -385,6 +386,7 @@ class CrownSpawnController(
         current: CrownFix?,
         previous: CrownFix?,
         idempotencyKey: String,
+        freshProofProvider: (() -> CrownProofPair?)? = null,
     ) {
         if (claimFlow.value == CrownClaimStatus.Collecting) return
         if (current == null || previous == null ||
@@ -395,7 +397,27 @@ class CrownSpawnController(
         }
         claimFlow.value = CrownClaimStatus.Collecting
         try {
-            val outcome = repository.claimSpawn(spawn.id, current, previous, idempotencyKey)
+            val activeKey = activeClaimKeys.getOrPut(idempotencyKey) { idempotencyKey }
+            var outcome = repository.claimSpawn(spawn.id, current, previous, activeKey)
+            if (outcome.result == CrownSpawnClaimResult.POSITION_TOO_OLD && freshProofProvider != null) {
+                // A definitive non-award can use a new key. Never rotate a key
+                // merely because transport failed: that outcome is unknown.
+                val freshKey = java.util.UUID.randomUUID().toString()
+                activeClaimKeys[idempotencyKey] = freshKey
+                val fresh = freshProofProvider()
+                if (fresh != null && fresh.current.recordedAtMillis > current.recordedAtMillis &&
+                    CrownCollectGate.isDwellProofUsable(fresh.previous, fresh.current)
+                ) {
+                    outcome = repository.claimSpawn(spawn.id, fresh.current, fresh.previous, freshKey)
+                }
+                if (outcome.result == CrownSpawnClaimResult.POSITION_TOO_OLD) {
+                    // At most one automatic recovery. Leave the card/sampler
+                    // alive, rather than trapping the member in a terminal result.
+                    activeClaimKeys[idempotencyKey] = java.util.UUID.randomUUID().toString()
+                    claimFlow.value = CrownClaimStatus.NeedsPosition
+                    return
+                }
+            }
             when (outcome.result) {
                 // The user's FIRST successful collect. What happens next depends on
                 // the crown's collect mode, NOT just the result: a SHARED crown
@@ -445,6 +467,11 @@ class CrownSpawnController(
     /** Clears the last result/failure so the button is usable again. */
     fun resetClaim() {
         claimFlow.value = CrownClaimStatus.Idle
+        activeClaimKeys.clear()
+    }
+
+    fun resumeAfterPositionRefresh() {
+        if (claimFlow.value == CrownClaimStatus.NeedsPosition) claimFlow.value = CrownClaimStatus.Idle
     }
 
     /** Drops every crown and forgets the query anchor. */
