@@ -11,6 +11,8 @@ final class CrownDesignTests: XCTestCase {
         let spawn: CrownSpawn
         var lastPlacementReport: (CrownMapTarget, CrownPlacementReportReason, String)?
         var showPoint = true
+        var spawnClaimKeys: [String] = []
+        var spawnClaimAction: ((CrownFixPair, String) async throws -> CrownSpawnClaimOutcome)?
         var holdCollectedRead = false
         private var collectedContinuation: CheckedContinuation<Set<String>, Never>?
         var collectedReadPending: Bool { collectedContinuation != nil }
@@ -37,8 +39,144 @@ final class CrownDesignTests: XCTestCase {
             CrownPointClaimOutcome(result: .awarded, pointsAwarded: 7, newBalance: 7)
         }
         func submitSpawnClaim(spawnId: String, proof: CrownFixPair, idempotencyKey: String) async throws -> CrownSpawnClaimOutcome {
-            CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7, newBalance: 7, rarity: .rare)
+            spawnClaimKeys.append(idempotencyKey)
+            if let spawnClaimAction { return try await spawnClaimAction(proof, idempotencyKey) }
+            return CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7, newBalance: 7, rarity: .rare)
         }
+    }
+
+    func testWarmStopUnlocksOnSelectionAndDemandEndsWithTheMapLifecycle() async throws {
+        let now = Date(timeIntervalSince1970: 2000)
+        var clock = now
+        let repository = Repository(now: now)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = CrownHuntMapCoordinator(repository: repository, locationProvider: provider,
+            crownHuntEnabled: true, spawnEnabled: true, passesMemberGate: true,
+            uid: "synthetic", nowProvider: { clock })
+        await coordinator.refresh(camera: .of(latitude: 57, longitude: 12, zoom: 14, bearing: 0, pitch: 0),
+                                  visibleRadiusMeters: 200)
+        coordinator.start()
+        for second in 0...4 {
+            clock = now.addingTimeInterval(Double(second))
+            provider.emitFix(fix(clock))
+            try await waitForFix(coordinator, timestamp: clock)
+        }
+        coordinator.select(markerId: "spawn:spawn")
+        XCTAssertEqual(coordinator.readinessState, .ready, "Selection must use the existing physical stop immediately")
+        coordinator.dismissSelection()
+        try await waitForDemand(provider, count: 1) // Only the ordinary map subscription remains.
+        clock = now.addingTimeInterval(15)
+        try await Task.sleep(for: .milliseconds(300))
+        coordinator.select(markerId: "spawn:spawn")
+        XCTAssertEqual(coordinator.readinessState, .noPosition, "Clock expiry must work without a GPS callback")
+        coordinator.stop()
+        try await waitForDemand(provider, count: 0)
+    }
+
+    func testOpeningAfterWarmPauseChecksOneFreshFixAndRejectsUnobservedDeparture() async throws {
+        let now = Date(timeIntervalSince1970: 2000)
+        var clock = now
+        let repository = Repository(now: now)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = CrownHuntMapCoordinator(repository: repository, locationProvider: provider,
+            crownHuntEnabled: true, spawnEnabled: true, passesMemberGate: true,
+            uid: "synthetic", nowProvider: { clock })
+        await coordinator.refresh(camera: .of(latitude: 57, longitude: 12, zoom: 14, bearing: 0, pitch: 0),
+                                  visibleRadiusMeters: 200)
+        coordinator.start()
+        defer { coordinator.stop() }
+        provider.emitFix(fix(now)); try await waitForFix(coordinator, timestamp: now)
+        clock = now.addingTimeInterval(4)
+        provider.emitFix(fix(clock)); try await waitForFix(coordinator, timestamp: clock)
+        clock = now.addingTimeInterval(8)
+        coordinator.select(markerId: "spawn:spawn")
+        XCTAssertEqual(coordinator.collectState(now: clock), .noPosition)
+        provider.emitFix(fix(clock)); try await waitForFix(coordinator, timestamp: clock)
+        XCTAssertEqual(coordinator.collectState(now: clock), .ready, "One fresh fix reuses the already-earned stop")
+        coordinator.dismissSelection()
+        clock = now.addingTimeInterval(12)
+        coordinator.select(markerId: "spawn:spawn")
+        XCTAssertEqual(coordinator.collectState(now: clock), .noPosition)
+        provider.emitFix(LocationFix.of(latitude: 57 + 4 / 111195.0, longitude: 12,
+            timestamp: clock, accuracyMeters: 3, speedMetersPerSecond: 0)!)
+        try await waitForFix(coordinator, timestamp: clock)
+        XCTAssertNotEqual(coordinator.collectState(now: clock), .ready)
+    }
+
+    func testDelayedStaleClaimRecoversOnceWithFreshEvidenceAndKeepsRetryKeyOnTransportFailure() async throws {
+        let now = Date(timeIntervalSince1970: 2000)
+        var clock = now
+        let repository = Repository(now: now)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = CrownHuntMapCoordinator(repository: repository, locationProvider: provider,
+            crownHuntEnabled: true, spawnEnabled: true, passesMemberGate: true,
+            uid: "synthetic", nowProvider: { clock })
+        await coordinator.refresh(camera: .of(latitude: 57, longitude: 12, zoom: 14, bearing: 0, pitch: 0),
+                                  visibleRadiusMeters: 200)
+        coordinator.start()
+        defer { repository.spawnClaimAction = nil; coordinator.stop() }
+        provider.emitFix(fix(now)); try await waitForFix(coordinator, timestamp: now)
+        clock = now.addingTimeInterval(4)
+        provider.emitFix(fix(clock)); try await waitForFix(coordinator, timestamp: clock)
+        coordinator.select(markerId: "spawn:spawn")
+        repository.spawnClaimAction = { _, _ in
+            switch repository.spawnClaimKeys.count {
+            case 1:
+                clock = now.addingTimeInterval(15)
+                provider.emitFix(self.fix(clock))
+                try await self.waitForFix(coordinator, timestamp: clock)
+                return CrownSpawnClaimOutcome(result: .positionTooOld, pointsAwarded: nil, newBalance: nil, rarity: .rare)
+            case 2: throw NSError(domain: "test.transport", code: 1)
+            default: return CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7, newBalance: 7, rarity: .rare)
+            }
+        }
+        await coordinator.collect(now: now.addingTimeInterval(4))
+        XCTAssertEqual(repository.spawnClaimKeys.count, 2)
+        XCTAssertNotEqual(repository.spawnClaimKeys[0], repository.spawnClaimKeys[1])
+        await coordinator.collect(now: clock)
+        XCTAssertEqual(repository.spawnClaimKeys.count, 3)
+        XCTAssertEqual(repository.spawnClaimKeys[1], repository.spawnClaimKeys[2], "Unknown transport outcomes must reuse their key")
+        guard case .spawn(let outcome) = coordinator.claimStatus else { return XCTFail("Expected an award") }
+        XCTAssertEqual(outcome.pointsAwarded, 7)
+    }
+
+    private func waitForDemand(_ provider: StubLocationProvider, count: Int) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while provider.activeFixStreamCount != count, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(provider.activeFixStreamCount, count)
+    }
+
+    func testOpenSpawnFollowsStopAndDepartureWithoutDismissOrSelectAgain() async throws {
+        let now = Date(timeIntervalSince1970: 2000)
+        let repository = Repository(now: now)
+        let provider = StubLocationProvider(authorization: .whileInUse)
+        let coordinator = makeCoordinator(repository, provider)
+        await coordinator.refresh(camera: .of(latitude: 57, longitude: 12, zoom: 14, bearing: 0, pitch: 0),
+                                  visibleRadiusMeters: 200)
+        coordinator.select(markerId: "spawn:spawn")
+        let selected = coordinator.selectedTarget
+        coordinator.start()
+        defer { coordinator.stop() }
+        let moving = LocationFix.of(latitude: 57 + 10 / 111195.0, longitude: 12,
+                                    timestamp: now, accuracyMeters: 3, speedMetersPerSecond: 1)!
+        provider.emitFix(moving)
+        try await waitForFix(coordinator, timestamp: now)
+        XCTAssertEqual(coordinator.collectState(now: now), .moving)
+        provider.emitFix(fix(now.addingTimeInterval(2)))
+        try await waitForFix(coordinator, timestamp: now.addingTimeInterval(2))
+        XCTAssertEqual(coordinator.collectState(now: now.addingTimeInterval(2)), .confirming)
+        provider.emitFix(fix(now.addingTimeInterval(6)))
+        try await waitForFix(coordinator, timestamp: now.addingTimeInterval(6))
+        XCTAssertEqual(coordinator.collectState(now: now.addingTimeInterval(6)), .ready)
+        let departure = LocationFix.of(latitude: 57 + 2 / 111195.0, longitude: 12,
+                                       timestamp: now.addingTimeInterval(8), accuracyMeters: 3,
+                                       speedMetersPerSecond: 1)!
+        provider.emitFix(departure)
+        try await waitForFix(coordinator, timestamp: now.addingTimeInterval(8))
+        XCTAssertEqual(coordinator.collectState(now: now.addingTimeInterval(8)), .moving)
+        XCTAssertEqual(coordinator.selectedTarget, selected)
     }
 
     func testReportPlacementWithoutLocationAndRemoveOnRefresh() async throws {
@@ -256,6 +394,29 @@ final class CrownDesignTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(result.height, 48)
             XCTAssertLessThan(result.height, 160)
         }
+    }
+
+    func testRewardReceiptWrapsAtLargeTextWithOptionalOlderResponseFields() {
+        let allowance = CrownAllowance(cap: 3000, remaining: 2993, resetsAt: Date())
+        assertWrapping(CrownRewardReceipt(pointsAwarded: 7, newBalance: 207, allowance: allowance))
+        assertWrapping(CrownRewardReceipt(pointsAwarded: nil, newBalance: 207, allowance: nil))
+    }
+
+    func testAccessibleProgressUsesDiscreteStatesAndPreservesAwardOverExpiry() {
+        func feedback(_ state: CrownCollectState, _ status: CrownMapClaimStatus = .idle) -> CrownCollectFeedback {
+            CrownCollectFeedback(state: state, status: status)
+        }
+        XCTAssertNil(feedback(.tooFar(500)).announcementKey)
+        XCTAssertNil(feedback(.tooFar(450)).announcementKey, "Distance updates must not repeatedly interrupt VoiceOver")
+        XCTAssertNotEqual(feedback(.moving).announcementKey, feedback(.confirming).announcementKey)
+        XCTAssertNotEqual(feedback(.confirming).announcementKey, feedback(.ready).announcementKey)
+        XCTAssertEqual(feedback(.ready, .collecting).announcementKey, feedback(.moving, .collecting).announcementKey,
+                       "In-flight result status takes precedence over changing GPS")
+        let award = CrownMapClaimStatus.spawn(CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7,
+                                                                   newBalance: 207, rarity: nil))
+        let result = CrownCollectFeedback(state: .noPosition, status: award, collected: true, expired: true)
+        XCTAssertEqual(result.announcementKey, feedback(.ready, award).announcementKey)
+        assertWrapping(feedback(.confirming))
     }
 
     private func makeCoordinator(_ repository: Repository, _ provider: StubLocationProvider) -> CrownHuntMapCoordinator {

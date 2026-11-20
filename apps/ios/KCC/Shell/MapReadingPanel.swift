@@ -11,6 +11,11 @@ struct MapReadingPanel<Content: View>: View {
     var docksToBottom = false
     @ViewBuilder let content: () -> Content
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var opacity = 1.0
+    @State private var closing = false
+    @State private var transitionTask: Task<Void, Never>?
+
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -28,7 +33,7 @@ struct MapReadingPanel<Content: View>: View {
                 Text(title).font(leadingImage == nil ? .headline : .title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Button(action: onClose) {
+                Button(action: closeWithFade) {
                     Image(systemName: "xmark").font(.system(size: 18, weight: .semibold))
                         .frame(width: 48, height: 48).contentShape(Rectangle())
                 }
@@ -40,7 +45,7 @@ struct MapReadingPanel<Content: View>: View {
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 16).onEnded { drag in
-                if docksToBottom && (drag.translation.height > 72 || drag.predictedEndTranslation.height > 120) { onClose() }
+                if docksToBottom && (drag.translation.height > 72 || drag.predictedEndTranslation.height > 120) { closeWithFade() }
             })
             Divider()
             if scrollsContent {
@@ -56,7 +61,39 @@ struct MapReadingPanel<Content: View>: View {
         .overlay { panelShape.strokeBorder(KccTheme.border).allowsHitTesting(false) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map.reading.panel")
-        .accessibilityAction(.escape, onClose)
+        .accessibilityAction(.escape, closeWithFade)
+        .opacity(opacity)
+        .allowsHitTesting(!closing)
+        .accessibilityHidden(closing)
+        .onAppear {
+            guard !reduceMotion else { return }
+            opacity = 0
+            transitionTask = Task { @MainActor in
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: MapPresencePolicy.duration)) { opacity = 1 }
+            }
+        }
+        .onDisappear { transitionTask?.cancel(); transitionTask = nil }
+        .onChange(of: reduceMotion) { _, reduced in
+            if reduced {
+                transitionTask?.cancel(); opacity = 1
+                if closing { onClose() }
+            }
+        }
+    }
+
+    private func closeWithFade() {
+        guard !closing else { return }
+        closing = true
+        transitionTask?.cancel()
+        guard !reduceMotion else { onClose(); return }
+        withAnimation(.easeOut(duration: MapPresencePolicy.duration)) { opacity = 0 }
+        transitionTask = Task { @MainActor in
+            do { try await Task.sleep(for: .seconds(MapPresencePolicy.duration)) } catch { return }
+            guard !Task.isCancelled else { return }
+            onClose()
+        }
     }
 
     private var panelShape: UnevenRoundedRectangle {
@@ -75,9 +112,11 @@ struct MapReadingPanel<Content: View>: View {
 
 enum MapReadingSelection: Hashable {
     case stopLive
+    case densityGroup
     case savedPlaces
     case place(PlaceSuggestion)
     case crown(String)
+    case event(String)
     case incident(String)
     case police(String)
     case camera(String)

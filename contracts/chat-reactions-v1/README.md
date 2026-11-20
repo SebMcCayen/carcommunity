@@ -6,6 +6,22 @@ plus button, reaction chips under the message, existing actions beneath it.
 The exact selected reference is in `docs/design/evidence/2026-11-14-chat-reactions/`.
 The previous permanent composer emoji row remains only as a feature-off rollback.
 
+Reaction chips show the emoji and aggregate count centered in the capsule. The
+current actor's selection uses the selected outline and accessibility state,
+without an additional checkmark. On both platforms, choosing an emoji closes the
+menu immediately and projects the add/change/removal locally while the existing
+versioned callable runs in the background. Unconfirmed choices never enter the
+persistent own-state cache or local usage history. Rejected writes restore the
+latest message counts and refresh private state; delayed reads and stale message
+snapshots must not replace an in-flight choice. Confirmed server state reconciles
+with the existing message listener without adding polling or listeners.
+
+Shared acceptance: with a delayed server response, add, change and removal must
+be visible before completion; failure must roll back; a late own-state read must
+not overwrite the new selection; account/room invalidation must discard pending
+presentation. Existing counts, localized labels and selected accessibility state
+remain available on Android and iOS.
+
 ## Ownership and callable contract
 
 CarCommunity owns `chatReactions-set` / `chatReactions-getMine` for scopes

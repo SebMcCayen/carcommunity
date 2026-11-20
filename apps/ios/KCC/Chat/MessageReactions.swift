@@ -17,6 +17,10 @@ struct MessageReactionChoice: Codable, Equatable, Sendable {
     let version: Int
     var fetchedAt = Date().timeIntervalSince1970
 }
+struct MessageReactionConfirmation: Sendable {
+    let choice: MessageReactionChoice
+    let counts: [String: Int]
+}
 struct ReactionEmoji: Identifiable, Decodable, Sendable {
     let id: String
     let glyph: String
@@ -107,15 +111,32 @@ final class MessageReactionStore {
     var busy = false
     var failed = false
     fileprivate var visible: [String: [String: Int]] = [:]
+    private var sourceCounts: [String: [String: Int]] = [:]
+    private var sourceRevisions: [String: Int] = [:]
+    private var nextSourceRevision = 0
+    private var confirmedCounts: [String: [String: Int]] = [:]
+    private var revisions: [String: Int] = [:]
+    private var nextRevision = 0
+    private var refreshPending = false
+    private let sessionIsCurrent: (() -> Bool)?
+    private let readOverride: (([String]) async throws -> [String: MessageReactionChoice])?
+    private let setOverride: ((String, String?, Int, String) async throws -> MessageReactionConfirmation)?
     private var attempted: [String: TimeInterval] = [:]
     private var generation = 0
+    private var listenerToken = UUID()
     private var flags: ListenerRegistration?
     private var authHandle: AuthStateDidChangeListenerHandle?
     private var refresh: Task<Void, Never>?
     private var pending: (id: String, emoji: String?, version: Int, operation: String)?
+    private var pendingPresentation: (id: String, counts: [String: Int], choice: MessageReactionChoice)?
     private var recorded: Set<String> = []
-    init(room: MessageReactionRoom, uid: String) { self.room = room; self.uid = uid; history = .store(uid: uid) }
-    private var current: Bool { FirebaseApp.app() != nil && Auth.auth().currentUser?.uid == uid }
+    init(room: MessageReactionRoom, uid: String, sessionIsCurrent: (() -> Bool)? = nil,
+         readOverride: (([String]) async throws -> [String: MessageReactionChoice])? = nil,
+         setOverride: ((String, String?, Int, String) async throws -> MessageReactionConfirmation)? = nil) {
+        self.room = room; self.uid = uid; history = .store(uid: uid)
+        self.sessionIsCurrent = sessionIsCurrent; self.readOverride = readOverride; self.setOverride = setOverride
+    }
+    private var current: Bool { sessionIsCurrent?() ?? (FirebaseApp.app() != nil && Auth.auth().currentUser?.uid == uid) }
     private var functions: Functions { Functions.functions(region: "europe-west1") }
     private var setName: String { room.scope == "club" ? "driver-clubsSetMessageReaction" : "chatReactions-set" }
     private var mineName: String { room.scope == "club" ? "driver-clubsGetMyMessageReactions" : "chatReactions-getMine" }
@@ -127,89 +148,177 @@ final class MessageReactionStore {
             catalog = (try? await Task.detached { try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: url)).entries }.value) ?? []
         }
         guard !Task.isCancelled, generation == epoch, FirebaseApp.app() != nil, flags == nil else { return }
+        let token = UUID(); listenerToken = token
         flags = Firestore.firestore().document("config/featureFlags").addSnapshotListener { [weak self] snapshot, error in
             let allowed = error == nil && snapshot?.get("chatReactions") as? Bool == true
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.listenerToken == token else { return }
                 self.enabled = allowed && self.current
-                if self.enabled { self.request() } else { self.dismiss() }
+                if self.enabled { self.request() } else { self.resetReactionState() }
             }
         }
         authHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             let uid = user?.uid
             Task { @MainActor in
-                guard let self, uid != self.uid else { return }
+                guard let self, self.listenerToken == token, uid != self.uid else { return }
                 self.stop(); self.history.clear()
             }
         }
     }
     func stop() {
-        generation += 1
+        listenerToken = UUID()
         flags?.remove(); flags = nil
         if let authHandle, FirebaseApp.app() != nil { Auth.auth().removeStateDidChangeListener(authHandle) }; authHandle = nil
-        refresh?.cancel(); enabled = false; dismiss(); own = [:]
+        resetReactionState()
+    }
+    private func resetReactionState() {
+        generation += 1
+        refresh?.cancel(); refresh = nil; refreshPending = false
+        attempted = [:]
+        enabled = false; dismiss(); own = [:]; revisions = [:]
+        sourceCounts = sourceCounts.filter { visible[$0.key] != nil }
+        sourceRevisions = sourceRevisions.filter { sourceCounts[$0.key] != nil }
+        visible = sourceCounts; confirmedCounts = [:]; busy = false; pending = nil; pendingPresentation = nil
+        history.forget(room)
     }
     func dismiss() { selectedID = nil; picker = false; failed = false }
     func select(_ id: String) { guard enabled, visible[id] != nil else { return }; selectedID = id; failed = false; request() }
-    func reload() { if let id = selectedID { own[id] = nil; attempted[id] = nil }; failed = false; request() }
+    func reload() { if let id = selectedID { nextRevision += 1; revisions[id] = nextRevision; own[id] = nil; attempted[id] = nil }; failed = false; request() }
     func register(_ id: String, counts: [String: Int]) {
-        if let old = visible[id], old != counts { own[id] = nil; attempted[id] = nil; history.forget(room) }
+        let changed = sourceCounts[id] != counts
+        sourceCounts[id] = counts
+        if changed { nextSourceRevision += 1; sourceRevisions[id] = nextSourceRevision }
+        // Listener echoes must not erase an in-flight optimistic reaction.
+        if busy, let presentation = pendingPresentation, presentation.id == id {
+            visible[id] = presentation.counts
+            own[id] = presentation.choice
+            return
+        }
+        if let confirmed = confirmedCounts[id], !changed, counts != confirmed { return }
+        confirmedCounts[id] = nil
+        if changed {
+            nextRevision += 1; revisions[id] = nextRevision
+            if visible[id] != counts { own[id] = nil; attempted[id] = nil; history.forget(room) }
+        }
         visible[id] = counts
         if own[id] == nil { own[id] = history.cached(room, id: id) }
         request()
     }
-    func unregister(_ id: String) { visible[id] = nil; own[id] = nil; attempted[id] = nil; if selectedID == id { dismiss() } }
+    func unregister(_ id: String) {
+        visible[id] = nil; confirmedCounts[id] = nil
+        // Retain the source revision across row recycling while its write is in flight.
+        if !busy || pending?.id != id { sourceCounts[id] = nil; sourceRevisions[id] = nil }
+        own[id] = nil; revisions[id] = nil; attempted[id] = nil
+        if selectedID == id { dismiss() }
+    }
+    func displayedCounts(_ id: String, fallback: [String: Int]) -> [String: Int] { visible[id] ?? fallback }
     func request() {
-        refresh?.cancel()
+        refreshPending = true
+        guard refresh == nil else { return }
+        let epoch = generation
         refresh = Task { [weak self] in
-            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
-            guard let self, self.enabled, self.current, !self.busy else { return }
-            let now = Date().timeIntervalSince1970
-            let candidates = (self.selectedID.map { [$0] } ?? []) + self.visible.keys.filter { $0 != self.selectedID }
-            let ids = Array(candidates.filter { self.visible[$0] != nil && now - (self.attempted[$0] ?? 0) > 10 && (self.own[$0] == nil || now - self.own[$0]!.fetchedAt > 60) }.prefix(50))
-            guard !ids.isEmpty else { return }
-            ids.forEach { self.attempted[$0] = now }
-            do {
-                let response = try await self.functions.httpsCallable(self.mineName).call(["scope": self.room.scope, "roomId": self.room.roomID, "messageIds": ids])
-                guard self.current, let items = (response.data as? [String: Any])?["items"] as? [[String: Any]] else { return }
-                for item in items {
-                    guard let id = item["messageId"] as? String, ids.contains(id), self.visible[id] != nil,
-                          let version = item["version"] as? Int, version >= 0 else { continue }
-                    let choice = MessageReactionChoice(emojiID: item["emojiId"] as? String, version: version)
-                    self.own[id] = choice; self.history.remember(self.room, id: id, choice: choice)
+            guard let self else { return }
+            defer { if self.generation == epoch { self.refresh = nil } }
+            repeat {
+                self.refreshPending = false
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                guard self.generation == epoch, self.enabled, self.current, !self.busy else { return }
+                let now = Date().timeIntervalSince1970
+                let candidates = (self.selectedID.map { [$0] } ?? []) + self.visible.keys.filter { $0 != self.selectedID }
+                let ids = Array(candidates.filter { self.visible[$0] != nil && now - (self.attempted[$0] ?? 0) > 10 && (self.own[$0] == nil || now - self.own[$0]!.fetchedAt > 60) }.prefix(50))
+                if ids.isEmpty { continue }
+                let readRevisions = ids.reduce(into: [String: Int]()) { $0[$1] = self.revisions[$1] }
+                ids.forEach { self.attempted[$0] = now }
+                do {
+                    let choices: [String: MessageReactionChoice]
+                    if let readOverride = self.readOverride { choices = try await readOverride(ids) }
+                    else {
+                        let response = try await self.functions.httpsCallable(self.mineName).call(["scope": self.room.scope, "roomId": self.room.roomID, "messageIds": ids])
+                        let items = (response.data as? [String: Any])?["items"] as? [[String: Any]] ?? []
+                        choices = items.reduce(into: [:]) { result, item in
+                            guard let id = item["messageId"] as? String, let version = item["version"] as? Int, version >= 0 else { return }
+                            result[id] = MessageReactionChoice(emojiID: item["emojiId"] as? String, version: version)
+                        }
+                    }
+                    guard self.generation == epoch, self.current, !Task.isCancelled else { return }
+                    for (id, choice) in choices where ids.contains(id) && self.visible[id] != nil && readRevisions[id] == self.revisions[id] {
+                        self.own[id] = choice; self.history.remember(self.room, id: id, choice: choice)
+                    }
+                    self.history.save()
+                } catch is CancellationError { return } catch {
+                    guard self.generation == epoch, self.current else { return }
+                    for id in ids where readRevisions[id] == self.revisions[id] { self.own[id] = nil }
+                    self.history.forget(self.room); self.failed = self.selectedID != nil
                 }
-                self.history.save()
-            } catch is CancellationError { return } catch { self.own = [:]; self.history.forget(self.room); self.failed = self.selectedID != nil }
+            } while self.refreshPending
         }
     }
     func choose(_ emojiID: String?) {
-        guard current, let id = selectedID, visible[id] != nil, let before = own[id], !busy else { failed = true; request(); return }
+        guard enabled, current, let id = selectedID, let counts = visible[id], let before = own[id], !busy else { failed = true; request(); return }
         let desired = before.emojiID == emojiID ? nil : emojiID
         guard before.emojiID != desired else { dismiss(); return }
         let operation: String, expectedVersion: Int
         if let pending, pending.id == id, pending.emoji == desired { operation = pending.operation; expectedVersion = pending.version }
-        else {
-            operation = UUID().uuidString
-            expectedVersion = before.version
+        else { operation = UUID().uuidString; expectedVersion = before.version }
+        let epoch = generation
+        let sourceRevisionBefore = sourceRevisions[id]
+        pending = (id, desired, expectedVersion, operation); busy = true
+        nextRevision += 1; revisions[id] = nextRevision
+        confirmedCounts[id] = nil
+        var optimistic = counts
+        if let previous = before.emojiID {
+            let count = (optimistic[previous] ?? 0) - 1
+            optimistic[previous] = count > 0 ? count : nil
         }
-        pending = (id, desired, expectedVersion, operation); busy = true; failed = false
+        if let desired { optimistic[desired] = (optimistic[desired] ?? 0) + 1 }
+        let optimisticChoice = MessageReactionChoice(emojiID: desired, version: before.version)
+        pendingPresentation = (id, optimistic, optimisticChoice)
+        visible[id] = optimistic
+        own[id] = optimisticChoice
+        dismiss()
         Task {
-            defer { busy = false; if failed { request() } }
+            guard generation == epoch, current else { return }
+            defer {
+                if generation == epoch {
+                    if visible[id] == nil { sourceCounts[id] = nil; sourceRevisions[id] = nil; revisions[id] = nil }
+                    pendingPresentation = nil
+                    busy = false; request()
+                }
+            }
             do {
-                let response = try await Self.setReaction(functions: functions, name: setName,
-                    room: room, messageID: id, emojiID: desired,
-                    expectedVersion: expectedVersion, operationID: operation)
-                guard current, visible[id] != nil, let data = response.data as? [String: Any], let version = data["version"] as? Int else { return }
-                let choice = MessageReactionChoice(emojiID: data["emojiId"] as? String, version: version)
-                visible[id] = MessageReactionParser.counts(data["counts"])
-                own[id] = choice; history.remember(room, id: id, choice: choice)
-                if let desired, choice.emojiID == desired, recorded.insert(operation).inserted { history.record(desired) }
+                let confirmation: MessageReactionConfirmation
+                if let setOverride { confirmation = try await setOverride(id, desired, expectedVersion, operation) }
+                else {
+                    let response = try await Self.setReaction(functions: functions, name: setName,
+                        room: room, messageID: id, emojiID: desired,
+                        expectedVersion: expectedVersion, operationID: operation)
+                    guard let data = response.data as? [String: Any], let version = data["version"] as? Int else { throw CocoaError(.coderReadCorrupt) }
+                    confirmation = MessageReactionConfirmation(choice: MessageReactionChoice(emojiID: data["emojiId"] as? String, version: version), counts: MessageReactionParser.counts(data["counts"]))
+                }
+                guard generation == epoch, current else { return }
+                pending = nil
+                if visible[id] != nil {
+                    // The listener can advance beyond the callable's count snapshot while it is in flight.
+                    // Prefer that changed source instead of pinning an older response indefinitely.
+                    let counts = sourceRevisions[id] != sourceRevisionBefore ? (sourceCounts[id] ?? confirmation.counts) : confirmation.counts
+                    visible[id] = counts
+                    confirmedCounts[id] = sourceCounts[id] == counts ? nil : counts
+                    nextRevision += 1; revisions[id] = nextRevision
+                    own[id] = confirmation.choice
+                }
+                history.remember(room, id: id, choice: confirmation.choice)
+                if let desired, confirmation.choice.emojiID == desired, recorded.insert(operation).inserted { history.record(desired) }
                 if recorded.count > 100, let first = recorded.first { recorded.remove(first) }
-                pending = nil; history.save(); dismiss()
+                history.save()
             } catch {
+                guard generation == epoch, current else { return }
                 let code = FunctionsErrorCode(rawValue: (error as NSError).code)
                 if code == .aborted || code == .permissionDenied || code == .notFound || code == .failedPrecondition { pending = nil }
-                failed = true; own[id] = nil; attempted[id] = nil; history.forget(room)
+                confirmedCounts[id] = nil
+                if visible[id] != nil { visible[id] = sourceCounts[id] }
+                nextRevision += 1; revisions[id] = nextRevision
+                own[id] = nil; attempted[id] = nil; history.forget(room)
+                if enabled, visible[id] != nil, selectedID == nil || selectedID == id { selectedID = id; picker = false; failed = true }
             }
         }
     }
@@ -324,14 +433,14 @@ private struct ReactionChips: View {
     let id: String
     let counts: [String: Int]
     var body: some View {
-        let sorted = counts.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
+        let sorted = store.displayedCounts(id, fallback: counts).sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
         HStack(spacing: KccSpacing.s1) {
             ForEach(Array(sorted.prefix(3)), id: \.key) { entry in
                 if let emoji = store.catalog.first(where: { $0.id == entry.key }) {
                     let selected = store.own[id]?.emojiID == entry.key
                     Button { store.select(id); store.choose(entry.key) } label: {
-                        HStack(spacing: 3) { Text(emoji.glyph); Text(entry.value.formatted()); if selected { Image(systemName: "checkmark") } }
-                            .padding(.horizontal, KccSpacing.s2).frame(minHeight: 44)
+                        HStack(alignment: .center, spacing: 3) { Text(emoji.glyph); Text(entry.value.formatted()) }
+                            .padding(.horizontal, KccSpacing.s2).frame(minWidth: 44, minHeight: 44, alignment: .center)
                             .background(KccTheme.subtle, in: Capsule())
                             .overlay(Capsule().stroke(selected ? KccPalette.crownGold : KccTheme.border))
                     }

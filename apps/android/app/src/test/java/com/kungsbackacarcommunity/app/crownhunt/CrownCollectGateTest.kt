@@ -837,4 +837,27 @@ class CrownCollectGateTest {
         // Two readings of the same instant prove nothing.
         assertFalse(CrownCollectGate.isDwellProofUsable(fix(now), fix(now)))
     }
+
+    @Test
+    fun slowRollingAtOneMetrePerSecondIsNotAStop() {
+        val previous = fixAt(atMillis = 0, speed = 0.0)
+        val current = fixAt(lat = 57.5 + 4.0 / 111195.0, atMillis = 4000, speed = 0.0)
+        assertTrue(CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(current, previous)))
+    }
+
+    @Test
+    fun newerDepartureOverridesAnOlderAccurateParkedPair() {
+        val previous = fixAt(atMillis = 0, speed = 0.0)
+        val current = fixAt(atMillis = 4000, speed = 0.0)
+        val latest = fixAt(lat = 57.5 + 2.0 / 111195.0, atMillis = 6000, speed = 1.0)
+        assertTrue(CrownCollectGate.isMoving(CrownCollectGate.liveMovementSpeedMps(current, previous, latest)))
+    }
+
+    @Test
+    fun liveStationaryScatterAndOneSpeedSpikeDoNotRestartTheStop() {
+        val previous = fixAt(atMillis = 0, speed = 0.0)
+        val current = fixAt(atMillis = 4000, speed = 0.0)
+        val latest = fixAt(lat = 57.5 + 0.5 / 111195.0, atMillis = 6000, speed = 6.0)
+        assertFalse(CrownCollectGate.isMoving(CrownCollectGate.liveMovementSpeedMps(current, previous, latest)))
+    }
 }

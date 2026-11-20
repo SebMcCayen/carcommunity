@@ -909,8 +909,8 @@ class MapFirstShellTest {
         val byDescription =
             composeTestRule
                 // The compass opens in its default course-up mode, whose
-                // description is shell_compassCourseUp (the two-mode toggle).
-                .onNodeWithContentDescription(str(R.string.shell_compassCourseUp))
+                // action switches to north-up; current mode is a separate state description.
+                .onNodeWithContentDescription(str(R.string.shell_compassSwitchToNorth))
                 .getUnclippedBoundsInRoot()
         assertEquals(byTag.top.value.toDouble(), byDescription.top.value.toDouble(), 0.01)
         assertEquals(byTag.left.value.toDouble(), byDescription.left.value.toDouble(), 0.01)
@@ -1019,8 +1019,8 @@ class MapFirstShellTest {
 
     /**
      * The compass ICON changes with the mode, so its (localized) content
-     * description flips too: course-up by default, north-up after one tap, and
-     * back. Only the icon/description changes — the control keeps its default
+     * action description flips too: switch to north-up by default, switch to
+     * course-up after one tap, and back. Only the icon/description changes — the control keeps its default
      * container/content colours in both modes (a colour change would be a visual
      * regression, and there is nothing here that changes them).
      */
@@ -1028,15 +1028,15 @@ class MapFirstShellTest {
     fun compassControl_iconReflectsTheMode() {
         setMapHome(trafikverketDataShown = false)
         // Default: course-up.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassCourseUp)).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassNorthUp)).assertDoesNotExist()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassSwitchToNorth)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassSwitchToCourse)).assertDoesNotExist()
         // Tap → north-up.
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassNorthUp)).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassCourseUp)).assertDoesNotExist()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassSwitchToCourse)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassSwitchToNorth)).assertDoesNotExist()
         // Tap → back to course-up.
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassCourseUp)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassSwitchToNorth)).assertExists()
     }
 
     @Test

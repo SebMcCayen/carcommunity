@@ -25,6 +25,30 @@ class RecordingPuckLocationProviderTest {
     )
 
     @Test
+    fun `camera source identity advances on raw receipts but never on display frames`() {
+        provider.registerLocationConsumer(consumer)
+        val proxy = device.consumers.single()
+        val point = Point.fromLngLat(12.0, 57.0)
+        proxy.onLocationUpdated(point)
+        val first = requireNotNull(provider.cameraSourceFix)
+        assertEquals(MapPoint(12.0, 57.0), first.point)
+        assertEquals(null, first.capturedAtMs) // The SDK supplies Point[], not a GPS timestamp.
+        now += 1_000
+        proxy.onLocationUpdated(point)
+        val identical = requireNotNull(provider.cameraSourceFix)
+        assertTrue(identical.sequence > first.sequence)
+        assertEquals(first.point, identical.point)
+
+        val fix = position().copy(pointCount = 1)
+        provider.update(true, fix, listOf(fix.point))
+        val recordingSource = requireNotNull(provider.cameraSourceFix)
+        assertEquals(fix.elapsedRealtimeMs, recordingSource.capturedAtMs)
+        now += 100
+        provider.advance()
+        assertEquals(recordingSource, provider.cameraSourceFix)
+    }
+
+    @Test
     fun `live puck uses exact recorder vertices and fences independent device fixes`() {
         provider.registerLocationConsumer(consumer)
         val oldDeviceConsumer = device.consumers.single()
@@ -164,26 +188,26 @@ class RecordingPuckLocationProviderTest {
         provider.registerLocationConsumer(callbackConsumer)
         provider.update(true, first, listOf(first.point))
         now += 2_000L
+        assertTrue(provider.advance()) // Continuous motion before the next physical fix.
+        val before = callbackConsumer.points.last()
         provider.update(true, last, listOf(first.point, last.point))
-        // A newly accepted target does not teleport either visible element.
-        assertEquals(first.point.longitude, callbackConsumer.points.last().longitude(), 0.0)
-
-        now += 1_000L
+        assertEquals(before, callbackConsumer.points.last()) // Retarget starts where it was displayed.
+        now += 125L
         assertTrue(provider.advance())
         val halfway = callbackConsumer.points.last()
-        assertEquals((first.point.longitude + last.point.longitude) / 2, halfway.longitude(), 0.000001)
+        assertEquals((before.longitude() + last.point.longitude) / 2, halfway.longitude(), 0.000001)
         assertEquals(MapPoint(halfway.longitude(), halfway.latitude()), observedTips.last())
-        assertTrue(callbackConsumer.immediatePosition) // Only the shared clock interpolates.
-
-        now += 1_000L
-        assertFalse(provider.advance())
+        assertTrue(callbackConsumer.immediatePosition) // Only the shared timeline animates.
+        now += 125L
+        assertTrue(provider.advance()) // The short correction finishes, prediction continues.
         assertEquals(last.point, observedTips.last())
-        assertEquals(last.point.longitude, callbackConsumer.points.last().longitude(), 0.0)
-        assertEquals(2, callbackConsumer.accuracies.size) // GPS cadence, not display cadence.
+        now += 3_500L
+        assertFalse(provider.advance()) // Prediction ends 3.5 s after source time (+250 ms presentation).
+        assertEquals(2, callbackConsumer.accuracies.size)
         val emitted = callbackConsumer.points.size
         now += 5_000L
         assertFalse(provider.advance())
-        assertEquals(emitted, callbackConsumer.points.size) // No motion beyond the GPS target.
+        assertEquals(emitted, callbackConsumer.points.size)
     }
 
     @Test
@@ -202,8 +226,13 @@ class RecordingPuckLocationProviderTest {
         provider.registerLocationConsumer(reattached)
         assertEquals(consumer.points.last(), reattached.points.last())
         now += 1_000L
+        assertTrue(provider.advance())
+        now += 2_000L
         assertFalse(provider.advance())
-        assertEquals(next.point.longitude, reattached.points.last().longitude(), 0.0)
+        val frozen = reattached.points.last()
+        now += 1_000L
+        assertFalse(provider.advance())
+        assertEquals(frozen, reattached.points.last())
 
         provider.update(false, null)
         val count = reattached.points.size
@@ -224,7 +253,7 @@ class RecordingPuckLocationProviderTest {
         provider.registerLocationConsumer(consumer)
         assertEquals(route, provider.renderedFrame?.trail)
         assertEquals(fix.point.longitude, consumer.points.single().longitude(), 0.0)
-        assertFalse(provider.advance())
+        assertTrue(provider.advance()) // A fresh moving source may continue between fixes.
     }
 
     @Test

@@ -64,7 +64,7 @@ class CrownProofSelectionTest {
         // back in the pre-latch window).
         val tracker = CrownFixTracker()
         tracker.record(eastFix(0, metresEast = 15.0))
-        tracker.record(eastFix(5, metresEast = 5.0))
+        tracker.record(eastFix(5, metresEast = 14.5))
         val now = base + 5_000
 
         val (current, previous) = CrownProofSelection.selectFixes(tracker, now, crown = null)
@@ -79,7 +79,7 @@ class CrownProofSelectionTest {
     fun `once the crown latches the in-range pair is selected`() {
         val tracker = CrownFixTracker()
         tracker.record(eastFix(0, metresEast = 15.0))
-        tracker.record(eastFix(5, metresEast = 5.0))
+        tracker.record(eastFix(5, metresEast = 14.5))
         val now = base + 5_000
 
         // Same tracker, same instant — only the crown has latched. The pair must
@@ -125,14 +125,14 @@ class CrownProofSelectionTest {
         }
 
         // t=2 (< MIN_DWELL of 4s): still no usable partner.
-        tracker.record(eastFix(2, metresEast = 8.0))
+        tracker.record(eastFix(2, metresEast = 9.8))
         CrownProofSelection.selectFixes(tracker, base + 2_000, crown).let { (_, prev) ->
             assertNull("2s < MIN_DWELL, still confirming", prev)
         }
 
         // t=4 (== MIN_DWELL): the t=0 fix is now a valid partner. Re-selecting on
         // this tick — no reset, same tracker — must surface a usable pair.
-        tracker.record(eastFix(4, metresEast = 6.0))
+        tracker.record(eastFix(4, metresEast = 9.6))
         CrownProofSelection.selectFixes(tracker, base + 4_000, crown).let { (cur, prev) ->
             assertNotNull("current fix", cur)
             assertNotNull("a partner has aged MIN_DWELL in — pair goes live", prev)

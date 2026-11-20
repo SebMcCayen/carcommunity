@@ -300,7 +300,7 @@
     {
       "name": "crownHunt.claimSpawn",
       "domain": "crownHunt",
-      "description": "Collects an auto-spawned crown with stationary two-fix proof, geofence, freshness, repeat/collection-mode and anti-fraud guards; maximum 20 successful claims per UTC day. All signed-in unrestricted users can participate regardless of the legacy crownHuntRequirePaid flag. Both paths share a PRIVATE crown-only allowance: free 2250 KP, verified Plus/Supporter 3000 KP per Europe/Stockholm day (DST-correct). The server reads subscriptions/{uid} in the ledger transaction, rounds base × boost × live-share multiplier once, then clips to remaining KP. Ledger, allowance and successful collection writes commit atomically. At zero, daily_limit_reached includes allowance metadata and consumes no crown, collector slot, count or successful-claim key, so an upgrade can immediately enable a retry. Upgrades add headroom; downgrades preserve earnings/balance. Other KP sources and spending/reversals do not consume or replenish this allowance. Existing pointsDailyTotals accounting is preserved: its idempotent async crown fold still charges actual KP once; the new counter does not write that budget. Optional allowance response snapshot {cap,earned,remaining,resetsAt}; successful retries replay the stored award and snapshot. See contracts/schemas/crown-hunt.schema.json#/$defs/claimSpawnResponse.",
+      "description": "Collects an auto-spawned crown with near-stationary two-fix proof (derived speed <=0.5 m/s, 4-12 seconds between fixes, current fix <=10 seconds old), geofence, freshness, repeat/collection-mode and anti-fraud guards; maximum 20 successful claims per UTC day. All signed-in unrestricted users can participate regardless of the legacy crownHuntRequirePaid flag. Both paths share a PRIVATE crown-only allowance: free 2250 KP, verified Plus/Supporter 3000 KP per Europe/Stockholm day (DST-correct). The server reads subscriptions/{uid} in the ledger transaction, rounds base × boost × live-share multiplier once, then clips to remaining KP. Ledger, allowance and successful collection writes commit atomically. At zero, daily_limit_reached includes allowance metadata and consumes no crown, collector slot, count or successful-claim key, so an upgrade can immediately enable a retry. Upgrades add headroom; downgrades preserve earnings/balance. Other KP sources and spending/reversals do not consume or replenish this allowance. Existing pointsDailyTotals accounting is preserved: its idempotent async crown fold still charges actual KP once; the new counter does not write that budget. Optional allowance response snapshot {cap,earned,remaining,resetsAt}; successful retries replay the stored award and snapshot. See contracts/schemas/crown-hunt.schema.json#/$defs/claimSpawnResponse.",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
@@ -534,7 +534,7 @@
     {
       "name": "garage.rankedDrivingVehicleIds",
       "domain": "garage",
-      "description": "Empty input. Returns { vehicleIds: string[] } for the active caller, ordered by confirmed uses in the last 90 days, then most recent use, then ID. Starts are private, one per solo session or convoy started with the owner's selected vehicle. Rides with a vehicle ID saved before the first tracked start seed earlier use in the rolling window. Clients intersect the result with their current garage. Deployed as garage-rankedDrivingVehicleIds.",
+      "description": "Empty input. Returns { vehicleIds: string[], recentVehicleIds: string[] } for the active caller. vehicleIds preserves frequency ordering by confirmed uses in the last 90 days, then most recent use, then ID. recentVehicleIds orders distinct vehicles by most recent confirmed use within the same window, then ID; Android uses this for its three recent quick choices. Starts are private, one per solo session or convoy started with the owner's selected vehicle. Rides with a vehicle ID saved before the first tracked start seed earlier use in the rolling window. Clients intersect the result with their current garage. Deployed as garage-rankedDrivingVehicleIds.",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
@@ -1691,6 +1691,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "functions/src/finance/settings.ts"
+    },
+    {
+      "name": "partners.portal",
+      "domain": "partners",
+      "description": "Company-scoped partner application/publication, staff permissions, managed offer drafts, atomic limited reservations and short-lived online QR redemption. Administrative commands require current admin; customer claims require verified paid entitlement without an admin bypass. Aggregate statistics expose no customer identifiers, update daily and derive only from server-confirmed redemption. App Check and per-action rate limits enforced. Scheduled partners-sweepPortal expires reservations and minimizes private linkage; partners-publishStatistics publishes delayed aggregate snapshots.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/contracts/partner-portal-v1.md"
     }
   ]
 }

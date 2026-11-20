@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 enum CrownMapTarget: Equatable, Sendable, Identifiable {
     case point(CrownMapPoint)
@@ -90,17 +91,64 @@ struct CrownSpawn: Equatable, Sendable, Identifiable {
     }
 }
 
+enum CrownReceiptMetadata {
+    static func integer(_ raw: Any?) -> Int? {
+        guard let number = raw as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let value = number.doubleValue
+        guard value.isFinite, value >= 0, value <= Double(Int32.max), value.rounded() == value else { return nil }
+        return Int(value)
+    }
+}
+
+/// Optional collection-time snapshot; never used to authorize collection locally.
+struct CrownAllowance: Equatable, Sendable {
+    let cap: Int
+    let remaining: Int
+    let resetsAt: Date
+
+    static func fromWire(_ value: Any?) -> CrownAllowance? {
+        guard let data = value as? [String: Any] else { return nil }
+        guard let cap = CrownReceiptMetadata.integer(data["cap"]), [2250, 3000].contains(cap),
+              let remaining = CrownReceiptMetadata.integer(data["remaining"]), remaining <= cap,
+              let rawReset = data["resetsAt"] as? String else { return nil }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let fractional = parser.date(from: rawReset)
+        parser.formatOptions = [.withInternetDateTime]
+        guard let reset = fractional ?? parser.date(from: rawReset) else { return nil }
+        return CrownAllowance(cap: cap, remaining: remaining, resetsAt: reset)
+    }
+}
+
 struct CrownSpawnClaimOutcome: Equatable, Sendable {
     let result: CrownSpawnClaimResult
     let pointsAwarded: Int?
     let newBalance: Int?
     let rarity: CrownRarity?
+    let allowance: CrownAllowance?
+
+    init(result: CrownSpawnClaimResult, pointsAwarded: Int?, newBalance: Int?, rarity: CrownRarity?, allowance: CrownAllowance? = nil) {
+        self.result = result
+        self.pointsAwarded = pointsAwarded
+        self.newBalance = newBalance
+        self.rarity = rarity
+        self.allowance = allowance
+    }
 }
 
 struct CrownPointClaimOutcome: Equatable, Sendable {
     let result: CrownHuntClaimResult
     let pointsAwarded: Int?
     let newBalance: Int?
+    let allowance: CrownAllowance?
+
+    init(result: CrownHuntClaimResult, pointsAwarded: Int?, newBalance: Int?, allowance: CrownAllowance? = nil) {
+        self.result = result
+        self.pointsAwarded = pointsAwarded
+        self.newBalance = newBalance
+        self.allowance = allowance
+    }
 }
 
 enum CrownMarkerStyle {
@@ -154,10 +202,12 @@ struct MapCrownMarkerStyle: Equatable, Sendable {
 enum CrownSpawnLimits {
     static let defaultCollectRadiusMeters = 75.0
     static let maximumStoredCollectRadiusMeters = 250.0
-    static let maximumSpeedMetersPerSecond = 2.0
+    static let maximumSpeedMetersPerSecond = 0.5
     static let minimumDwell: TimeInterval = 4
-    static let maximumDwell: TimeInterval = 300
+    static let maximumDwell: TimeInterval = 12
     static let maximumPositionAge: TimeInterval = 60
+    static let maximumSpawnPositionAge: TimeInterval = 10
+    static let maximumInteractionPositionAge: TimeInterval = 2
 
     static func collectRadius(_ stored: Double?) -> Double {
         guard let stored, stored.isFinite, stored > 0,
@@ -260,8 +310,22 @@ struct CrownFixTracker: Equatable, Sendable {
     private let capacity = 120
 
     mutating func record(_ fix: LocationFix) {
+        if let latest = fixes.last, fix.timestamp <= latest.timestamp { return }
+        let anchor = fixes.last {
+            let gap = fix.timestamp.timeIntervalSince($0.timestamp)
+            return gap >= CrownSpawnLimits.minimumDwell && gap <= CrownSpawnLimits.maximumDwell
+        }
+        let recentMotion = fixes.last.map {
+            CrownFixPair(previous: $0, current: fix).movementSpeedMetersPerSecond
+                > CrownSpawnLimits.maximumSpeedMetersPerSecond
+        } ?? false
+        if recentMotion || anchor.map({
+            CrownFixPair(previous: $0, current: fix).movementSpeedMetersPerSecond
+                > CrownSpawnLimits.maximumSpeedMetersPerSecond
+        }) == true {
+            fixes.removeAll()
+        }
         fixes.append(fix)
-        fixes.sort { $0.timestamp < $1.timestamp }
         fixes = Array(fixes.suffix(capacity))
     }
 
@@ -273,17 +337,26 @@ struct CrownFixTracker: Equatable, Sendable {
     func proof(for spawn: CrownSpawn, now: Date) -> CrownFixPair? {
         let fresh = fixes.reversed().filter { fix in
             now.timeIntervalSince(fix.timestamp) >= 0
-                && now.timeIntervalSince(fix.timestamp) <= CrownSpawnLimits.maximumPositionAge
+                && now.timeIntervalSince(fix.timestamp) <= CrownSpawnLimits.maximumSpawnPositionAge
                 && inRange(fix, of: spawn)
         }
         for current in fresh {
-            let candidates = fixes.filter { previous in
+            let candidates = fixes.reversed().filter { previous in
                 let gap = current.timestamp.timeIntervalSince(previous.timestamp)
                 return gap >= CrownSpawnLimits.minimumDwell
                     && gap <= CrownSpawnLimits.maximumDwell
                     && inRange(previous, of: spawn)
             }
-            if let previous = candidates.min(by: { accuracyRank($0) < accuracyRank($1) }) {
+            let stationary = candidates.filter { previous in
+                let pair = CrownFixPair(previous: previous, current: current)
+                guard pair.movementSpeedMetersPerSecond <= CrownSpawnLimits.maximumSpeedMetersPerSecond else { return false }
+                if let latest = latest(now: now), latest.timestamp > current.timestamp {
+                    return CrownFixPair(previous: current, current: latest).movementSpeedMetersPerSecond
+                        <= CrownSpawnLimits.maximumSpeedMetersPerSecond
+                }
+                return true
+            }
+            if let previous = stationary.min(by: { accuracyRank($0) < accuracyRank($1) }) {
                 return CrownFixPair(previous: previous, current: current)
             }
         }
@@ -342,7 +415,7 @@ enum CrownCollectGate {
         guard enabled else { return .featureOff }
         guard let latest,
               now.timeIntervalSince(latest.timestamp) >= 0,
-              now.timeIntervalSince(latest.timestamp) <= CrownSpawnLimits.maximumPositionAge else {
+              now.timeIntervalSince(latest.timestamp) <= CrownSpawnLimits.maximumSpawnPositionAge else {
             return .noPosition
         }
         let distance = CrownGeo.distanceMeters(
@@ -352,12 +425,23 @@ enum CrownCollectGate {
             toLongitude: spawn.longitude
         )
         guard distance <= spawn.collectRadiusMeters else { return .tooFar(distance) }
+        let selectedSpeed = proof?.movementSpeedMetersPerSecond
+        let liveSpeed = proof.map { pair in
+            latest.timestamp > pair.current.timestamp
+                ? CrownFixPair(previous: pair.current, current: latest).movementSpeedMetersPerSecond
+                : pair.movementSpeedMetersPerSecond
+        }
+        let movement = max(selectedSpeed ?? 0, liveSpeed ?? latest.speedMetersPerSecond ?? 0)
+        if movement > CrownSpawnLimits.maximumSpeedMetersPerSecond { return .moving }
         if let accuracy = latest.accuracyMeters, accuracy > spawn.collectRadiusMeters {
             return .waitingForSignal
         }
         guard let proof else { return .confirming }
-        guard proof.movementSpeedMetersPerSecond <= CrownSpawnLimits.maximumSpeedMetersPerSecond else {
-            return .moving
+        let gap = proof.current.timestamp.timeIntervalSince(proof.previous.timestamp)
+        guard gap >= CrownSpawnLimits.minimumDwell, gap <= CrownSpawnLimits.maximumDwell,
+              now.timeIntervalSince(proof.current.timestamp) >= 0,
+              now.timeIntervalSince(proof.current.timestamp) <= CrownSpawnLimits.maximumSpawnPositionAge else {
+            return .confirming
         }
         return .ready
     }

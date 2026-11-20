@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CrownHuntMapOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -127,11 +128,11 @@ struct CrownHuntCollectContent: View {
                     // independently when even the compact layout cannot fit.
                     ScrollView { details(feedback, expired: expired, compact: true) }
                 }
-                if coordinator.selectedTarget != nil {
+                if coordinator.selectedTarget != nil && !CrownCollectPresentation.isAwarded(coordinator.claimStatus) {
                     Button {
                         Task { await coordinator.collect(now: Date()) }
                     } label: {
-                        Text("crownHunt.collectButton")
+                        Text("crownHunt.spawnCollect")
                             .frame(maxWidth: .infinity, minHeight: 48)
                             .contentShape(Rectangle())
                     }
@@ -151,6 +152,14 @@ struct CrownHuntCollectContent: View {
                     }
                 }
             }
+            // One announcement host: ViewThatFits builds several feedback alternatives.
+            .onChange(of: feedback.announcementKey) { _, key in
+                guard UIAccessibility.isVoiceOverRunning, let key else { return }
+                let text = NSLocalizedString(key, comment: "Crown collection status")
+                UIAccessibility.post(notification: .announcement, argument: NSAttributedString(
+                    string: text, attributes: [.accessibilitySpeechQueueAnnouncement: true]
+                ))
+            }
         }
         .sheet(item: $reportingTarget) { target in
             CrownPlacementReportSheet(coordinator: coordinator, target: target)
@@ -159,13 +168,15 @@ struct CrownHuntCollectContent: View {
 
     private func details(_ feedback: CrownCollectFeedback, expired: Bool, compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? KccSpacing.s1 : KccSpacing.s3) {
-            if let target = coordinator.selectedTarget {
-                CrownTargetDetails(target: target, compact: compact)
+            if !CrownCollectPresentation.isAwarded(coordinator.claimStatus) {
+                if let target = coordinator.selectedTarget {
+                    CrownTargetDetails(target: target, compact: compact)
+                }
+                Text("crownHunt.safetyStop").font(compact ? .footnote : .subheadline)
+                    .foregroundStyle(KccTheme.secondary)
             }
-            Text("crownHunt.safetyStop").font(compact ? .footnote : .subheadline)
-                .foregroundStyle(KccTheme.secondary)
             feedback.font(compact ? .footnote : .body)
-            if let target = coordinator.selectedTarget {
+            if !CrownCollectPresentation.isAwarded(coordinator.claimStatus), let target = coordinator.selectedTarget {
                 if coordinator.reportedPlacements.contains(target.placementReportKey) {
                     Label("crownHunt.crownPlacementReported", systemImage: "checkmark.circle")
                         .font(compact ? .footnote : .subheadline)
@@ -397,7 +408,7 @@ struct CrownCollectFeedback: View {
                     CrownDistanceLabel(meters: proximity.distanceMeters)
                         .accessibilityIdentifier("crown.distance")
                 }
-                collectState
+                if status != .collecting { collectState.font(.body) }
                 if showLiveShareTip {
                     Label("crownHunt.liveShareTip", systemImage: "info.circle")
                         .foregroundStyle(KccTheme.secondary)
@@ -406,7 +417,30 @@ struct CrownCollectFeedback: View {
             claimResult
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(KccTheme.text)
         .accessibilityIdentifier("crown.collect.feedback")
+    }
+
+    // Announce discrete state changes, never distance updates or a ticking timer.
+    var announcementKey: String? {
+        if expired, !CrownCollectPresentation.isAwarded(status) { return "crownHunt.spawnResultCrownExpired" }
+        if collected, !CrownCollectPresentation.isAwarded(status) { return "crownHunt.spawnResultAlreadyCollected" }
+        switch status {
+        case .collecting: return "crownHunt.spawnCollecting"
+        case .failed: return "crownHunt.spawnErrorClaim"
+        case .point(let outcome): return pointResultKey(outcome.result)
+        case .spawn(let outcome): return spawnResultKey(outcome.result)
+        case .idle:
+            switch state {
+            case .ready: return "crownHunt.spawnReadyToCollect"
+            case .noPosition: return "crownHunt.spawnNoPositionDetail"
+            case .tooFar: return nil
+            case .waitingForSignal: return "crownHunt.spawnWaitingForSignal"
+            case .confirming: return "crownHunt.spawnConfirming"
+            case .moving: return "crownHunt.spawnStopFirst"
+            case .featureOff: return "crownHunt.spawnResultFeatureDisabled"
+            }
+        }
     }
 
     // Once the server has answered, show that decision instead of a local
@@ -430,7 +464,8 @@ struct CrownCollectFeedback: View {
                 Label("crownHunt.pointCollectRangeHint", systemImage: "figure.walk")
             }
         case .waitingForSignal: Label("crownHunt.spawnWaitingForSignal", systemImage: "location.circle")
-        case .confirming, .moving: Label("crownHunt.spawnConfirming", systemImage: "hand.raised")
+        case .confirming: Label("crownHunt.spawnConfirming", systemImage: "hand.raised")
+        case .moving: Label("crownHunt.spawnStopFirst", systemImage: "hand.raised")
         case .featureOff: Label("crownHunt.spawnResultFeatureDisabled", systemImage: "crown")
         }
     }
@@ -438,18 +473,23 @@ struct CrownCollectFeedback: View {
     @ViewBuilder private var claimResult: some View {
         switch status {
         case .idle: EmptyView()
-        case .collecting: ProgressView("crownHunt.claiming")
+        case .collecting: ProgressView("crownHunt.spawnCollecting")
         case .failed:
-            Label("crownHunt.spawnErrorClaim", systemImage: "exclamationmark.triangle").foregroundStyle(KccPalette.errorRed)
+            Label("crownHunt.spawnErrorClaim", systemImage: "exclamationmark.triangle").foregroundStyle(KccTheme.error)
         case .point(let outcome):
-            Text(LocalizedStringKey(pointResultKey(outcome.result)))
-            if outcome.result == .awarded, let points = outcome.pointsAwarded {
-                Text(CrownHuntStrings.kpValue(points)).font(.title2.weight(.bold))
+            Text(LocalizedStringKey(outcome.result == .dailyLimitReached && outcome.allowance != nil
+                ? "crownHunt.allowanceReached" : pointResultKey(outcome.result)))
+                .font(outcome.result == .awarded ? .headline : .body)
+            if outcome.result == .awarded {
+                CrownRewardReceipt(pointsAwarded: outcome.pointsAwarded, newBalance: outcome.newBalance, allowance: outcome.allowance)
             }
         case .spawn(let outcome):
-            if outcome.result == .awarded, let points = outcome.pointsAwarded {
-                Text(format("crownHunt.spawnResultAwardedPoints", points)).font(.title2.weight(.bold))
-            } else { Text(LocalizedStringKey(spawnResultKey(outcome.result))) }
+            Text(LocalizedStringKey(outcome.result == .dailyLimitReached && outcome.allowance != nil
+                ? "crownHunt.allowanceReached" : spawnResultKey(outcome.result)))
+                .font(outcome.result == .awarded ? .headline : .body)
+            if outcome.result == .awarded {
+                CrownRewardReceipt(pointsAwarded: outcome.pointsAwarded, newBalance: outcome.newBalance, allowance: outcome.allowance)
+            }
         }
     }
 
@@ -484,8 +524,59 @@ struct CrownCollectFeedback: View {
         case .notEligible: "crownHunt.spawnResultNotEligible"
         }
     }
+}
 
-    private func format(_ key: String, _ value: CVarArg) -> String {
-        String.localizedStringWithFormat(NSLocalizedString(key, comment: ""), value)
+/// Actual credit, balance, then daily snapshot, in the same order as Android.
+struct CrownRewardReceipt: View {
+    @Environment(\.locale) private var locale
+    let pointsAwarded: Int?
+    let newBalance: Int?
+    let allowance: CrownAllowance?
+
+    var body: some View {
+        VStack(spacing: KccSpacing.s3) {
+            if pointsAwarded != nil || newBalance != nil {
+                Image("crown-royal").renderingMode(.template).resizable().scaledToFit()
+                    .frame(width: 80, height: 80).foregroundStyle(KccPalette.crownGold)
+                    .accessibilityHidden(true)
+                if let pointsAwarded {
+                    Text(verbatim: CrownRewardText.amount("crownHunt.spawnResultAwardedPoints", pointsAwarded, locale: locale))
+                        .font(.largeTitle.weight(.bold))
+                }
+                if let newBalance {
+                    VStack {
+                        Text("crownHunt.shopBalanceLabel").font(.subheadline).foregroundStyle(KccTheme.secondary)
+                        Text(verbatim: CrownRewardText.amount("crownHunt.kpValue", newBalance, locale: locale))
+                            .font(.title2.weight(.semibold))
+                    }.accessibilityElement(children: .combine)
+                }
+            }
+            if let allowance {
+                Text(verbatim: CrownRewardText.remaining(allowance, locale: locale))
+                    .font(.body).foregroundStyle(KccTheme.secondary)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityIdentifier("crown.reward.receipt")
+    }
+}
+
+enum CrownRewardText {
+    static func amount(_ key: String, _ amount: Int, locale: Locale, bundle: Bundle = .main) -> String {
+        String(format: localizedFormat(key, locale: locale, bundle: bundle), locale: locale, Int64(amount))
+    }
+
+    static func remaining(_ allowance: CrownAllowance, locale: Locale, bundle: Bundle = .main) -> String {
+        String(format: localizedFormat("crownHunt.allowanceRemaining", locale: locale, bundle: bundle),
+               locale: locale, Int64(allowance.remaining), Int64(allowance.cap))
+    }
+
+    private static func localizedFormat(_ key: String, locale: Locale, bundle: Bundle) -> String {
+        let languageBundle = locale.language.languageCode.flatMap { code in
+            bundle.url(forResource: code.identifier, withExtension: "lproj").flatMap(Bundle.init(url:))
+        } ?? bundle
+        return languageBundle.localizedString(forKey: key, value: nil, table: nil)
     }
 }

@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
@@ -18,6 +19,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
@@ -269,6 +271,10 @@ class MapboxMapSurface(
     private val followController = CameraFollowController()
     private var followScope: CoroutineScope? = null
     private var idleReturnJob: Job? = null
+    private val cameraResume = MapCameraResumePolicy()
+    private var cameraReturnJob: Job? = null
+    private var cameraReturnGeneration = 0L
+    private var sceneResumed = false
 
     // Camera-manipulation gesture listeners, held so they can be detached in
     // onRelease. Any of pan/zoom/rotate/tilt counts as the user taking over the
@@ -282,6 +288,8 @@ class MapboxMapSurface(
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
+    private val renderedOwnPointFlow = MutableStateFlow<MapPoint?>(null)
+    override val renderedOwnPoint: StateFlow<MapPoint?> = renderedOwnPointFlow.asStateFlow()
 
     // How the map is oriented while following (see [MapCompassMode]) — the
     // compass control's two modes. north-up pins the camera bearing at 0;
@@ -371,6 +379,7 @@ class MapboxMapSurface(
         }
         provider.update(recording = recording != null, position = recording?.position, points = recording?.points.orEmpty())
         val animating = surfaceActive && provider.advance()
+        if (!provider.canDisplayLocation) renderedOwnPointFlow.value = null
         renderRecordingBreadcrumb()
         if (recording == null && changedBreadcrumbOwner) redrawBreadcrumb()
         val map = mapViewRef ?: return animating
@@ -466,6 +475,17 @@ class MapboxMapSurface(
     // reconciliation. Changed lists retain annotations by marker id. Reset with
     // the manager so a recreated map always draws the current markers.
     private var lastAppliedIncidents: List<MapIncidentMarker>? = null
+    private var groupedIncidentIds: Set<String> = emptySet()
+    private var groupedCrownIds: Set<String> = emptySet()
+    private val incidentPresence = MapMarkerPresence<MapIncidentMarker> { it.id }
+    private val eventPresence = MapMarkerPresence<MapEventMarker> { it.id }
+    private val billboardPresence = MapMarkerPresence<MapBillboardMarker> { it.id }
+    private val eventAnnotations = MapAnnotationReconciler<MapEventMarker, PointAnnotation> { it.id }
+    private val billboardAnnotations = MapAnnotationReconciler<MapBillboardMarker, PointAnnotation> { it.id }
+    private val incidentRedrawTickFlow = MutableStateFlow(0)
+    private val incidentManagerReadyFlow = MutableStateFlow(false)
+    private val presentationActiveFlow = MutableStateFlow(false)
+
 
     // ---- Kronjakt crown layer -----------------------------------------------
     // Its OWN annotation manager, image set and lookup, parallel to the incident
@@ -852,6 +872,17 @@ class MapboxMapSurface(
         incidentMarkersFlow.value = markers
     }
 
+    override fun setGroupedMarkerIds(incidentIds: Set<String>, crownIds: Set<String>) {
+        if (groupedIncidentIds == incidentIds && groupedCrownIds == crownIds) return
+        groupedIncidentIds = incidentIds
+        groupedCrownIds = crownIds
+        // Covered sources stop accepting native hits immediately; their public
+        // presentation may complete a short noninteractive crossfade.
+        incidentIdsByAnnotation.entries.removeAll { it.value in incidentIds }
+        incidentRedrawTickFlow.value += 1
+        runCatching { renderCrownFrame(SystemClock.uptimeMillis()) }
+    }
+
     override fun setCrownMarkers(markers: List<MapCrownMarker>) {
         // Same contract as the incident markers: the Content update lambda
         // observes this flow and redraws only when the set actually changes, so
@@ -1160,6 +1191,7 @@ class MapboxMapSurface(
         // map is composed; wrapped defensively like every other native call.
         val map = mapViewRef ?: return
         syncRecordingLocation()
+        if (!hasMapLocationPermission() || puckLocationProvider?.canDisplayLocation == false) renderedOwnPointFlow.value = null
         runCatching {
             map.location.updateSettings {
                 enabled = surfaceActive && puckLocationProvider?.canDisplayLocation != false
@@ -1286,6 +1318,7 @@ class MapboxMapSurface(
         // not rendering is not a defect and the render watchdog must not accrue
         // time (see the watchdog loop in [Content]).
         surfaceActive = active
+        updateCameraVisibility()
         val map = mapViewRef ?: return
         if (active) {
             refreshLocationComponent()
@@ -1302,6 +1335,89 @@ class MapboxMapSurface(
                 }
             }
         }
+    }
+
+    /** One return transition owns the camera; normal puck tracking stays immediate. */
+    private fun hasMapLocationPermission(): Boolean {
+        val context = appContext ?: return false
+        return listOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION).any {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun updateCameraVisibility() {
+        val visible = surfaceActive && sceneResumed
+        presentationActiveFlow.value = visible
+        if (!visible) {
+            incidentPresence.clear()
+            eventPresence.clear()
+            billboardPresence.clear()
+            lastAppliedIncidents = null
+            lastAppliedEvents = null
+            lastAppliedBillboards = null
+            incidentIdsByAnnotation.clear()
+            runCatching { applyIncidentMarkersIfChanged(incidentMarkersFlow.value) }
+            runCatching { applyEventMarkersIfChanged(eventMarkersFlow.value) }
+            runCatching { applyBillboardMarkersIfChanged(billboardMarkersFlow.value) }
+        }
+        incidentRedrawTickFlow.value += 1
+        cameraResume.visibilityChanged(visible, followController.shouldTrack(routeOverlayFlow.value != null) && convoyFitPoints == null,
+            puckLocationProvider?.cameraSourceFix?.sequence)
+        if (!visible) {
+            renderedOwnPointFlow.value = null
+            cameraReturnJob?.cancel()
+            cameraReturnJob = null
+            idleReturnJob?.cancel()
+            idleReturnJob = null
+            lastBearing = mapViewRef?.mapboxMap?.cameraState?.bearing ?: 0.0
+            runCatching { mapViewRef?.camera?.cancelAllAnimators() }
+        }
+    }
+
+    private fun returnCameraIfNeeded(point: Point): Boolean {
+        val source = puckLocationProvider?.cameraSourceFix
+        val now = SystemClock.elapsedRealtime()
+        // SDK-only input exposes receipt time, not physical GPS capture time.
+        // Its first callback may recenter, but course still requires two raw
+        // source positions: native interpolation cannot masquerade as movement.
+        val fresh = source == null || now - (source.capturedAtMs ?: source.receivedAtMs) in 0L..MapCameraResumePolicy.MAX_FIX_AGE_MS
+        if (!cameraResume.takeReturn(source?.sequence, fresh)) return cameraResume.pending || cameraReturnJob?.isActive == true
+        val map = mapViewRef ?: return false
+        val scope = followScope ?: return false
+        val firstFix = !centeredOnFirstFix
+        if (firstFix) {
+            // A cold open reveals the location locally, never flies across a world overview.
+            map.mapboxMap.setCamera(cameraOptions { center(point); zoom((browsingZoom - 1).coerceAtLeast(1.0)) })
+            centeredOnFirstFix = true
+        }
+        val start = map.mapboxMap.cameraState
+        val startTime = now
+        val duration = if (ValueAnimator.areAnimatorsEnabled()) MapCameraResumePolicy.RETURN_DURATION_MS else 0L
+        runCatching { map.camera.cancelAllAnimators() }
+        cameraReturnJob?.cancel()
+        val generation = ++cameraReturnGeneration
+        cameraReturnJob = scope.launch {
+            try {
+                do {
+                    if (!surfaceActive || !sceneResumed || convoyFitPoints != null ||
+                        !followController.shouldTrack(routeOverlayFlow.value != null)) break
+                    val fraction = if (duration == 0L) 1.0 else ((SystemClock.elapsedRealtime() - startTime).toDouble() / duration).coerceIn(0.0, 1.0)
+                    val eased = fraction * fraction * (3 - 2 * fraction)
+                    val target = lastPoint ?: point
+                    val longitudeDelta = (target.longitude() - start.center.longitude() + 540) % 360 - 180
+                    map.mapboxMap.setCamera(cameraOptions {
+                        center(Point.fromLngLat(start.center.longitude() + longitudeDelta * eased,
+                            start.center.latitude() + (target.latitude() - start.center.latitude()) * eased))
+                        if (firstFix) { zoom(start.zoom + (browsingZoom - start.zoom) * eased); pitch(start.pitch + (this@MapboxMapSurface.pitch - start.pitch) * eased) }
+                        bearing(MapCameraResumePolicy.bearingBetween(start.bearing,
+                            CompassCamera.followBearing(compassMode, lastBearing), eased))
+                    })
+                    if (fraction >= 1.0) break
+                    withFrameNanos { }
+                } while (isActive)
+            } finally { if (cameraReturnGeneration == generation) cameraReturnJob = null }
+        }
+        return true
     }
 
     override fun recenter() = userRequestedRecenter(resetBearingToNorth = false)
@@ -1347,6 +1463,9 @@ class MapboxMapSurface(
      * bearing differs, and that difference is the single parameter.
      */
     private fun userRequestedRecenter(resetBearingToNorth: Boolean) {
+        if (lastPoint != null) cameraResume.cancel()
+        cameraReturnJob?.cancel()
+        cameraReturnJob = null
         followController.onRecenterRequested()
         idleReturnJob?.cancel()
         idleReturnJob = null
@@ -1473,6 +1592,10 @@ class MapboxMapSurface(
      * (gesture callbacks).
      */
     private fun onUserGestureBegin() {
+        cameraResume.cancel()
+        cameraReturnJob?.cancel()
+        cameraReturnJob = null
+        runCatching { mapViewRef?.camera?.cancelAllAnimators() }
         followController.onGestureBegin()
         idleReturnJob?.cancel()
         idleReturnJob = null
@@ -1552,7 +1675,24 @@ class MapboxMapSurface(
         // the CURRENT owner on every tick rather than the one it captured —
         // otherwise it would gate reporting on a stale, permanently-DESTROYED
         // lifecycle and either suppress every report or mislabel `foreground`.
-        val healthLifecycle by rememberUpdatedState(LocalLifecycleOwner.current)
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val healthLifecycle by rememberUpdatedState(lifecycleOwner)
+        DisposableEffect(lifecycleOwner) {
+            sceneResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            updateCameraVisibility()
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME || event == Lifecycle.Event.ON_PAUSE) {
+                    sceneResumed = event == Lifecycle.Event.ON_RESUME
+                    updateCameraVisibility()
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                sceneResumed = false
+                updateCameraVisibility()
+            }
+        }
         DisposableEffect(health) {
             healthReporter = health
             onDispose { healthReporter = null }
@@ -1598,6 +1738,24 @@ class MapboxMapSurface(
         val mapMode by mapModeFlow.collectAsState()
         val overlay by routeOverlayFlow.collectAsState()
         val incidents by incidentMarkersFlow.collectAsState()
+        val events by eventMarkersFlow.collectAsState()
+        val billboards by billboardMarkersFlow.collectAsState()
+        val incidentManagerReady by incidentManagerReadyFlow.collectAsState()
+        val incidentRedrawTick by incidentRedrawTickFlow.collectAsState()
+        val presentationActive by presentationActiveFlow.collectAsState()
+        LaunchedEffect(incidents, events, billboards, incidentManagerReady, incidentRedrawTick, presentationActive) {
+            if (!incidentManagerReady) return@LaunchedEffect
+            do {
+                val incidentAnimating = applyIncidentMarkersIfChanged(incidents)
+                val eventAnimating = applyEventMarkersIfChanged(events)
+                val billboardAnimating = applyBillboardMarkersIfChanged(billboards)
+                if (!presentationActive || !(incidentAnimating || eventAnimating || billboardAnimating)) break
+                withFrameNanos { }
+            } while (isActive)
+            applyIncidentMarkersIfChanged(incidents)
+            applyEventMarkersIfChanged(events)
+            applyBillboardMarkersIfChanged(billboards)
+        }
         val followMeTrail by followMeTrailFlow.collectAsState()
         val crowns by crownMarkersFlow.collectAsState()
         val crownManagerReady by crownManagerReadyFlow.collectAsState()
@@ -1615,9 +1773,10 @@ class MapboxMapSurface(
         // previous run (and its loop) before starting the next: there is only ever
         // one ticker. The animator is a field, so in-flight spawns/despawns carry
         // across a restart rather than resetting.
-        LaunchedEffect(crowns, crownManagerReady, crownRedrawTick, mapMode) {
+        LaunchedEffect(crowns, crownManagerReady, crownRedrawTick, mapMode, presentationActive) {
             if (!crownManagerReady) return@LaunchedEffect
             syncCrownMarkers(crowns, SystemClock.uptimeMillis())
+            if (!presentationActive) return@LaunchedEffect
             while (isActive) {
                 val settled = renderCrownFrame(SystemClock.uptimeMillis())
                 if (settled) break
@@ -1626,8 +1785,6 @@ class MapboxMapSurface(
                 withFrameNanos { }
             }
         }
-        val events by eventMarkersFlow.collectAsState()
-        val billboards by billboardMarkersFlow.collectAsState()
         // The caller's marker only carries live-sharing state now (its position
         // is the device puck): a green pulse signals sharing, blue otherwise.
         val marker by userMarkerFlow.collectAsState()
@@ -1657,6 +1814,7 @@ class MapboxMapSurface(
                     // re-entered from inside itself (see [guardIndicator]).
                     guardIndicator {
                         lastPoint = point
+                        renderedOwnPointFlow.value = if (surfaceActive && sceneResumed && hasMapLocationPermission()) MapPoint(point.longitude(), point.latitude()) else null
                         // Cache this fix for the next map open (see
                         // [persistLastKnownLocation]). Before the follow gate so
                         // it keeps refreshing even when the user has panned away.
@@ -1692,6 +1850,11 @@ class MapboxMapSurface(
                             return@OnIndicatorPositionChangedListener
                         }
                         val map = mapViewRef ?: return@OnIndicatorPositionChangedListener
+                        if (!surfaceActive || !sceneResumed) return@OnIndicatorPositionChangedListener
+                        puckLocationProvider?.cameraSourceFix?.let { source ->
+                            cameraResume.position(source.point, source.receivedAtMs, source.speedMps, source.sequence)
+                        }
+                        if (convoyFitPoints == null && returnCameraIfNeeded(point)) return@OnIndicatorPositionChangedListener
                         // "Keep the whole convoy in view" replaces the follow TARGET,
                         // not the follow MACHINERY: same gate above, same listener,
                         // just a different thing to frame. Own movement still drives
@@ -1781,6 +1944,9 @@ class MapboxMapSurface(
                     // native state, so a re-fired bearing callback stacked on top of
                     // one already running is dropped (see [guardIndicator]).
                     guardIndicator {
+                        if (!surfaceActive || !sceneResumed || !cameraResume.acceptsCourse(SystemClock.elapsedRealtime())) {
+                            return@OnIndicatorBearingChangedListener
+                        }
                         lastBearing = heading
                         // First real heading of this map: give the dot its arrow.
                         //
@@ -1805,7 +1971,7 @@ class MapboxMapSurface(
                         // A convoy fit deliberately keeps the user's current bearing
                         // while framing the group (see applyConvoyFit), so don't spin
                         // the map out from under it here.
-                        if (convoyFitPoints != null) return@OnIndicatorBearingChangedListener
+                        if (convoyFitPoints != null || cameraResume.pending || cameraReturnJob?.isActive == true) return@OnIndicatorBearingChangedListener
                         val map = mapViewRef ?: return@OnIndicatorBearingChangedListener
                         // Rotate in place: only the bearing is set, so centre/zoom/
                         // pitch stay exactly as the position listener maintains them.
@@ -2178,6 +2344,8 @@ class MapboxMapSurface(
                             incidentAnnotations.clear()
                             incidentIdsByAnnotation.clear()
                             incidentMarkerManager = incidentManager
+                            incidentManagerReadyFlow.value = true
+                            incidentRedrawTickFlow.value += 1
                             lastAppliedIncidents = null
                             // Style images are owned by the style that was just
                             // (re)loaded, so anything registered against the
@@ -2208,6 +2376,8 @@ class MapboxMapSurface(
                             eventClickListener = eventClick
                             eventManager.addClickListener(eventClick)
                             eventMarkerManager = eventManager
+                            eventAnnotations.clear()
+                            incidentRedrawTickFlow.value += 1
                             lastAppliedEvents = null
                             registeredEventImages.clear()
                             applyEventMarkersIfChanged(eventMarkersFlow.value)
@@ -2230,6 +2400,8 @@ class MapboxMapSurface(
                             billboardClickListener = billboardClick
                             billboardManager.addClickListener(billboardClick)
                             billboardMarkerManager = billboardManager
+                            billboardAnnotations.clear()
+                            incidentRedrawTickFlow.value += 1
                             lastAppliedBillboards = null
                             // Style images die with the style that owned them.
                             registeredBillboardImages.clear()
@@ -2387,12 +2559,16 @@ class MapboxMapSurface(
                 // not rotate to an old bearing before its first fresh fix. The
                 // compass MODE itself is a preference and deliberately kept across
                 // the recreate — the fresh map's listeners re-apply it.
+                cameraResume.cancel()
+                cameraReturnJob?.cancel()
+                cameraReturnJob = null
                 lastBearing = 0.0
                 // …and with the heading goes the arrow that visualised it: a
                 // recreated map shows the plain dot again until its own first
                 // heading arrives, rather than an arrow left pointing north.
                 puckBearingArrowShown = false
                 puckLocationProvider = null
+                renderedOwnPointFlow.value = null
                 resetBreadcrumbRenderCache()
                 cameraChangeListener?.let { l ->
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
@@ -2466,6 +2642,12 @@ class MapboxMapSurface(
                 billboardClickListener = null
                 destMarkerManager = null
                 incidentAnnotations.clear()
+                incidentPresence.clear()
+                eventPresence.clear()
+                billboardPresence.clear()
+                eventAnnotations.clear()
+                billboardAnnotations.clear()
+                    incidentManagerReadyFlow.value = false
                 incidentMarkerManager = null
                 crownMarkerManager = null
                 eventMarkerManager = null
@@ -2568,7 +2750,7 @@ class MapboxMapSurface(
      */
     internal fun onIncidentAnnotationClicked(annotationId: String): Boolean {
         val incidentId = incidentIdsByAnnotation[annotationId]
-        if (incidentId != null) {
+        if (incidentId != null && incidentId !in groupedIncidentIds && incidentMarkersFlow.value.any { it.id == incidentId }) {
             emitIncidentTap(incidentId)
             return true
         }
@@ -2589,7 +2771,7 @@ class MapboxMapSurface(
      */
     internal fun onEventAnnotationClicked(annotationId: String): Boolean {
         val eventId = eventIdsByAnnotation[annotationId]
-        if (eventId != null) {
+        if (eventId != null && eventMarkersFlow.value.any { it.id == eventId }) {
             emitEventTap(eventId)
             return true
         }
@@ -2605,15 +2787,22 @@ class MapboxMapSurface(
      * Only a complete draw (the single event image uploaded) is cached, so a draw
      * attempted before the style handle is ready repairs itself on the next update.
      */
-    private fun applyEventMarkersIfChanged(markers: List<MapEventMarker>) {
-        if (markers == lastAppliedEvents) return
-        if (applyEventMarkers(markers)) {
-            lastAppliedEvents = markers
+    private fun applyEventMarkersIfChanged(markers: List<MapEventMarker>): Boolean {
+        // No native work (including Android animation clocks) until the layer exists.
+        if (eventMarkerManager == null) return false
+        val presentation = eventPresence.frame(markers, SystemClock.uptimeMillis(), surfaceActive && sceneResumed,
+            android.animation.ValueAnimator.areAnimatorsEnabled())
+        if (presentation.markers != lastAppliedEvents) {
+            lastAppliedEvents = if (applyEventMarkers(presentation.markers,
+                presentation.frames.mapValues { it.value.alpha.toDouble() })) presentation.markers else null
         }
+        applyMarkerOpacity(presentation.frames, eventMarkerManager, eventAnnotations::forEachAnnotation,
+            eventIdsByAnnotation, markers.map { it.id }.toSet())
+        return presentation.animating
     }
 
     /**
-     * Clears and redraws the event pins — one event badge per marker — and
+     * Reconciles keyed event pins — one event badge per marker — and
      * rebuilds the annotation-id → event-id lookup the click listener resolves
      * taps through. A no-op until the manager exists (style loaded). Every native
      * call is wrapped defensively so a partial/failed draw degrades rather than
@@ -2628,7 +2817,7 @@ class MapboxMapSurface(
      * semantics node, so a screen reader cannot reach an individual pin — the
      * event content becomes accessible once the info popup opens (ordinary text).
      */
-    private fun applyEventMarkers(markers: List<MapEventMarker>): Boolean {
+    private fun applyEventMarkers(markers: List<MapEventMarker>, opacityById: Map<String, Double> = emptyMap()): Boolean {
         val manager = eventMarkerManager ?: return false
         val style = mapViewRef?.mapboxMap?.style
         val context = appContext
@@ -2653,23 +2842,18 @@ class MapboxMapSurface(
                     runCatching { style.addImage(imageId, bitmap) }.isSuccess
             if (added) registeredEventImages.add(imageId) else complete = false
         }
-        runCatching { manager.deleteAll() }
+        complete = eventAnnotations.reconcile(markers,
+            prepare = { imageId in registeredEventImages },
+            create = { marker -> manager.create(PointAnnotationOptions()
+                .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                .withIconImage(imageId).withIconOpacity(opacityById[marker.id] ?: 1.0).withIconAnchor(IconAnchor.CENTER)) },
+            update = { annotation, marker ->
+                annotation.point = Point.fromLngLat(marker.longitude, marker.latitude)
+                annotation.iconImage = imageId
+                manager.update(annotation)
+            }, delete = { manager.delete(it) }) && complete
         eventIdsByAnnotation.clear()
-        // Nothing more to draw if the image never made it onto the style: the
-        // annotations would reference a name the style does not know.
-        if (imageId !in registeredEventImages) return false
-        for (marker in markers) {
-            runCatching {
-                val annotation =
-                    manager.create(
-                        PointAnnotationOptions()
-                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                            .withIconImage(imageId)
-                            .withIconAnchor(IconAnchor.CENTER),
-                    )
-                eventIdsByAnnotation[annotation.id] = marker.id
-            }
-        }
+        eventAnnotations.forEachAnnotation { id, annotation -> eventIdsByAnnotation[annotation.id] = id }
         return complete
     }
 
@@ -2678,16 +2862,39 @@ class MapboxMapSurface(
      * one applied. The reconciler ignores list order and retains unchanged ids.
      * The cache is reset to null wherever the manager is (re)created or torn down.
      */
-    private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>) {
-        if (markers == lastAppliedIncidents) return
-        // Cache ONLY a complete draw. An incomplete one (the style handle not
-        // available yet, so a marker image could not be uploaded) would
-        // otherwise be remembered as applied, and every later update carrying
-        // the same markers would short-circuit here — leaving those incidents
-        // drawn as blank, icon-less annotations for as long as the set did not
-        // change. Declining to cache costs one redundant redraw and makes the
-        // next update repair it.
-        lastAppliedIncidents = if (applyIncidentMarkers(markers)) markers else null
+    private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>): Boolean {
+        // No native work (including Android animation clocks) until the layer exists.
+        if (incidentMarkerManager == null) return false
+        val presentation = incidentPresence.frame(markers, SystemClock.uptimeMillis(), surfaceActive && sceneResumed,
+            android.animation.ValueAnimator.areAnimatorsEnabled(), groupedIncidentIds)
+        if (presentation.markers != lastAppliedIncidents) {
+            lastAppliedIncidents = if (applyIncidentMarkers(presentation.markers,
+                presentation.frames.mapValues { it.value.alpha.toDouble() })) presentation.markers else null
+        }
+        applyMarkerOpacity(presentation.frames, incidentMarkerManager, incidentAnnotations::forEachAnnotation,
+            incidentIdsByAnnotation, markers.map { it.id }.toSet() - groupedIncidentIds)
+        return presentation.animating
+    }
+
+    private fun applyMarkerOpacity(frames: Map<String, MapPresencePolicy.Frame>, manager: PointAnnotationManager?,
+        each: ((String, PointAnnotation) -> Unit) -> Unit, lookup: MutableMap<String, String>, currentIds: Set<String>) {
+        lookup.clear()
+        val changed = mutableListOf<Pair<PointAnnotation, Double?>>()
+        each { id, annotation ->
+            val frame = frames[id]
+            if (manager != null && frame != null && annotation.iconOpacity != frame.alpha.toDouble()) {
+                changed += annotation to annotation.iconOpacity
+                annotation.iconOpacity = frame.alpha.toDouble()
+            }
+            if (frame?.interactive == true && id in currentIds) lookup[annotation.id] = id
+        }
+        if (manager != null && changed.isNotEmpty()) {
+            // One source update per layer/frame, even when many entries arrive together.
+            if (runCatching { manager.update(changed.map { it.first }) }.isFailure) {
+                // Restore the Kotlin value so the next frame retries the failed SDK update.
+                changed.forEach { (annotation, previous) -> annotation.iconOpacity = previous }
+            }
+        }
     }
 
     /**
@@ -2701,7 +2908,7 @@ class MapboxMapSurface(
      * this surface's own and is passed in; see that object's KDoc for the draw
      * order, the incomplete-draw contract and the accessibility note.
      */
-    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>): Boolean {
+    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>, opacityById: Map<String, Double> = emptyMap()): Boolean {
         val manager = incidentMarkerManager ?: return false
         return IncidentMarkerLayer.draw(
             manager = manager,
@@ -2711,6 +2918,7 @@ class MapboxMapSurface(
             registeredImages = registeredIncidentImages,
             idsByAnnotation = incidentIdsByAnnotation,
             annotations = incidentAnnotations,
+            opacityById = opacityById,
         )
     }
 
@@ -2731,7 +2939,7 @@ class MapboxMapSurface(
      */
     internal fun onBillboardAnnotationClicked(annotationId: String): Boolean {
         val billboardId = billboardIdsByAnnotation[annotationId]
-        if (billboardId != null) {
+        if (billboardId != null && billboardMarkersFlow.value.any { it.id == billboardId }) {
             emitBillboardTap(billboardId)
             return true
         }
@@ -2746,22 +2954,29 @@ class MapboxMapSurface(
      * could not upload its image is NOT cached, so the next update repairs it
      * rather than leaving permanently blank annotations.
      */
-    private fun applyBillboardMarkersIfChanged(markers: List<MapBillboardMarker>) {
-        if (markers == lastAppliedBillboards) return
-        if (applyBillboardMarkers(markers)) {
-            lastAppliedBillboards = markers
+    private fun applyBillboardMarkersIfChanged(markers: List<MapBillboardMarker>): Boolean {
+        // No native work (including Android animation clocks) until the layer exists.
+        if (billboardMarkerManager == null) return false
+        val presentation = billboardPresence.frame(markers, SystemClock.uptimeMillis(), surfaceActive && sceneResumed,
+            android.animation.ValueAnimator.areAnimatorsEnabled())
+        if (presentation.markers != lastAppliedBillboards) {
+            lastAppliedBillboards = if (applyBillboardMarkers(presentation.markers,
+                presentation.frames.mapValues { it.value.alpha.toDouble() })) presentation.markers else null
         }
+        applyMarkerOpacity(presentation.frames, billboardMarkerManager, billboardAnnotations::forEachAnnotation,
+            billboardIdsByAnnotation, markers.map { it.id }.toSet())
+        return presentation.animating
     }
 
     /**
-     * Clears and redraws the sponsored billboards on THIS surface. A no-op until
+     * Reconciles the sponsored billboards on THIS surface. A no-op until
      * the manager exists (style loaded).
      *
      * The draw itself is [BillboardMarkerLayer.draw]; everything with a lifetime
      * (the manager, the registered style image, the annotation → billboard
      * lookup) is this surface's own and is passed in.
      */
-    private fun applyBillboardMarkers(markers: List<MapBillboardMarker>): Boolean {
+    private fun applyBillboardMarkers(markers: List<MapBillboardMarker>, opacityById: Map<String, Double> = emptyMap()): Boolean {
         val manager = billboardMarkerManager ?: return false
         return BillboardMarkerLayer.draw(
             manager = manager,
@@ -2770,6 +2985,8 @@ class MapboxMapSurface(
             markers = markers,
             registeredImages = registeredBillboardImages,
             idsByAnnotation = billboardIdsByAnnotation,
+            annotations = billboardAnnotations,
+            opacityById = opacityById,
         )
     }
 
@@ -2791,7 +3008,7 @@ class MapboxMapSurface(
     internal fun onCrownAnnotationClicked(annotationId: String): Boolean {
         val spawnId = crownIdsByAnnotation[annotationId]
         if (spawnId != null) {
-            emitCrownTap(spawnId)
+            if (spawnId !in groupedCrownIds && crownMarkersFlow.value.any { it.id == spawnId }) emitCrownTap(spawnId)
             return true
         }
         forceRedrawCrowns()
@@ -2855,6 +3072,7 @@ class MapboxMapSurface(
         val liveIds = HashSet<String>(states.size)
 
         for (state in states) {
+            if (state.id in groupedCrownIds) continue
             liveIds += state.id
             val marker = crownMarkerById[state.id] ?: continue
             val annotation =

@@ -395,6 +395,8 @@ final class LiveLocationCoordinator {
             var lastSubmittedAt: Date?
             var lastLatitude: Double?
             var lastLongitude: Double?
+            var lastSpeed: Double?
+            var lastFixTimestamp: Date?
             for await fix in stream {
                 guard !Task.isCancelled, let self else { return }
                 // Expiry guard: the session may have run out between session
@@ -405,6 +407,7 @@ final class LiveLocationCoordinator {
                     return
                 }
                 let at = clock()
+                if let lastFixTimestamp, fix.timestamp <= lastFixTimestamp { continue }
                 guard
                     LiveShareCadence.shouldPublish(
                         lastSubmittedAt: lastSubmittedAt,
@@ -412,12 +415,16 @@ final class LiveLocationCoordinator {
                         lastSubmittedLongitude: lastLongitude,
                         latitude: fix.latitude,
                         longitude: fix.longitude,
-                        now: at
+                        now: at,
+                        lastSubmittedSpeedMetersPerSecond: lastSpeed,
+                        speedMetersPerSecond: fix.speedMetersPerSecond
                     )
                 else { continue }
                 lastSubmittedAt = at
                 lastLatitude = fix.latitude
                 lastLongitude = fix.longitude
+                lastSpeed = fix.speedMetersPerSecond
+                lastFixTimestamp = fix.timestamp
                 // Retry only transient callable failures, with a hard bound.
                 // The relay still holds at most one newer fix while these
                 // attempts run, and cancellation from Stop/Hide/expiry aborts

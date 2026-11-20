@@ -2,6 +2,7 @@ import SwiftUI
 import MapboxMaps
 import CoreLocation
 import UIKit
+import Observation
 
 /// Camera padding changes framing, never the native map's size. Apply it at
 /// the renderer binding so every center/follow command (including callbacks
@@ -85,6 +86,32 @@ struct MapHomeCameraTarget: Equatable {
 /// Pixel projection remains observable on MapSurface for accurate marker motion.
 @MainActor
 final class MapHomeCameraRuntime {
+    private(set) var cameraReturnToken: UUID?
+    private var cameraReturnTask: Task<Void, Never>?
+    var cameraReturnActive: Bool { cameraReturnToken != nil }
+
+    func beginCameraReturn() -> UUID {
+        cancelCameraReturn()
+        let token = UUID()
+        cameraReturnToken = token
+        return token
+    }
+
+    func retainCameraReturn(_ task: Task<Void, Never>) { cameraReturnTask = task }
+
+    func finishCameraReturn(_ token: UUID) -> Bool {
+        guard cameraReturnToken == token else { return false }
+        cameraReturnToken = nil
+        cameraReturnTask = nil
+        return true
+    }
+
+    func cancelCameraReturn() {
+        cameraReturnTask?.cancel()
+        cameraReturnTask = nil
+        cameraReturnToken = nil
+    }
+
     private(set) var canonicalTarget: MapHomeCameraTarget?
     private var programmaticTokens: Set<UUID> = []
     private var programmaticTasks: [UUID: Task<Void, Never>] = [:]
@@ -157,6 +184,7 @@ final class MapHomeCameraRuntime {
     }
 
     func cancelAll() {
+        cancelCameraReturn()
         cancelIdleReturn()
         for task in programmaticTasks.values { task.cancel() }
         programmaticTasks.removeAll()
@@ -472,6 +500,8 @@ struct MapHomeView: View {
     private let featureHealthReporter: FeatureHealthReporter?
     private let markers: AnyView
     @State private var renderWatchdog: MapRenderWatchdog
+    @State private var placeholderTapCount = 0
+    @State private var placeholderPanCount = 0
 
     init(
         surface: StubMapSurface,
@@ -566,7 +596,32 @@ struct MapHomeView: View {
         }
     }
 
-    private var mapPlaceholder: some View {
+    @ViewBuilder private var mapPlaceholder: some View {
+        if ProcessInfo.processInfo.arguments.contains("-KCCUITestMapGestures") {
+            // Opt-in config-less acceptance surface, in the same position as
+            // Mapbox and underneath every real marker/chrome overlay. Sending
+            // coordinate events here checks touch delivery rather than the AX
+            // hit point of the decorative "Map" label.
+            mapPlaceholderContent
+                .contentShape(Rectangle())
+                .onTapGesture { placeholderTapCount += 1 }
+                .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { _ in
+                    surface.suspendConvoyFitForInteraction()
+                    surface.suspendSelfFollowForInteraction()
+                    placeholderPanCount += 1
+                })
+                .overlay(alignment: .bottomLeading) {
+                    Text(verbatim: "\(placeholderTapCount)|\(placeholderPanCount)")
+                        .accessibilityIdentifier("shell.mapGestureProbe")
+                        .accessibilityValue(Text(verbatim: "\(placeholderTapCount)|\(placeholderPanCount)"))
+                        .allowsHitTesting(false)
+                }
+        } else {
+            mapPlaceholderContent
+        }
+    }
+
+    private var mapPlaceholderContent: some View {
         ZStack {
             KccTheme.subtle
                 .ignoresSafeArea()
@@ -589,11 +644,99 @@ struct MapHomeView: View {
 
 }
 
+/// Mapbox's stock iOS puck adds a fixed 1.1-second interpolator. Reuse its
+/// exact image assets in native annotations, driven by the same short timeline
+/// as other drivers, rather than layering that second animation on top.
+@Observable @MainActor
+private final class DriverPuckPresentation {
+    private(set) var point: DriverMotionPoint?
+    private(set) var trail: [MapPoint] = []
+    private(set) var accuracyMeters: Double?
+    private(set) var sourceFix: LocationFix?
+    @ObservationIgnored private var motion = DriverMotionTimeline()
+    @ObservationIgnored private var animation: Task<Void, Never>?
+    @ObservationIgnored private var accepted: ConvoyMemberPosition?
+    @ObservationIgnored private var pending: ConvoyMemberPosition?
+    @ObservationIgnored private var history: [MapPoint] = []
+    @ObservationIgnored private var stableBearing = 0.0
+    @ObservationIgnored private var ingestedAt: TimeInterval = 0
+
+    @discardableResult
+    func ingest(_ fix: LocationFix, sharing: Bool, seed: [MapPoint],
+                onFrame: @escaping @MainActor (DriverMotionPoint) -> Void) -> Bool {
+        let wallNow = Date()
+        guard MapCameraResumePolicy.isFresh(fixAt: fix.timestamp, now: wallNow) else { return false }
+        let candidate = ConvoyMemberPosition(uid: "self", latitude: fix.latitude, longitude: fix.longitude,
+            updatedAt: fix.timestamp, accuracyMeters: fix.accuracyMeters,
+            headingDegrees: fix.headingDegrees, speedMetersPerSecond: fix.speedMetersPerSecond)
+        switch ConvoyPositionQuality.judge(candidate, previous: accepted, pending: pending) {
+        case .reject: pending = nil; return false
+        case .hold: pending = candidate; return false
+        case .accept: pending = nil
+        }
+        stableBearing = MapCameraResumePolicy.course(heading: fix.headingDegrees,
+            speed: fix.speedMetersPerSecond, speedAccuracy: fix.speedAccuracyMetersPerSecond, holding: stableBearing)
+        let now = ProcessInfo.processInfo.systemUptime
+        guard motion.update(DriverMotionPoint(latitude: fix.latitude, longitude: fix.longitude, bearing: stableBearing),
+            recordedAt: fix.timestamp, sampleAge: wallNow.timeIntervalSince(fix.timestamp), now: now,
+            speed: fix.speedMetersPerSecond, course: stableBearing) else { return false }
+        accepted = candidate
+        sourceFix = fix
+        accuracyMeters = fix.accuracyMeters
+        ingestedAt = now
+        if !sharing { history = [] }
+        else {
+            if history.isEmpty { history = Array(seed.suffix(1_000)) }
+            let next = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+            if let previous = history.last {
+                let distance = LiveShareCadence.distanceMeters(lat1: previous.latitude, lon1: previous.longitude,
+                    lat2: next.latitude, lon2: next.longitude)
+                if distance > 100 { history = [] }
+            }
+            if history.last != next { history.append(next) }
+            var meters = 0.0
+            var start = max(0, history.count - 1)
+            while start > 0, meters < 500 {
+                meters += LiveShareCadence.distanceMeters(lat1: history[start].latitude, lon1: history[start].longitude,
+                    lat2: history[start - 1].latitude, lon2: history[start - 1].longitude)
+                start -= 1
+            }
+            history = Array(history[start...].suffix(1_000))
+        }
+        animation?.cancel()
+        publish(at: now, onFrame: onFrame)
+        animation = Task { @MainActor [weak self] in
+            while let self, self.motion.isAnimating(at: ProcessInfo.processInfo.systemUptime) {
+                do { try await Task.sleep(for: .seconds(DriverMotionPolicy.frameInterval)) } catch { return }
+                guard !Task.isCancelled else { return }
+                self.publish(at: ProcessInfo.processInfo.systemUptime, onFrame: onFrame)
+            }
+        }
+        return true
+    }
+
+    func stop() {
+        animation?.cancel(); animation = nil
+        point = nil; sourceFix = nil; accuracyMeters = nil; trail = []
+        motion = DriverMotionTimeline(); accepted = nil; pending = nil
+    }
+
+    private func publish(at now: TimeInterval, onFrame: @MainActor (DriverMotionPoint) -> Void) {
+        guard let frame = motion.frame(at: now) else { return }
+        point = frame
+        let head = MapPoint(longitude: frame.longitude, latitude: frame.latitude)
+        let prefix = now - ingestedAt < DriverMotionPolicy.correctionDuration ? Array(history.dropLast()) : history
+        trail = prefix.isEmpty ? [] : (prefix.last == head ? prefix : prefix + [head])
+        onFrame(frame)
+    }
+}
+
 /// Mapbox-specific rendering stays confined to this file. The initial camera
 /// waits for location consent, then follows the member until they browse.
 @MainActor
 private struct MapboxStandardMap: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onLoaded: @MainActor () -> Void
     let onFullFrameRendered: @MainActor () -> Void
     let onLoadingError: @MainActor (FeatureHealthKind) -> Void
@@ -602,6 +745,8 @@ private struct MapboxStandardMap: View {
     let basemap: MapBasemap
     let bottomClearance: CGFloat
     let markers: AnyView
+    @State private var ownMotion = DriverPuckPresentation()
+    private let puckImages = Puck2DConfiguration.makeDefault(showBearing: true)
     @State private var viewport: Viewport
     @State private var cameraBeforeConvoy: MapCameraSnapshot?
     @State private var interactionObserver: ConvoyViewportInteractionObserver
@@ -617,6 +762,8 @@ private struct MapboxStandardMap: View {
     @State private var cameraRuntime = MapHomeCameraRuntime()
     @State private var rendererAttached = false
     @State private var isVisible = false
+    @State private var cameraResume = MapCameraResumePolicy()
+    @State private var stableCourse: Double?
 
     init(
         accessToken: String,
@@ -661,9 +808,44 @@ private struct MapboxStandardMap: View {
                     authorization: locationAuthorization,
                     surfaceActive: surfaceActive,
                     sceneIsActive: scenePhase == .active
-                ) {
-                    Puck2D(bearing: .course)
-                        .showsAccuracyRing(true)
+                ), let point = ownMotion.point {
+                    let coordinate = CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
+                    CircleAnnotation(centerCoordinate: coordinate)
+                        .circleRadius(accuracyRadius(at: point))
+                        .circleColor(StyleColor(puckImages.accuracyRingColor))
+                        .circleStrokeWidth(1)
+                        .circleStrokeColor(StyleColor(puckImages.accuracyRingBorderColor))
+                    PointAnnotationGroup {
+                        if let image = puckImages.shadowImage {
+                            PointAnnotation(id: "own-puck-shadow", coordinate: coordinate)
+                                .image(.init(image: image, name: "own-puck-shadow"))
+                                .symbolSortKey(0)
+                        }
+                        if let image = puckImages.bearingImage {
+                            PointAnnotation(id: "own-puck-bearing", coordinate: coordinate)
+                                .image(.init(image: image, name: "own-puck-bearing"))
+                                .iconRotate(point.bearing ?? 0)
+                                .symbolSortKey(1)
+                        }
+                        if let image = puckImages.topImage {
+                            PointAnnotation(id: "own-puck-top", coordinate: coordinate)
+                                .image(.init(image: image, name: "own-puck-top"))
+                                .symbolSortKey(2)
+                        }
+                    }
+                    .iconAllowOverlap(true)
+                    .iconIgnorePlacement(true)
+                    .iconRotationAlignment(.map)
+                    .iconPitchAlignment(.viewport)
+                    .slot(.top)
+                    if ownMotion.trail.count >= 2 {
+                        PolylineAnnotation(id: "own-driver-trail", lineCoordinates: ownMotion.trail.map {
+                            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                        })
+                        .lineColor(UIColor(KccPalette.crownGold))
+                        .lineBorderColor(UIColor(KccPalette.inkBlack))
+                        .lineBorderWidth(2).lineWidth(6).lineOpacity(0.92).lineJoin(.round)
+                    }
                 }
                 if let trail = surface.followMeTrail, trail.count >= 2 {
                     PolylineAnnotation(
@@ -775,6 +957,8 @@ private struct MapboxStandardMap: View {
                     // A gesture can interrupt an in-flight programmatic animation.
                     // Always suspend now; idle return waits for its token to clear.
                     startupCamera.cancel()
+                    cameraResume.cancel()
+                    cameraRuntime.cancelCameraReturn()
                     if !meFollowEnabled { compassFollowRequested = false }
                     cameraRuntime.setTarget(nil)
                     guard meFollowEnabled else { return }
@@ -812,10 +996,12 @@ private struct MapboxStandardMap: View {
             .onChange(of: surface.compassMode) { _, _ in
                 guard surfaceActive else { return }
                 startupCamera.cancel()
+                cameraResume.cancel()
+                cameraRuntime.cancelCameraReturn()
                 compassFollowRequested = true
                 cameraRuntime.setTarget(nil)
                 surface.suspendConvoyFitForInteraction()
-                meFollowSuspended = true
+                meFollowSuspended = false
                 cameraRuntime.cancelIdleReturn()
                 applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
             }
@@ -825,26 +1011,25 @@ private struct MapboxStandardMap: View {
             .ignoresSafeArea(edges: .top)
         }
         .task(id: MapHomeMeFollowPolicy.subscriptionKey(
-            surfaceActive: surfaceActive,
-            enabled: meFollowEnabled,
+            surfaceActive: surfaceActive && scenePhase == .active && isVisible && mapReady,
+            enabled: true,
             authorization: locationAuthorization,
             locationProvider: locationProvider
         )) {
-            guard MapHomeMeFollowPolicy.shouldConsumeFixes(
-                surfaceActive: surfaceActive,
-                followEnabled: meFollowEnabled,
-                authorization: locationAuthorization
-            ) else { return }
+            guard surfaceActive, scenePhase == .active, isVisible, mapReady,
+                  locationAuthorization.isAuthorized else { ownMotion.stop(); surface.updateRenderedOwnPoint(nil); return }
+            defer { ownMotion.stop(); surface.updateRenderedOwnPoint(nil) }
             for await fix in locationProvider.fixes() {
                 if Task.isCancelled { return }
-                let update = MapHomeMeFollowPolicy.ingestFix(
-                    fix,
-                    followEnabled: meFollowEnabled,
-                    suspended: meFollowSuspended
-                )
-                latestOwnPoint = update.latestOwnPoint
-                guard update.shouldApplyCamera else { continue }
-                applyMeFollow(update.latestOwnPoint, viewport: $viewport)
+                guard MapCameraResumePolicy.isFresh(fixAt: fix.timestamp, now: Date()) else { continue }
+                guard ownMotion.ingest(fix, sharing: surface.userMarker?.isLiveSharing == true,
+                    seed: surface.seededBreadcrumb, onFrame: { frame in
+                        applyPresentedOwnFrame(frame, viewport: $viewport)
+                    }) else { continue }
+                // Resume is evaluated ONCE from an accepted physical fix,
+                // never from a predicted display frame or cached SDK callback.
+                _ = consumeCameraReturnFix(fix)
+                cameraResume.recordFix(at: fix.timestamp)
             }
         }
         .task(id: ObjectIdentifier(locationProvider as AnyObject)) {
@@ -856,6 +1041,8 @@ private struct MapboxStandardMap: View {
                 startOwnLocationIfNeeded()
                 if !authorization.isAuthorized, compassFollowRequested {
                     startupCamera.cancel()
+                    cameraResume.cancel()
+                    cameraRuntime.cancelCameraReturn()
                     compassFollowRequested = false
                     // Stop the explicit follow viewport when consent is lost.
                     performProgrammaticViewportChange { viewport = .idle }
@@ -943,6 +1130,8 @@ private struct MapboxStandardMap: View {
                 }
                 if enabled {
                     startupCamera.cancel()
+                    cameraResume.cancel()
+                    cameraRuntime.cancelCameraReturn()
                     compassFollowRequested = false
                 }
                 switch MapHomeConvoyViewportPolicy.plan(points: points, focusEnabled: enabled) {
@@ -1017,6 +1206,8 @@ private struct MapboxStandardMap: View {
             center: { point in
                 let wasWaitingForInitialLocation = startupCamera.pending
                 startupCamera.cancel()
+                cameraResume.cancel()
+                cameraRuntime.cancelCameraReturn()
                 compassFollowRequested = false
                 if meFollowEnabled.wrappedValue {
                     meFollowSuspended.wrappedValue = true
@@ -1047,7 +1238,7 @@ private struct MapboxStandardMap: View {
                 // Keep the neutral overview pending consent, and keep native
                 // puck ownership after style reloads instead of replacing it
                 // with a fixed camera at the renderer's preceding coordinate.
-                if startupCamera.pending { return }
+                if startupCamera.pending || cameraResume.pending || cameraRuntime.cameraReturnActive { return }
                 if startupCamera.following {
                     if isVisible, surfaceActive, scenePhase == .active,
                        locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
@@ -1083,17 +1274,23 @@ private struct MapboxStandardMap: View {
     }
 
     private func updateOwnLocationForVisibility() {
-        guard surfaceActive, scenePhase == .active, isVisible, mapReady else {
-            cameraRuntime.cancelIdleReturn()
-            if compassFollowRequested {
-                performProgrammaticViewportChange { viewport = .idle }
-            }
+        let visible = surfaceActive && scenePhase == .active && isVisible && mapReady
+        let following = (compassFollowRequested || meFollowEnabled) && !meFollowSuspended &&
+            !surface.convoyFocusEnabled && surface.routeOverlay == nil
+        cameraResume.visibilityChanged(visible: visible, following: following)
+        guard visible else {
+            surface.updateRenderedOwnPoint(nil)
+            stableCourse = surface.cameraSnapshot?.bearing
+            if compassFollowRequested { performProgrammaticViewportChange { viewport = .idle } }
+            cameraRuntime.cancelAll()
             return
         }
-        if compassFollowRequested, locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
-            applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
-        } else {
-            startOwnLocationIfNeeded()
+        if !cameraResume.pending {
+            if compassFollowRequested, locationAuthorization.isAuthorized, !surface.convoyFocusEnabled {
+                applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
+            } else {
+                startOwnLocationIfNeeded()
+            }
         }
         // A covered/inactive scene cancels its timer. A selected destination
         // has already released startup/compass ownership, so it needs a new
@@ -1108,10 +1305,54 @@ private struct MapboxStandardMap: View {
                 active: isVisible && surfaceActive && scenePhase == .active,
                 rendererReady: mapReady
               ) else { return }
-        // Use the SDK's existing local puck-follow path. This neither starts
-        // live sharing nor adds another app location stream/permission prompt.
+        // Wait for one current fix before arming follow. No cached native course
+        // is allowed to spin the camera while location is being reacquired.
         compassFollowRequested = true
-        applyCompassViewport(viewport: $viewport, snapshot: surface.cameraSnapshot)
+        cameraResume.requestReturn()
+    }
+
+    /// The return is a one-shot camera owner. Subsequent fixes update its latest
+    /// target/heading, but never restart its duration or delay ordinary driving.
+    private func consumeCameraReturnFix(_ fix: LocationFix) -> Bool {
+        guard compassFollowRequested, !meFollowSuspended, !surface.convoyFocusEnabled,
+              surface.routeOverlay == nil, surfaceActive, scenePhase == .active else { return false }
+        let previousCourse = stableCourse ?? surface.cameraSnapshot?.bearing ?? 0
+        stableCourse = MapCameraResumePolicy.course(
+            heading: fix.headingDegrees, speed: fix.speedMetersPerSecond,
+            speedAccuracy: fix.speedAccuracyMetersPerSecond, holding: previousCourse)
+        latestOwnPoint = MapPoint(longitude: fix.longitude, latitude: fix.latitude)
+        let shouldReturn = cameraResume.takeReturn(fixAt: fix.timestamp, now: Date())
+        cameraResume.recordFix(at: fix.timestamp)
+        if shouldReturn {
+            let token = cameraRuntime.beginCameraReturn()
+            let snapshot = surface.cameraSnapshot
+            let duration = reduceMotion ? 0 : MapCameraResumePolicy.duration
+            let targetBearing = surface.compassMode == .northUp ? 0 : (stableCourse ?? previousCourse)
+            // A neutral world overview is not a place to fly from on first launch.
+            if snapshot == nil || (snapshot?.zoom ?? 0) < 3 {
+                viewport = .camera(center: .init(latitude: fix.latitude, longitude: fix.longitude),
+                    zoom: max(1, surface.browsingZoom - 1), bearing: targetBearing, pitch: 0)
+            }
+            applyCameraTarget(MapHomeCameraTarget(latitude: fix.latitude, longitude: fix.longitude,
+                zoom: snapshot.map { $0.zoom >= 3 ? $0.zoom : surface.browsingZoom } ?? surface.browsingZoom,
+                bearing: MapCameraResumePolicy.shortestBearing(from: snapshot?.bearing ?? targetBearing, to: targetBearing),
+                pitch: surface.is3D ? 45 : 0), duration: duration, viewport: $viewport)
+            let task = Task { @MainActor in
+                if duration > 0 { do { try await Task.sleep(for: .seconds(duration)) } catch { return } }
+                guard !Task.isCancelled, cameraRuntime.finishCameraReturn(token),
+                      isVisible, surfaceActive, scenePhase == .active, compassFollowRequested,
+                      !meFollowSuspended, !surface.convoyFocusEnabled, surface.routeOverlay == nil else { return }
+                // Handoff without starting another animated return.
+                setCompassFollow(viewport: $viewport, snapshot: surface.cameraSnapshot)
+            }
+            cameraRuntime.retainCameraReturn(task)
+            return true
+        }
+        if cameraResume.pending || cameraRuntime.cameraReturnActive { return true }
+        if stableCourse != previousCourse {
+            setCompassFollow(viewport: $viewport, snapshot: surface.cameraSnapshot)
+        }
+        return true
     }
 
     private func applyCameraTarget(
@@ -1121,7 +1362,7 @@ private struct MapboxStandardMap: View {
     ) {
         cameraRuntime.setTarget(target)
         performProgrammaticViewportChange {
-            withViewportAnimation(.easeInOut(duration: duration)) {
+            withViewportAnimation(.easeInOut(duration: reduceMotion ? 0 : duration)) {
                 viewport.wrappedValue = .camera(
                     center: CLLocationCoordinate2D(
                         latitude: target.latitude,
@@ -1208,20 +1449,16 @@ private struct MapboxStandardMap: View {
     }
 
     /// The same retained Mapbox viewport owns this user-requested transition.
-    /// No permission request, extra location subscription, or live sharing is
-    /// started by toggling orientation. Without consent only north is reset.
+    /// Uses the visible map's shared fix demand; never requests permission or
+    /// starts live sharing. Without consent only north is reset.
     private func applyCompassViewport(
         viewport: Binding<Viewport>,
         snapshot: MapCameraSnapshot?
     ) {
         if locationAuthorization.isAuthorized {
             performProgrammaticViewportChange {
-                withViewportAnimation(.easeInOut(duration: 0.5)) {
-                    viewport.wrappedValue = .followPuck(
-                        zoom: CGFloat(surface.browsingZoom),
-                        bearing: surface.compassMode == .northUp ? .constant(0) : .course,
-                        pitch: surface.is3D ? 45 : 0
-                    )
+                withViewportAnimation(.easeInOut(duration: reduceMotion ? 0 : 0.5)) {
+                    setCompassFollow(viewport: viewport, snapshot: snapshot)
                 }
             }
         } else if let snapshot {
@@ -1237,6 +1474,35 @@ private struct MapboxStandardMap: View {
                 viewport: viewport
             )
         }
+    }
+
+    private func setCompassFollow(viewport: Binding<Viewport>, snapshot: MapCameraSnapshot?) {
+        if let point = ownMotion.point { applyPresentedOwnFrame(point, viewport: viewport) }
+    }
+
+    private func applyPresentedOwnFrame(_ point: DriverMotionPoint, viewport: Binding<Viewport>) {
+        latestOwnPoint = MapPoint(longitude: point.longitude, latitude: point.latitude)
+        surface.updateRenderedOwnPoint(isVisible && surfaceActive && scenePhase == .active && locationAuthorization.isAuthorized ? latestOwnPoint : nil)
+        guard isVisible, surfaceActive, scenePhase == .active, locationAuthorization.isAuthorized,
+              !cameraResume.pending, !cameraRuntime.cameraReturnActive,
+              !meFollowSuspended, !surface.convoyFocusEnabled, surface.routeOverlay == nil,
+              compassFollowRequested || meFollowEnabled else { return }
+        let snapshot = surface.cameraSnapshot
+        let target = MapHomeCameraTarget(latitude: point.latitude, longitude: point.longitude,
+            zoom: cameraRuntime.canonicalTarget?.zoom ?? snapshot?.zoom ?? surface.browsingZoom,
+            bearing: surface.compassMode == .northUp ? 0 : (point.bearing ?? stableCourse ?? snapshot?.bearing ?? 0),
+            pitch: surface.is3D ? 45 : 0)
+        cameraRuntime.setTarget(target)
+        // Already interpolated. A second viewport animation would add latency
+        // and make the camera disagree with the puck and breadcrumb tip.
+        viewport.wrappedValue = .camera(center: .init(latitude: point.latitude, longitude: point.longitude),
+            zoom: target.zoom, bearing: target.bearing, pitch: target.pitch)
+    }
+
+    private func accuracyRadius(at point: DriverMotionPoint) -> Double {
+        let metersPerPoint = 78_271.51696 * cos(point.latitude * .pi / 180) / pow(2, surface.cameraSnapshot?.zoom ?? surface.browsingZoom)
+        guard metersPerPoint > 0, let accuracy = ownMotion.accuracyMeters else { return 0 }
+        return min(500, max(0, accuracy / metersPerPoint))
     }
 
     private func meFollowCamera(

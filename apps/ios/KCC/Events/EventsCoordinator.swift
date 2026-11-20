@@ -45,6 +45,9 @@ final class EventsCoordinator {
 
     private(set) var state: EventsListUiState = .loading
     private(set) var isPaidSubscriber = false
+    private(set) var mapEvents: [EventSummary] = []
+    @ObservationIgnored
+    nonisolated(unsafe) private var pinExpiry: Task<Void, Never>?
 
     init(
         repository: EventsRepository,
@@ -64,6 +67,7 @@ final class EventsCoordinator {
     deinit {
         subscription?.cancel()
         tierSubscription?.cancel()
+        pinExpiry?.cancel()
     }
 
     /// Begins observing on first appearance. Idempotent: a second call (e.g.
@@ -71,9 +75,44 @@ final class EventsCoordinator {
     /// subscription and its current state instead of flashing back to
     /// loading.
     func start() {
+        startMap()
+        subscribeToTierIfNeeded()
+    }
+
+    /// Share the existing bounded teaser subscription; map viewing does not
+    /// require a subscription-tier listener or member-only event details.
+    func startMap() {
         guard subscription == nil else { return }
         subscribe()
-        subscribeToTierIfNeeded()
+    }
+
+    func stop() {
+        subscription?.cancel(); subscription = nil
+        tierSubscription?.cancel(); tierSubscription = nil
+        pinExpiry?.cancel(); pinExpiry = nil
+        mapEvents = []
+        isPaidSubscriber = false
+        state = .loading
+    }
+
+    /// Public for deterministic clock-boundary tests. One wake at the nearest
+    /// expiry replaces polling; the server remains the lifecycle authority.
+    func refreshMapPins(now: Date = Date()) {
+        pinExpiry?.cancel(); pinExpiry = nil
+        guard case .loaded(let events) = state else { mapEvents = []; return }
+        mapEvents = Events.mapPinEvents(events, now: now)
+        guard let expiry = Events.nextPinExpiry(events, now: now) else { return }
+        let delay = max(0.001, expiry.timeIntervalSince(now) + 0.001)
+        pinExpiry = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard !Task.isCancelled else { return }
+            self?.refreshMapPins()
+        }
+    }
+
+    func mapEvent(id: String, now: Date = Date()) -> EventSummary? {
+        // Re-check the clock on the tap path, including foreground after sleep.
+        Events.mapPinEvents(mapEvents, now: now).first { $0.id == id }
     }
 
     /// The "try again" affordance — Android's `reloadKey++`: tears the
@@ -86,6 +125,7 @@ final class EventsCoordinator {
     private func subscribe() {
         subscription?.cancel()
         state = .loading
+        refreshMapPins()
         // The stream is created HERE, not inside the task, so the listener is
         // attached synchronously — reload() has re-subscribed by the time it
         // returns, deterministically (and testably), rather than whenever the
@@ -152,5 +192,6 @@ final class EventsCoordinator {
         case .loaded(let events):
             state = events.isEmpty ? .empty : .loaded(events)
         }
+        refreshMapPins()
     }
 }

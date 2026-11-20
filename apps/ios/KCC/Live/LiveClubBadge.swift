@@ -44,10 +44,40 @@ struct LiveClubBadge: Equatable, Sendable {
     }
 }
 
+/// Public cosmetic flags only; never a membership authorization proof.
+struct LiveDriverAppearance: Equatable, Sendable {
+    let clubBadge: LiveClubBadge?
+    let showMembershipMapRing: Bool
+
+    static func decode(_ fields: [String: Any]?) -> Self? {
+        guard let fields else { return nil }
+        return Self(clubBadge: LiveClubBadge.decode(fields["clubBadge"]),
+            showMembershipMapRing: fields["membershipMapRingEligible"] as? Bool == true &&
+                (fields["showMembershipMapRing"] == nil || fields["showMembershipMapRing"] as? Bool == true))
+    }
+}
+
 @MainActor
 protocol LiveClubBadgeRepository: AnyObject {
     /// Missing or unreadable profiles clear the badge.
     func badgeUpdates(uid: String) -> AsyncStream<LiveClubBadge?>
+    func appearanceUpdates(uid: String) -> AsyncStream<LiveDriverAppearance?>
+}
+
+extension LiveClubBadgeRepository {
+    func appearanceUpdates(uid: String) -> AsyncStream<LiveDriverAppearance?> {
+        let badges = badgeUpdates(uid: uid)
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let task = Task { @MainActor in
+                for await badge in badges {
+                    guard !Task.isCancelled else { break }
+                    continuation.yield(LiveDriverAppearance(clubBadge: badge, showMembershipMapRing: false))
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 /// One public profile listener per actually drawn, already authorized marker.
@@ -57,6 +87,7 @@ protocol LiveClubBadgeRepository: AnyObject {
 final class LiveClubBadgeCoordinator {
     static let maximumProfiles = 100
     private(set) var badges: [String: LiveClubBadge] = [:]
+    private(set) var membershipRings: [String: Bool] = [:]
     private(set) var viewerID: String?
     @ObservationIgnored private let makeRepository: (String) -> (any LiveClubBadgeRepository)?
     @ObservationIgnored private var repository: (any LiveClubBadgeRepository)?
@@ -74,6 +105,10 @@ final class LiveClubBadgeCoordinator {
         return badges[uid]
     }
 
+    func showsMembershipRing(for uid: String, viewerID: String?) -> Bool {
+        viewerID != nil && self.viewerID == viewerID && membershipRings[uid] == true
+    }
+
     func setRoster(viewerID: String?, drawnUIDs: Set<String>) {
         if self.viewerID != viewerID {
             stop()
@@ -88,18 +123,21 @@ final class LiveClubBadgeCoordinator {
             tokens.removeValue(forKey: uid)
             tasks.removeValue(forKey: uid)?.cancel()
             badges.removeValue(forKey: uid)
+            membershipRings.removeValue(forKey: uid)
         }
         for uid in wanted where tasks[uid] == nil {
             let token = UUID()
             tokens[uid] = token
             tasks[uid] = Task { [weak self, repository] in
-                for await badge in repository.badgeUpdates(uid: uid) {
+                for await appearance in repository.appearanceUpdates(uid: uid) {
                     guard !Task.isCancelled, let self, self.tokens[uid] == token else { return }
-                    self.badges[uid] = badge
+                    self.badges[uid] = appearance?.clubBadge
+                    self.membershipRings[uid] = appearance?.showMembershipMapRing
                 }
                 // A terminated/failed listener must not retain old cosmetics.
                 guard !Task.isCancelled, let self, self.tokens[uid] == token else { return }
                 self.badges.removeValue(forKey: uid)
+                self.membershipRings.removeValue(forKey: uid)
             }
         }
     }
@@ -109,6 +147,7 @@ final class LiveClubBadgeCoordinator {
         tasks.values.forEach { $0.cancel() }
         tasks.removeAll()
         badges.removeAll()
+        membershipRings.removeAll()
         repository = nil
         viewerID = nil
     }
@@ -147,6 +186,7 @@ struct LiveCarPhotoBadge: View {
     let imageURL: URL?
     let badge: LiveClubBadge?
     var diameter: CGFloat = 40
+    var showMembershipMapRing = false
 
     var body: some View {
         ZStack {
@@ -165,6 +205,11 @@ struct LiveCarPhotoBadge: View {
         .frame(width: diameter, height: diameter)
         .clipShape(Circle())
         .overlay(Circle().stroke(KccTheme.driver, lineWidth: 2))
+        .overlay {
+            if showMembershipMapRing {
+                Circle().strokeBorder(KccPalette.crownGold, lineWidth: 2).padding(2).accessibilityHidden(true)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let badge {
                 LiveClubBadgeView(badge: badge).offset(y: 2).accessibilityHidden(true)

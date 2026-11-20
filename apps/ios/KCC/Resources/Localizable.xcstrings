@@ -2438,13 +2438,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din ställning räknas på servern – nivån dyker upp här så fort den är klar."
+            "value": "Märket visas här när du har uppfyllt kraven."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your standing is counted on the server – the tier appears here as soon as it is earned."
+            "value": "The badge appears here when you have met its requirements."
           }
         }
       }
@@ -11040,13 +11040,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dagens KP-gräns för Kronjakt är nådd. Kronan har inte samlats in."
+            "value": "Du har nått dagens KP-gräns för Kronjakt. Kronan hämtades inte."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Today's Crown Hunt KP allowance is used up. The crown has not been collected."
+            "value": "Today's Crown Hunt CP limit is reached. This crown was not collected."
           }
         }
       }
@@ -11057,13 +11057,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld av %2$lld KP kvar för Kronjakt vid insamlingen. Ny dagsgräns %3$@ (Stockholm)."
+            "value": "Efter hämtningen: %1$lld av %2$lld KP kvar idag."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld of %2$lld Crown Hunt KP remaining at collection time. Resets %3$@ (Stockholm)."
+            "value": "After collection: %1$lld of %2$lld CP left today."
           }
         }
       }
@@ -11414,13 +11414,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Community: 2 250 KP per dag. Plus och Supporter: 3 000 KP per dag. Återställs vid midnatt svensk tid. Servern bekräftar din återstående budget och hur många poäng du får."
+            "value": "Community: 2 250 KP per dag. Plus och Supporter: 3 000 KP per dag. En ny dagsgräns börjar vid midnatt svensk tid."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Community: 2,250 CP per day. Plus and Supporter: 3,000 CP per day. Resets at midnight in Sweden. The server confirms your remaining budget and awarded points."
+            "value": "Community: 2,250 CP per day. Plus and Supporter: 3,000 CP per day. A new daily limit starts at midnight in Sweden."
           }
         }
       }
@@ -11958,13 +11958,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. Kör i närheten av en krona på kartan.\n2. Stanna eller sakta ner rejält – du kan samla in en krona när du står stilla eller rör dig mycket långsamt. Kör aldrig ovarsamt för att hinna.\n3. Tryck på kronan och sedan på Samla in. Appen bekräftar snabbt att du står stilla innan kronan blir din – det finns ingen tidsgräns, så ta det lugnt.\nHåll koll på kartan medan du kör, så ser du kronorna dyka upp runt omkring dig."
+            "value": "1. Kör nära en krona på kartan.\n2. Stanna på en säker plats innan du hämtar kronan. Hämta aldrig medan bilen rullar.\n3. Tryck på kronan och låt kortet vara öppet. När du har stått stilla en kort stund aktiveras Hämta. Det är ingen brådska.\nHåll uppmärksamheten på trafiken när du kör."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "1. Drive near a crown on the map.\n2. Stop or slow right down – you can collect a crown while stationary or moving very slowly. Never drive carelessly to reach one.\n3. Tap the crown, then tap Collect. The app quickly confirms you're stopped before the crown is yours – there's no timer, so take your time.\nKeep an eye on the map as you drive and you'll see crowns appear around you."
+            "value": "1. Drive near a crown on the map.\n2. Stop somewhere safe before collecting. Never collect while the car is rolling.\n3. Tap the crown and leave its card open. Collect becomes available after you have stayed still a moment. There is no rush.\nKeep your attention on traffic while driving."
           }
         }
       }
@@ -12128,13 +12128,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ju fler kronor du samlar totalt, desto högre Kronjägar-nivå låser du upp: Brons vid 10 kronor, Silver vid 50, Guld vid 250 och Platina vid 1 000. Nivån räknas på servern utifrån alla kronor du plockat – den dyker upp automatiskt så fort du når den."
+            "value": "Ju fler kronor du samlar totalt, desto högre Kronjägar-nivå låser du upp: Brons vid 10 kronor, Silver vid 50, Guld vid 250 och Platina vid 1 000. Den nya nivån visas här när du når den."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The more crowns you collect in total, the higher the Crown Hunter rank you unlock: Bronze at 10 crowns, Silver at 50, Gold at 250 and finally Platinum at 1,000. The rank is tallied on the server from all the crowns you've collected – it appears automatically as soon as you reach it."
+            "value": "The more crowns you collect in total, the higher the Crown Hunter rank you unlock: Bronze at 10 crowns, Silver at 50, Gold at 250 and Platinum at 1,000. Your new rank appears here when you reach it."
           }
         }
       }
@@ -13369,13 +13369,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Du rör dig för snabbt för att samla in."
+            "value": "Stanna på en säker plats innan du hämtar kronan."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You are moving too fast to collect."
+            "value": "Stop somewhere safe before collecting the crown."
           }
         }
       }
@@ -13437,13 +13437,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din position är för gammal. Försök igen."
+            "value": "Vänta ett ögonblick på en aktuell position och försök igen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your position is too old. Please try again."
+            "value": "Wait a moment for your current position, then try again."
           }
         }
       }
@@ -13454,13 +13454,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Claimen behöver granskas och inga poäng har delats ut ännu."
+            "value": "Din position kunde inte bekräftas. Inga poäng delades ut. Försök från en plats med fri sikt mot himlen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The claim needs review and no points have been awarded yet."
+            "value": "Your position could not be confirmed. No points were awarded. Try somewhere with a clear view of the sky."
           }
         }
       }
@@ -13522,13 +13522,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kronjakt kan endast användas när du står stilla eller rör dig mycket långsamt."
+            "value": "Hämta bara kronor när du har stannat på en säker plats."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Crown Hunt may only be used when you are stationary or moving very slowly."
+            "value": "Collect crowns only after stopping somewhere safe."
           }
         }
       }
@@ -13624,13 +13624,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Serverbekräftad"
+            "value": "Poängen har lagts till"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Server confirmed"
+            "value": "Points added"
           }
         }
       }
@@ -13981,13 +13981,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bekräftar att du står stilla…"
+            "value": "Stå kvar en kort stund…"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Confirming you're stopped…"
+            "value": "Stay still a moment…"
           }
         }
       }
@@ -13998,13 +13998,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bekräftar att du står stilla… (%1$lld s)"
+            "value": "Stå kvar en kort stund… (%1$lld s)"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Confirming you're stopped… (%1$lld s)"
+            "value": "Stay still a moment… (%1$lld s)"
           }
         }
       }
@@ -14168,13 +14168,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stå stilla några sekunder så vi hinner se att du står still."
+            "value": "Vänta ett ögonblick på din aktuella position."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stay put for a few seconds so we can confirm you are standing still."
+            "value": "Wait a moment for your current position."
           }
         }
       }
@@ -14406,13 +14406,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din position är lite gammal. Vänta en stund och försök igen."
+            "value": "Vänta ett ögonblick på en aktuell position och försök igen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your position is a little old. Wait a moment and try again."
+            "value": "Wait a moment for your current position, then try again."
           }
         }
       }
@@ -14457,13 +14457,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stanna bilen först"
+            "value": "Stanna säkert för att hämta"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stop the car first"
+            "value": "Stop safely to collect"
           }
         }
       }
@@ -14729,13 +14729,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din ställning räknas på servern – nästa nivå dyker upp här så fort du når den."
+            "value": "Nästa nivå visas här när du har samlat tillräckligt många kronor."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your standing is tallied on the server — the next rank appears here as soon as you reach it."
+            "value": "Your next rank appears here when you have collected enough crowns."
           }
         }
       }
@@ -14820,7 +14820,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You hit a Spike Strip! −%1$lld KP"
+            "value": "You hit a Spike Strip! −%1$lld CP"
           }
         }
       }
@@ -22747,6 +22747,23 @@
         }
       }
     },
+    "liveDriverPhoto.membershipRing": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guldring för medlemskap"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Membership gold ring"
+          }
+        }
+      }
+    },
     "liveLocation.accessLimitedByModeration": {
       "extractionState": "manual",
       "localizations": {
@@ -23246,13 +23263,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din position delas bara under den tid du väljer."
+            "value": "Din position delas bara under en aktiv delning, som avslutas automatiskt."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your location is shared only for the time you select."
+            "value": "Your location is shared only during an active session, which ends automatically."
           }
         }
       }
@@ -23620,13 +23637,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Backend avgör alltid vem som får dela och se live-positioner."
+            "value": "När du delar kan andra inloggade användare se din liveposition, även utanför din konvoj. Personer som du har blockerat, eller som har blockerat dig, kan inte se den."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The backend always determines who can share and see live locations."
+            "value": "When sharing is on, other signed-in users can see your live location, including people outside your convoy. People you have blocked, or who have blocked you, cannot see it."
           }
         }
       }
@@ -23899,6 +23916,142 @@
           "stringUnit": {
             "state": "translated",
             "value": "Map"
+          }
+        }
+      }
+    },
+    "mapDensity.choose": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj ett objekt för att se detaljer."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an item to see its details."
+          }
+        }
+      }
+    },
+    "mapDensity.groupLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld kartobjekt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld map items"
+          }
+        }
+      }
+    },
+    "mapDensity.hazardsIncluded": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Innehåller trafikhändelse"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Includes a traffic hazard"
+          }
+        }
+      }
+    },
+    "mapDensity.next": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nästa"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next"
+          }
+        }
+      }
+    },
+    "mapDensity.page": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visar %1$lld–%2$lld av %3$lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing %1$lld–%2$lld of %3$lld"
+          }
+        }
+      }
+    },
+    "mapDensity.previous": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Föregående"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous"
+          }
+        }
+      }
+    },
+    "mapDensity.selected": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valt objekt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected item"
+          }
+        }
+      }
+    },
+    "mapDensity.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "På den här platsen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At this location"
           }
         }
       }
@@ -27248,6 +27401,1995 @@
           "stringUnit": {
             "state": "translated",
             "value": "Valid until"
+          }
+        }
+      }
+    },
+    "partnerPortal.accessDenied": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du saknar behörighet eller behörigheten har ändrats."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You do not have access, or your permissions have changed."
+          }
+        }
+      }
+    },
+    "partnerPortal.active": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktivt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active"
+          }
+        }
+      }
+    },
+    "partnerPortal.address": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besöksadress och ort"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business address and city"
+          }
+        }
+      }
+    },
+    "partnerPortal.aggregateHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endast aggregerade antal bekräftade inlösen. Inga kundlistor eller individuppgifter. Uppdateras med fördröjning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggregate counts of confirmed redemptions only. No customer lists or personal details. Updated with a delay."
+          }
+        }
+      }
+    },
+    "partnerPortal.allTime": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Totalt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All time"
+          }
+        }
+      }
+    },
+    "partnerPortal.alreadyUsed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det här kontot kan inte använda kampanjen igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This account cannot use this campaign again."
+          }
+        }
+      }
+    },
+    "partnerPortal.application": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Min partneransökan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My partner application"
+          }
+        }
+      }
+    },
+    "partnerPortal.apply": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bli företagspartner"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Become a business partner"
+          }
+        }
+      }
+    },
+    "partnerPortal.approved": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Godkänd"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved"
+          }
+        }
+      }
+    },
+    "partnerPortal.billboardHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syns med din logotyp på CarCommunitys karta, exempelvis intill vältrafikerade vägar. Vi kommer överens om placering och granskar den före publicering."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show your logo on the CarCommunity map, for example beside busy roads. We agree on and review placements before publication."
+          }
+        }
+      }
+    },
+    "partnerPortal.billboardInterest": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jag är intresserad av digitala billboards"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I am interested in digital billboards"
+          }
+        }
+      }
+    },
+    "partnerPortal.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avbryt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "partnerPortal.cancelConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vill du avboka? Rätten till den reserverade platsen släpps."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel this reservation? Your reserved place will be released."
+          }
+        }
+      }
+    },
+    "partnerPortal.cancelReservation": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avboka reservation"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel reservation"
+          }
+        }
+      }
+    },
+    "partnerPortal.cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avbokad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelled"
+          }
+        }
+      }
+    },
+    "partnerPortal.capacity": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Totalt antal (tomt = obegränsat)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total places (blank = unlimited)"
+          }
+        }
+      }
+    },
+    "partnerPortal.changesRequested": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Behöver komplettering"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes requested"
+          }
+        }
+      }
+    },
+    "partnerPortal.close": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stäng"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
+    },
+    "partnerPortal.company": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Företaget"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business"
+          }
+        }
+      }
+    },
+    "partnerPortal.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekräfta"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm"
+          }
+        }
+      }
+    },
+    "partnerPortal.confirmRedeem": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekräfta inlösen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm redemption"
+          }
+        }
+      }
+    },
+    "partnerPortal.contactAccount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontakt och konto"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contact and account"
+          }
+        }
+      }
+    },
+    "partnerPortal.days": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dagar att använda reservationen (1–30)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Days to use reservation (1–30)"
+          }
+        }
+      }
+    },
+    "partnerPortal.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Presentation"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Presentation"
+          }
+        }
+      }
+    },
+    "partnerPortal.draft": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utkast"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draft"
+          }
+        }
+      }
+    },
+    "partnerPortal.draftHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erbjudandet sparas som utkast. KCC måste godkänna det innan det blir synligt. Villkor för utfärdade reservationer kan inte ändras."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The offer is saved as a draft. KCC must approve it before publication. Terms of issued reservations cannot be changed."
+          }
+        }
+      }
+    },
+    "partnerPortal.draftSaved": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utkastet är sparat på denna enhet i högst sju dagar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The draft is saved on this device for up to seven days."
+          }
+        }
+      }
+    },
+    "partnerPortal.editOffer": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redigera utkast"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit draft"
+          }
+        }
+      }
+    },
+    "partnerPortal.emptyOffers": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga erbjudanden ännu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No offers yet."
+          }
+        }
+      }
+    },
+    "partnerPortal.emptyReservations": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har inga reservationer ännu. Reservera ett erbjudande på en partners sida."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have no reservations yet. Reserve an offer on a partner page."
+          }
+        }
+      }
+    },
+    "partnerPortal.end": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slut för nya reservationer (ÅÅÅÅ-MM-DD, valfritt)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End of new reservations (YYYY-MM-DD, optional)"
+          }
+        }
+      }
+    },
+    "partnerPortal.ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avslutat"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ended"
+          }
+        }
+      }
+    },
+    "partnerPortal.enterToken": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klistra in engångskod"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste one-time code"
+          }
+        }
+      }
+    },
+    "partnerPortal.error": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åtgärden kunde inte bekräftas. Kontrollera anslutningen och försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The action could not be confirmed. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "partnerPortal.expired": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utgången"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expired"
+          }
+        }
+      }
+    },
+    "partnerPortal.expires": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Använd senast: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use by: %1$@"
+          }
+        }
+      }
+    },
+    "partnerPortal.full": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga platser återstår eller erbjudandet kan inte reserveras längre."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No places remain or this offer can no longer be reserved."
+          }
+        }
+      }
+    },
+    "partnerPortal.inspect": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrollera kod"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check code"
+          }
+        }
+      }
+    },
+    "partnerPortal.inspectHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrollen löser inte in erbjudandet. Kontrollera villkoren och bekräfta när förmånen används."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking does not redeem the offer. Review the terms and confirm when the benefit is used."
+          }
+        }
+      }
+    },
+    "partnerPortal.invalidFields": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontrollera obligatoriska fält, antal och datum."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check required fields, quantities and dates."
+          }
+        }
+      }
+    },
+    "partnerPortal.invalidToken": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koden är ogiltig, utgången eller redan använd. Be kunden visa en ny QR."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The code is invalid, expired or already used. Ask the customer to show a new QR."
+          }
+        }
+      }
+    },
+    "partnerPortal.localDraftHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utkastet är privat för ditt konto och sparas på denna enhet i sju dagar. Logotypen sparas inte och måste väljas igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This draft is private to your account and saved on this device for seven days. The logo is not saved and must be selected again."
+          }
+        }
+      }
+    },
+    "partnerPortal.logo": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ladda upp logotyp"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upload logo"
+          }
+        }
+      }
+    },
+    "partnerPortal.logoError": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj en giltig PNG, högst 5 MB och 16 megapixlar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a valid PNG, up to 5 MB and 16 megapixels."
+          }
+        }
+      }
+    },
+    "partnerPortal.logoHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PNG med transparent bakgrund, rekommenderat 1024 × 1024 px, högst 5 MB. Proportionerna behålls."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PNG with transparent background, recommended 1024 × 1024 px, up to 5 MB. Proportions are preserved."
+          }
+        }
+      }
+    },
+    "partnerPortal.logoReady": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logotyp vald"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logo selected"
+          }
+        }
+      }
+    },
+    "partnerPortal.logoRights": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jag har rätt att använda logotypen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I have the right to use this logo"
+          }
+        }
+      }
+    },
+    "partnerPortal.manage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hantera företag"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage business"
+          }
+        }
+      }
+    },
+    "partnerPortal.memberGate": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ditt konto har inte tillgång till medlemsförmåner. Du kan fortfarande se partnerns presentation."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account does not have access to member benefits. You can still view the partner profile."
+          }
+        }
+      }
+    },
+    "partnerPortal.newOffer": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skapa erbjudande"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create offer"
+          }
+        }
+      }
+    },
+    "partnerPortal.next": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortsätt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "partnerPortal.noAppointment": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du reserverar rätten till erbjudandet. Detta bokar ingen tid eller något besök."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You reserve access to the offer. This does not book an appointment or visit."
+          }
+        }
+      }
+    },
+    "partnerPortal.noBusinesses": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inget företag är kopplat till ditt konto ännu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No business is linked to your account yet."
+          }
+        }
+      }
+    },
+    "partnerPortal.noPayment": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Betalning sker hos partnern. CarCommunity hanterar inga betalningar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Payment takes place with the partner. CarCommunity does not handle payments."
+          }
+        }
+      }
+    },
+    "partnerPortal.noStatistics": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen publicerad statistik ännu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No published statistics yet."
+          }
+        }
+      }
+    },
+    "partnerPortal.notConfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inte bekräftat"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not confirmed"
+          }
+        }
+      }
+    },
+    "partnerPortal.offers": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erbjudanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offers"
+          }
+        }
+      }
+    },
+    "partnerPortal.onePerAccount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En inlösen per konto och kampanj"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One redemption per account and campaign"
+          }
+        }
+      }
+    },
+    "partnerPortal.organization": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organisationsnummer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registration number"
+          }
+        }
+      }
+    },
+    "partnerPortal.pause": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausa nya reservationer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause new reservations"
+          }
+        }
+      }
+    },
+    "partnerPortal.pauseHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redan bekräftade reservationer fortsätter att gälla."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already confirmed reservations remain valid."
+          }
+        }
+      }
+    },
+    "partnerPortal.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausat"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused"
+          }
+        }
+      }
+    },
+    "partnerPortal.percent": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rabatt i procent (valfritt)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Percentage discount (optional)"
+          }
+        }
+      }
+    },
+    "partnerPortal.placement": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Önskad väg eller område"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preferred road or area"
+          }
+        }
+      }
+    },
+    "partnerPortal.previous": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Föregående"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous"
+          }
+        }
+      }
+    },
+    "partnerPortal.privateContact": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontaktperson och kontaktmejl används för granskning och publiceras inte på partnersidan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contact name and email are used for review and are not published on the partner page."
+          }
+        }
+      }
+    },
+    "partnerPortal.profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Företagspresentation"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business presentation"
+          }
+        }
+      }
+    },
+    "partnerPortal.publicPhone": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offentligt telefonnummer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Public phone number"
+          }
+        }
+      }
+    },
+    "partnerPortal.publicPreview": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Så visas företaget i appen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Public business preview"
+          }
+        }
+      }
+    },
+    "partnerPortal.publishLogo": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara logotyp"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save logo"
+          }
+        }
+      }
+    },
+    "partnerPortal.qrExpired": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koden har gått ut. Hämta en ny QR."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This code has expired. Get a new QR."
+          }
+        }
+      }
+    },
+    "partnerPortal.qrHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa på plats för behörig personal. Koden gäller i högst 60 sekunder och kräver internet vid inlösen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show this to authorized staff on arrival. The code is valid for up to 60 seconds and redemption requires internet."
+          }
+        }
+      }
+    },
+    "partnerPortal.qrRemaining": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koden gäller i %1$lld sekunder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code valid for %1$lld seconds"
+          }
+        }
+      }
+    },
+    "partnerPortal.redeemSuccess": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inlösen bekräftad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redemption confirmed"
+          }
+        }
+      }
+    },
+    "partnerPortal.redeemed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Använd"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redeemed"
+          }
+        }
+      }
+    },
+    "partnerPortal.reference": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reservationsreferens: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reservation reference: %1$@"
+          }
+        }
+      }
+    },
+    "partnerPortal.refreshQr": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hämta ny QR"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get new QR"
+          }
+        }
+      }
+    },
+    "partnerPortal.rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avslagen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejected"
+          }
+        }
+      }
+    },
+    "partnerPortal.remaining": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld av %2$lld platser kvar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld places remaining"
+          }
+        }
+      }
+    },
+    "partnerPortal.reservationStatsNotice": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekräftad inlösen räknas i samlad statistik. Kundidentifierare visas inte i statistiken."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirmed redemptions count toward aggregate statistics. Customer identifiers are not shown in statistics."
+          }
+        }
+      }
+    },
+    "partnerPortal.reservationWindow": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reservationen gäller i upp till %1$lld dagar. Sista giltighet visas i bekräftelsen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your reservation is valid for up to %1$lld days. The exact expiry appears in your confirmation."
+          }
+        }
+      }
+    },
+    "partnerPortal.reservations": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mina reservationer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My reservations"
+          }
+        }
+      }
+    },
+    "partnerPortal.reserve": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reservera erbjudandet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reserve offer"
+          }
+        }
+      }
+    },
+    "partnerPortal.reserved": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reserverad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reserved"
+          }
+        }
+      }
+    },
+    "partnerPortal.reservedCount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reserverat: %1$lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reserved: %1$lld"
+          }
+        }
+      }
+    },
+    "partnerPortal.resubmit": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Komplettera ansökan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update application"
+          }
+        }
+      }
+    },
+    "partnerPortal.resume": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Återuppta nya reservationer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume new reservations"
+          }
+        }
+      }
+    },
+    "partnerPortal.retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Försök igen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "partnerPortal.review": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Granska och skicka"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review and submit"
+          }
+        }
+      }
+    },
+    "partnerPortal.revoked": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Återkallad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoked"
+          }
+        }
+      }
+    },
+    "partnerPortal.saveDraft": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara för granskning"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save for review"
+          }
+        }
+      }
+    },
+    "partnerPortal.saveLocalDraft": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara utkast på enheten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save draft on this device"
+          }
+        }
+      }
+    },
+    "partnerPortal.saveProfile": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spara presentation"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save presentation"
+          }
+        }
+      }
+    },
+    "partnerPortal.saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sparat"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        }
+      }
+    },
+    "partnerPortal.scan": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skanna kundens QR"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan customer QR"
+          }
+        }
+      }
+    },
+    "partnerPortal.scannerUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skannern kunde inte öppnas. Kontrollera Google Play-tjänster och anslutningen, eller använd engångskoden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The scanner could not open. Check Google Play services and connection, or use the one-time code."
+          }
+        }
+      }
+    },
+    "partnerPortal.selfService": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jag vill hantera företagets egna erbjudanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I want to manage our business offers"
+          }
+        }
+      }
+    },
+    "partnerPortal.selfServiceHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KCC granskar företaget och kontots rätt att företräda det. Ansökan ger ingen behörighet i sig."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KCC verifies the business and your authority to represent it. Applying does not grant access."
+          }
+        }
+      }
+    },
+    "partnerPortal.showQr": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa min QR"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show my QR"
+          }
+        }
+      }
+    },
+    "partnerPortal.signedInAccount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inloggat konto: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed-in account: %1$@"
+          }
+        }
+      }
+    },
+    "partnerPortal.start": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start (ÅÅÅÅ-MM-DD, valfritt)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start (YYYY-MM-DD, optional)"
+          }
+        }
+      }
+    },
+    "partnerPortal.statistics": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistik"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistics"
+          }
+        }
+      }
+    },
+    "partnerPortal.submitted": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inskickad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitted"
+          }
+        }
+      }
+    },
+    "partnerPortal.teaser": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kort beskrivning"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Short description"
+          }
+        }
+      }
+    },
+    "partnerPortal.terms": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Villkor"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terms"
+          }
+        }
+      }
+    },
+    "partnerPortal.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rubrik"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title"
+          }
+        }
+      }
+    },
+    "partnerPortal.tokenInput": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Engångskod"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-time code"
+          }
+        }
+      }
+    },
+    "partnerPortal.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funktionen är inte tillgänglig just nu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This feature is currently unavailable."
+          }
+        }
+      }
+    },
+    "partnerPortal.underReview": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Under granskning"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Under review"
+          }
+        }
+      }
+    },
+    "partnerPortal.unlimited": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obegränsat antal"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlimited places"
+          }
+        }
+      }
+    },
+    "partnerPortal.untilFurther": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gäller tills vidare"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valid until further notice"
+          }
+        }
+      }
+    },
+    "partnerPortal.updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uppdaterad: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated: %1$@"
+          }
+        }
+      }
+    },
+    "partnerPortal.usedCount": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inlösta: %1$lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redeemed: %1$lld"
+          }
+        }
+      }
+    },
+    "partnerPortal.validUntil": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erbjudandet gäller till: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offer valid until: %1$@"
+          }
+        }
+      }
+    },
+    "partnerPortal.viewPartner": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visa partner och erbjudanden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View partner and offers"
+          }
+        }
+      }
+    },
+    "partnerPortal.visibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synlighet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visibility"
+          }
+        }
+      }
+    },
+    "partnerPortal.working": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbetar…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working…"
           }
         }
       }
@@ -34653,13 +36795,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Följ din riktning"
+            "value": "Färdriktning uppåt"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Follow your direction"
+            "value": "Direction of travel up"
           }
         }
       }
@@ -34677,6 +36819,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "North up"
+          }
+        }
+      }
+    },
+    "shell.compassSwitchToCourse": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Växla till färdriktning uppåt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to direction of travel up"
+          }
+        }
+      }
+    },
+    "shell.compassSwitchToNorth": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Växla till norr uppåt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to north up"
           }
         }
       }
@@ -36750,7 +38926,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Always free: social features, event details and RSVP, driving statistics, up to 2 garage vehicles, your 5 newest saved drives and 2,250 Crown Hunt KP per day."
+            "value": "Always free: social features, event details and RSVP, driving statistics, up to 2 garage vehicles, your 5 newest saved drives and 2,250 Crown Hunt CP per day."
           }
         }
       }
@@ -37073,7 +39249,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Event check-in, attendee names, member partner offers, up to 5 garage vehicles, 90 days of drive history and 3,000 Crown Hunt KP per day (Community: 2,250)."
+            "value": "Event check-in, attendee names, member partner offers, up to 5 garage vehicles, 90 days of drive history and 3,000 Crown Hunt CP per day (Community: 2,250)."
           }
         }
       }

@@ -69,6 +69,10 @@ protocol LocationProvider: AnyObject {
     /// arriving later makes fixes flow without a re-subscribe.
     func fixes() -> AsyncStream<LocationFix>
 
+    /// Foreground, time-bounded crown evidence demand. Production keeps samples
+    /// flowing while stopped; cancellation releases that extra demand.
+    func crownCollectionFixes() -> AsyncStream<LocationFix>
+
     /// Dedicated recording demand also receives coordinate-free rejection
     /// outcomes, so poor samples cannot disappear before diagnostics see them.
     func recordingEvents() -> AsyncStream<RecordingLocationEvent>
@@ -145,6 +149,8 @@ struct RecordingLocationEvent: Sendable {
 }
 
 extension LocationProvider {
+    func crownCollectionFixes() -> AsyncStream<LocationFix> { fixes() }
+
     /// Compatibility for existing fakes and foreground-only implementations.
     /// Production CoreLocationProvider overrides this to include rejections.
     func recordingEvents() -> AsyncStream<RecordingLocationEvent> {

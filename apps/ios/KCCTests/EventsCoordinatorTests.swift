@@ -15,6 +15,8 @@ final class EventsCoordinatorTests: XCTestCase {
         private var pending: [EventsListSnapshot] = []
         private var continuations: [UUID: AsyncStream<EventsListSnapshot>.Continuation] = [:]
         private(set) var subscribeCount = 0
+        private(set) var eventReadCount = 0
+        private(set) var privateDetailReadCount = 0
 
         /// Snapshots replayed to each FUTURE subscription (the listener's
         /// initial snapshot). The stream then stays open, like a real
@@ -67,11 +69,13 @@ final class EventsCoordinatorTests: XCTestCase {
         // hang a test.
 
         func event(withId eventId: String) -> AsyncStream<EventSummary?> {
-            AsyncStream { $0.finish() }
+            eventReadCount += 1
+            return AsyncStream { $0.finish() }
         }
 
         func eventDetail(eventId: String) -> AsyncStream<EventPrivateDetailSnapshot> {
-            AsyncStream { $0.finish() }
+            privateDetailReadCount += 1
+            return AsyncStream { $0.finish() }
         }
 
         func myRsvp(eventId: String, uid: String) -> AsyncStream<RsvpStatus?> {
@@ -133,11 +137,11 @@ final class EventsCoordinatorTests: XCTestCase {
         line: UInt = #line,
         until predicate: (EventsListUiState) -> Bool
     ) async {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(timeout))
+        while clock.now < deadline {
             if predicate(coordinator.state) { return }
-            await Task.yield()
-            try? await Task.sleep(nanoseconds: 1_000_000)
+            try? await Task.sleep(for: .milliseconds(1))
         }
         XCTFail(
             "Timed out waiting for state; last: \(coordinator.state)",
@@ -264,5 +268,98 @@ final class EventsCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(coordinator.makeDetailCoordinator(eventId: "event").eventChatEnabled)
         XCTAssertEqual(repository.subscribeCount, 0)
+    }
+
+    // MARK: - map teaser lifecycle
+
+    private static func mapEvent(_ id: String, endsAt: Date? = nil) -> EventSummary {
+        EventSummary(id: id, title: id, summary: nil, startsAt: nil, endsAt: endsAt,
+            approximateArea: nil, locationName: "Kungsbacka", latitude: 57.5, longitude: 12.0,
+            isOfficial: false, status: .published, counts: .empty)
+    }
+
+    @MainActor
+    func testMapAndListShareOneTeaserListenerWithoutPrivateReads() async {
+        let repository = FakeEventsRepository()
+        let events = [Self.mapEvent("public")]
+        repository.script([.loaded(events)])
+        let coordinator = EventsCoordinator(repository: repository)
+        coordinator.startMap()
+        await waitForState(of: coordinator) { $0 == .loaded(events) }
+        coordinator.start()
+        coordinator.startMap()
+        XCTAssertEqual(coordinator.mapEvents, events)
+        XCTAssertEqual(coordinator.mapEvent(id: "public"), events.first)
+        XCTAssertEqual(repository.subscribeCount, 1)
+        XCTAssertEqual(repository.eventReadCount, 0)
+        XCTAssertEqual(repository.privateDetailReadCount, 0)
+        coordinator.stop()
+    }
+
+    @MainActor
+    func testMapSelectionRejectsRemovedFailedReloadedAndStoppedItems() async {
+        let repository = FakeEventsRepository()
+        let events = [Self.mapEvent("public")]
+        repository.script([.loaded(events)])
+        let coordinator = EventsCoordinator(repository: repository)
+        coordinator.startMap()
+        await waitForState(of: coordinator) { $0 == .loaded(events) }
+        repository.emit(.loaded([]))
+        await waitForState(of: coordinator) { $0 == .empty }
+        XCTAssertNil(coordinator.mapEvent(id: "public"))
+        repository.emit(.loaded(events))
+        await waitForState(of: coordinator) { $0 == .loaded(events) }
+        repository.emit(.failed(code: "PERMISSION_DENIED"))
+        await waitForState(of: coordinator) { $0 == .failed(code: "PERMISSION_DENIED") }
+        XCTAssertTrue(coordinator.mapEvents.isEmpty)
+        XCTAssertNil(coordinator.mapEvent(id: "public"))
+        repository.script([.loaded(events)])
+        coordinator.reload()
+        XCTAssertTrue(coordinator.mapEvents.isEmpty)
+        await waitForState(of: coordinator) { $0 == .loaded(events) }
+        coordinator.stop()
+        XCTAssertTrue(coordinator.mapEvents.isEmpty)
+        XCTAssertNil(coordinator.mapEvent(id: "public"))
+        XCTAssertEqual(coordinator.state, .loading)
+        coordinator.startMap()
+        await waitForState(of: coordinator) { $0 == .loaded(events) }
+        XCTAssertEqual(repository.subscribeCount, 3)
+        coordinator.stop()
+    }
+
+    @MainActor
+    func testExpiryWakeRemovesPinsWithoutAnotherSnapshotOrListener() async {
+        let repository = FakeEventsRepository()
+        let end = Date().addingTimeInterval(1)
+        let events = [Self.mapEvent("ending", endsAt: end)]
+        repository.script([.loaded(events)])
+        let coordinator = EventsCoordinator(repository: repository)
+        coordinator.startMap()
+        await waitForState(of: coordinator) { $0 == .loaded(events) }
+        XCTAssertEqual(coordinator.mapEvents, events)
+        await waitForState(of: coordinator, timeout: 3) { _ in coordinator.mapEvents.isEmpty }
+        XCTAssertEqual(coordinator.state, .loaded(events))
+        XCTAssertNil(coordinator.mapEvent(id: "ending"))
+        XCTAssertEqual(repository.subscribeCount, 1)
+        coordinator.stop()
+    }
+
+    @MainActor
+    func testForegroundRefreshRechecksClockWithoutResubscribing() async {
+        let repository = FakeEventsRepository()
+        let end = Date().addingTimeInterval(60)
+        let events = [Self.mapEvent("ending", endsAt: end), Self.mapEvent("untimed")]
+        repository.script([.loaded(events)])
+        let coordinator = EventsCoordinator(repository: repository)
+        coordinator.startMap()
+        await waitForState(of: coordinator) { $0 == .loaded(events) }
+        // Selection checks the current clock even before the scheduled wake.
+        XCTAssertNotNil(coordinator.mapEvent(id: "ending", now: end))
+        XCTAssertNil(coordinator.mapEvent(id: "ending", now: end.addingTimeInterval(0.001)))
+        coordinator.refreshMapPins(now: end.addingTimeInterval(1))
+        XCTAssertEqual(coordinator.mapEvents.map(\.id), ["untimed"])
+        XCTAssertNil(coordinator.mapEvent(id: "ending"))
+        XCTAssertEqual(repository.subscribeCount, 1)
+        coordinator.stop()
     }
 }

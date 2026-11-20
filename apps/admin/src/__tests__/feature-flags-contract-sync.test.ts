@@ -143,6 +143,7 @@ describe('feature flags — defaults are not drifting', () => {
       crownHuntSpawn: false,
       partners: true,
       partnerStats: true,
+      partnerSelfService: false,
       pushNotifications: true,
       socialSharing: true,
       externalDataSources: true,

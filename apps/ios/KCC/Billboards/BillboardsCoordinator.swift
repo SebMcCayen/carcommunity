@@ -65,14 +65,28 @@ final class BillboardsCoordinator {
         state = repository == nil ? .unavailable : .loading
     }
 
-    func open(billboardId: String) {
-        guard visibleBillboards.contains(where: { $0.id == billboardId }) else { return }
+    func open(billboardId: String, onOpenPartner: ((String) -> Bool)? = nil) {
+        guard let billboard = visibleBillboards.first(where: { $0.id == billboardId }) else { return }
         selectedBillboardId = billboardId
         record(billboardId: billboardId, type: .open)
+        // Explicit legacy actions keep their popup. Only a default/profile
+        // placement may open its company automatically, matching Android.
+        if billboard.callToActionType == nil || billboard.callToActionType == .partnerProfile {
+            openPartner(for: billboardId, using: onOpenPartner)
+        }
     }
 
     func dismiss() {
         selectedBillboardId = nil
+    }
+
+    /// A rejected or unavailable destination keeps the existing popup and CTA.
+    @discardableResult
+    func openPartner(for billboardId: String, using navigate: ((String) -> Bool)?) -> Bool {
+        guard let billboard = selectedBillboard, billboard.id == billboardId,
+              let companyId = billboard.companyId, navigate?(companyId) == true else { return false }
+        dismiss()
+        return true
     }
 
     func recordAction(_ action: BillboardAction, for billboard: Billboard) {

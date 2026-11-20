@@ -3,6 +3,63 @@ import XCTest
 @testable import KCC
 
 final class CrownHuntMapModelTests: XCTestCase {
+    func testOptionalReceiptAmountsPreserveIntegersAndRejectTruncationOrFabrication() {
+        for value in [NSNumber(value: 0), NSNumber(value: 7), NSNumber(value: 207.0), NSNumber(value: Int32.max)] {
+            XCTAssertEqual(CrownReceiptMetadata.integer(value), value.intValue)
+        }
+        let malformed: [Any] = [true, "7", -1, 0.5, Double.nan, Double.infinity, Double(Int32.max) + 1]
+        for value in malformed {
+            XCTAssertNil(CrownReceiptMetadata.integer(value))
+        }
+        XCTAssertNil(CrownReceiptMetadata.integer(nil))
+    }
+
+    func testOptionalAllowanceAcceptsBothCapsAndRejectsMalformedSnapshots() throws {
+        let payload: [String: Any] = ["cap": 2250, "remaining": 2193, "resetsAt": "2026-03-29T22:00:00Z"]
+        let allowance = try XCTUnwrap(CrownAllowance.fromWire(payload))
+        XCTAssertEqual(allowance.cap, 2250)
+        XCTAssertEqual(allowance.remaining, 2193)
+        XCTAssertEqual(allowance.resetsAt.timeIntervalSince1970, 1774821600)
+        var updated = payload
+        updated["cap"] = 3000
+        updated["resetsAt"] = "2026-03-29T22:00:00.000Z"
+        XCTAssertEqual(CrownAllowance.fromWire(updated)?.cap, 3000)
+        XCTAssertNil(CrownAllowance.fromWire(nil))
+        for (key, value) in [("cap", 2251 as Any), ("remaining", -1 as Any), ("remaining", 2251 as Any),
+                             ("remaining", 0.5 as Any), ("remaining", true as Any),
+                             ("remaining", Double.nan as Any), ("resetsAt", "invalid" as Any)] {
+            var malformed = payload
+            malformed[key] = value
+            XCTAssertNil(CrownAllowance.fromWire(malformed), key)
+        }
+        let legacy = CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7, newBalance: nil, rarity: nil)
+        XCTAssertEqual(legacy.pointsAwarded, 7)
+        XCTAssertNil(legacy.allowance)
+    }
+
+    func testReceiptFormatsActualValuesAndLocaleCurrencyWithoutResetMetadata() throws {
+        let allowance = CrownAllowance(cap: 2250, remaining: 2193, resetsAt: Date(timeIntervalSince1970: 1774821600))
+        for language in ["sv", "en"] {
+            let locale = Locale(identifier: language)
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            let currency = language == "sv" ? "KP" : "CP"
+            let credit = CrownRewardText.amount("crownHunt.spawnResultAwardedPoints", 7, locale: locale, bundle: bundle)
+            let balance = CrownRewardText.amount("crownHunt.kpValue", 207, locale: locale, bundle: bundle)
+            let remaining = CrownRewardText.remaining(allowance, locale: locale, bundle: bundle)
+            XCTAssertTrue(credit.contains("7") && credit.contains(currency))
+            XCTAssertTrue(balance.contains("207") && balance.contains(currency))
+            // Locale-aware integer formatting may group thousands with commas
+            // or nonbreaking spaces. Check the actual amounts independently of
+            // those presentation separators.
+            XCTAssertEqual(String(remaining.filter(\.isNumber)), "21932250")
+            XCTAssertTrue(remaining.contains(currency))
+            XCTAssertFalse(remaining.contains("Stockholm"))
+            XCTAssertFalse(remaining.contains("2026"))
+            XCTAssertFalse(remaining.contains("%"), "Every native format placeholder must be substituted")
+        }
+    }
+
     func testProximityMeasuresToTheRingAndMatchesAndroidApproachWindow() throws {
         for radius in [30.0, 75.0, 150.0] {
             for (gap, fraction) in [(-1.0, 1.0), (0.0, 1.0), (1.0, 0.998),
@@ -130,21 +187,41 @@ final class CrownHuntMapModelTests: XCTestCase {
         XCTAssertEqual(CrownSpawnLimits.collectRadius(120), 120)
     }
 
-    func testProofRequiresTwoInRangeFixesAtLeastFourSecondsApart() {
+    func testProofRequiresTwoInRangeFixesAtLeastFourSecondsApart() throws {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        var tracker = CrownFixTracker()
+        tracker.record(fix(at: now.addingTimeInterval(-4)))
+        tracker.record(fix(at: now.addingTimeInterval(-3)))
+        XCTAssertNil(tracker.proof(for: spawn, now: now))
+
+        tracker.record(fix(at: now))
+        let proof = try XCTUnwrap(tracker.proof(for: spawn, now: now))
+        XCTAssertEqual(proof.current.timestamp, now)
+        XCTAssertEqual(
+            proof.current.timestamp.timeIntervalSince(proof.previous.timestamp),
+            CrownSpawnLimits.minimumDwell
+        )
+        XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(11)))
+    }
+
+    func testOutOfOrderFixCannotBackfillDwellEvidence() throws {
         let now = Date(timeIntervalSince1970: 2_000)
         let spawn = makeSpawn()
         var tracker = CrownFixTracker()
         tracker.record(fix(at: now.addingTimeInterval(-3)))
+        tracker.record(fix(at: now.addingTimeInterval(-5)))
+        XCTAssertEqual(tracker.fixes.count, 1)
+        XCTAssertEqual(tracker.latest(now: now)?.timestamp, now.addingTimeInterval(-3))
+
         tracker.record(fix(at: now))
         XCTAssertNil(tracker.proof(for: spawn, now: now))
 
-        tracker.record(fix(at: now.addingTimeInterval(-5)))
-        let proof = tracker.proof(for: spawn, now: now)
-        XCTAssertNotNil(proof)
-        XCTAssertGreaterThanOrEqual(
-            proof!.current.timestamp.timeIntervalSince(proof!.previous.timestamp),
-            CrownSpawnLimits.minimumDwell
-        )
+        let next = now.addingTimeInterval(1)
+        tracker.record(fix(at: next))
+        let proof = try XCTUnwrap(tracker.proof(for: spawn, now: next))
+        XCTAssertEqual(proof.current.timestamp, next)
+        XCTAssertEqual(proof.previous.timestamp, now.addingTimeInterval(-3))
     }
 
     func testProofRejectsOutOfRangeEarlierFix() {
@@ -336,6 +413,103 @@ final class CrownHuntMapModelTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(10))
         }
         XCTFail("Perk state did not update")
+    }
+
+    func testReadinessUsesPhysicalFixPhasesAndNeverCountsACachedSampleTwice() {
+        let base = Date(timeIntervalSince1970: 2000)
+        let spawn = makeSpawn()
+        for phase in [0.0, 0.125, 0.9] {
+            var tracker = CrownFixTracker()
+            for second in 0...4 {
+                let now = base.addingTimeInterval(phase + Double(second))
+                tracker.record(fix(at: now))
+                let state = CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: now),
+                    proof: tracker.proof(for: spawn, now: now), enabled: true, now: now)
+                XCTAssertEqual(state, second < 4 ? .confirming : .ready)
+            }
+        }
+        var cached = CrownFixTracker()
+        for _ in 0..<20 { cached.record(fix(at: base)) }
+        XCTAssertEqual(cached.fixes.count, 1)
+        XCTAssertNil(cached.proof(for: spawn, now: base.addingTimeInterval(4)))
+    }
+
+    func testImprovingAccuracyUsesAnExistingPartnerWithoutAnotherDwell() {
+        let base = Date(timeIntervalSince1970: 2000)
+        let spawn = makeSpawn()
+        var tracker = CrownFixTracker()
+        for second in 0...4 {
+            tracker.record(LocationFix.of(latitude: spawn.latitude, longitude: spawn.longitude,
+                timestamp: base.addingTimeInterval(Double(second)), accuracyMeters: 100,
+                speedMetersPerSecond: 0)!)
+        }
+        let coarseNow = base.addingTimeInterval(4)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: coarseNow),
+            proof: tracker.proof(for: spawn, now: coarseNow), enabled: true, now: coarseNow), .waitingForSignal)
+        let clearNow = base.addingTimeInterval(5)
+        tracker.record(fix(at: clearNow))
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: clearNow),
+            proof: tracker.proof(for: spawn, now: clearNow), enabled: true, now: clearNow), .ready)
+    }
+
+    func testShortDepartureRejectsZeroAndAbsentReportedSpeed() {
+        let now = Date(timeIntervalSince1970: 2000)
+        let spawn = makeSpawn()
+        for speed in [1.0, 0.0, nil] as [Double?] {
+            var tracker = CrownFixTracker()
+            tracker.record(fix(at: now.addingTimeInterval(-4)))
+            tracker.record(fix(at: now))
+            XCTAssertNotNil(tracker.proof(for: spawn, now: now))
+            tracker.record(LocationFix.of(latitude: spawn.latitude + 2 / 111195.0,
+                longitude: spawn.longitude, timestamp: now.addingTimeInterval(2),
+                accuracyMeters: 5, speedMetersPerSecond: speed)!)
+            XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(2)))
+        }
+    }
+
+    func testSlowRollingAndNewDepartureCannotUseAnOldParkedProof() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        let previous = fix(at: now.addingTimeInterval(-4))
+        let current = fix(at: now)
+        let proof = CrownFixPair(previous: previous, current: current)
+        let moved = LocationFix.of(latitude: current.latitude + 2 / 111195.0,
+                                   longitude: current.longitude, timestamp: now.addingTimeInterval(2),
+                                   accuracyMeters: 5, speedMetersPerSecond: 1)!
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: current, proof: proof,
+                                                enabled: true, now: now), .ready)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: moved, proof: proof,
+                                                enabled: true, now: moved.timestamp), .moving)
+        var tracker = CrownFixTracker()
+        tracker.record(previous)
+        tracker.record(current)
+        tracker.record(moved)
+        XCTAssertNil(tracker.proof(for: spawn, now: moved.timestamp))
+        tracker.record(LocationFix.of(latitude: current.latitude + 4 / 111195.0,
+                                      longitude: current.longitude, timestamp: now.addingTimeInterval(4),
+                                      accuracyMeters: 5, speedMetersPerSecond: 1)!)
+        XCTAssertNil(tracker.proof(for: spawn, now: now.addingTimeInterval(4)))
+    }
+
+    func testOpenCrownGateAdvancesWithoutReselectionAndToleratesStationaryNoise() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let spawn = makeSpawn()
+        var tracker = CrownFixTracker()
+        tracker.record(fix(at: now))
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: now),
+                                                proof: tracker.proof(for: spawn, now: now),
+                                                enabled: true, now: now), .confirming)
+        tracker.record(LocationFix.of(latitude: spawn.latitude + 0.5 / 111195.0,
+                                      longitude: spawn.longitude, timestamp: now.addingTimeInterval(2),
+                                      accuracyMeters: 5, speedMetersPerSecond: 6)!)
+        tracker.record(fix(at: now.addingTimeInterval(4)))
+        let later = now.addingTimeInterval(4)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: later),
+                                                proof: tracker.proof(for: spawn, now: later),
+                                                enabled: true, now: later), .ready)
+        XCTAssertEqual(CrownCollectGate.evaluate(spawn: spawn, latest: tracker.latest(now: later),
+                                                proof: tracker.proof(for: spawn, now: later),
+                                                enabled: true, now: later.addingTimeInterval(11)), .noPosition)
     }
 
     private func makeSpawn() -> CrownSpawn {

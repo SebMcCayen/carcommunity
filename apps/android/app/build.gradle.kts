@@ -196,8 +196,8 @@ android {
         applicationId = "com.kungsbackacarcommunity.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 76
-        versionName = "1.1.21"
+        versionCode = 77
+        versionName = "1.1.22"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -464,6 +464,8 @@ dependencies {
 
     // Coil — Compose image loading (avatar + vehicle photos)
     implementation(libs.coil.compose)
+    implementation(libs.play.services.code.scanner)
+    implementation(libs.zxing.core)
 
     // Unit tests
     testImplementation(libs.junit)

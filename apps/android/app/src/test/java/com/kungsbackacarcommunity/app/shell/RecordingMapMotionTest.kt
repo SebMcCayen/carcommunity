@@ -36,10 +36,10 @@ class RecordingMapMotionTest {
         assertFalse(frame(0L).animating)
         motion.update(fix(b, 2, 3_000L), listOf(a, b), 0.0, 2_000L)
 
-        for (elapsed in listOf(0L, 500L, 1_000L, 1_500L, 2_000L)) {
+        for (elapsed in listOf(0L, 50L, 125L, 200L, 250L)) {
             val rendered = frame(2_000L + elapsed)
-            assertPoint(MapPoint(a.longitude, a.latitude + (b.latitude - a.latitude) * elapsed / 2_000.0), rendered.point)
-            assertEquals(elapsed < 2_000L, rendered.animating)
+            assertPoint(MapPoint(a.longitude, a.latitude + (b.latitude - a.latitude) * elapsed / 250.0), rendered.point)
+            assertEquals(elapsed < 250L, rendered.animating)
             assertTrue(rendered.trail.size <= 2)
         }
         assertEquals(b, frame(50_000L).point) // No dead reckoning after GPS stops.
@@ -52,15 +52,15 @@ class RecordingMapMotionTest {
         val accepted = listOf(a, b, c)
         motion.update(fix(c, 3, 5_000L), accepted, 90.0, 4_000L)
 
-        val approach = frame(4_500L)
+        val approach = frame(4_062L)
         assertEquals(a.longitude, approach.point.longitude, 1e-9)
         assertTrue(approach.point.latitude > a.latitude && approach.point.latitude < b.latitude)
         assertEquals(listOf(a, approach.point), approach.trail)
-        val exit = frame(5_500L)
+        val exit = frame(4_188L)
         assertEquals(b.latitude, exit.point.latitude, 1e-9)
         assertTrue(exit.point.longitude > b.longitude && exit.point.longitude < c.longitude)
         assertEquals(listOf(a, b, exit.point), exit.trail)
-        assertEquals(accepted, frame(6_000L).trail)
+        assertEquals(accepted, frame(4_250L).trail)
         assertEquals(listOf(a, b, c), accepted)
     }
 
@@ -68,29 +68,28 @@ class RecordingMapMotionTest {
     fun `retargeting in flight starts at displayed position and still visits old target`() {
         motion.update(fix(a, 1, 1_000L), listOf(a), 0.0, 0L)
         motion.update(fix(b, 2, 3_000L), listOf(a, b), 0.0, 2_000L)
-        val before = frame(3_000L)
-        motion.update(fix(c, 3, 5_000L), listOf(a, b, c), 90.0, 3_000L)
-        assertEquals(before.point, frame(3_000L).point)
-        assertEquals(before.trail, frame(3_000L).trail)
+        val before = frame(2_125L)
+        motion.update(fix(c, 3, 5_000L), listOf(a, b, c), 90.0, 2_125L)
+        assertEquals(before.point, frame(2_125L).point)
+        assertEquals(before.trail, frame(2_125L).trail)
 
-        for (at in 3_100L..5_000L step 100L) {
+        for (at in 2_150L..2_375L step 25L) {
             val rendered = frame(at)
             assertTrue("interpolated point must stay on one of the accepted legs",
                 kotlin.math.abs(rendered.point.longitude - a.longitude) < 1e-9 ||
                     kotlin.math.abs(rendered.point.latitude - b.latitude) < 1e-9)
             if (rendered.point.longitude > b.longitude + 1e-9) assertTrue(b in rendered.trail)
         }
-        assertEquals(c, frame(5_000L).point)
+        assertEquals(c, frame(2_375L).point)
     }
 
     @Test
     fun `bearing takes shortest turn across north using the same display fraction`() {
         motion.update(fix(a, 1, 1_000L), listOf(a), 359.0, 0L)
         motion.update(fix(b, 2, 3_000L), listOf(a, b), 1.0, 2_000L)
-        assertEquals(359.5, frame(2_500L).bearingDegrees!!, 1e-9)
-        assertEquals(0.0, frame(3_000L).bearingDegrees!!, 1e-9)
-        assertEquals(0.5, frame(3_500L).bearingDegrees!!, 1e-9)
-        assertEquals(1.0, frame(4_000L).bearingDegrees!!, 1e-9)
+        assertEquals(359.0, frame(2_000L).bearingDegrees!!, 1e-9)
+        assertEquals(0.0, frame(2_125L).bearingDegrees!!, 1e-9)
+        assertEquals(1.0, frame(2_250L).bearingDegrees!!, 1e-9)
     }
 
     @Test
@@ -98,13 +97,13 @@ class RecordingMapMotionTest {
         motion.update(fix(a, 1, 1_000L), listOf(a), 0.0, 0L)
         val second = fix(b, 2, 3_000L)
         motion.update(second, listOf(a, b), 0.0, 2_000L)
-        frame(2_500L)
-        motion.update(second, listOf(a, b), 0.0, 2_500L)
-        motion.update(second.copy(elapsedRealtimeMs = 2_999L), listOf(a, b), 240.0, 2_700L)
-        assertPoint(MapPoint(a.longitude, (a.latitude + b.latitude) / 2), frame(3_000L).point)
-        assertEquals(0.0, frame(3_000L).bearingDegrees!!, 0.0)
-        assertEquals(b, frame(4_000L).point)
-        assertFalse(frame(4_000L).animating)
+        frame(2_125L)
+        motion.update(second, listOf(a, b), 0.0, 2_125L)
+        motion.update(second.copy(elapsedRealtimeMs = 2_999L), listOf(a, b), 240.0, 2_170L)
+        assertPoint(MapPoint(a.longitude, (a.latitude + b.latitude) / 2), frame(2_125L).point)
+        assertEquals(0.0, frame(2_125L).bearingDegrees!!, 0.0)
+        assertEquals(b, frame(2_250L).point)
+        assertFalse(frame(2_250L).animating)
     }
 
     @Test
@@ -169,11 +168,11 @@ class RecordingMapMotionTest {
         val e = MapPoint(12.0006, 57.0002)
         motion.update(fix(c, 3, 5_000L), listOf(a, b, c), 90.0, 0L)
         motion.update(fix(d, 4, 7_000L), listOf(b, c, d), 90.0, 2_000L)
-        val before = frame(3_000L)
-        motion.update(fix(e, 5, 9_000L), listOf(c, d, e), 90.0, 3_000L)
-        assertEquals(before.point, frame(3_000L).point)
-        assertEquals(listOf(c, before.point), frame(3_000L).trail)
-        assertEquals(listOf(c, d, e), frame(5_000L).trail)
+        val before = frame(2_125L)
+        motion.update(fix(e, 5, 9_000L), listOf(c, d, e), 90.0, 2_125L)
+        assertEquals(before.point, frame(2_125L).point)
+        assertEquals(listOf(c, before.point), frame(2_125L).trail)
+        assertEquals(listOf(c, d, e), frame(2_375L).trail)
     }
 
     @Test

@@ -350,6 +350,19 @@ enum Events {
         return result?.isEmpty == false ? result : nil
     }
 
+    /// Android Events.mapPinEvents: public teaser positions, published only,
+    /// with an inclusive explicit-end-or-start cutoff. No private detail reads.
+    static func mapPinEvents(_ events: [EventSummary], now: Date) -> [EventSummary] {
+        events.filter { event in
+            event.status == .published && event.latitude != nil && event.longitude != nil
+                && (event.endsAt ?? event.startsAt).map { $0 >= now } != false
+        }
+    }
+
+    static func nextPinExpiry(_ events: [EventSummary], now: Date) -> Date? {
+        mapPinEvents(events, now: now).compactMap { $0.endsAt ?? $0.startsAt }.min()
+    }
+
     /// Published events sorted by soonest start first — nil start times last,
     /// original order preserved among ties (Android's `sortedForList`, which
     /// relies on a stable sort; the explicit index tie-break here guarantees

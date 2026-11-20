@@ -138,9 +138,8 @@ final class LiveLocationModelsTests: XCTestCase {
 
     func testFixFasterThanMinUpdateIntervalIsThrottledEvenWithMovement() {
         // ~110 m of movement, but only 1 s after the last submit — under the
-        // 2 s min-update floor. CoreLocation can deliver above 1 Hz, so the
-        // floor is enforced in the throttle (Android caps it in the fused
-        // request instead).
+        // 3 s publication floor. CoreLocation can deliver above 1 Hz, so the
+        // floor is enforced in the publication throttle on both platforms.
         XCTAssertFalse(
             LiveShareCadence.shouldPublish(
                 lastSubmittedAt: now.addingTimeInterval(-1),
@@ -172,6 +171,35 @@ final class LiveLocationModelsTests: XCTestCase {
         let distance = LiveShareCadence.distanceMeters(lat1: 57.0, lon1: 12.0, lat2: 58.0, lon2: 12.0)
         XCTAssertEqual(distance, 111_195, accuracy: 100)
         XCTAssertEqual(LiveShareCadence.distanceMeters(lat1: 57.5, lon1: 12.1, lat2: 57.5, lon2: 12.1), 0)
+    }
+
+    func testSlowMotionUsesThreeSecondCadenceBelowDistanceThreshold() {
+        func eligible(_ elapsed: TimeInterval) -> Bool {
+            LiveShareCadence.shouldPublish(
+                lastSubmittedAt: now.addingTimeInterval(-elapsed),
+                lastSubmittedLatitude: 57.5, lastSubmittedLongitude: 12.1,
+                latitude: 57.500027, longitude: 12.1, now: now,
+                lastSubmittedSpeedMetersPerSecond: 1, speedMetersPerSecond: 1
+            )
+        }
+        XCTAssertFalse(eligible(2.999))
+        XCTAssertTrue(eligible(3))
+    }
+
+    func testStopBypassesFloorOnceThenUsesSparseHeartbeat() {
+        func eligible(_ previous: Double?, _ speed: Double?, _ elapsed: TimeInterval) -> Bool {
+            LiveShareCadence.shouldPublish(
+                lastSubmittedAt: now.addingTimeInterval(-elapsed),
+                lastSubmittedLatitude: 57.5, lastSubmittedLongitude: 12.1,
+                latitude: 57.5, longitude: 12.1, now: now,
+                lastSubmittedSpeedMetersPerSecond: previous, speedMetersPerSecond: speed
+            )
+        }
+        XCTAssertTrue(eligible(12, 0, 1))
+        XCTAssertFalse(eligible(0, 0, 3))
+        XCTAssertFalse(eligible(12, nil, 1))
+        XCTAssertFalse(eligible(12, .nan, 1))
+        XCTAssertTrue(eligible(0, 0, LiveShareCadence.stationaryHeartbeat))
     }
 
     // MARK: - wire mappings
@@ -281,4 +309,207 @@ final class LiveLocationModelsTests: XCTestCase {
         XCTAssertNil(LiveMarker.fromMap(uid: "member", ["latitude": 91.0, "longitude": 12.0]))
         XCTAssertNil(LiveMarker.fromMap(uid: "", ["latitude": 57.0, "longitude": 12.0]))
     }
+}
+
+final class DriverMotionTimelineTests: XCTestCase {
+    private let point = DriverMotionPoint(latitude: 57, longitude: 12, bearing: 0)
+    private let epoch = Date(timeIntervalSince1970: 10_000)
+
+    func testThreeSecondUpdatesStayContinuousAndRetargetWithoutTeleporting() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 0, now: 0, speed: 10, course: 0)
+        XCTAssertEqual(point, motion.frame(at: 0.250))
+        var previous = motion.frame(at: 0.250)!
+        for step in 6...60 {
+            let frame = motion.frame(at: Double(step) / 20)!
+            XCTAssertGreaterThan(frame.latitude, previous.latitude)
+            previous = frame
+        }
+        let next = DriverMotionPoint(latitude: point.latitude + 30 / 6_371_000 * 180 / .pi, longitude: point.longitude, bearing: 0)
+        let before = motion.frame(at: 3)
+        motion.update(next, recordedAt: epoch.addingTimeInterval(3), sampleAge: 0, now: 3, speed: 10, course: 0)
+        XCTAssertEqual(before, motion.frame(at: 3))
+        XCTAssertEqual(next.latitude, motion.frame(at: 3.250)!.latitude, accuracy: 1e-9)
+        XCTAssertGreaterThan(motion.frame(at: 3.300)!.latitude, next.latitude)
+    }
+
+    func testSelfNearbyAndConvoyHaveOnePresentationPolicy() {
+        var tracks = Array(repeating: DriverMotionTimeline(), count: 3)
+        for index in tracks.indices {
+            tracks[index].update(point, recordedAt: epoch, sampleAge: 0.100, now: 0.100, speed: 20, course: 90)
+        }
+        for step in 1...250 {
+            let time = Double(step) / 60
+            let frames = tracks.indices.map { index in tracks[index].frame(at: time) }
+            XCTAssertEqual(frames[0], frames[1]); XCTAssertEqual(frames[0], frames[2])
+        }
+        XCTAssertEqual(DriverMotionPolicy.presentationDelay, 0.250)
+    }
+
+    func testStopReplacesEstimatedVelocityAndStaysStopped() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 0, now: 0, speed: 20, course: 0)
+        _ = motion.frame(at: 2)
+        let stopped = DriverMotionPoint(latitude: 57.0001, longitude: 12, bearing: 0)
+        motion.update(stopped, recordedAt: epoch.addingTimeInterval(2), sampleAge: 0, now: 2, speed: 0, course: 0)
+        XCTAssertEqual(stopped, motion.frame(at: 2.250))
+        XCTAssertEqual(stopped, motion.frame(at: 30))
+        XCTAssertFalse(motion.isAnimating(at: 2.250))
+    }
+
+    func testPredictionIsBoundedBySourceTimeRatherThanPacketArrival() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 20, now: 30, speed: 20, course: 0)
+        XCTAssertEqual(point, motion.frame(at: 30))
+        XCTAssertEqual(motion.frame(at: 30), motion.frame(at: 60))
+        XCTAssertFalse(motion.isAnimating(at: 30))
+        var fresh = DriverMotionTimeline()
+        fresh.update(point, recordedAt: epoch, sampleAge: 0, now: 0, speed: 20, course: 0)
+        XCTAssertEqual(fresh.frame(at: 3.750), fresh.frame(at: 60))
+        XCTAssertFalse(fresh.isAnimating(at: 3.750))
+    }
+
+    func testOldDuplicateFutureAndUndatedSamplesDoNotInventMotion() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 0, now: 0)
+        XCTAssertFalse(motion.update(point, recordedAt: epoch, sampleAge: 0, now: 1))
+        XCTAssertFalse(motion.update(point, recordedAt: epoch.addingTimeInterval(-1), sampleAge: 0, now: 1))
+        for (recordedAt, age) in [(Optional<Date>.none, 0.0), (Optional(epoch), -1.0)] {
+            var unknown = DriverMotionTimeline()
+            unknown.update(point, recordedAt: recordedAt, sampleAge: age, now: 0, speed: 20, course: 0)
+            XCTAssertEqual(point, unknown.frame(at: 30))
+        }
+    }
+
+    func testBearingAndLongitudeCrossTheirWrapWithoutSpinning() {
+        let a = DriverMotionPoint(latitude: 0, longitude: 179, bearing: 359)
+        let b = DriverMotionPoint(latitude: 0, longitude: -179, bearing: 1)
+        let middle = DriverMotionTimeline.interpolate(a, b, fraction: 0.5)
+        XCTAssertEqual(middle.longitude, -180, accuracy: 1e-9)
+        XCTAssertEqual(middle.bearing!, 0, accuracy: 1e-9)
+    }
+
+    func testTurnCorrectionDoesNotTeleportAndThenFollowsTheNewCourse() {
+        var motion = DriverMotionTimeline()
+        motion.update(point, recordedAt: epoch, sampleAge: 0, now: 0, speed: 10, course: 0)
+        let before = motion.frame(at: 3)
+        let corner = DriverMotionPoint(latitude: 57.00027, longitude: 12, bearing: 90)
+        motion.update(corner, recordedAt: epoch.addingTimeInterval(3), sampleAge: 0, now: 3, speed: 10, course: 90)
+        XCTAssertEqual(before, motion.frame(at: 3))
+        let east = motion.frame(at: 3.500)!
+        XCTAssertGreaterThan(east.longitude, corner.longitude)
+        XCTAssertEqual(east.bearing!, 90, accuracy: 1e-9)
+    }
+
+    func testMarkerParsingPreservesOptionalPhysicalMotionFields() {
+        let marker = LiveMarker.fromMap(uid: "driver", ["latitude": 57.0, "longitude": 12.0,
+            "recordedAt": "2026-11-17T18:00:00Z", "headingDegrees": 359.0, "speedMetersPerSecond": 12.5])!
+        XCTAssertEqual(marker.headingDegrees, 359)
+        XCTAssertEqual(marker.speedMetersPerSecond, 12.5)
+        let member = ConvoyMemberPosition(marker: marker)
+        XCTAssertEqual(member.headingDegrees, marker.headingDegrees)
+        XCTAssertEqual(member.speedMetersPerSecond, marker.speedMetersPerSecond)
+    }
+}
+
+final class DriverPhotoLayoutTests: XCTestCase {
+    private let own = DriverPhotoPoint(x: 195, y: 500)
+    private func anchors(_ count: Int) -> [DriverPhotoAnchor] {
+        (0..<count).map { DriverPhotoAnchor(uid: "driver-\($0)", point: own) }
+    }
+    func testNearbyAndConvoyShareNonOverlappingTargetsAndProtectOwnPoint() {
+        let result = DriverPhotoLayout().layout(anchors(2), width: 390, height: 844, ownPoint: own)
+        XCTAssertEqual(result.placed.count, 2); XCTAssertTrue(result.overflow.isEmpty)
+        XCTAssertFalse(result.placed[0].hitBounds.intersects(result.placed[1].hitBounds))
+        for item in result.placed {
+            XCTAssertEqual(item.anchor, own); XCTAssertFalse(item.showAnchor)
+            XCTAssertGreaterThanOrEqual(item.lineStart.distance(to: own), 27.999)
+            XCTAssertEqual(item.hitBounds.right - item.hitBounds.left, 48)
+        }
+    }
+    func testReorderAndSmallMotionKeepUidSlotsStable() {
+        let layout = DriverPhotoLayout()
+        let before = layout.layout(anchors(2), width: 390, height: 844, ownPoint: own).placed.map { ($0.uid, $0.slot) }
+        let moved = anchors(2).reversed().map { DriverPhotoAnchor(uid: $0.uid, point: .init(x: own.x + 0.2, y: own.y - 0.2)) }
+        let after = layout.layout(moved, width: 390, height: 844, ownPoint: own).placed
+        XCTAssertEqual(Dictionary(uniqueKeysWithValues: before), Dictionary(uniqueKeysWithValues: after.map { ($0.uid, $0.slot) }))
+    }
+    func testActualOwnPositionAtPannedEdgeIsProtected() throws {
+        let edge = DriverPhotoPoint(x: 22, y: 400)
+        let result = DriverPhotoLayout().layout([DriverPhotoAnchor(uid: "nearby", point: edge)], width: 390, height: 844, ownPoint: edge)
+        let item = try XCTUnwrap(result.placed.first)
+        XCTAssertEqual(item.anchor, edge); XCTAssertGreaterThanOrEqual(item.hitBounds.left, 8)
+        XCTAssertGreaterThanOrEqual(item.lineStart.distance(to: edge), 27.999)
+    }
+    func testDenseCaseUsesLongerLinesAndKeepsEveryPhoto() {
+        let result = DriverPhotoLayout().layout(anchors(12), width: 390, height: 844, ownPoint: own)
+        XCTAssertEqual(result.placed.count, 12); XCTAssertTrue(result.overflow.isEmpty)
+        XCTAssertTrue(result.placed.contains { $0.photo.distance(to: $0.anchor) > 72 })
+        for (index, first) in result.placed.enumerated() {
+            for second in result.placed.dropFirst(index + 1) { XCTAssertFalse(first.hitBounds.intersects(second.hitBounds)) }
+        }
+    }
+    func testDenseTokensAndOffsetsRemainStableUnderNormalGeographicMotion() {
+        let layout = DriverPhotoLayout()
+        let first = layout.layout(anchors(12), width: 390, height: 844, ownPoint: own).placed
+        let moved = anchors(12).map { DriverPhotoAnchor(uid: $0.uid, point: .init(x: own.x + 0.1, y: own.y + 0.1)) }
+        let second = layout.layout(moved, width: 390, height: 844, ownPoint: .init(x: own.x + 0.1, y: own.y + 0.1)).placed
+        XCTAssertEqual(first.map(\.slot), second.map(\.slot))
+        for (a, b) in zip(first, second) { XCTAssertEqual(b.photo.x - a.photo.x, 0.1, accuracy: 1e-8) }
+    }
+    func testNoDataLossWhenTheScreenPhysicallyCannotFitAllTargets() {
+        let all = anchors(200)
+        let result = DriverPhotoLayout().layout(all, width: 390, height: 844, ownPoint: own)
+        XCTAssertEqual(Set(all.map(\.uid)), Set(result.placed.map(\.uid) + result.overflow.map(\.uid)))
+        XCTAssertFalse(result.overflow.isEmpty)
+    }
+    func testConfiguredMaximumFitsPhonesWithIndividualControlBounds() {
+        for height in [700.0, 844.0] {
+            let center = DriverPhotoPoint(x: 195, y: height * 0.6)
+            var controls = [DriverPhotoRect(left: 16, top: 16, right: 64, bottom: 64),
+                DriverPhotoRect(left: 326, top: 16, right: 374, bottom: 64),
+                DriverPhotoRect(left: 12, top: height - 68, right: 378, bottom: height - 12)]
+            controls += (0...4).map { DriverPhotoRect(left: 326, top: 88 + Double($0) * 60, right: 374, bottom: 136 + Double($0) * 60) }
+            let anchors = (0..<74).map { DriverPhotoAnchor(uid: "driver-\($0)", point: center) }
+            let result = DriverPhotoLayout().layout(anchors, width: 390, height: height, ownPoint: center, exclusions: controls)
+            XCTAssertEqual(result.placed.count, 74); XCTAssertTrue(result.overflow.isEmpty)
+            for (index, first) in result.placed.enumerated() {
+                XCTAssertFalse(controls.contains { $0.intersects(first.hitBounds) })
+                for second in result.placed.dropFirst(index + 1) { XCTAssertFalse(first.hitBounds.intersects(second.hitBounds)) }
+            }
+        }
+    }
+    func testMovingMaximumRosterRepackagesFragmentedStickyOffsets() {
+        let layout = DriverPhotoLayout()
+        let center = DriverPhotoPoint(x: 195, y: 420)
+        var controls = [DriverPhotoRect(left: 16, top: 16, right: 64, bottom: 64),
+            DriverPhotoRect(left: 326, top: 16, right: 374, bottom: 64),
+            DriverPhotoRect(left: 12, top: 632, right: 378, bottom: 688)]
+        controls += (0...4).map { DriverPhotoRect(left: 326, top: 88 + Double($0) * 60, right: 374, bottom: 136 + Double($0) * 60) }
+        let initial = (0..<74).map { DriverPhotoAnchor(uid: "driver-\($0)", point: center) }
+        _ = layout.layout(initial, width: 390, height: 700, ownPoint: center, exclusions: controls)
+        for frame in 0...3 {
+            let moved = initial.enumerated().map { i, a in DriverPhotoAnchor(uid: a.uid,
+                point: .init(x: 40 + Double((i * 37 + frame * 23) % 300), y: 80 + Double((i * 83 + frame * 31) % 500))) }
+            let result = layout.layout(moved, width: 390, height: 700, ownPoint: center, exclusions: controls)
+            XCTAssertEqual(result.placed.count, 74); XCTAssertTrue(result.overflow.isEmpty)
+        }
+    }
+    func testCrowdClearingRestoresShortLeaders() {
+        let layout = DriverPhotoLayout()
+        _ = layout.layout(anchors(74), width: 390, height: 844, ownPoint: own)
+        let small = layout.layout(anchors(2), width: 390, height: 844, ownPoint: own).placed
+        XCTAssertEqual(small.count, 2)
+        XCTAssertTrue(small.allSatisfy { $0.slot < 16 && $0.photo.distance(to: $0.anchor) <= 72.001 })
+        XCTAssertEqual(small, layout.layout(anchors(2), width: 390, height: 844, ownPoint: own).placed)
+    }
+    func testSpreadFormerCrowdRestoresShortLeaders() {
+        let layout = DriverPhotoLayout()
+        _ = layout.layout(anchors(12), width: 390, height: 844, ownPoint: own)
+        let spread = anchors(12).enumerated().map { i, item in DriverPhotoAnchor(uid: item.uid,
+            point: .init(x: 75 + Double(i % 3) * 120, y: 110 + Double(i / 3) * 160)) }
+        let result = layout.layout(spread, width: 390, height: 844, ownPoint: .init(x: 20, y: 810))
+        XCTAssertEqual(result.placed.count, 12); XCTAssertTrue(result.placed.allSatisfy { $0.slot < 16 })
+    }
+    func testPortableHashMatchesAndroid() { XCTAssertEqual(DriverPhotoLayout.stableHash("driver"), 1_700_010_463) }
 }

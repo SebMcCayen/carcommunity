@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import android.os.SystemClock
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Canvas
@@ -22,6 +24,8 @@ import androidx.compose.runtime.withFrameMillis
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import com.kungsbackacarcommunity.app.shell.rememberMapPresence
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -110,6 +114,9 @@ fun ConvoyMapAwarenessOverlay(
     focusFitActive: Boolean = false,
     appearances: Map<String, LiveMarkerAppearance> = emptyMap(),
     onDrawnUidsChanged: (Set<String>) -> Unit = {},
+    presentedMembers: List<ConvoyMemberPosition>? = null,
+    showOnScreenPhotos: Boolean = true,
+    suppressedArrowUids: Set<String> = emptySet(),
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
@@ -127,7 +134,7 @@ fun ConvoyMapAwarenessOverlay(
     // survive the frames on which the Box bails out early (no camera yet, empty
     // viewport during a resize). Remembering it past a conditional return inside
     // the Box would reset every marker to a standing start each time.
-    val smoothedMembers = rememberSmoothedMembers(members = members, nowMillis = nowMillis)
+    val smoothedMembers = presentedMembers ?: rememberSmoothedMembers(members = members, nowMillis = nowMillis)
 
     Box(
         modifier =
@@ -260,10 +267,11 @@ fun ConvoyMapAwarenessOverlay(
         }
 
         ReportDrawnLiveMarkerUids(
-            (placements.onScreen.map { it.member.uid } + placements.offScreen.map { it.member.uid }).toSet(),
+            ((if (showOnScreenPhotos) placements.onScreen.map { it.member.uid } else emptyList()) +
+                placements.offScreen.filter { it.member.uid !in suppressedArrowUids }.map { it.member.uid }).toSet(),
             onDrawnUidsChanged,
         )
-        placements.onScreen.forEach { placement ->
+        if (showOnScreenPhotos) placements.onScreen.forEach { placement ->
             ConvoyMemberChip(
                 member = placement.member,
                 appearance = appearances[placement.member.uid] ?: LiveMarkerAppearance(),
@@ -280,7 +288,10 @@ fun ConvoyMapAwarenessOverlay(
             )
         }
 
-        placements.offScreen.forEach { placement ->
+        val arrows = placements.offScreen.filter { it.member.uid !in suppressedArrowUids }.associateBy { it.member.uid }
+        val arrowPresence = rememberMapPresence(arrows, allowed = members.map { it.uid }.toSet())
+        arrowPresence.forEach { present ->
+            val placement = present.value
             ConvoyMemberChip(
                 member = placement.member,
                 appearance = appearances[placement.member.uid] ?: LiveMarkerAppearance(),
@@ -290,7 +301,9 @@ fun ConvoyMapAwarenessOverlay(
                 extraCount = placement.extraCount,
                 contentDescription =
                     directionDescription(placement),
-                modifier = Modifier.testTag(CONVOY_EDGE_ARROW_TAG + placement.member.uid),
+                modifier = Modifier.testTag(CONVOY_EDGE_ARROW_TAG + placement.member.uid)
+                    .graphicsLayer { alpha = present.alpha }
+                    .then(if (present.interactive) Modifier else Modifier.clearAndSetSemantics {}),
             )
         }
     }
@@ -316,7 +329,7 @@ fun ConvoyMapAwarenessOverlay(
  * timestamps it compares against.
  */
 @Composable
-private fun rememberSmoothedMembers(
+internal fun rememberSmoothedMembers(
     members: List<ConvoyMemberPosition>,
     nowMillis: () -> Long,
 ): List<ConvoyMemberPosition> {
@@ -341,11 +354,11 @@ private fun rememberSmoothedMembers(
         }
     // The instant the markers are currently drawn AT. Every published change is
     // one recomposition of the overlay, which is why the loop below throttles.
-    var renderAtMillis by remember { mutableLongStateOf(nowMillis()) }
+    var renderAtMillis by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
 
     LaunchedEffect(members) {
-        val startMillis = nowMillis()
-        smoother.onPositions(members, startMillis)
+        val startMillis = SystemClock.elapsedRealtime()
+        smoother.onPositions(members, startMillis, sourceWallNowMillis = nowMillis())
         renderAtMillis = startMillis
 
         var frameBaseMillis: Long? = null

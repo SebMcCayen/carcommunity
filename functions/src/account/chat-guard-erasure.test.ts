@@ -9,6 +9,7 @@ const fake = vi.hoisted(() => {
     authGone: false,
     authError: null as null | string,
     guardError: false,
+    partnerError: false,
   };
   const ref = (path: string) => ({
     path,
@@ -73,6 +74,12 @@ const fake = vi.hoisted(() => {
   };
 });
 vi.mock('../firebase', () => fake);
+vi.mock('../partners/portal-erasure', () => ({
+  erasePartnerAccountData: async () => {
+    fake.state.events.push('partner-erasure');
+    if (fake.state.partnerError) throw Error('partner erasure pending');
+  },
+}));
 vi.mock('firebase-functions', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 import { purgeUserData, runAccountPurge } from './scheduled';
 import { PURGE_DOC_TREES } from './deletion-core';
@@ -85,9 +92,20 @@ beforeEach(() =>
     authGone: false,
     authError: null,
     guardError: false,
+    partnerError: false,
   }),
 );
 describe('canonical post-Auth shared guard erasure', () => {
+  it('keeps the deletion pending and Auth/user data intact if partner erasure needs another page', async () => {
+    fake.state.partnerError = true;
+    expect((await runAccountPurge(new Date())).purgedCount).toBe(0);
+    expect(fake.state.processed).toBe(false);
+    expect(fake.state.authGone).toBe(false);
+    expect(fake.state.events).toEqual(['partner-erasure']);
+    fake.state.partnerError = false;
+    expect((await runAccountPurge(new Date())).purgedCount).toBe(1);
+    expect(fake.state.processed).toBe(true);
+  });
   it('deletes guard only after Auth succeeds and before progress/request completion', async () => {
     expect(PURGE_DOC_TREES as readonly string[]).not.toContain('chatSendGuards');
     expect((await runAccountPurge(new Date())).purgedCount).toBe(1);

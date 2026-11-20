@@ -85,7 +85,7 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
         store.writeRoadCameraLayer(type, enabled)
     }
     /** Bound native annotation work; panning reuses the complete local catalog without a network read. */
-    fun markersNear(latitude: Double?, longitude: Double?, zoom: Double = 17.0): List<MapIncidentMarker> {
+    fun markersNear(latitude: Double?, longitude: Double?, zoom: Double = 17.0, coordinatedDensity: Boolean = false): List<MapIncidentMarker> {
         if (latitude == null || longitude == null) return emptyList()
         val longitudeScale = kotlin.math.cos(Math.toRadians(latitude))
         fun distance(camera: RoadCamera): Double {
@@ -95,8 +95,11 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
         }
         val nearby = locations.filter { enabled(it.camera.type) && distance(it.camera) <= 50_000.0 * 50_000.0 }
         // Group before the draw cap so counts include every nearby source camera.
-        displayedGroups = groupRoadCameraMarkers(nearby, zoom).sortedWith(
-            compareBy<RoadCameraMapGroup> { distance(it.camera) }.thenBy { it.camera.id }).take(250)
+        // Cross-type density is coordinated with hazards and crowns by MapDensityPolicy.
+        // Keep every site and its direction views available to that presentation.
+        val grouped = if (coordinatedDensity) nearby.map { RoadCameraMapGroup(listOf(it)) } else groupRoadCameraMarkers(nearby, zoom)
+        val ordered = grouped.sortedWith(compareBy<RoadCameraMapGroup> { distance(it.camera) }.thenBy { it.camera.id })
+        displayedGroups = if (coordinatedDensity) ordered else ordered.take(250)
         return displayedGroups.map { group ->
             val camera = group.camera
             MapIncidentMarker(ROAD_CAMERA_MARKER_PREFIX + camera.id, camera.longitude, camera.latitude,

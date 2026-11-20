@@ -15,6 +15,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 
@@ -143,6 +146,11 @@ private fun CrownPointCollectBody(
         )
     }
     val collecting = status == CrownHuntClaimStatus.Claiming
+    if (collecting) {
+        Text(stringResource(R.string.crownHunt_spawnCollecting), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    }
     Button(
         onClick = onCollect,
         modifier = Modifier.fillMaxWidth().testTag(CROWN_POINT_COLLECT_TAG),
@@ -152,12 +160,7 @@ private fun CrownPointCollectBody(
         // before it is asked.
         enabled = collectInRange && !collecting,
     ) {
-        Text(
-            text =
-                stringResource(
-                    if (collecting) R.string.crownHunt_claiming else R.string.crownHunt_collectButton,
-                ),
-        )
+        Text(stringResource(R.string.crownHunt_spawnCollect))
     }
     reportPlacement()
     OutlinedButton(
@@ -178,17 +181,18 @@ private fun CrownPointOutcomeBody(
     onDismiss: () -> Unit,
 ) {
     val awarded = result == CrownHuntClaimResult.AWARDED
-    CrownAllowanceText(allowance)
     Text(
         text = stringResource(if (result == CrownHuntClaimResult.DAILY_LIMIT_REACHED && allowance != null) R.string.crownHunt_allowanceReached else crownHuntClaimResultRes(result)),
         style =
             if (awarded) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
     )
     if (awarded) {
         // The payoff, from the server's answer — that is what actually landed in
         // the balance, so it is honest even if the document's value drifted.
-        points?.let { CrownRewardSummary(pointsAwarded = it, newBalance = newBalance) }
+        CrownRewardSummary(pointsAwarded = points, newBalance = newBalance)
+        CrownAllowanceText(allowance)
     }
     TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
         Text(text = stringResource(R.string.crownHunt_spawnClose))

@@ -95,6 +95,7 @@ internal object IncidentMarkerLayer {
         registeredImages: MutableSet<String>,
         idsByAnnotation: MutableMap<String, String>,
         annotations: IncidentMarkerReconciler<PointAnnotation>,
+        opacityById: Map<String, Double> = emptyMap(),
     ): Boolean {
         val complete = annotations.reconcile(
             markers = markers,
@@ -106,6 +107,7 @@ internal object IncidentMarkerLayer {
                     PointAnnotationOptions()
                         .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
                         .withIconImage(imageId(marker))
+                        .withIconOpacity(opacityById[marker.id] ?: 1.0)
                         .withIconAnchor(IconAnchor.CENTER),
                 )
             },

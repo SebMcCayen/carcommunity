@@ -41,9 +41,13 @@ final class StoreKitSubscriptionIntegrationTests: XCTestCase {
         // separate operation, after the production server would have verified it.
         let restoredStore = StoreKitSubscriptionStore()
         try await restoredStore.synchronize()
-        let restored = await restoredStore.currentEntitlements()
+        let restored = try await waitForPublishedTransactions(session, stage: "restored entitlements") {
+            await restoredStore.currentEntitlements()
+        }
         XCTAssertEqual(restored.map(\.id), [purchase.id])
-        let unfinished = await store.unfinishedTransactions()
+        let unfinished = try await waitForPublishedTransactions(session, stage: "unfinished transactions") {
+            await store.unfinishedTransactions()
+        }
         XCTAssertTrue(unfinished.contains { $0.id == purchase.id })
         await store.finish(transactionID: purchase.id)
 
@@ -83,5 +87,28 @@ final class StoreKitSubscriptionIntegrationTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(50))
         }
         throw NSError(domain: "StoreKitIntegrationTestTimeout", code: 1)
+    }
+
+    /// StoreKit can return the purchase before publishing its transaction sequences.
+    /// Return the first nonempty snapshot, including unexpected transactions, so
+    /// the caller's exact-ID assertions cannot be hidden by subsequent polling.
+    private func waitForPublishedTransactions(
+        _ session: SKTestSession,
+        stage: String,
+        read: () async -> [StoreSignedTransaction]
+    ) async throws -> [StoreSignedTransaction] {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        var observedIDs: [UInt64] = []
+        repeat {
+            let transactions = await read()
+            observedIDs = transactions.map(\.id)
+            if !transactions.isEmpty { return transactions }
+            try await Task.sleep(for: .milliseconds(50))
+        } while ContinuousClock.now < deadline
+        let localIDs = session.allTransactions().map(\.identifier)
+        throw NSError(domain: "StoreKitIntegrationTestTimeout", code: 2, userInfo: [
+            NSLocalizedDescriptionKey: "Timed out waiting for \(stage). " +
+                "Observed IDs: \(observedIDs); local StoreKit test transaction IDs: \(localIDs)"
+        ])
     }
 }

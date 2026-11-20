@@ -239,6 +239,8 @@ private fun DataSnapshot.toLiveMarker(uid: String): LiveMarker? {
         mainCar = child("mainCar").toLiveMainCar(),
         recordedAtIso = child("recordedAt").getValue(String::class.java),
         accuracyMeters = child("accuracyMeters").getValue(Double::class.java),
+        headingDegrees = child("headingDegrees").getValue(Double::class.java)?.takeIf { it.isFinite() && it in 0.0..360.0 },
+        speedMetersPerSecond = child("speedMetersPerSecond").getValue(Double::class.java)?.takeIf { it.isFinite() && it >= 0.0 },
     )
 }
 

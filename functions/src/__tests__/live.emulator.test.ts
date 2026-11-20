@@ -715,16 +715,16 @@ describe('live session lifecycle', () => {
     const startTime = (await useRef.get()).get('startedAt') as Timestamp;
     await call('live-startSession', request);
     expect((await useRef.get()).get('startedAt')).toEqual(startTime);
-    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [olderCar, recentCar] });
+    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [olderCar, recentCar], recentVehicleIds: [recentCar, olderCar] });
 
     // Saved iOS timestamps have second precision and can predate the same
     // confirmed start. It was saved after tracking began, so it adds no use.
     await saveRide('new', recentCar, Timestamp.fromMillis(startTime.toMillis() - 1_000));
-    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [olderCar, recentCar] });
+    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [olderCar, recentCar], recentVehicleIds: [recentCar, olderCar] });
     await call('live-stopSession', {});
 
     await signInAs(freeUser);
-    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [] });
+    expect((await call('garage-rankedDrivingVehicleIds', {})).data).toEqual({ vehicleIds: [], recentVehicleIds: [] });
     expect(await callableErrorCode(call('garage-rankedDrivingVehicleIds', { uid: user.uid })))
       .toBe('functions/invalid-argument');
   });

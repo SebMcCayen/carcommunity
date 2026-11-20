@@ -26,8 +26,9 @@ class LiveSessionPositionPublisherTest {
             discoveryRefreshedAtMillis = if (ready) epoch else null,
         )
 
-    private fun fix(at: Long, latitude: Double = 0.0) =
-        LiveCoordinate(latitude, 0.0, Instant.ofEpochMilli(at).toString(), 5.0)
+    private fun fix(at: Long, latitude: Double = 0.0, speed: Double? = null) =
+        LiveCoordinate(latitude, 0.0, Instant.ofEpochMilli(at).toString(), 5.0,
+            speedMetersPerSecond = speed)
 
     @Test fun `failed stationary first upload retries before heartbeat and readiness restores normal cadence`() = runTest {
         val times = mutableListOf<Long>()
@@ -122,13 +123,60 @@ class LiveSessionPositionPublisherTest {
         publisher.observeSession(session(ready = true))
         publisher.accept(fix(epoch))
         runCurrent()
-        publisher.accept(fix(epoch, 0.001))
-        publisher.accept(fix(epoch, 0.002))
+        advanceTimeBy(3_000)
+        publisher.accept(fix(epoch + 2_000, 0.001))
+        publisher.accept(fix(epoch + 3_000, 0.002))
         runCurrent()
         assertEquals(listOf(0.0), sent)
         gate.complete(Unit)
         runCurrent()
         assertEquals(listOf(0.0, 0.002), sent)
+    }
+
+    @Test fun `moving burst waits for three second floor without replaying a used fix`() = runTest {
+        val times = mutableListOf<Long>()
+        val latitudes = mutableListOf<Double>()
+        val publisher = LiveSessionPositionPublisher(backgroundScope, { epoch + testScheduler.currentTime }) {
+            times += testScheduler.currentTime
+            latitudes += it.latitude
+        }
+        publisher.observeSession(session(ready = true))
+        publisher.accept(fix(epoch, speed = 1.0))
+        runCurrent()
+        advanceTimeBy(1_000)
+        publisher.accept(fix(epoch + 1_000, 0.000009, 1.0))
+        runCurrent()
+        advanceTimeBy(1_000)
+        publisher.accept(fix(epoch + 2_000, 0.000018, 1.0))
+        // Out-of-order delivery cannot replace the pending newest position.
+        publisher.accept(fix(epoch + 1_500, 0.000013, 1.0))
+        runCurrent()
+        assertEquals(listOf(0L), times)
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(listOf(0L, 3_000L), times)
+        assertEquals(listOf(0.0, 0.000018), latitudes)
+        advanceTimeBy(10_000)
+        runCurrent()
+        assertEquals(2, times.size)
+    }
+
+    @Test fun `new stop publishes promptly then stays on sparse heartbeat`() = runTest {
+        val sent = mutableListOf<LiveCoordinate>()
+        val publisher = LiveSessionPositionPublisher(backgroundScope, { epoch + testScheduler.currentTime }) { sent += it }
+        publisher.observeSession(session(ready = true))
+        publisher.accept(fix(epoch, speed = 12.0))
+        runCurrent()
+        advanceTimeBy(1_000)
+        publisher.accept(fix(epoch + 1_000, 0.00001, 0.0))
+        runCurrent()
+        assertEquals(listOf(12.0, 0.0), sent.map { it.speedMetersPerSecond })
+        repeat(5) {
+            advanceTimeBy(3_000)
+            publisher.accept(fix(epoch + testScheduler.currentTime, 0.00001, 0.0))
+            runCurrent()
+        }
+        assertEquals(2, sent.size)
     }
 
     @Test fun `stop cancels a pending startup retry and rejects later fixes`() = runTest {

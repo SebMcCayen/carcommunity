@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.live
 
+import com.kungsbackacarcommunity.app.convoy.rememberSmoothedMembers
+import com.kungsbackacarcommunity.app.map.toConvoyMemberPosition
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -79,6 +81,16 @@ fun NearbyLiveOverlay(
     appearances: Map<String, LiveMarkerAppearance> = emptyMap(),
     onDrawnUidsChanged: (Set<String>) -> Unit = {},
 ) {
+    val presentation = rememberSmoothedMembers(
+        members = remember(sharers) { sharers.map { it.toConvoyMemberPosition() } },
+        nowMillis = { System.currentTimeMillis() },
+    )
+    val sourceByUid = remember(sharers) { sharers.associateBy { it.uid } }
+    val displayedSharers = remember(presentation, sourceByUid) {
+        presentation.mapNotNull { point ->
+            sourceByUid[point.uid]?.copy(latitude = point.latitude, longitude = point.longitude)
+        }
+    }
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
 
@@ -119,10 +131,10 @@ fun NearbyLiveOverlay(
         // cross-examination ([ConvoyEdgeGeometry.isProjectionTrustworthy]) as a
         // secondary check while naming each verdict for diagnostics.
         val evaluation =
-            remember(snapshot, sharers, viewportSize, marginPx) {
+            remember(snapshot, displayedSharers, viewportSize, marginPx) {
                 val visible = mutableListOf<Pair<LiveMarker, MapScreenPoint>>()
                 val verdicts = mutableListOf<MapAwarenessDiagnostics.ChipProjectionVerdict>()
-                for (sharer in sharers) {
+                for (sharer in displayedSharers) {
                     val point = mapSurface.screenPositionFor(sharer.latitude, sharer.longitude)
                     val projected = point?.let { ConvoyEdgeGeometry.ProjectedPoint(it.x, it.y) }
                     val geographicBearing =

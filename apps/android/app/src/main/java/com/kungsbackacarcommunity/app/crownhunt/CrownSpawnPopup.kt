@@ -26,6 +26,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.MapDetailSheet
 import com.kungsbackacarcommunity.app.shell.CrownMarkerBitmaps
@@ -37,6 +40,9 @@ const val CROWN_SPAWN_POPUP_TAG = "crown_spawn_popup"
 
 /** Test tag on the Collect action. */
 const val CROWN_SPAWN_COLLECT_TAG = "crown_spawn_collect"
+
+/** Readable status independent of the disabled action. */
+const val CROWN_SPAWN_STATUS_TAG = "crown_spawn_status"
 
 /** Test tag on the Navigate action. */
 const val CROWN_SPAWN_NAVIGATE_TAG = "crown_spawn_navigate"
@@ -171,77 +177,11 @@ private fun CrownCollectBody(
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
-    if (tooFar != null) {
-        // The loading bar that fills as you close in, in place of a flat
-        // "move closer" line: watch it fill rather than re-read a sentence. The
-        // fraction is pure ([CrownProximity]); this only animates and draws it.
-        CrownProximityBar(distanceMeters = tooFar.distanceMeters, collectRadiusMeters = collectRadiusMeters)
-    } else {
-        CrownSpawnMessages.refusalTitleRes(state)?.let { titleRes ->
-            Text(
-                text = stringResource(titleRes),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        CrownSpawnMessages.refusalDetailRes(state)?.let { detailRes ->
-            Text(
-                text =
-                    if (detailRes == R.string.crownHunt_spawnMoveCloserDetail) {
-                        // The only refusal detail that takes an argument: how close
-                        // you actually have to get. The crown's OWN radius, read off
-                        // the document, so a server-side retune is honest here too.
-                        stringResource(detailRes, CrownDistanceFormat.wholeMetres(collectRadiusMeters))
-                    } else {
-                        stringResource(detailRes)
-                    },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-    // "Wait a moment" — the app has no second fix yet, so it cannot ASK, let
-    // alone be refused. Distinct from a refusal on purpose: nothing has gone
-    // wrong and the member need do nothing but stay put.
-    //
-    // Suppressed when the gate is ALREADY saying this (no fix at all), so the
-    // same sentence is never printed twice under itself.
-    if (status == CrownClaimStatus.NeedsPosition && state != CrownCollectState.NoPosition) {
-        Text(
-            text = stringResource(R.string.crownHunt_spawnNoPositionDetail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    if (status == CrownClaimStatus.Failed) {
-        Text(
-            text = stringResource(R.string.crownHunt_spawnErrorClaim),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
-        )
-    }
     val collecting = status == CrownClaimStatus.Collecting
-    // The confirming state is the honest "hold on a moment" that replaces a button
-    // that looked live and then refused with NeedsPosition. It carries an optional
-    // seconds hint; when present the button counts it down, otherwise it just says
-    // it is confirming. The label choice for every OTHER case lives in
-    // [CrownSpawnMessages.collectActionLabelRes], so it is unit-tested.
-    //
-    // The numeric "(N s)" countdown is chosen ONLY for [CrownCollectState.Confirming]
-    // (the dwell-not-aged-in wait, which has a defined seconds-remaining). An in-range
-    // [CrownCollectState.Moving] — the speed-still-settling moment — has no defined N,
-    // so it falls through to the indeterminate "confirming you're stopped…" label from
-    // [CrownSpawnMessages.collectActionLabelRes]. That fold is deliberate: both are the
-    // same in-range "stand still a moment" wait, so a crown never flips between a calm
-    // countdown and a blunt "stop the car first" from one approach to the next.
-    val confirmingSeconds =
-        (state as? CrownCollectState.Confirming)?.secondsRemaining?.takeIf { it > 0 }
-    val buttonText =
-        if (!collecting && confirmingSeconds != null) {
-            stringResource(R.string.crownHunt_spawnConfirmingSeconds, confirmingSeconds)
-        } else {
-            stringResource(CrownSpawnMessages.collectActionLabelRes(state, collecting))
-        }
+    if (tooFar != null && !collecting) {
+        CrownProximityBar(distanceMeters = tooFar.distanceMeters, collectRadiusMeters = collectRadiusMeters)
+    }
+    CrownCollectStatus(state, status)
     // Keep claim readiness static: no ornamental bounce or rotation, including
     // when the OS requests reduced motion or its preference is unavailable.
     Button(
@@ -254,7 +194,7 @@ private fun CrownCollectBody(
         // guard is the only thing added here, so one press is one call.
         enabled = CrownCollectGate.isCollectEnabled(state) && !collecting,
     ) {
-        Text(text = buttonText)
+        Text(text = stringResource(R.string.crownHunt_spawnCollect))
     }
     reportPlacement()
     OutlinedButton(
@@ -262,6 +202,25 @@ private fun CrownCollectBody(
         modifier = Modifier.fillMaxWidth().testTag(CROWN_SPAWN_NAVIGATE_TAG),
     ) {
         Text(text = stringResource(R.string.crownHunt_navigate))
+    }
+}
+
+@Composable
+internal fun CrownCollectStatus(state: CrownCollectState, status: CrownClaimStatus) {
+    val message = when {
+        status == CrownClaimStatus.Collecting -> R.string.crownHunt_spawnCollecting
+        status == CrownClaimStatus.Failed -> R.string.crownHunt_spawnErrorClaim
+        status == CrownClaimStatus.NeedsPosition -> R.string.crownHunt_spawnNoPositionDetail
+        state == CrownCollectState.Ready -> R.string.crownHunt_spawnReadyToCollect
+        state == CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPositionDetail
+        state is CrownCollectState.TooFar -> null
+        state == CrownCollectState.FeatureOff -> R.string.crownHunt_spawnResultFeatureDisabled
+        else -> CrownSpawnMessages.collectActionLabelRes(state, false)
+    }
+    message?.let {
+        Text(stringResource(it), style = MaterialTheme.typography.bodyLarge,
+            color = if (status == CrownClaimStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag(CROWN_SPAWN_STATUS_TAG).semantics { liveRegion = LiveRegionMode.Polite })
     }
 }
 
@@ -324,7 +283,6 @@ private fun CrownProximityBar(distanceMeters: Double, collectRadiusMeters: Doubl
 @Composable
 private fun CrownOutcomeBody(outcome: CrownSpawnClaimOutcome, onDismiss: () -> Unit) {
     val awarded = outcome.result == CrownSpawnClaimResult.AWARDED
-    CrownAllowanceText(outcome.allowance)
     Text(
         text = stringResource(if (outcome.result == CrownSpawnClaimResult.DAILY_LIMIT_REACHED && outcome.allowance != null) R.string.crownHunt_allowanceReached else CrownSpawnMessages.resultMessageRes(outcome.result)),
         style =
@@ -334,15 +292,15 @@ private fun CrownOutcomeBody(outcome: CrownSpawnClaimOutcome, onDismiss: () -> U
                 MaterialTheme.typography.bodyLarge
             },
         color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
     )
     if (awarded) {
         // The payoff, big and on its own line. `pointsAwarded` comes from the
         // server's answer rather than the crown document, because THAT is what
         // actually landed in the balance — showing the document's value would be
         // a guess that could disagree with the ledger.
-        outcome.pointsAwarded?.let { points ->
-            CrownRewardSummary(pointsAwarded = points, newBalance = outcome.newBalance)
-        }
+        CrownRewardSummary(pointsAwarded = outcome.pointsAwarded, newBalance = outcome.newBalance)
+        CrownAllowanceText(outcome.allowance)
     }
     TextButton(
         onClick = onDismiss,

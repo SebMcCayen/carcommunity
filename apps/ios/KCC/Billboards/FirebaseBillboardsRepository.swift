@@ -62,7 +62,8 @@ final class FirebaseBillboardsRepository: BillboardsRepository, @unchecked Senda
                 .flatMap(BillboardCallToActionType.init(rawValue:)),
             callToActionValue: nonempty(document.get("callToActionValue") as? String),
             availableFrom: (document.get("availableFrom") as? Timestamp)?.dateValue(),
-            availableUntil: (document.get("availableUntil") as? Timestamp)?.dateValue()
+            availableUntil: (document.get("availableUntil") as? Timestamp)?.dateValue(),
+            imagePath: nonempty(document.get("imagePath") as? String)
         )
     }
 

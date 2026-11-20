@@ -411,12 +411,19 @@ struct ConvoyMapAwarenessOverlay: View {
     var badgeViewerID: String? = nil
     var onDrawnUIDsChanged: (Set<String>) -> Void = { _ in }
 
+    var presentationProvided = false
+    var showsOnScreenPhotos = true
+    var suppressedArrowUIDs = Set<String>()
+
+    @State private var motion = DriverMotionRoster()
+    @State private var presented: [ConvoyMemberPosition] = []
+
     var body: some View {
         GeometryReader { geometry in
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 let placements = placements(size: geometry.size, now: context.date)
                 ZStack {
-                    ForEach(placements.onScreen) { placement in
+                    ForEach(showsOnScreenPhotos ? placements.onScreen : []) { placement in
                         Button { onSelect?(placement.member.uid) } label: {
                             memberChip(placement.member)
                                 .frame(minWidth: 48, minHeight: 48).contentShape(Rectangle())
@@ -424,15 +431,28 @@ struct ConvoyMapAwarenessOverlay: View {
                         .buttonStyle(.plain)
                         .position(x: placement.point.x, y: placement.point.y)
                     }
-                    ForEach(placements.offScreen) { placement in
+                    MapPresenceLayer(items: Dictionary(uniqueKeysWithValues: placements.offScreen.filter {
+                        !suppressedArrowUIDs.contains($0.member.uid)
+                    }.map { ($0.member.uid, $0) }), allowed: Set(members.map(\.uid))) { present in
+                        let placement = present.value
                         edgeChip(placement)
                             .allowsHitTesting(false)
                             .position(x: placement.point.x, y: placement.point.y)
                     }
                 }
-                .onChange(of: Set(placements.onScreen.map(\.id) + placements.offScreen.map(\.id)), initial: true) { _, uids in
+                .onChange(of: Set((showsOnScreenPhotos ? placements.onScreen.map(\.id) : []) + placements.offScreen.filter { !suppressedArrowUIDs.contains($0.member.uid) }.map(\.id)), initial: true) { _, uids in
                     onDrawnUIDsChanged(uids)
                 }
+            }
+        }
+        .task(id: members) {
+            guard !presentationProvided else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            motion.update(members, now: now, wallNow: Date())
+            presented = motion.rendered(members, at: now)
+            while motion.isAnimating(at: ProcessInfo.processInfo.systemUptime), !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(DriverMotionPolicy.frameInterval)) } catch { return }
+                presented = motion.rendered(members, at: ProcessInfo.processInfo.systemUptime)
             }
         }
         .onDisappear { onDrawnUIDsChanged([]) }
@@ -445,7 +465,7 @@ struct ConvoyMapAwarenessOverlay: View {
             return ConvoyPlacements(onScreen: [], offScreen: [])
         }
         return ConvoyArrowPlanner.plan(
-            members: members,
+            members: presentationProvided ? members : presented.filter { item in members.contains { $0.uid == item.uid } },
             camera: camera,
             viewportWidth: size.width,
             viewportHeight: size.height,

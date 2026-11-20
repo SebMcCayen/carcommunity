@@ -705,7 +705,8 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(start.isHittable)
         XCTAssertEqual(app.staticTexts["place.navigation.name"].label, "Göteborg Centralstation")
         app.buttons["map.reading.close"].tap()
-        XCTAssertFalse(start.exists)
+        XCTAssertTrue(start.wait(for: \.exists, toEqual: false, timeout: 2),
+            "Closing must remove the destination after its bounded fade")
         XCTAssertTrue(app.buttons["shell.search"].isHittable)
         app.terminate()
     }
@@ -808,11 +809,17 @@ final class ShellSmokeTests: XCTestCase {
     func testChatBackLiveMetricsProfileAndStopMatchAndroid() {
         for largeText in [false, true] {
             let app = launch(language: "en", largeText: largeText,
-                theme: largeText ? "Dark" : "Light", chatFixture: !largeText, liveFixture: true)
+                theme: largeText ? "Dark" : "Light", chatFixture: !largeText, liveFixture: true,
+                mapGestureFixture: true)
             let map = app.staticTexts["shell.mapPlaceholder"]
             let identity = map.value as? String
             let bar = app.buttons["map.session.bar"]
             XCTAssertTrue(bar.waitForExistence(timeout: 15))
+            assertMapReceivesGestures(app)
+            let initialVisit = openNearbyMarkerWithPhysicalTap(app, stage: "before-chat")
+            app.buttons["map.reading.close"].tap()
+            XCTAssertTrue(initialVisit.wait(for: \.exists, toEqual: false, timeout: 5),
+                "The initial nearby card must close before opening Chat")
             let speedReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "36 km/h"), object: bar)
             XCTAssertEqual(XCTWaiter.wait(for: [speedReady], timeout: 10), .completed)
             let stop = app.buttons["shell.tab.create"]
@@ -868,10 +875,7 @@ final class ShellSmokeTests: XCTestCase {
             XCTAssertEqual(map.value as? String, identity)
             XCTAssertTrue(bar.isHittable, "Back must not stop the session")
 
-            let marker = app.buttons["map.fixture.liveSharer"]
-            XCTAssertTrue(marker.wait(for: \.isHittable, toEqual: true, timeout: 10))
-            marker.tap()
-            let visit = app.buttons["nearby.visitProfile"]
+            let visit = openNearbyMarkerWithPhysicalTap(app, stage: "after-chat")
             let visitReady = visit.waitForExistence(timeout: 10)
             if !visitReady { chatProof(app, name: "live-profile-card-missing-after-chat", tree: true) }
             XCTAssertTrue(visitReady, "The nearby marker must open its profile card after returning from Chat")
@@ -922,7 +926,8 @@ final class ShellSmokeTests: XCTestCase {
             chatProof(app, name: largeText ? "live-stop-panel-sv-accessibility" : "live-stop-panel-sv")
 
             app.buttons["map.reading.close"].tap()
-            XCTAssertFalse(app.buttons["map.session.stop"].exists)
+            XCTAssertTrue(app.buttons["map.session.stop"].wait(for: \.exists, toEqual: false, timeout: 2),
+                "Closing must remove the Stop panel after its bounded fade")
             XCTAssertTrue(bar.isHittable, "Closing the panel must leave the live session running")
             XCTAssertFalse(element("map.fixture.savedDrive", in: app).exists)
 
@@ -1073,18 +1078,71 @@ final class ShellSmokeTests: XCTestCase {
     }
 
     func testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip() {
-        let app = launch(language: "en")
+        let app = launch(language: "en", mapGestureFixture: true)
         let placeholder = app.staticTexts["shell.mapPlaceholder"]
         XCTAssertTrue(placeholder.waitForExistence(timeout: 5))
-        XCTAssertTrue(placeholder.isHittable, "Map content must not be covered by the tab host")
+        assertMapReceivesGestures(app)
         app.buttons["shell.tab.social"].tap()
         app.buttons["shell.tab.map"].tap()
         assertSelected(app.buttons["shell.tab.map"])
-        XCTAssertTrue(placeholder.isHittable)
+        assertMapReceivesGestures(app)
         openSettings(app)
         app.buttons["Back"].firstMatch.tap()
         XCTAssertTrue(placeholder.waitForExistence(timeout: 5))
-        XCTAssertTrue(placeholder.isHittable)
+        assertMapReceivesGestures(app)
+    }
+
+    private func assertMapReceivesGestures(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let map = app.staticTexts["shell.mapPlaceholder"]
+        let probe = app.staticTexts["shell.mapGestureProbe"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 5), file: file, line: line)
+        let counts = (probe.value as? String)?.split(separator: "|").compactMap { Int($0) } ?? []
+        guard counts.count == 2 else {
+            XCTFail("Map touch probe must expose tap and pan counts", file: file, line: line)
+            return
+        }
+        print("MAP_GESTURE_PROBE labelHittable=\(map.isHittable) labelFrame=\(map.frame) before=\(counts)")
+        // Use physical coordinates, not an AX activation action. A full-map
+        // overlay that steals taps or pans must prevent these counters moving.
+        let center = map.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        center.tap()
+        let tapDelivered = NSPredicate(format: "value == %@", "\(counts[0] + 1)|\(counts[1])")
+        let tapReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: tapDelivered, object: probe)], timeout: 5)
+        if tapReady != .completed { chatProof(app, name: "map-tap-blocked", tree: true) }
+        XCTAssertEqual(tapReady, .completed, "Blank map space must receive taps through marker and chrome layers", file: file, line: line)
+        center.withOffset(CGVector(dx: -70, dy: 40)).press(forDuration: 0.05,
+            thenDragTo: center.withOffset(CGVector(dx: 70, dy: 40)))
+        let panDelivered = NSPredicate(format: "value == %@", "\(counts[0] + 1)|\(counts[1] + 1)")
+        let panReady = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: panDelivered, object: probe)], timeout: 5)
+        if panReady != .completed { chatProof(app, name: "map-pan-blocked", tree: true) }
+        XCTAssertEqual(panReady, .completed, "Blank map space must receive drags through marker and chrome layers", file: file, line: line)
+    }
+
+    private func openNearbyMarkerWithPhysicalTap(
+        _ app: XCUIApplication, stage: String, file: StaticString = #filePath, line: UInt = #line
+    ) -> XCUIElement {
+        let marker = app.buttons["map.fixture.liveSharer"]
+        XCTAssertTrue(marker.waitForExistence(timeout: 10), file: file, line: line)
+        XCTAssertTrue(marker.wait(for: \.isEnabled, toEqual: true, timeout: 10), file: file, line: line)
+        let frame = marker.frame
+        XCTAssertGreaterThanOrEqual(frame.width, 48 - 0.001, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.height, 48 - 0.001, file: file, line: line)
+        XCTAssertTrue(app.frame.contains(frame), "The nearby marker must be entirely onscreen", file: file, line: line)
+        let probe = app.staticTexts["shell.mapGestureProbe"]
+        XCTAssertTrue(probe.exists, file: file, line: line)
+        let counts = probe.value as? String
+        XCTAssertNotNil(counts, file: file, line: line)
+        print("NEARBY_MARKER_PROBE stage=\(stage) axHittable=\(marker.isHittable) frame=\(frame) mapCounts=\(counts ?? "missing")")
+        // The interactive placeholder can affect AX hit-point reporting. Test
+        // actual event delivery once, without activating an accessibility action.
+        marker.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let visit = app.buttons["nearby.visitProfile"]
+        let opened = visit.waitForExistence(timeout: 10)
+        if !opened { chatProof(app, name: "nearby-physical-tap-\(stage)-failed", tree: true) }
+        XCTAssertTrue(opened, "One nearby-marker press must open its profile card", file: file, line: line)
+        XCTAssertEqual(probe.value as? String, counts,
+            "A nearby-marker press must not reach the map's background gestures", file: file, line: line)
+        return visit
     }
 
     func testMapToolsAppearOnRightAndWorkWithoutBackend() {
@@ -1095,9 +1153,14 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(compass.isHittable)
         XCTAssertGreaterThan(layers.frame.midX, app.frame.midX)
         XCTAssertGreaterThan(compass.frame.minY, layers.frame.maxY)
-        XCTAssertEqual(compass.value as? String, "NorthUp")
-        XCTAssertEqual(compass.label, "North up")
-        for mode in ["CourseUp", "NorthUp"] {
+        // VoiceOver announces the localized current state as the value and
+        // the next available action as the label.
+        XCTAssertEqual(compass.value as? String, "North up")
+        XCTAssertEqual(compass.label, "Switch to direction of travel up")
+        for (mode, action) in [
+            ("Direction of travel up", "Switch to north up"),
+            ("North up", "Switch to direction of travel up")
+        ] {
             compass.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
                 compass.exists && (compass.value as? String) == mode
@@ -1107,7 +1170,7 @@ final class ShellSmokeTests: XCTestCase {
                 chatProof(app, name: "compass-\(mode)-center-tap-failure", tree: true)
             }
             XCTAssertEqual(result, .completed, "One tap at the center of Compass must switch to \(mode)")
-            XCTAssertEqual(compass.label, mode == "NorthUp" ? "North up" : "Follow your direction")
+            XCTAssertEqual(compass.label, action)
         }
         layers.tap()
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
@@ -1154,7 +1217,8 @@ final class ShellSmokeTests: XCTestCase {
         saved.tap()
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()
-        XCTAssertFalse(panel.exists)
+        XCTAssertTrue(panel.wait(for: \.exists, toEqual: false, timeout: 2),
+            "Closing must remove the saved-places panel after its bounded fade")
         XCTAssertTrue(app.buttons["shell.mapLayers"].isHittable)
     }
 
@@ -1708,7 +1772,7 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertFalse(sheetBar.exists, "Dismissal must remove the sheet before using the screen behind it")
     }
 
-    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatKeyboardFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false, convoyDockFixture: Bool = false) -> XCUIApplication {
+    private func launch(language: String, largeText: Bool = false, theme: String = "Light", chatFixture: Bool = false, chatKeyboardFixture: Bool = false, chatFloodFixture: Bool = false, markerPoints: [CGPoint] = [], placeSearchFixture: Bool = false, rejectMaps: Bool = false, liveFixture: Bool = false, convoyDockFixture: Bool = false, mapGestureFixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launchArguments += ["-KCCUITestTheme", theme]
@@ -1721,6 +1785,7 @@ final class ShellSmokeTests: XCTestCase {
         if placeSearchFixture { app.launchArguments += ["-KCCUITestPlaceSearch"] }
         if rejectMaps { app.launchArguments += ["-KCCUITestNavigationFailure"] }
         if liveFixture { app.launchArguments += ["-KCCUITestLiveSession"] }
+        if mapGestureFixture { app.launchArguments += ["-KCCUITestMapGestures"] }
         if convoyDockFixture { app.launchArguments += ["-KCCUITestConvoyDock"] }
         if !markerPoints.isEmpty {
             app.launchArguments += ["-KCCUITestMapMarkers", markerPoints.map { "\($0.x),\($0.y)" }.joined(separator: ";")]

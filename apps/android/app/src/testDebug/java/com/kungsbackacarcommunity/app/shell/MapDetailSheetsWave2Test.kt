@@ -1,11 +1,16 @@
 package com.kungsbackacarcommunity.app.shell
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.Text
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
@@ -82,4 +87,29 @@ class MapDetailSheetsWave2Test {
         compose.onNodeWithTag(INCIDENT_DETAILS_CLEAR_TAG).performScrollTo().assertIsDisplayed().assertIsNotEnabled()
         assertEquals(1, confirmed)
     }
+    @Test
+    fun replacementPanelCancelsPreviousDismissEvenWithSharedCallback() {
+        val selected = mutableStateOf("first")
+        var dismissed = 0
+        val sharedDismiss: () -> Unit = { dismissed++ }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            KccTheme {
+                DockedMapSheetHost {
+                    key(selected.value) {
+                        MapDetailSheet(title = selected.value, onDismiss = sharedDismiss,
+                            closeContentDescription = "Close panel") { Text("Panel " + selected.value) }
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(256); compose.waitForIdle()
+        compose.onNodeWithContentDescription("Close panel").performClick()
+        compose.mainClock.advanceTimeBy(48)
+        compose.runOnIdle { selected.value = "second" }
+        compose.mainClock.advanceTimeBy(256); compose.waitForIdle()
+        compose.onNodeWithText("Panel second").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, dismissed) }
+    }
+
 }

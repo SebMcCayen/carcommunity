@@ -68,12 +68,14 @@ struct ShellView: View {
     /// keeping this one instance for the shell's lifetime. Covered pages only
     /// stand it down via ``MapSurface/setActive(_:)`` (see the map-cover
     /// effect below), never recreate it.
+    @State private var mapDriverControlFrames: [String: CGRect] = [:]
     @State private var mapSurface = StubMapSurface()
     @State private var mapLayerPreferences = MapLayerPreferences.shared
     @State private var showMapLayers = false
     @State private var navSearchOpen = false
     @AccessibilityFocusState private var searchLauncherFocused: Bool
     @State private var mapReadingSelection: MapReadingSelection?
+    @State private var densityReadingItems: [MapDensityContentItem] = []
     @State private var mapDockHeight: CGFloat = 0
     @State private var mapSessionHeight: CGFloat = 0
     @State private var invitationFooterHeight: CGFloat = 0
@@ -110,6 +112,7 @@ struct ShellView: View {
     @State private var feedbackCoordinator: FeedbackCoordinator?
     @State private var openTicketsCoordinator: OpenTicketsCoordinator?
     @State private var partnerApplicationCoordinator: PartnerApplicationCoordinator?
+    @State private var partnerCompanyDestination: String?
     @State private var accountDeletionCoordinator: AccountDeletionCoordinator
     @State private var subscriptionCoordinator: SubscriptionCoordinator
     @State private var liveLocationCoordinator: LiveLocationCoordinator?
@@ -248,6 +251,7 @@ struct ShellView: View {
                 guard phase == .active, signedInUid != nil else { return }
                 appUpdateCoordinator.scheduleRequiredUpdateRecheck()
                 driveRecordingCoordinator?.retryPendingRouteUploads()
+                eventsCoordinator?.refreshMapPins()
             }
             // Own the idle timer at shell scope so tabs, routes and sheets
             // do not interrupt an active live session's screen-awake demand.
@@ -322,6 +326,8 @@ struct ShellView: View {
         invitationAnswerTask = nil
         notificationsCoordinator?.stopObserving()
         billboardsCoordinator?.stop()
+        eventsCoordinator?.stop()
+        mapSurface.setEventMarkers([])
         clubsCoordinator?.stop()
         mapSurface.setBillboardMarkers([])
     }
@@ -541,6 +547,7 @@ struct ShellView: View {
     private var shellReadingInteractions: AnyView {
         shellBaseInteractions
         .onChange(of: mapReadingSelection) { _, selection in
+            if case .densityGroup = selection {} else { densityReadingItems = [] }
             if case .camera = selection {} else { roadCameraCoordinator?.dismiss() }
             centerMapReading(selection)
         }
@@ -657,6 +664,11 @@ struct ShellView: View {
         case .crown(let id):
             if let target = crownHuntComposition?.mapCoordinator?.selectedTarget, target.id == id {
                 mapSurface.centerOn(MapPoint(longitude: target.longitude, latitude: target.latitude))
+            }
+        case .event(let id):
+            if let item = eventsCoordinator?.mapEvent(id: id),
+               let longitude = item.longitude, let latitude = item.latitude {
+                mapSurface.centerOn(MapPoint(longitude: longitude, latitude: latitude))
             }
         case .incident(let id):
             if let item = incidentMapCoordinator?.selectedIncident, item.id == id {
@@ -868,9 +880,25 @@ struct ShellView: View {
     // A computed `some View` property alone does not bound the concrete type:
     // Release must still decode every nested generic modifier at first render.
     private var mapOverlayContent: AnyView {
-        Color.clear.ignoresSafeArea()
+        Color.clear.allowsHitTesting(false).ignoresSafeArea()
             .overlay { mapChromeContent }
             .eraseToAnyView()
+    }
+
+    private var billboardPartnerNavigation: ((String) -> Bool)? {
+        guard featureFlags.isEnabled(.partners), partnersCoordinator != nil else { return nil }
+        return { companyId in
+            // Recheck at activation as well as rendering: feature availability
+            // may change after the popup was presented.
+            BillboardPartnerNavigation.open(
+                companyId: companyId,
+                partnersEnabled: featureFlags.isEnabled(.partners),
+                coordinatorAvailable: partnersCoordinator != nil
+            ) { destination in
+                partnerCompanyDestination = destination
+                routes = routes.opening(.partners)
+            }
+        }
     }
 
     private var mapMarkerContent: AnyView {
@@ -886,13 +914,12 @@ struct ShellView: View {
                 ConfiglessDriveSaveProbe(state: driveRecordingCoordinator?.state)
             }
             #endif
-            if let crownMapCoordinator = crownHuntComposition?.mapCoordinator {
-                CrownHuntMapOverlay(
-                    coordinator: crownMapCoordinator,
-                    projection: mapSurface,
-                    mapMode: mapSurface.mapMode
-                )
-            }
+            MapDensityOverlay(surface: mapSurface, incidents: incidentMapCoordinator,
+                cameras: roadCameraCoordinator, crowns: crownHuntComposition?.mapCoordinator,
+                onSelect: selectDensityItem, onGroup: { items in
+                    densityReadingItems = items
+                    selectMapReading(.densityGroup)
+                })
             if let perkMapCoordinator = crownHuntComposition?.perkMapCoordinator {
                 CrownPerkMapOverlay(
                     coordinator: perkMapCoordinator,
@@ -900,47 +927,47 @@ struct ShellView: View {
                     ownFix: crownHuntComposition?.mapCoordinator?.latestFix
                 )
             }
-            if let roadCameraCoordinator {
-                RoadCameraMapOverlay(coordinator: roadCameraCoordinator, surface: mapSurface) { camera in
-                    clearIncidentSelection()
-                    roadCameraCoordinator.select(camera)
-                    selectMapReading(.camera(camera.id))
+            if let eventsCoordinator {
+                EventMapOverlay(coordinator: eventsCoordinator, projection: mapSurface) { id in
+                    guard eventsCoordinator.mapEvent(id: id) != nil else { return }
+                    selectMapReading(.event(id))
                 }
-            }
-            if let incidentMapCoordinator {
-                IncidentMapOverlay(
-                    coordinator: incidentMapCoordinator,
-                    projection: mapSurface,
-                    onSelect: { id in selectMapReading(.incident(id)) }
-                )
+                .id(ObjectIdentifier(eventsCoordinator))
             }
             if let billboardsCoordinator {
                 BillboardMapOverlay(
                     coordinator: billboardsCoordinator,
-                    projection: mapSurface
+                    projection: mapSurface,
+                    onOpenPartner: billboardPartnerNavigation
                 )
             }
             if liveLocationFeatureEnabled {
-                ConvoyMapAwarenessOverlay(
-                    members: convoyAwareness.visibleMembers,
-                    imageURLs: convoyAwareness.imageURLs,
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                LiveDriverMapOverlay(
+                    convoy: convoyAwareness.visibleMembers,
+                    nearby: nearbyLive.visibleMarkers(at: context.date),
+                    convoyImageURLs: convoyAwareness.imageURLs,
+                    nearbyImageURLs: nearbyLive.imageURLs,
                     projection: mapSurface,
-                    onSelect: { uid in selectMapReading(.convoyMember(uid)) },
-                    clubBadges: liveClubBadges,
-                    badgeViewerID: liveClubBadgeViewerID,
-                    onDrawnUIDsChanged: { convoyDrawnUIDs = $0 }
+                    onSelect: { uid, isConvoy in
+                        if isConvoy {
+                            guard convoyAwareness.profileTarget(uid: uid) != nil else { return }
+                            selectMapReading(.convoyMember(uid))
+                        } else {
+                            guard nearbyLive.profileTarget(uid: uid) != nil else { return }
+                            selectMapReading(.nearby(uid))
+                        }
+                    },
+                    clubBadges: liveClubBadges, badgeViewerID: liveClubBadgeViewerID,
+                    controlFrames: Array(mapDriverControlFrames.values),
+                    onConvoyDrawn: { convoyDrawnUIDs = $0 },
+                    onNearbyDrawn: { nearbyDrawnUIDs = $0 }
                 )
-                NearbyLiveOverlay(
-                    coordinator: nearbyLive,
-                    projection: mapSurface,
-                    onSelect: { uid in selectMapReading(.nearby(uid)) },
-                    clubBadges: liveClubBadges,
-                    badgeViewerID: liveClubBadgeViewerID,
-                    onDrawnUIDsChanged: { nearbyDrawnUIDs = $0 }
-                )
+                }
             }
         }
 
+        .environment(\.mapPresentationActive, mapSurface.isActive && mapHomeChromeVisible)
         .task(id: liveClubBadgeRosterKey) {
             liveClubBadges.setRoster(
                 viewerID: liveClubBadgeViewerID,
@@ -951,8 +978,18 @@ struct ShellView: View {
     }
 
 
+    private func recordDriverControl(_ id: String, _ bounds: CGRect?) {
+        if let bounds, bounds.width > 0, bounds.height > 0 {
+            guard mapDriverControlFrames[id] != bounds else { return }
+            mapDriverControlFrames[id] = bounds
+        } else if mapDriverControlFrames[id] != nil {
+            mapDriverControlFrames.removeValue(forKey: id)
+        }
+    }
+
     private var mapChromeContent: AnyView {
         Color.clear
+            .allowsHitTesting(false)
             // Account entries require a real session. Public Settings
             // (including legal links) also remain usable without config.
             .overlay(alignment: .topTrailing) {
@@ -1038,6 +1075,11 @@ struct ShellView: View {
                 )
                 do { try await Task.sleep(for: .seconds(86_400)) } catch {}
                 incidentMapCoordinator.stop()
+            }
+            .onChange(of: foregroundMapWorkActive) { _, active in
+                // Cancel local evidence immediately, even if an earlier refresh
+                // is still waiting for its network response.
+                if !active { crownHuntComposition?.mapCoordinator?.stop() }
             }
             .task(id: crownMapLifecycleKey) {
                 guard foregroundMapWorkActive,
@@ -1163,6 +1205,17 @@ struct ShellView: View {
                     )
                 }
             }
+            .onChange(of: eventsCoordinator.map { ObjectIdentifier($0) }, initial: true) { _, _ in
+                eventsCoordinator?.startMap()
+            }
+            .onChange(of: eventsCoordinator?.mapEvents, initial: true) { _, events in
+                mapSurface.setEventMarkers((events ?? []).compactMap { event in
+                    guard let latitude = event.latitude, let longitude = event.longitude else { return nil }
+                    return MapEventMarker(id: event.id, longitude: longitude, latitude: latitude)
+                })
+                if case .event(let id) = mapReadingSelection,
+                   eventsCoordinator?.mapEvent(id: id) == nil { dismissMapReading() }
+            }
             .onChange(of: billboardsCoordinator?.markers, initial: true) { _, markers in
                 mapSurface.setBillboardMarkers(markers ?? [])
             }
@@ -1260,14 +1313,26 @@ struct ShellView: View {
                 Button {
                     routes = routes.opening(.partnerApplication)
                 } label: {
-                    Label("shell.morePartnerApplication", systemImage: "briefcase")
+                    PortalText("portal.apply")
+                }
+                Button {
+                    routes = routes.opening(.partnerWorkspace)
+                } label: {
+                    Label(portalString("portal.workspace"), systemImage: "building.2.crop.circle")
+                }
+                if featureFlags.isEnabled(.partners) {
+                    Button {
+                        routes = routes.opening(.partnerReservations)
+                    } label: {
+                        Label(portalString("portal.myReservations"), systemImage: "qrcode")
+                    }
                 }
             }
             if partnerStatsEntryAvailable {
                 Button {
                     routes = routes.opening(.partnerStats)
                 } label: {
-                    Label("shell.morePartnerStats", systemImage: "hand.raised")
+                    Label(portalString("portal.privacySettings"), systemImage: "hand.raised")
                 }
             }
         } label: {
@@ -1278,6 +1343,7 @@ struct ShellView: View {
             )
         }
         .accessibilityIdentifier("shell.menu")
+        .driverPhotoObstacle("profile", update: recordDriverControl)
         .padding(KccSpacing.s4)
     }
 
@@ -1350,6 +1416,7 @@ struct ShellView: View {
                 .background { GeometryReader { proxy in
                     Color.clear.preference(key: MapDockHeightKey.self, value: proxy.size.height)
                 } }
+                .driverPhotoObstacle("dock", update: recordDriverControl)
             }
             .onPreferenceChange(MapSessionHeightKey.self) { mapSessionHeight = $0 }
         }
@@ -1383,6 +1450,10 @@ struct ShellView: View {
 
     @ViewBuilder private func mapReadingPanel(_ selection: MapReadingSelection) -> some View {
         switch selection {
+        case .densityGroup:
+            MapReadingPanel(title: "mapDensity.title", onClose: dismissMapReading, docksToBottom: true) {
+                MapDensityGroupContents(entries: currentDensityReadingItems, mapMode: mapSurface.mapMode, onSelect: selectDensityItem)
+            }
         case .stopLive:
             MapReadingPanel(title: "shell.liveTitle", onClose: dismissMapReading, docksToBottom: true) {
                 LiveSessionStopContent(busy: pendingSessionCommand != nil || liveLocationCoordinator?.actionStatus == .working) {
@@ -1432,6 +1503,17 @@ struct ShellView: View {
                     })
                 }
             }
+        case .event(let id):
+            if let event = eventsCoordinator?.mapEvent(id: id) {
+                MapReadingPanel(title: LocalizedStringKey(event.title), onClose: dismissMapReading,
+                    leadingImage: "event-calendar", leadingTint: Color(argb: 0xFF00897B), docksToBottom: true) {
+                    EventMapContents(event: event) {
+                        guard eventsCoordinator?.mapEvent(id: id) != nil else { return }
+                        dismissMapReading()
+                        openEvents(eventId: id)
+                    }
+                }
+            }
         case .incident(let id):
             if let coordinator = incidentMapCoordinator, coordinator.selectedIncident?.id == id {
                 MapReadingPanel(title: "incidents.markerLabel", onClose: dismissMapReading) {
@@ -1474,6 +1556,45 @@ struct ShellView: View {
         }
     }
 
+    /// Re-resolve the open group against current sources; removed/expired rows cannot open stale details.
+    private var currentDensityReadingItems: [MapDensityContentItem] {
+        let incidentIDs = Set(incidentMapCoordinator.map {
+            IncidentLayerPresentation.markers(enabled: $0.trafficAlertsEnabled,
+                incidents: $0.visibleIncidents, policeReports: $0.policeReports).map(\.id)
+        } ?? [])
+        let crownIDs = Set(crownHuntComposition?.mapCoordinator?.markers.filter { !$0.collectedByYou }.map(\.id) ?? [])
+        let cameraIDs = Set(roadCameraCoordinator?.cameras.filter {
+            roadCameraCoordinator?.enabledTypes.contains($0.type) == true
+        }.map(\.id) ?? [])
+        return densityReadingItems.filter { entry in
+            if let incident = entry.incident { return incidentIDs.contains(incident.id) }
+            if let crown = entry.crown { return crownIDs.contains(crown.id) }
+            if let camera = entry.camera { return camera.views.contains { cameraIDs.contains($0.id) } }
+            return false
+        }
+    }
+
+    private func selectDensityItem(_ entry: MapDensityContentItem) {
+        if let marker = entry.incident, let coordinator = incidentMapCoordinator {
+            let current = IncidentLayerPresentation.markers(enabled: coordinator.trafficAlertsEnabled,
+                incidents: coordinator.visibleIncidents, policeReports: coordinator.policeReports)
+            guard current.contains(where: { $0.id == marker.id }) else { return }
+            coordinator.selectMarker(id: marker.id)
+            selectMapReading(.incident(marker.id))
+        } else if let group = entry.camera, let coordinator = roadCameraCoordinator {
+            let catalog = Dictionary(uniqueKeysWithValues: coordinator.cameras.map { ($0.id, $0) })
+            let retained = group.views.compactMap { catalog[$0.id] }.filter { coordinator.enabledTypes.contains($0.type) }
+            guard !retained.isEmpty else { return }
+            let current = RoadCameraMapGroup(sites: RoadCameraLocation.group(retained))
+            clearIncidentSelection()
+            coordinator.selectGroup(current)
+            selectMapReading(.camera(current.camera.id))
+        } else if let marker = entry.crown, let coordinator = crownHuntComposition?.mapCoordinator {
+            guard coordinator.markers.contains(where: { $0.id == marker.id && !$0.collectedByYou }) else { return }
+            coordinator.select(markerId: marker.id)
+        }
+    }
+
     private func selectMapReading(_ selection: MapReadingSelection) {
         if case .camera = selection {} else { roadCameraCoordinator?.dismiss() }
         // The marker coordinator still owns authorization, freshness and actions.
@@ -1482,8 +1603,10 @@ struct ShellView: View {
         if case .incident = selection, let pin = incidentMapCoordinator?.selectedPolice {
             mapReadingSelection = .police(pin.id)
         } else { mapReadingSelection = selection }
+        if case .densityGroup = selection { clearIncidentSelection() }
         if case .savedPlaces = selection { clearIncidentSelection() }
         if case .stopLive = selection { clearIncidentSelection() }
+        if case .event = selection { clearIncidentSelection() }
         if case .nearby = selection { clearIncidentSelection() }
         if case .convoyMember = selection { clearIncidentSelection() }
     }
@@ -1506,6 +1629,7 @@ struct ShellView: View {
             // Keep the tools fixed when the nearby-wave control appears.
             if nearbyWaveUid != nil, groupDriveMapUids.isEmpty, let nearbyWaveCoordinator {
                 NearbyWaveButton(coordinator: nearbyWaveCoordinator, rangeAt: nearbyWaveRange(at:))
+                    .driverPhotoObstacle("wave", update: recordDriverControl)
             }
         }
         .font(.system(size: 20, weight: .semibold))
@@ -1524,6 +1648,7 @@ struct ShellView: View {
                         .kccMapControl()
                 }
                 .accessibilityLabel(Text("incidents.reportButton"))
+                .driverPhotoObstacle("report", update: recordDriverControl)
             }
 
             MapLayersButton(isPresented: $showMapLayers, isActive:
@@ -1532,12 +1657,15 @@ struct ShellView: View {
                 (mapLayerPreferences.mapModeOverride != nil &&
                  mapLayerPreferences.mapModeOverride != (colorScheme == .dark ? .night : .day)))
                 .accessibilityIdentifier("shell.mapLayers")
+                .driverPhotoObstacle("layers", update: recordDriverControl)
             MapCompassButton(mode: mapSurface.compassMode, bearing: mapSurface.bearing) {
                 mapSurface.setCompassMode($0)
             }
+            .driverPhotoObstacle("compass", update: recordDriverControl)
 
             if let coordinator = crownHuntComposition?.perkMapCoordinator, coordinator.isAvailable {
                 CrownPerkMapControl(coordinator: coordinator)
+                    .driverPhotoObstacle("perks", update: recordDriverControl)
             }
         }
     }
@@ -1556,6 +1684,7 @@ struct ShellView: View {
         .accessibilityLabel(Text("shell.searchExpand"))
         .accessibilityIdentifier("shell.search")
         .accessibilityFocused($searchLauncherFocused)
+        .driverPhotoObstacle("search", update: recordDriverControl)
     }
 
     private var primaryNavigation: some View {
@@ -1709,18 +1838,30 @@ struct ShellView: View {
             if featureFlags.isEnabled(.partners), let partnersCoordinator {
                 PartnersScreen(
                     coordinator: partnersCoordinator,
-                    onBack: { routes = routes.poppingOne() }
+                    onBack: { routes = routes.poppingOne(); partnerCompanyDestination = nil },
+                    initialCompanyId: partnerCompanyDestination,
+                    sponsoredEntry: partnerCompanyDestination != nil
                 )
             } else {
                 unavailableRoute
             }
+        case .partnerWorkspace:
+            PartnerWorkspaceScreen(
+                onBack: { routes = routes.poppingOne() },
+                onApply: { routes = routes.opening(.partnerApplication) }
+            ).id(signedInUid)
+        case .partnerReservations:
+            if featureFlags.isEnabled(.partners) {
+                PartnerMyReservationsScreen(onBack: { routes = routes.poppingOne() }).id(signedInUid)
+            } else { unavailableRoute }
         case .partnerApplication:
             if let partnerApplicationCoordinator {
                 routeNavigation {
                     PartnerApplicationScreen(
                         coordinator: partnerApplicationCoordinator,
-                        onClose: { routes = routes.poppingOne() }
-                    )
+                        onClose: { routes = routes.poppingOne() },
+                        accountUID: signedInUid
+                    ).id(signedInUid)
                 }
             } else {
                 unavailableRoute
@@ -2612,6 +2753,7 @@ struct ShellView: View {
         feedbackCoordinator = nil
         openTicketsCoordinator = nil
         partnerApplicationCoordinator = nil
+        partnerCompanyDestination = nil
 
         navigationDestination = nil
         let friends = FirebaseFriendsRepository.createIfAvailable()
@@ -2654,6 +2796,8 @@ struct ShellView: View {
             FirebaseRoadCameraRepository.createIfAvailable().map { CachedRoadCameraRepository(upstream: $0) })
         let eventChat = eventChatEnabled
             ? FirebaseEventChatRepository.createIfAvailable() : nil
+        eventsCoordinator?.stop()
+        mapSurface.setEventMarkers([])
         eventsCoordinator = FirebaseEventsRepository.createIfAvailable().map {
             EventsCoordinator(
                 repository: $0,
@@ -3459,5 +3603,36 @@ struct MapProfileAvatarContent: View {
                 .allowsHitTesting(false)
             }
         }
+    }
+}
+
+
+private struct DriverPhotoObstacle: ViewModifier {
+    let id: String
+    let update: @MainActor (String, CGRect?) -> Void
+    func body(content: Content) -> some View {
+        content
+            // Measurement must not introduce an interactive layer around a
+            // control: the surrounding map still owns taps and pans.
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: DriverPhotoObstacleFrameKey.self,
+                        value: geometry.frame(in: .global))
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+            .onPreferenceChange(DriverPhotoObstacleFrameKey.self) { update(id, $0) }
+            .onDisappear { update(id, nil) }
+    }
+}
+
+private struct DriverPhotoObstacleFrameKey: PreferenceKey {
+    static var defaultValue: CGRect { .zero }
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+}
+private extension View {
+    func driverPhotoObstacle(_ id: String, update: @escaping @MainActor (String, CGRect?) -> Void) -> some View {
+        modifier(DriverPhotoObstacle(id: id, update: update))
     }
 }

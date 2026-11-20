@@ -1,0 +1,13 @@
+# iOS event map parity (UX point 9)
+
+The main iOS map shows public community events with Android's exact calendar vector, teal disc and two-tone marker ring. Selecting a pin opens the shared docked reading panel with the title, public schedule/place, going count and localized View details action. The action opens the existing event detail route, which retains its membership, blocking, RSVP and chat gates. The marker is a labeled 44-point button; outgoing pins leave hit testing and accessibility immediately.
+
+The map and event list share EventsCoordinator's existing published-events listener, bounded to 200 teasers. No second listener, per-pin detail read or subscription-tier read is needed for map viewing. Opening the iOS map now starts this listener earlier than the previous event-list-only behavior, so active teaser reads can increase. Query size and shape stay bounded and opening the list does not add another listener; no backend/index/function changes or tier/private-detail fanout are added. Pins require published status, both public coordinates, and an inclusive endsAt-or-startsAt cutoff. Events without readable dates remain eligible. Public locations do not inherit an author-block filter, matching Android; this does not change the detail/chat policy.
+
+A single task wakes just after the earliest qualifying expiry and schedules the next boundary. Foreground refresh and the tap path re-check time. A new snapshot, reload, listener failure or sign-out clears stale selection eligibility. The account's coordinator identity also resets retained presentation. MapPresenceLayer supplies the native 200 ms entry/exit policy, inactive/background cleanup and Reduce Motion behavior; opacity is applied to the bounded marker before map positioning.
+
+## Validation
+
+EventsModelTests cover publication/coordinates, explicit-end precedence, start fallback, inclusive cutoff, missing dates and next expiry. EventsCoordinatorTests cover shared map/list reads, absence of private reads, stale IDs after deletion/failure/reload/stop, expiry without a new snapshot, and foreground clock refresh. Existing MapPresencePolicyTests cover fade lifecycle and outgoing noninteraction.
+
+Linux source preflight, code generation drift checks and Python tooling tests are available locally. Native Swift compilation and XCTest execution require macOS CI and must be assessed separately. Device QA should verify day/night map contrast, Swedish/English teaser content, large text/VoiceOver, rapid pin replacement, automatic expiry, background/foreground and sign-out. No app release, deployment or production data change is part of this PR.

@@ -65,7 +65,17 @@ class CrownFixTracker {
      */
     fun record(fix: CrownFix) {
         val current = latest
-        if (current != null && fix.recordedAtMillis < current.recordedAtMillis) return
+        if (current != null && fix.recordedAtMillis <= current.recordedAtMillis) return
+        // A proof belongs to one continuous stop. Never let an accuracy-ranked
+        // parked pair survive a later, corroborated departure.
+        val movementAnchor = recent.lastOrNull {
+            val gap = fix.recordedAtMillis - it.recordedAtMillis
+            gap in CrownSpawnLimits.MIN_DWELL_SECONDS * 1000..CrownSpawnLimits.MAX_DWELL_SECONDS * 1000
+        }
+        val recentMotion = CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(fix, current))
+        if (recentMotion || CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(fix, movementAnchor))) {
+            recent.clear()
+        }
         latest = fix
         recent.addLast(fix)
         val cutoff = fix.recordedAtMillis - CrownSpawnLimits.MAX_DWELL_SECONDS * 1000
@@ -104,10 +114,8 @@ class CrownFixTracker {
      * (and the pair built on it) would otherwise still read as usable — which is
      * exactly the wrong-state class of bug this feature is trying to remove:
      * seeding a popup, and enabling/labelling Collect, off a minutes-old position.
-     * But the threshold must NOT be stricter than the server's, or a device with a
-     * slow location cadence whose newest fix is a routine 10–30 s old would be
-     * blocked from a collect the server would happily accept — re-creating the very
-     * lag this PR fixes. So it rejects only genuinely stale (minutes-old) leftovers.
+     * The ten-second bound matches the server: an old parking fix must not be
+     * reused after departure or resuming the app. Poll time never refreshes its age.
      *
      * The freshness filter is applied to the sample actually RETURNED, not just to
      * [latest]: [bestRecent] may prefer a more-accurate EARLIER sample from the
@@ -118,7 +126,7 @@ class CrownFixTracker {
         val current = latest ?: return null
         val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
         // A stale newest fix means there is no trustworthy current position at all.
-        if (current.recordedAtMillis < freshCutoff) return null
+        if (current.recordedAtMillis < freshCutoff || current.recordedAtMillis > nowMillis) return null
         val settleStart = current.recordedAtMillis - SETTLE_WINDOW_SECONDS * 1000
         return recent
             .asReversed()
@@ -148,65 +156,31 @@ class CrownFixTracker {
         proofPair(nowMillis, inRange)?.previous
 
     /**
-     * The best (current, previous) dwell pair achievable from the recorded fixes,
-     * or null when none is — the ONE readiness answer everything downstream uses.
-     *
-     * ## Why a pair, not "best current then its partner"
-     *
-     * Choosing the current fix purely by accuracy and THEN looking for a partner
-     * can strand a usable pair: if the most-accurate fresh sample happens to be the
-     * OLDEST, it has no fix older than it to pair with, so readiness reads false —
-     * even though a different fresh current (e.g. [latest]) DOES have a valid
-     * partner. That leaves Collect stuck in "confirming" while a collectable pair
-     * sits in the buffer, which is exactly the lag this feature exists to kill.
-     *
-     * So the choice is made over PAIRS: among fresh currents that HAVE a valid
-     * partner, pick the most-accurate current (ties → newest), and take that
-     * current's best-accuracy partner. Accuracy is preferred only among currents
-     * that keep a pair achievable, never at the cost of one.
-     *
-     * Freshness ([CrownSpawnLimits.MAX_POSITION_AGE_SECONDS], the server's own
-     * bound) applies to the CURRENT half only — the partner may legitimately be up
-     * to [CrownSpawnLimits.MAX_DWELL_SECONDS] old, which is the whole point of the
-     * dwell. A stale [latest] therefore yields no fresh current and null here.
-     *
-     * ## Why the geofence gate is on BOTH halves (#911)
-     *
-     * The server's `evaluateStationaryCollection` refuses the pair with
-     * `outside_radius` when EITHER fix is outside the collect geofence — not just
-     * the current one. This tracker is fed by a PRE-WARM poll that runs while the
-     * member is still APPROACHING a crown, so its buffer routinely holds
-     * approach-era fixes recorded from farther out (or a jittery balanced-power
-     * sample that landed outside the ring). Left ungated, [proofPair] would happily
-     * pair a dead-on current with one of those out-of-range earlier fixes, the gate
-     * would read [CrownCollectState.Ready], and the very first tap would be refused
-     * `outside_radius` by the server — the exact "tap, out of range, restart, works"
-     * bug in #911, whose telemetry logs a perfect 0–10 m current fix because the
-     * server never logs the PREVIOUS fix that actually failed.
-     *
-     * So callers that know the crown pass an [inRange] predicate; BOTH the current
-     * and the chosen partner must satisfy it, mirroring the server's
-     * `insideNow && insideBefore`. The default accepts any fix, preserving the pure
-     * dwell-timing behaviour for callers (and tests) that do not track a crown.
-     * This only ever makes the client STRICTER than the server — it can never widen
-     * the gate — so the anti-spoof geofence stays the authority.
+     * The freshest current with an actually stationary, in-range partner.
+     * Accuracy ranks only eligible partners: an accurate approach sample must
+     * never hide another pair which the server can already accept. Both fixes
+     * keep their original timestamps and the current remains wall-clock fresh.
+     * The default geofence accepts any fix for non-crown timing callers.
      */
     fun proofPair(
         nowMillis: Long,
         inRange: (CrownFix) -> Boolean = ACCEPT_ANY,
     ): CrownProofPair? {
         val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
-        var best: CrownProofPair? = null
-        // Newest first, so equal-accuracy currents resolve to the newest.
+        // Prefer the freshest current that already has a server-usable partner.
+        // Accuracy ranks partners only AFTER motion/readiness eligibility; a
+        // precise approach sample must not hide a later valid stopped pair.
         for (current in recent.asReversed()) {
-            if (current.recordedAtMillis < freshCutoff) continue
+            if (current.recordedAtMillis < freshCutoff || current.recordedAtMillis > nowMillis) continue
             if (!inRange(current)) continue
-            val partner = proofPartnerFor(current, inRange) ?: continue
-            if (best == null || accuracyRank(current) < accuracyRank(best.current)) {
-                best = CrownProofPair(current, partner)
-            }
+            val partner = recent.asReversed().filter { previous ->
+                CrownCollectGate.isDwellProofUsable(previous, current) && inRange(previous) &&
+                    !CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(current, previous)) &&
+                    !CrownCollectGate.isMoving(CrownCollectGate.liveMovementSpeedMps(current, previous, latest))
+            }.minByOrNull { accuracyRank(it) }
+            if (partner != null) return CrownProofPair(current, partner)
         }
-        return best
+        return null
     }
 
     /**

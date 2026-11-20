@@ -63,48 +63,17 @@ object CrownSpawnMessages {
             CrownSpawnClaimResult.NOT_ELIGIBLE -> R.string.crownHunt_spawnResultNotEligible
         }
 
-    /**
-     * The headline for a state in which the button is NOT live, or null for
-     * [CrownCollectState.Ready] — which has no explaining to do — AND for the
-     * in-range wait states ([CrownCollectState.Moving], now folded into the
-     * confirming presentation, plus [CrownCollectState.Confirming] and
-     * [CrownCollectState.WaitingForSignal]), where the headline is intentionally
-     * suppressed because the BUTTON carries the "confirming you're stopped…" /
-     * "waiting for a better GPS signal…" line instead.
-     *
-     * `TooFar` keeps its own "move closer" sentence: it is a genuinely different
-     * instruction from the stop/still family, and telling a member to stop when
-     * the answer is "walk 300 m" would be an instruction to brake for nothing.
-     *
-     * `Moving`, however, is NOT given the old "stop the car first" headline. In
-     * range, [CrownCollectState.Moving] and [CrownCollectState.Confirming] are two
-     * moments of the SAME wait — one where the phone's derived speed is still
-     * settling to a stop, the other where the stationary proof has not aged in yet
-     * — and a member could hit either on different approaches to the SAME crown
-     * purely by GPS timing. Showing "stop the car first" on one and a calm
-     * "confirming you're stopped" countdown on the other reads as two different
-     * crowns behaving differently. So in range, `Moving` carries no headline and
-     * folds into the confirming presentation: the BUTTON says "confirming you're
-     * stopped…" (indeterminate, no number) via [collectActionLabelRes], exactly as
-     * `Confirming` and `WaitingForSignal` do. The gate's actual `Ready` decision —
-     * and the safety proof underneath it — is untouched; only how the disabled
-     * state is worded changes.
-     */
+    /** Moving must say to stop; confirming is only the short stopped-proof wait. */
     @StringRes
     fun refusalTitleRes(state: CrownCollectState): Int? =
         when (state) {
             CrownCollectState.Ready -> null
             is CrownCollectState.TooFar -> R.string.crownHunt_spawnMoveCloser
-            // In range but still moving: fold into the confirming wait rather than
-            // flashing "stop the car first". No headline — the button carries the
-            // "confirming you're stopped…" line, same as Confirming/WaitingForSignal.
-            CrownCollectState.Moving -> null
+            CrownCollectState.Moving -> null // The readable collection status carries the stop instruction.
             CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPosition
             // WaitingForSignal and Confirming are not refusals: nothing has gone
-            // wrong and the member need only stay put. The BUTTON carries their
-            // line ("waiting for a better GPS signal" / "confirming you're
-            // stopped") via [collectActionLabelRes], so there is no separate
-            // headline to print above the distance — the same choice Ready makes.
+            // wrong and the member need only stay put. CrownCollectStatus carries
+            // their line outside the disabled button via [collectActionLabelRes].
             CrownCollectState.WaitingForSignal -> null
             is CrownCollectState.Confirming -> null
             CrownCollectState.FeatureOff -> R.string.crownHunt_spawnResultFeatureDisabled
@@ -125,7 +94,7 @@ object CrownSpawnMessages {
             CrownCollectState.Ready -> null
             is CrownCollectState.TooFar -> R.string.crownHunt_spawnMoveCloserDetail
             // Folded into the confirming wait (see [refusalTitleRes]): no detail
-            // paragraph, the button carries the "confirming you're stopped" line.
+            // paragraph, the readable status carries the confirming instruction.
             CrownCollectState.Moving -> null
             CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPositionDetail
             // The waiting/confirming line lives on the button, not in a detail
@@ -135,33 +104,14 @@ object CrownSpawnMessages {
             CrownCollectState.FeatureOff -> null
         }
 
-    /**
-     * The Collect button's own label for the current [state] and in-flight
-     * [collecting] status — the ONE place the button decides what it says.
-     *
-     * Kept here (not in the composable) so the "confirming you're stopped" step is
-     * unit-testable rather than only visible on a device: the whole point of the
-     * step is that the button stops looking live-then-refusing, and that promise
-     * is worth pinning. The seconds-remaining variant is chosen in the composable
-     * (it needs the argument), off [CrownCollectState.Confirming.secondsRemaining];
-     * this returns the argument-free resource.
-     *
-     * [CrownCollectState.Moving] resolves to the SAME argument-free
-     * "confirming you're stopped…" label as [CrownCollectState.Confirming] — the
-     * indeterminate form, because a still-settling speed has no defined
-     * seconds-remaining to count down. This is what folds the in-range "moving"
-     * moment into the confirming presentation (see [refusalTitleRes]); the numeric
-     * "(N s)" variant is only ever chosen for `Confirming`, in the composable.
-     */
+    /** Short instruction beside Collect, without claiming a moving car has stopped. */
     @StringRes
     fun collectActionLabelRes(state: CrownCollectState, collecting: Boolean): Int =
         when {
             collecting -> R.string.crownHunt_spawnCollecting
             state is CrownCollectState.WaitingForSignal ->
                 R.string.crownHunt_spawnWaitingForSignal
-            // Moving folds into confirming: same indeterminate "confirming you're
-            // stopped…" label as Confirming, never the old "stop the car first".
-            state is CrownCollectState.Moving -> R.string.crownHunt_spawnConfirming
+            state is CrownCollectState.Moving -> R.string.crownHunt_spawnStopFirst
             state is CrownCollectState.Confirming -> R.string.crownHunt_spawnConfirming
             else -> R.string.crownHunt_spawnCollect
         }

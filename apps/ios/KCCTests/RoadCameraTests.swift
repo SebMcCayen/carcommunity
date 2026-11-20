@@ -98,6 +98,21 @@ final class RoadCameraTests: XCTestCase {
         XCTAssertNil(coordinator.selectedCamera)
     }
 
+    func testCoordinatedDensityKeepsAllSitesBeyondTheLegacyDrawCap() async {
+        let upstream = CameraStub()
+        upstream.catalogCameras = (0..<300).map { i in
+            siteCamera("camera-\(i)", direction: 135, latitude: 57.45 + Double(i) * 0.000001,
+                type: .speed, name: "Site \(i)")
+        }
+        let coordinator = RoadCameraMapCoordinator(repository: upstream)
+        await coordinator.refresh(enabledTypes: [.speed])
+        let center = MapCameraSnapshot(latitude: 57.45, longitude: 12.09, zoom: 13, bearing: 0, pitch: 0)
+        let sites = coordinator.visibleGroups(center: center, radius: nil, coordinatedDensity: true)
+        XCTAssertEqual(sites.count, 300)
+        XCTAssertEqual(Set(sites.flatMap(\.views).map(\.id)), Set((upstream.catalogCameras ?? []).map(\.id)))
+        XCTAssertEqual(upstream.photoCalls, 0)
+    }
+
     func testAnOpenGroupRetainsSelectionAcrossZoomAndHonorsCatalogRemoval() async {
         let upstream = CameraStub()
         let first = siteCamera("a", direction: 135, type: .traffic, name: "First site")

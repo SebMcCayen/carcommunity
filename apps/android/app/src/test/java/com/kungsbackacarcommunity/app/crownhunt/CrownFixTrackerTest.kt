@@ -10,7 +10,7 @@ import org.junit.Test
  * The rolling pair of fixes a claim is proved with.
  *
  * `crownHunt.claimSpawn` will not accept a single sample — a reported speed of
- * zero is just a number the client sent — so it wants two fixes 4..300 s apart
+ * zero is just a number the client sent — so it wants two fixes 4..12 s apart
  * and derives its own speed from the pair. This is the arithmetic that picks
  * them, unit-tested rather than discovered by sitting in a car park.
  */
@@ -68,7 +68,7 @@ class CrownFixTrackerTest {
         val partner = tracker.proofPartner()!!
         val gapSeconds = (tracker.latest!!.recordedAtMillis - partner.recordedAtMillis) / 1000
         assertTrue(
-            "the pair spans $gapSeconds s — it should hug the 4 s minimum, not the 300 s cap",
+            "the pair spans $gapSeconds s — it should hug the 4 s minimum, not the maximum gap",
             gapSeconds in CrownSpawnLimits.MIN_DWELL_SECONDS..(CrownSpawnLimits.MIN_DWELL_SECONDS + 2),
         )
         assertTrue(CrownCollectGate.isDwellProofUsable(partner, tracker.latest!!))
@@ -221,11 +221,12 @@ class CrownFixTrackerTest {
             tracker.secondsUntilProofReady(staleNow),
         )
 
-        // A fresh fix restores readiness immediately (the old partner is still in
-        // the dwell window relative to it).
+        // After a long idle, one new fix restores the location, not the old stop.
         tracker.record(CrownFix(57.5, 12.0, staleNow))
         assertNotNull(tracker.bestRecent(staleNow))
-        assertNotNull(tracker.proofPartner(staleNow))
+        assertNull(tracker.proofPartner(staleNow))
+        tracker.record(CrownFix(57.5, 12.0, staleNow + 4_000))
+        assertNotNull(tracker.proofPartner(staleNow + 4_000))
     }
 
     /**
@@ -235,14 +236,14 @@ class CrownFixTrackerTest {
      * a stricter cutoff would re-create the collect lag on slow-GPS devices.
      */
     @Test
-    fun `a fix a few tens of seconds old is still usable, matching the server`() {
+    fun `a thirty second old parking fix is no longer usable for collection`() {
         val tracker = CrownFixTracker()
         tracker.record(fix(0))
         tracker.record(fix(6))
-        // 30 s after the last fix: comfortably inside the 60 s server window.
+        // A prior stop must not remain collectable after leaving or backgrounding.
         val now = base + 36_000
-        assertNotNull("a 30 s-old fix must still be a current", tracker.bestRecent(now))
-        assertNotNull("a 30 s-old pair must still be ready", tracker.proofPartner(now))
+        assertNull(tracker.bestRecent(now))
+        assertNull(tracker.proofPartner(now))
     }
 
     /**
@@ -259,9 +260,8 @@ class CrownFixTrackerTest {
         // Less accurate, but fresh, and within a settle window of the stale one.
         tracker.record(CrownFix(57.5, 12.0, base + 45_000, accuracyMeters = 50.0))
 
-        // now: latest (base+45s) is 55 s old = fresh; the 5 m sample (base+39s) is
-        // 61 s old = stale. The stale accurate sample must be rejected.
-        val now = base + 100_000
+        // now: latest is 10 s old; the more accurate sample is 16 s old and stale.
+        val now = base + 55_000
         val best = tracker.bestRecent(now)!!
         assertEquals(
             "a stale older sample must not win on accuracy",
@@ -336,7 +336,7 @@ class CrownFixTrackerTest {
                 Case(
                     "older accurate sample is stale",
                     listOf(Fx(39_000, 5.0), Fx(45_000, 50.0)),
-                    100_000,
+                    55_000,
                     true,
                     45_000,
                 ),
@@ -417,9 +417,9 @@ class CrownFixTrackerTest {
     @Test
     fun `an out-of-range earlier fix is not a valid proof partner`() {
         val tracker = CrownFixTracker()
-        // Approach-era sample ~180 m out, then the member stops on the crown.
-        tracker.record(eastFix(0, metresEast = 180.0))
-        tracker.record(eastFix(5, metresEast = 0.0))
+        // Tiny GPS scatter across the radius edge: stationary, but only one fix is in range.
+        tracker.record(eastFix(0, metresEast = 75.2))
+        tracker.record(eastFix(5, metresEast = 74.8))
         val now = base + 5_000
 
         // Ungated, the stale out-of-range partner pairs with the dead-on current —
@@ -437,7 +437,7 @@ class CrownFixTrackerTest {
         val tracker = CrownFixTracker()
         // Both fixes are inside the ring (the member stood still in range).
         tracker.record(eastFix(0, metresEast = 20.0))
-        tracker.record(eastFix(5, metresEast = 10.0))
+        tracker.record(eastFix(5, metresEast = 19.5))
         val now = base + 5_000
 
         val pair = tracker.proofPair(now, inRange)
@@ -456,7 +456,7 @@ class CrownFixTrackerTest {
         // few seconds later with no further recording — the popup does not need a
         // cold restart to re-earn it.
         tracker.record(eastFix(0, metresEast = 15.0))
-        tracker.record(eastFix(5, metresEast = 5.0))
+        tracker.record(eastFix(5, metresEast = 14.5))
 
         assertNotNull(tracker.proofPair(base + 5_000, inRange))
         // "Reopen" a couple of seconds later — still fresh (< 60 s), no new fix.
@@ -471,8 +471,8 @@ class CrownFixTrackerTest {
         // Only an out-of-range approach fix and a fresh in-range current: there is
         // no valid in-range partner, so the countdown must stay above zero (honest
         // "confirming") rather than reading the out-of-range fix as ready.
-        tracker.record(eastFix(0, metresEast = 200.0))
-        tracker.record(eastFix(5, metresEast = 0.0))
+        tracker.record(eastFix(0, metresEast = 75.2))
+        tracker.record(eastFix(5, metresEast = 74.8))
         val now = base + 5_000
 
         assertEquals("ungated hint would falsely say ready", 0, tracker.secondsUntilProofReady(now))
@@ -500,5 +500,40 @@ class CrownFixTrackerTest {
             "the countdown must not report ready (0) when no in-range pair exists",
             tracker.secondsUntilProofReady(now, inRange) > 0,
         )
+    }
+
+    @Test
+    fun `a corroborated departure discards a previously ready parked proof`() {
+        val tracker = CrownFixTracker()
+        tracker.record(fix(0))
+        tracker.record(fix(4))
+        assertNotNull(tracker.proofPair(base + 4_000))
+        tracker.record(CrownFix(57.5 + 2.0 / 111195.0, 12.0, base + 6_000, 1.0))
+        tracker.record(CrownFix(57.5 + 4.0 / 111195.0, 12.0, base + 8_000, 1.0))
+        assertNull("old parked proof cannot survive driving away", tracker.proofPair(base + 8_000))
+        tracker.record(CrownFix(57.5 + 4.0 / 111195.0, 12.0, base + 12_000, 0.0))
+        assertNotNull("a new stopped window becomes ready without reopening", tracker.proofPair(base + 12_000))
+    }
+
+    @Test
+    fun `modest coordinate scatter and one reported spike preserve a continuous stop`() {
+        val tracker = CrownFixTracker()
+        tracker.record(CrownFix(57.5, 12.0, base, 0.0))
+        tracker.record(CrownFix(57.5 + 0.5 / 111195.0, 12.0, base + 2_000, 6.0))
+        tracker.record(CrownFix(57.5, 12.0, base + 4_000, 0.0))
+        val pair = tracker.proofPair(base + 4_000)!!
+        assertTrue(!CrownCollectGate.isMoving(CrownCollectGate.movementSpeedMps(pair.current, pair.previous)))
+    }
+
+    @Test
+    fun `a new departure immediately clears the old stop even with zero or absent reported speed`() {
+        for (speed in listOf(1.0, 0.0, null)) {
+            val tracker = CrownFixTracker()
+            tracker.record(CrownFix(57.5, 12.0, base, 0.0))
+            tracker.record(CrownFix(57.5, 12.0, base + 4_000, 0.0))
+            assertNotNull(tracker.proofPair(base + 4_000))
+            tracker.record(CrownFix(57.5 + 2.0 / 111195.0, 12.0, base + 6_000, speed))
+            assertNull("speed=$speed must not average away a departure", tracker.proofPair(base + 6_000))
+        }
     }
 }

@@ -72,6 +72,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6.4.1
+      - name: Test Google Sign-In package validation
+        run: python3 -m unittest discover -s apps/android/scripts -p 'test_google_signin_config.py'
       - name: Prepare verified Gradle wrapper cache
         timeout-minutes: 10
         env:
@@ -111,12 +113,29 @@ jobs:
       # google-services + Crashlytics plugins are guarded behind an existing
       # google-services.json check, and the release build degrades to UNSIGNED
       # when keystore.properties is absent. R8 shrinking runs regardless of
-      # either. The unsigned release APK is deliberately NOT uploaded as an
+      # either. A synthetic OAuth resource exercises the production dynamic
+      # lookup/keep rule through optimized APK and AAB packaging. No Firebase
+      # backend, OAuth credentials or signing material are supplied. The fixture
+      # is removed afterwards and never enters the signed release workflow.
+      # The unsigned release APK is deliberately NOT uploaded as an
       # artifact (this is only a build gate, and release artifacts stay private).
       - name: Assemble release APK (R8 shrink gate)
         if: github.event_name != 'workflow_dispatch' || !inputs.source_only
         working-directory: apps/android
-        run: ./gradlew --no-daemon :app:assembleRelease
+        run: |
+          set -euo pipefail
+          fixture=app/src/release/res/values/google_signin_ci_fixture.xml
+          mkdir -p "$(dirname "$fixture")"
+          trap 'rm -f "$fixture"' EXIT
+          cp scripts/fixtures/google-signin.xml "$fixture"
+          ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          aapt2=$(find "$sdk_root/build-tools" -type f -name aapt2 | sort -V | tail -n1)
+          test -n "$aapt2"
+          python3 scripts/verify-google-signin-config.py \
+            --config scripts/fixtures/google-services-signin.json --aapt2 "$aapt2" \
+            app/build/outputs/apk/release/app-release-unsigned.apk \
+            app/build/outputs/bundle/release/app-release.aab
 
       - name: Verify 16 KB native-library alignment
         if: github.event_name != 'workflow_dispatch' || !inputs.source_only

@@ -11,6 +11,7 @@ import {
   DENSITY_K,
   MAX_ACTIVITY_SPEED_MPS,
   MAX_COLLECT_SPEED_MPS,
+  MAX_SPAWN_POSITION_AGE_SECONDS,
   MAX_CROWNS_PER_CELL,
   MAX_STORED_COLLECT_RADIUS_METERS,
   MIN_CROWN_SEPARATION_METERS,
@@ -46,7 +47,7 @@ import {
   type CrownRarity,
 } from './crown-spawn-core';
 import { MAX_REPORTED_ACCURACY_METERS } from './crownhunt-core';
-import { haversineDistanceMeters } from './crown-hunt-geo';
+import { haversineDistanceMeters, isPositionFresh } from './crown-hunt-geo';
 import { isFirestoreSafeId } from '../points/points-core';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -574,16 +575,25 @@ describe('stationary collection rule', () => {
     ...overrides,
   });
 
-  const evaluate = (
-    current: Partial<CrownFix>,
-    previous: Partial<CrownFix>,
-    movedMeters = 1,
-  ) =>
+  const evaluate = (current: Partial<CrownFix>, previous: Partial<CrownFix>, movedMeters = 1) =>
     evaluateStationaryCollection({
       current: fix({ recordedAtMs: base + 6000, ...current }),
       previous: fix(previous),
       movedMeters,
     });
+
+  it('requires a current fix within the automatic-crown freshness window', () => {
+    const now = base + 20_000;
+    expect(
+      isPositionFresh(new Date(now - 10_000).toISOString(), now, MAX_SPAWN_POSITION_AGE_SECONDS),
+    ).toBe(true);
+    expect(
+      isPositionFresh(new Date(now - 10_001).toISOString(), now, MAX_SPAWN_POSITION_AGE_SECONDS),
+    ).toBe(false);
+    expect(
+      isPositionFresh(new Date(now + 1).toISOString(), now, MAX_SPAWN_POSITION_AGE_SECONDS),
+    ).toBe(false);
+  });
 
   it('accepts a member standing still inside the radius', () => {
     expect(evaluate({}, {})).toEqual({ ok: true });
@@ -656,10 +666,33 @@ describe('stationary collection rule', () => {
       evaluate(
         { speedMetersPerSecond: MAX_COLLECT_SPEED_MPS },
         { speedMetersPerSecond: MAX_COLLECT_SPEED_MPS },
-        // 6 s of dwell at 2.0 m/s is 12 m, so the derived speed also passes.
-        12,
+        // Exactly the near-stationary tolerance, not the former walking-speed ceiling.
+        6 * MAX_COLLECT_SPEED_MPS,
       ),
     ).toEqual({ ok: true });
+  });
+
+  it('rejects a slowly rolling car at 1 m/s, including absent or zero reported speeds', () => {
+    for (const speed of [null, 0, 1]) {
+      expect(evaluate({ speedMetersPerSecond: speed }, { speedMetersPerSecond: speed }, 6)).toEqual(
+        { ok: false, result: 'must_be_stationary' },
+      );
+    }
+  });
+
+  it('accepts modest stationary coordinate scatter without subtracting GPS accuracy from motion', () => {
+    expect(evaluate({ accuracyMeters: 10 }, { accuracyMeters: 10 }, 1.5)).toEqual({ ok: true });
+    expect(evaluate({ accuracyMeters: 100 }, { accuracyMeters: 100 }, 6)).toEqual({
+      ok: false,
+      result: 'must_be_stationary',
+    });
+  });
+
+  it('does not dilute a departure with a long parked interval', () => {
+    expect(evaluate({ recordedAtMs: base + 30_000 }, {}, 6)).toEqual({
+      ok: false,
+      result: 'must_be_stationary',
+    });
   });
 
   it('rejects a MOVING claim on the derived speed even when the client omits speed', () => {
@@ -694,9 +727,10 @@ describe('stationary collection rule', () => {
   });
 
   it('checks the radius BEFORE the dwell, so a far-away member is told the useful thing', () => {
-    expect(
-      evaluate({ distanceMeters: 5000, accuracyMeters: 0, recordedAtMs: base }, {}),
-    ).toEqual({ ok: false, result: 'outside_radius' });
+    expect(evaluate({ distanceMeters: 5000, accuracyMeters: 0, recordedAtMs: base }, {})).toEqual({
+      ok: false,
+      result: 'outside_radius',
+    });
   });
 });
 
@@ -749,11 +783,7 @@ describe('activity write throttle', () => {
 
   it('always writes immediately when the cell changes', () => {
     expect(
-      shouldRecordCrownActivity(
-        { recordedAtIso: now.toISOString(), cellKey: 'a_b' },
-        'a_c',
-        now,
-      ),
+      shouldRecordCrownActivity({ recordedAtIso: now.toISOString(), cellKey: 'a_b' }, 'a_c', now),
     ).toBe(true);
   });
 
@@ -766,9 +796,9 @@ describe('activity write throttle', () => {
   });
 
   it('fails toward writing on unparseable state', () => {
-    expect(shouldRecordCrownActivity({ recordedAtIso: 'nonsense', cellKey: 'a_b' }, 'a_b', now)).toBe(
-      true,
-    );
+    expect(
+      shouldRecordCrownActivity({ recordedAtIso: 'nonsense', cellKey: 'a_b' }, 'a_b', now),
+    ).toBe(true);
     expect(shouldRecordCrownActivity({ cellKey: 'a_b' }, 'a_b', now)).toBe(true);
   });
 });
@@ -930,7 +960,9 @@ describe('claimSpawn input parsing — accuracyMeters bounds', () => {
   it('keeps the sibling speed field non-finite-safe', () => {
     expect(parseClaimSpawnInput({ ...validClaim, speedMetersPerSecond: 0 }).ok).toBe(true);
     expect(parseClaimSpawnInput({ ...validClaim, speedMetersPerSecond: -1 }).ok).toBe(false);
-    expect(parseClaimSpawnInput({ ...validClaim, speedMetersPerSecond: Number.NaN }).ok).toBe(false);
+    expect(parseClaimSpawnInput({ ...validClaim, speedMetersPerSecond: Number.NaN }).ok).toBe(
+      false,
+    );
     expect(
       parseClaimSpawnInput({ ...validClaim, speedMetersPerSecond: Number.POSITIVE_INFINITY }).ok,
     ).toBe(false);

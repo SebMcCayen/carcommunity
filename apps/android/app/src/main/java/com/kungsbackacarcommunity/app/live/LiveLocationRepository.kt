@@ -83,6 +83,8 @@ data class LiveMarker(
      * publisher vanish from the map.
      */
     val accuracyMeters: Double? = null,
+    val headingDegrees: Double? = null,
+    val speedMetersPerSecond: Double? = null,
 )
 
 /**
