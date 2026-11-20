@@ -39090,13 +39090,47 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Din appbutik bekräftade inget aktivt medlemskap för köpet."
+            "value": "Din appbutik bekräftade inget aktivt medlemskap."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your app store did not confirm an active membership for this purchase."
+            "value": "Your app store did not confirm an active membership."
+          }
+        }
+      }
+    },
+    "subscription.errorMembershipVerification": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att kontrollera ditt medlemskap just nu. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your membership could not be checked right now. Please try again."
+          }
+        }
+      }
+    },
+    "subscription.errorNoPurchasesToRestore": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inga aktiva prenumerationer kunde återställas. Kontrollera att du använder samma butikskonto som vid köpet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No active subscriptions could be restored. Check that you are using the same store account as when you purchased."
           }
         }
       }
@@ -39135,19 +39169,53 @@
         }
       }
     },
+    "subscription.errorRestore": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det gick inte att återställa dina köp från appbutiken. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your purchases could not be restored from the app store. Please try again."
+          }
+        }
+      }
+    },
+    "subscription.errorRestoreVerification": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dina köp hämtades från appbutiken, men medlemskapet kunde inte verifieras just nu. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your purchases were retrieved from the app store, but your membership could not be verified right now. Please try again."
+          }
+        }
+      }
+    },
     "subscription.errorVerification": {
       "extractionState": "manual",
       "localizations": {
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vi kunde inte verifiera ditt köp. Det har ännu inte aktiverats som medlemskap."
+            "value": "Det gick inte att verifiera köpet just nu. Försök igen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "We could not verify your purchase. It has not been activated as a membership."
+            "value": "Your purchase could not be verified right now. Please try again."
           }
         }
       }
@@ -39407,19 +39475,53 @@
         }
       }
     },
+    "subscription.statusRestored": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dina köp har återställts. Ditt medlemskap är aktivt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your purchases have been restored. Your membership is active."
+          }
+        }
+      }
+    },
+    "subscription.statusRestoring": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Återställer dina köp…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restoring your purchases…"
+          }
+        }
+      }
+    },
     "subscription.statusSuccess": {
       "extractionState": "manual",
       "localizations": {
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Köpet är verifierat. Medlemskapet är aktivt."
+            "value": "Köpet är slutfört. Ditt medlemskap är aktivt."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Purchase verified. Membership is active."
+            "value": "Purchase completed. Your membership is active."
           }
         }
       }
@@ -39441,19 +39543,36 @@
         }
       }
     },
+    "subscription.statusVerified": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ditt medlemskap är aktivt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your membership is active."
+          }
+        }
+      }
+    },
     "subscription.statusVerifying": {
       "extractionState": "manual",
       "localizations": {
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verifierar ditt köp…"
+            "value": "Kontrollerar ditt medlemskap…"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verifying your purchase…"
+            "value": "Checking your membership…"
           }
         }
       }

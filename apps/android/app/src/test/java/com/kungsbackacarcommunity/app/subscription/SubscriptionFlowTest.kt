@@ -94,6 +94,7 @@ class SubscriptionFlowTest {
 
         assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Connecting))
         assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Purchasing))
+        assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Restoring))
         assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Verifying))
         assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Pending))
     }

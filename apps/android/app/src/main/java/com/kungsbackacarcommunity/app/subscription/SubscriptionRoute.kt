@@ -112,6 +112,8 @@ fun SubscriptionRoute(
             )
         },
         onBack = onBack,
-        onRestore = { scope.launch { coordinator.reconcileOwnedPurchases() } },
+        onRestore = {
+            scope.launch { coordinator.reconcileOwnedPurchases(SubscriptionOperation.Restore) }
+        },
     )
 }

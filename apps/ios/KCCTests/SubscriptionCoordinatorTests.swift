@@ -29,7 +29,7 @@ struct SubscriptionCoordinatorTests {
         await coordinator.start()
 
         #expect(coordinator.currentTier == .supporter)
-        #expect(coordinator.status == .success(.supporter))
+        #expect(coordinator.status == .success(.supporter, operation: .verification))
         let finished = await store.finishedIDs
         #expect(finished == [7])
     }
@@ -86,6 +86,104 @@ struct SubscriptionCoordinatorTests {
         #expect(coordinator.status == .pending)
         let calls = await verifier.calls
         #expect(calls == 0)
+    }
+
+    @Test("purchase, restore and verification have distinct confirmations", arguments: [SubscriptionTier.plus, .supporter])
+    @MainActor
+    func operationFeedback(tier: SubscriptionTier) async {
+        let transaction = StoreSignedTransaction(id: 42,
+            productID: tier == .plus ? plusMonthlyProductID : supporterMonthlyProductID,
+            signedTransaction: "owned")
+        let store = FakeSubscriptionStore(purchaseResult: .purchased(transaction), entitlements: [transaction])
+        let verifier = FakeAppleVerifier(result: .success(SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: tier)))
+        let coordinator = SubscriptionCoordinator(uid: "member", store: store, verifier: verifier)
+
+        await coordinator.start()
+        #expect(coordinator.status == .success(tier, operation: .verification))
+        #expect(coordinator.status.messageKey == "subscription.statusVerified")
+
+        await coordinator.purchase(transaction.productID)
+        #expect(coordinator.status == .success(tier, operation: .purchase))
+        #expect(coordinator.status.messageKey == "subscription.statusSuccess")
+
+        await coordinator.restore()
+        #expect(coordinator.status == .success(tier, operation: .restore))
+        #expect(coordinator.status.messageKey == "subscription.statusRestored")
+        #expect(coordinator.currentTier == tier)
+    }
+
+    @Test("failed Apple synchronization preserves membership and retry only verifies")
+    @MainActor
+    func restoreFailureThenRetry() async {
+        let transaction = StoreSignedTransaction(id: 43, productID: supporterMonthlyProductID,
+            signedTransaction: "owned")
+        let store = FakeSubscriptionStore(entitlements: [transaction], synchronizationFails: true)
+        let verifier = FakeAppleVerifier(result: .success(SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: .supporter)))
+        let coordinator = SubscriptionCoordinator(uid: "member", store: store, verifier: verifier)
+        await coordinator.start()
+
+        await coordinator.restore()
+        #expect(coordinator.status == .failed(.restore))
+        #expect(coordinator.status.messageKey == "subscription.errorRestore")
+        #expect(coordinator.currentTier == .supporter)
+        #expect(await verifier.calls == 1)
+
+        await coordinator.reloadAndReconcile()
+        #expect(coordinator.status == .success(.supporter, operation: .verification))
+        #expect(coordinator.status.messageKey == "subscription.statusVerified")
+        #expect(await store.synchronizationCalls == 1)
+        #expect(await verifier.calls == 2)
+    }
+
+    @Test("restore verification failure has restore copy and leaves the transaction unfinished")
+    @MainActor
+    func restoreVerificationFailure() async {
+        let transaction = StoreSignedTransaction(id: 44, productID: plusMonthlyProductID,
+            signedTransaction: "owned")
+        let store = FakeSubscriptionStore(entitlements: [transaction])
+        let verifier = FakeAppleVerifier(result: .failure(TestError.failed))
+        let coordinator = SubscriptionCoordinator(uid: "member", store: store, verifier: verifier)
+
+        await coordinator.restore()
+
+        #expect(coordinator.status == .failed(.restoreVerification))
+        #expect(coordinator.status.messageKey == "subscription.errorRestoreVerification")
+        #expect(await store.finishedIDs.isEmpty)
+        await coordinator.reloadAndReconcile()
+        #expect(coordinator.status == .failed(.membershipVerification))
+        #expect(coordinator.status.messageKey == "subscription.errorMembershipVerification")
+    }
+
+    @Test("restore with no active purchases never reports success or verifies")
+    @MainActor
+    func nothingToRestore() async {
+        let store = FakeSubscriptionStore()
+        let verifier = FakeAppleVerifier(result: .failure(TestError.failed))
+        let coordinator = SubscriptionCoordinator(uid: "member", store: store, verifier: verifier)
+
+        await coordinator.restore()
+
+        #expect(coordinator.status == .failed(.noPurchasesToRestore))
+        #expect(coordinator.status.messageKey == "subscription.errorNoPurchasesToRestore")
+        #expect(await verifier.calls == 0)
+    }
+
+    @Test("a restored transaction without verified access never reports restoration success")
+    @MainActor
+    func inactiveRestoration() async {
+        let store = FakeSubscriptionStore(entitlements: [StoreSignedTransaction(
+            id: 45, productID: plusMonthlyProductID, signedTransaction: "inactive")])
+        let verifier = FakeAppleVerifier(result: .success(SubscriptionVerificationResult(
+            entitlement: "none", status: "expired", tier: .plus)))
+        let coordinator = SubscriptionCoordinator(uid: "member", store: store, verifier: verifier)
+
+        await coordinator.restore()
+
+        #expect(coordinator.status == .failed(.noPurchasesToRestore))
+        #expect(coordinator.currentTier == nil)
+        #expect(SubscriptionFlowStatus.restoring.isBusy)
     }
     @Test("approval is delivered without opening membership")
     @MainActor
@@ -232,6 +330,8 @@ private actor FakeSubscriptionStore: SubscriptionStore {
     private let purchaseResult: StorePurchaseResult
     private let entitlements: [StoreSignedTransaction]
     private let catalogueUnavailable: Bool
+    private let synchronizationFails: Bool
+    private(set) var synchronizationCalls = 0
     private var unfinished: [StoreSignedTransaction]
     private(set) var unfinishedReads = 0
     private let updates: AsyncStream<StoreSignedTransaction>
@@ -246,13 +346,15 @@ private actor FakeSubscriptionStore: SubscriptionStore {
         purchaseResult: StorePurchaseResult = .cancelled,
         entitlements: [StoreSignedTransaction] = [],
         unfinished: [StoreSignedTransaction]? = nil,
-        catalogueUnavailable: Bool = false
+        catalogueUnavailable: Bool = false,
+        synchronizationFails: Bool = false
     ) {
         (updates, continuation) = AsyncStream.makeStream()
         availableProducts = products
         self.purchaseResult = purchaseResult
         self.entitlements = entitlements
         self.catalogueUnavailable = catalogueUnavailable
+        self.synchronizationFails = synchronizationFails
         self.unfinished = unfinished ?? entitlements
     }
 
@@ -271,7 +373,10 @@ private actor FakeSubscriptionStore: SubscriptionStore {
         return unfinished.filter { !finishedIDs.contains($0.id) }
     }
     func emit(_ transaction: StoreSignedTransaction) { continuation.yield(transaction) }
-    func synchronize() async throws {}
+    func synchronize() async throws {
+        synchronizationCalls += 1
+        if synchronizationFails { throw TestError.failed }
+    }
     func finish(transactionID: UInt64) async { finishedIDs.append(transactionID) }
 }
 

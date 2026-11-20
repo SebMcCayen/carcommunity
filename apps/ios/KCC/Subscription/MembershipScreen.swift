@@ -138,8 +138,8 @@ struct MembershipScreen: View {
 
     @ViewBuilder
     private var statusView: some View {
-        if let key = statusKey {
-            Text(key)
+        if let key = coordinator.status.messageKey {
+            Text(LocalizedStringKey(key))
                 .font(.footnote)
                 .foregroundStyle(isFailure ? Color.red : Color.secondary)
                 .multilineTextAlignment(.center)
@@ -153,25 +153,5 @@ struct MembershipScreen: View {
     private var isFailure: Bool {
         if case .failed = coordinator.status { return true }
         return false
-    }
-
-    private var statusKey: LocalizedStringKey? {
-        switch coordinator.status {
-        case .idle: nil
-        case .loading: "subscription.statusConnecting"
-        case .ready: "subscription.statusReady"
-        case .purchasing: "subscription.statusPurchasing"
-        case .verifying: "subscription.statusVerifying"
-        case .success: "subscription.statusSuccess"
-        case .pending: "subscription.statusPending"
-        case .failed(let reason):
-            switch reason {
-            case .unavailable: "subscription.statusUnavailable"
-            case .productUnavailable: "subscription.errorProductUnavailable"
-            case .purchase: "subscription.errorPurchase"
-            case .verification: "subscription.errorVerification"
-            case .inactivePurchase: "subscription.errorInactivePurchase"
-            }
-        }
     }
 }

@@ -36,20 +36,57 @@ enum StorePurchaseResult: Equatable, Sendable {
     case cancelled
 }
 
+enum SubscriptionOperation: Equatable, Sendable {
+    case purchase
+    case restore
+    case verification
+}
+
 enum SubscriptionFlowStatus: Equatable, Sendable {
     case idle
     case loading
     case ready
     case purchasing
+    case restoring
     case verifying
-    case success(SubscriptionTier)
+    case success(SubscriptionTier, operation: SubscriptionOperation)
     case pending
     case failed(SubscriptionFailureReason)
 
     var isBusy: Bool {
         switch self {
-        case .loading, .purchasing, .verifying: true
+        case .loading, .purchasing, .restoring, .verifying: true
         default: false
+        }
+    }
+
+    var messageKey: String? {
+        switch self {
+        case .idle: nil
+        case .loading: "subscription.statusConnecting"
+        case .ready: "subscription.statusReady"
+        case .purchasing: "subscription.statusPurchasing"
+        case .restoring: "subscription.statusRestoring"
+        case .verifying: "subscription.statusVerifying"
+        case .success(_, let operation):
+            switch operation {
+            case .purchase: "subscription.statusSuccess"
+            case .restore: "subscription.statusRestored"
+            case .verification: "subscription.statusVerified"
+            }
+        case .pending: "subscription.statusPending"
+        case .failed(let reason):
+            switch reason {
+            case .unavailable: "subscription.statusUnavailable"
+            case .productUnavailable: "subscription.errorProductUnavailable"
+            case .purchase: "subscription.errorPurchase"
+            case .verification: "subscription.errorVerification"
+            case .restore: "subscription.errorRestore"
+            case .restoreVerification: "subscription.errorRestoreVerification"
+            case .membershipVerification: "subscription.errorMembershipVerification"
+            case .noPurchasesToRestore: "subscription.errorNoPurchasesToRestore"
+            case .inactivePurchase: "subscription.errorInactivePurchase"
+            }
         }
     }
 }
@@ -59,6 +96,10 @@ enum SubscriptionFailureReason: Equatable, Sendable {
     case productUnavailable
     case purchase
     case verification
+    case restore
+    case restoreVerification
+    case membershipVerification
+    case noPurchasesToRestore
     case inactivePurchase
 }
 

@@ -135,33 +135,51 @@ class SubscriptionCoordinator(
      * Only one preferred owned purchase is verified to avoid an old lower-tier
      * token overwriting a current higher-tier entitlement.
      */
-    suspend fun reconcileOwnedPurchases() {
+    suspend fun reconcileOwnedPurchases(
+        operation: SubscriptionOperation = SubscriptionOperation.Verification,
+    ) {
         if (!PurchaseFlow.canStart(state.value) || verifier == null) return
         try {
-            state.value = PurchaseFlowStatus.Connecting
+            state.value =
+                if (operation == SubscriptionOperation.Restore) PurchaseFlowStatus.Restoring
+                else PurchaseFlowStatus.Connecting
             if (billing.connect() != BillingConnectionResult.Connected) {
-                state.value = PurchaseFlow.failed(PurchaseFailureReason.Connection)
+                state.value = PurchaseFlow.failed(
+                    if (operation == SubscriptionOperation.Restore) PurchaseFailureReason.Restore
+                    else PurchaseFailureReason.Connection,
+                )
                 return
             }
             val purchase = preferredPurchaseForReconciliation(billing.queryOwnedPurchases())
             ownedPurchaseState.value = purchase
             if (purchase == null) {
-                state.value = PurchaseFlowStatus.Idle
+                state.value =
+                    if (operation == SubscriptionOperation.Restore) {
+                        PurchaseFlow.failed(PurchaseFailureReason.NoPurchasesToRestore)
+                    } else PurchaseFlowStatus.Idle
                 return
             }
             state.value = PurchaseFlowStatus.Verifying
             val verified = verifier.verify(purchase.purchaseToken)
             state.value =
                 when {
-                    verified.grantsAccess -> PurchaseFlowStatus.Success(verified.tier)
+                    verified.grantsAccess -> PurchaseFlowStatus.Success(verified.tier, operation)
                     purchase.state == OwnedPurchaseState.Pending -> PurchaseFlowStatus.Pending
-                    else -> PurchaseFlow.failed(PurchaseFailureReason.InactivePurchase)
+                    else -> PurchaseFlow.failed(
+                        if (operation == SubscriptionOperation.Restore) PurchaseFailureReason.NoPurchasesToRestore
+                        else PurchaseFailureReason.InactivePurchase,
+                    )
                 }
         } catch (cancellation: CancellationException) {
             state.value = PurchaseFlowStatus.Idle
             throw cancellation
         } catch (_: Exception) {
-            state.value = PurchaseFlow.failed(PurchaseFailureReason.Verification)
+            val reason = when {
+                operation != SubscriptionOperation.Restore -> PurchaseFailureReason.MembershipVerification
+                state.value == PurchaseFlowStatus.Verifying -> PurchaseFailureReason.RestoreVerification
+                else -> PurchaseFailureReason.Restore
+            }
+            state.value = PurchaseFlow.failed(reason)
         }
     }
 

@@ -272,8 +272,13 @@ private fun statusTextRes(status: PurchaseFlowStatus): Int? =
         PurchaseFlowStatus.Connecting -> R.string.subscription_statusConnecting
         PurchaseFlowStatus.Ready -> R.string.subscription_statusReady
         PurchaseFlowStatus.Purchasing -> R.string.subscription_statusPurchasing
+        PurchaseFlowStatus.Restoring -> R.string.subscription_statusRestoring
         PurchaseFlowStatus.Verifying -> R.string.subscription_statusVerifying
-        is PurchaseFlowStatus.Success -> R.string.subscription_statusSuccess
+        is PurchaseFlowStatus.Success -> when (status.operation) {
+            SubscriptionOperation.Purchase -> R.string.subscription_statusSuccess
+            SubscriptionOperation.Restore -> R.string.subscription_statusRestored
+            SubscriptionOperation.Verification -> R.string.subscription_statusVerified
+        }
         PurchaseFlowStatus.Pending -> R.string.subscription_statusPending
         is PurchaseFlowStatus.Failed ->
             when (status.reason) {
@@ -282,6 +287,10 @@ private fun statusTextRes(status: PurchaseFlowStatus): Int? =
                     R.string.subscription_errorProductUnavailable
                 PurchaseFailureReason.Purchase -> R.string.subscription_errorPurchase
                 PurchaseFailureReason.Verification -> R.string.subscription_errorVerification
+                PurchaseFailureReason.MembershipVerification -> R.string.subscription_errorMembershipVerification
+                PurchaseFailureReason.Restore -> R.string.subscription_errorRestore
+                PurchaseFailureReason.RestoreVerification -> R.string.subscription_errorRestoreVerification
+                PurchaseFailureReason.NoPurchasesToRestore -> R.string.subscription_errorNoPurchasesToRestore
                 PurchaseFailureReason.InactivePurchase ->
                     R.string.subscription_errorInactivePurchase
                 PurchaseFailureReason.Unavailable -> R.string.subscription_statusUnavailable
