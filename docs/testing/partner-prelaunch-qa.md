@@ -84,9 +84,10 @@ to the PR, not this local-results table.
 
 The user explicitly deferred physical Android/iPhone camera, GMS, configured
 native Mapbox and online/offline device acceptance. No emulator screenshot or
-web fixture substitutes for those checks. The full Partner journey also retains
-the separate legacy billboard/Insights consent-verification gate described in
-[the prelaunch privacy review](../security/partner-portal-prelaunch-review.md).
+web fixture substitutes for those checks. The separate legacy billboard/Insights
+consent gap is addressed in source by
+[the versioned explicit-consent correction](../contracts/partner-analytics-consent-v1.md);
+its actual tests/CI and later deployment remain separate evidence.
 
 The managed Codex Security setup validated an ordinary Git clone and the exact
 original feature range, but its scan launcher still rejected the Git/HEAD target.

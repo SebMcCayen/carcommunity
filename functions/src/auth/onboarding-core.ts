@@ -36,13 +36,17 @@ const completeOnboardingInputSchema = z
     licenceConfirmed: z.literal(true),
     termsAccepted: z.literal(true),
     privacyPolicyAccepted: z.literal(true),
-    // Anonymised partner statistics are DEFAULT-ON / opt-out. The onboarding
-    // step surfaces the toggle pre-enabled; the client sends the member's
-    // choice here so it persists in the same transaction. Omitted → provisioning
-    // default (true). Only an explicit `false` opts the member out.
+    // New clients pair an optional OFF-by-default choice with wording version1.
+    // Legacy requests remain valid but cannot turn a default into consent.
     anonymousPartnerStatsOptIn: z.boolean().optional(),
+    anonymousPartnerStatsConsentVersion: z.literal(1).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (input) =>
+      input.anonymousPartnerStatsConsentVersion === undefined ||
+      input.anonymousPartnerStatsOptIn !== undefined,
+  );
 
 export type CompleteOnboardingInput = z.infer<typeof completeOnboardingInputSchema>;
 
@@ -55,7 +59,7 @@ export function parseCompleteOnboardingInput(data: unknown): ParseResult {
     return {
       ok: false,
       message:
-        'Expected { licenceConfirmed: true, termsAccepted: true, privacyPolicyAccepted: true, displayName?: string, anonymousPartnerStatsOptIn?: boolean }.',
+        'Expected { licenceConfirmed: true, termsAccepted: true, privacyPolicyAccepted: true, displayName?: string, anonymousPartnerStatsOptIn?: boolean, anonymousPartnerStatsConsentVersion?: 1 }.',
     };
   }
   return { ok: true, input: result.data };
@@ -124,13 +128,17 @@ export function computeOnboardingWrites(
     privateUpdate.privacyPolicyAcceptedAt = serverTimestamp();
   }
 
-  // Anonymised partner statistics (default-on / opt-out). Written only when the
-  // client sends an explicit choice from the onboarding toggle; when omitted the
-  // provisioning default (true) stands. Unlike the consent timestamps this is
-  // NOT write-once — the member can flip it here and later under Privacy, so the
-  // latest choice always wins.
-  if (input.anonymousPartnerStatsOptIn !== undefined) {
-    privateUpdate.anonymousPartnerStatsOptIn = input.anonymousPartnerStatsOptIn;
+  // Only the first onboarding completion may set optional consent. A retried
+  // onboarding request must never overwrite a later Privacy choice.
+  if (!isSet(existing.onboardingCompletedAt) && input.anonymousPartnerStatsOptIn !== undefined) {
+    if (input.anonymousPartnerStatsConsentVersion === 1) {
+      privateUpdate.anonymousPartnerStatsOptIn = input.anonymousPartnerStatsOptIn;
+      privateUpdate.anonymousPartnerStatsConsentVersion = 1;
+      privateUpdate.anonymousPartnerStatsConsentAt = serverTimestamp();
+    } else if (input.anonymousPartnerStatsOptIn === false) {
+      // Old clients can decline, but their preselected true cannot grant consent.
+      privateUpdate.anonymousPartnerStatsOptIn = false;
+    }
   }
 
   return { profileUpdate, privateUpdate };

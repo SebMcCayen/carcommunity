@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD,
+  PARTNER_INTERACTION_TYPES,
   aggregateId,
   buildScopedHash,
   computeAggregateMetric,
@@ -38,25 +39,35 @@ describe('insights-core privacy primitives', () => {
     expect(effectiveThreshold(25)).toBe(25);
   });
 
-  it('zeroes below-threshold pass-by aggregates (never just hides them)', () => {
-    const below = computeAggregateMetric('anonymous_pass_by', 40, 9, 10);
-    expect(below.resultStatus).toBe('insufficient_data');
-    expect(below.totalCount).toBe(0);
-    expect(below.uniqueContributorCount).toBeNull();
+  it.each(PARTNER_INTERACTION_TYPES)('enforces the floor and raised threshold for %s', (type) => {
+    expect(computeAggregateMetric(type, 40, 9, 1)).toEqual({
+      resultStatus: 'insufficient_data',
+      totalCount: 0,
+      uniqueContributorCount: null,
+    });
+    expect(computeAggregateMetric(type, 40, 10, 10)).toEqual({
+      resultStatus: 'available',
+      totalCount: 40,
+      uniqueContributorCount: 10,
+    });
+    expect(computeAggregateMetric(type, 40, 14, 15)).toEqual({
+      resultStatus: 'insufficient_data',
+      totalCount: 0,
+      uniqueContributorCount: null,
+    });
+    expect(computeAggregateMetric(type, 40, 15, 15)).toEqual({
+      resultStatus: 'available',
+      totalCount: 40,
+      uniqueContributorCount: 15,
+    });
+  });
 
-    const at = computeAggregateMetric('anonymous_pass_by', 40, 10, 10);
-    expect(at.resultStatus).toBe('available');
-    expect(at.totalCount).toBe(40);
-    expect(at.uniqueContributorCount).toBe(10);
-
-    // The threshold applies ONLY to anonymous_pass_by (legacy parity):
-    // user-initiated interactions are not aggregate-suppressed.
-    const regular = computeAggregateMetric('profile_view', 2, 1, 10);
-    expect(regular.resultStatus).toBe('available');
-    expect(regular.totalCount).toBe(2);
-
-    const empty = computeAggregateMetric('map_view', 0, 0, 10);
-    expect(empty.resultStatus).toBe('no_data');
+  it('zeroes an empty aggregate', () => {
+    expect(computeAggregateMetric('map_view', 0, 0, 10)).toEqual({
+      resultStatus: 'no_data',
+      totalCount: 0,
+      uniqueContributorCount: null,
+    });
   });
 });
 
@@ -86,9 +97,7 @@ describe('insights-core periods and identifiers', () => {
     expect(aggregateId('c1', 'profile_view', 'week', new Date('2026-06-29T00:00:00Z'))).toBe(
       'c1_profile_view_week_2026-06-29',
     );
-    expect(eventExpiry(new Date('2026-07-04T12:00:00Z'))).toEqual(
-      new Date('2026-07-11T12:00:00Z'),
-    );
+    expect(eventExpiry(new Date('2026-07-04T12:00:00Z'))).toEqual(new Date('2026-07-11T12:00:00Z'));
   });
 
   it('computes the previous UTC day with real date arithmetic', () => {

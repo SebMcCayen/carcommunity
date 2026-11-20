@@ -163,6 +163,10 @@ final class PrivacySettingsCoordinator {
 
     private func apply(_ snapshot: PrivacySettingsSnapshot) {
         switch snapshot {
+        case .unconfirmed:
+            // Metadata can return to cache/pending after a confirmed snapshot.
+            // Lock edits and saves without discarding the member's local draft.
+            state = .loading
         case .failed(let code):
             state = .failed(code: code)
         case .loaded(let choices):

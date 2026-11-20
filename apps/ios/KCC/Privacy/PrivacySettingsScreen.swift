@@ -44,7 +44,7 @@ struct PrivacySettingsScreen: View {
                 PrivacyPreferenceCard(title: "privacySettings.partnerStatsTitle", label: "privacySettings.partnerStatsBody",
                     explanations: ["privacySettings.partnerStatsExplainer", "privacySettings.partnerStatsNotice", "privacySettings.partnerStatsNote"],
                     value: Binding(
-                        get: { coordinator.draft?.partnerStatsOptIn ?? true },
+                        get: { coordinator.draft?.partnerStatsOptIn ?? false },
                         set: { coordinator.setPendingPartnerStatsOptIn($0) }),
                     status: coordinator.partnerSaveStatus, canEdit: coordinator.canEdit,
                     saveIdentifier: "privacySettings.partnerStats.save",

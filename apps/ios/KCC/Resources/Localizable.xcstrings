@@ -26306,13 +26306,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "På som standard. Du kan stänga av det nu, eller senare under Integritet."
+            "value": "Av som standard. Välj själv om framtida partnerinteraktioner och sparade körningar får bidra till aggregerad analys. Du kan ändra valet under Integritet."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On by default. You can turn it off now, or later under Privacy."
+            "value": "Off by default. Choose whether future partner interactions and saved drives may contribute to aggregate analytics. Change your choice under Privacy."
           }
         }
       }
@@ -26323,13 +26323,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bidra med anonymiserad partnerstatistik"
+            "value": "Bidra till frivillig partneranalys"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Contribute anonymised partner statistics"
+            "value": "Contribute to optional partner analytics"
           }
         }
       }
@@ -30828,13 +30828,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bidra med anonymiserad partnerstatistik"
+            "value": "Bidra till frivillig partneranalys"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Contribute anonymised partner statistics"
+            "value": "Contribute to optional partner analytics"
           }
         }
       }
@@ -30845,13 +30845,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "När funktionen är på kan aggregerad statistik bidra till att visa hur många användare som passerar nära KCC:s företagspartner."
+            "value": "Om du väljer ja får framtida interaktioner med partners och billboards samt framtida sparade körningar bidra till aggregerad analys. Äldre körningar används inte."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When enabled, aggregated statistics can help show how many users pass near KCC partner companies."
+            "value": "If you choose yes, future partner and billboard interactions and future saved drives may contribute to aggregate analytics. Earlier drives are not used."
           }
         }
       }
@@ -30862,13 +30862,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "På som standard. Du kan stänga av det när som helst."
+            "value": "Av utan ett nytt aktivt godkännande. Ett äldre sparat standardvärde räknas inte som samtycke. Ändra reglaget och spara ditt val."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On by default. You can turn it off at any time."
+            "value": "Off without a new active approval. An older saved default is not consent. Change the switch and save your choice."
           }
         }
       }
@@ -30879,13 +30879,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Företag får aldrig se din identitet, liveposition eller körhistorik."
+            "value": "Företagen får endast aggregerade resultat över integritetströskeln, inga kundlistor, identiteter, livepositioner eller körhistorik. Antalet bekräftade erbjudandeinlösen räknas separat även om du tackar nej. Du kan när som helst stoppa nya bidrag. Redan sammanställda resultat behålls."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Companies can never see your identity, live location, or drive history."
+            "value": "Companies receive only aggregate results above the privacy threshold, without customer lists, identities, live positions or drive history. Confirmed offer redemptions are counted separately even if you decline. You can stop new contributions at any time. Previously aggregated results are retained."
           }
         }
       }
@@ -30896,13 +30896,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bidra med anonymiserad partnerstatistik"
+            "value": "Bidra till frivillig partneranalys"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Contribute anonymised partner statistics"
+            "value": "Contribute to optional partner analytics"
           }
         }
       }
@@ -30913,13 +30913,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Du kan stänga av funktionen när som helst."
+            "value": "Du kan när som helst stoppa nya bidrag. Redan sammanställda resultat behålls."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You can turn the feature off at any time."
+            "value": "You can stop new contributions at any time. Previously aggregated results are retained."
           }
         }
       }
@@ -30930,13 +30930,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Anonymiserad partnerstatistik"
+            "value": "Frivillig partneranalys"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Anonymised partner statistics"
+            "value": "Optional partner analytics"
           }
         }
       }

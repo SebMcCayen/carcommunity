@@ -31,7 +31,11 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregateId, resolvePeriodBounds } from '../partnerInsights/insights-core';
+import {
+  aggregateId,
+  PARTNER_INTERACTION_TYPES,
+  resolvePeriodBounds,
+} from '../partnerInsights/insights-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -117,7 +121,10 @@ beforeAll(async () => {
   // absolute floor of 10. The seeded anonymous_pass_by (unique 12) was a
   // legitimate "available" row when written at the floor of 10, but now falls
   // below 15 — exactly the case the read-time re-application guards against.
-  await adminDb.collection('config').doc('partnerInsights').set({ minThreshold: 15 }, { merge: true });
+  await adminDb
+    .collection('config')
+    .doc('partnerInsights')
+    .set({ minThreshold: 15 }, { merge: true });
 
   // Seed a day aggregate for the company: an available map_view (unique 20, still
   // >= 15) and an available anonymous_pass_by now BELOW the raised threshold
@@ -128,6 +135,7 @@ beforeAll(async () => {
       .doc(aggregateId(companyId, type as never, 'day', bounds.start))
       .set({
         companyId,
+        consentVersion: 1,
         interactionType: type,
         periodType: 'day',
         periodStart: Timestamp.fromDate(bounds.start),
@@ -137,13 +145,20 @@ beforeAll(async () => {
       });
   };
   await seed('map_view', { totalCount: 42, uniqueContributorCount: 20, resultStatus: 'available' });
-  await seed('anonymous_pass_by', { totalCount: 15, uniqueContributorCount: 12, resultStatus: 'available' });
+  await seed('anonymous_pass_by', {
+    totalCount: 15,
+    uniqueContributorCount: 12,
+    resultStatus: 'available',
+  });
 }, 120_000);
 
 afterAll(async () => {
   // Restore the shared config floor so a raised threshold doesn't leak into
   // other emulator-suite files (config/partnerInsights is a single global doc).
-  await adminDb.collection('config').doc('partnerInsights').set({ minThreshold: 10 }, { merge: true });
+  await adminDb
+    .collection('config')
+    .doc('partnerInsights')
+    .set({ minThreshold: 10 }, { merge: true });
   await deleteApp(app);
 });
 
@@ -155,6 +170,80 @@ describe('partnerInsights-adminSummary', () => {
     );
   });
 
+  it('suppresses a historical unmarked aggregate even when its counts clear the floor', async () => {
+    await signInAs(adminUser);
+    const legacyCompany = `${companyId}-legacy`;
+    await adminDb
+      .collection('partnerInsights')
+      .doc(aggregateId(legacyCompany, 'profile_view', 'day', bounds.start))
+      .set({
+        companyId: legacyCompany,
+        interactionType: 'profile_view',
+        periodType: 'day',
+        totalCount: 500,
+        uniqueContributorCount: 100,
+        resultStatus: 'available',
+      });
+    const result = await call('partnerInsights-adminSummary', {
+      companyId: legacyCompany,
+      periodType: 'day',
+      date: REFERENCE_DATE,
+    });
+    const data = result.data as {
+      metrics: Array<{
+        interactionType: string;
+        totalCount: number;
+        uniqueContributorCount: number | null;
+        status: string;
+      }>;
+    };
+    expect(data.metrics.find((metric) => metric.interactionType === 'profile_view')).toEqual({
+      interactionType: 'profile_view',
+      totalCount: 0,
+      uniqueContributorCount: null,
+      status: 'no_data',
+    });
+  });
+
+  it.each(PARTNER_INTERACTION_TYPES)(
+    'reapplies the raised contributor floor to %s over SDK transport',
+    async (type) => {
+      await signInAs(adminUser);
+      const target = `${companyId}-${type}`;
+      await adminDb
+        .collection('partnerInsights')
+        .doc(aggregateId(target, type, 'day', bounds.start))
+        .set({
+          consentVersion: 1,
+          companyId: target,
+          interactionType: type,
+          periodType: 'day',
+          totalCount: 20,
+          uniqueContributorCount: 14,
+          resultStatus: 'available',
+        });
+      const result = await call('partnerInsights-adminSummary', {
+        companyId: target,
+        periodType: 'day',
+        date: REFERENCE_DATE,
+      });
+      const data = result.data as {
+        metrics: Array<{
+          interactionType: string;
+          totalCount: number;
+          uniqueContributorCount: number | null;
+          status: string;
+        }>;
+      };
+      expect(data.metrics.find((metric) => metric.interactionType === type)).toEqual({
+        interactionType: type,
+        totalCount: 0,
+        uniqueContributorCount: null,
+        status: 'insufficient_data',
+      });
+    },
+  );
+
   it('returns threshold-safe per-type metrics for a company/day', async () => {
     await signInAs(adminUser);
     const result = await call('partnerInsights-adminSummary', {
@@ -165,7 +254,12 @@ describe('partnerInsights-adminSummary', () => {
     const data = result.data as {
       companyId: string;
       periodType: string;
-      metrics: Array<{ interactionType: string; totalCount: number; uniqueContributorCount: number | null; status: string }>;
+      metrics: Array<{
+        interactionType: string;
+        totalCount: number;
+        uniqueContributorCount: number | null;
+        status: string;
+      }>;
     };
     expect(data.companyId).toBe(companyId);
     expect(data.periodType).toBe('day');

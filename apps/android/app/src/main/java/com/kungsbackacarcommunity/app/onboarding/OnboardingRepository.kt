@@ -11,8 +11,7 @@ interface OnboardingRepository {
      * and the consent timestamps with server timestamps.
      *
      * [anonymousPartnerStatsOptIn] carries the anonymised-partner-statistics
-     * choice (default-on / opt-out). null omits the field so the backend keeps
-     * the provisioning default (ON); false persists an explicit opt-out.
+     * explicit choice. null omits the consent fields and never grants optional analytics.
      *
      * @throws Exception when the callable fails (network, auth, validation).
      */

@@ -825,8 +825,8 @@ export const partners = {
  * `partnerInsights-aggregateDriveHeat`).
  *
  * Privacy-critical (contracts/functions/functions.json): events carry only
- * partner-scoped user hashes, anonymous_pass_by requires the flag and
- * default-on consent (only an explicit opt-out is silently excluded),
+ * partner-scoped user hashes; every optional interaction requires current
+ * explicit versioned consent, and anonymous_pass_by also needs its flag.
  * aggregates enforce the minimum-contributor
  * threshold with zeroed below-threshold counts, and raw events expire
  * after 7 days. The drive heatmap adds an anonymised H3 heat aggregate over

@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.onboarding
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.privacy.PARTNER_STATS_CONSENT_VERSION
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -28,19 +29,7 @@ class FirebaseOnboardingRepository private constructor(
         displayName: String?,
         anonymousPartnerStatsOptIn: Boolean?,
     ) {
-        val data =
-            buildMap<String, Any> {
-                put("licenceConfirmed", true)
-                put("termsAccepted", true)
-                put("privacyPolicyAccepted", true)
-                if (displayName != null) put("displayName", displayName)
-                // Default-on / opt-out: only sent when the onboarding toggle is
-                // shown, so an omitted field keeps the backend provisioning
-                // default (ON).
-                if (anonymousPartnerStatsOptIn != null) {
-                    put("anonymousPartnerStatsOptIn", anonymousPartnerStatsOptIn)
-                }
-            }
+        val data = onboardingConsentPayload(displayName, anonymousPartnerStatsOptIn)
         suspendCancellableCoroutine { continuation ->
             functions
                 .getHttpsCallable(CALLABLE_NAME)
@@ -69,3 +58,16 @@ class FirebaseOnboardingRepository private constructor(
         }
     }
 }
+
+/** Consent metadata is present only when the optional choice was displayed and submitted. */
+internal fun onboardingConsentPayload(displayName: String?, partnerStatsOptIn: Boolean?): Map<String, Any> =
+    buildMap {
+        put("licenceConfirmed", true)
+        put("termsAccepted", true)
+        put("privacyPolicyAccepted", true)
+        if (displayName != null) put("displayName", displayName)
+        if (partnerStatsOptIn != null) {
+            put("anonymousPartnerStatsOptIn", partnerStatsOptIn)
+            put("anonymousPartnerStatsConsentVersion", PARTNER_STATS_CONSENT_VERSION)
+        }
+    }

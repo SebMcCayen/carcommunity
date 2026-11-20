@@ -535,15 +535,17 @@ Composite index: `status ASC, createdAt ASC`.
 PRIVACY-CRITICAL, fully backend-only. Document ID =
 `{companyId}_{type}_{utcDay}_{scopedHash}` (one event per company + type +
 UTC day + user). `{ companyId, interactionType, userReferenceHash
-(SHA-256('kcc-pi:{companyId}:{uid}') — raw UIDs never stored, hashes are
-partner-scoped so cross-partner correlation is impossible), relatedOfferId?,
-occurredAt, aggregationDate, expiresAt (+7 days) }`
+(SHA-256('kcc-pi:{companyId}:{uid}') — no raw UID, but still a rederivable
+pseudonym), relatedOfferId?, occurredAt, aggregationDate, expiresAt (+7 days),
+consentVersion: 1 }`
 (contracts/schemas/partner-insights.schema.json).
 
-Written only by `partnerInsights.recordInteraction`; `anonymous_pass_by`
-additionally requires the `partnerInsightsPassBy` flag (default OFF) plus
-the caller's `anonymousPartnerStatsOptIn`, and a non-opted-in contribution
-returns `recorded: false` silently — opting out is unobservable. The
+Written by the shared collector used by Insights and billboard callables.
+Every optional event requires the explicit versioned owner choice described in
+[the consent contract](contracts/partner-analytics-consent-v1.md), checked with
+account/deletion fences in the event transaction. `anonymous_pass_by` additionally
+requires `partnerInsightsPassBy` (default OFF). Missing/legacy/declined consent
+returns `recorded: false`. No consent timestamp or identity is added to the event. The
 `partnerInsights-cleanupExpired` scheduled function (daily) deletes expired
 events. Composite index: `companyId ASC, occurredAt ASC`.
 
@@ -551,11 +553,14 @@ events. Composite index: `companyId ASC, occurredAt ASC`.
 
 Backend-only. Document ID = `{companyId}_{type}_{periodType}_{periodStart}`
 — the `partnerInsights-aggregateDaily` scheduled function (daily, per
-day/week/month periods) overwrites idempotently. For `anonymous_pass_by`,
+day/week/month periods) overwrites idempotently. For every optional interaction,
 periods with fewer unique contributors than the threshold (floor 10;
 `config/partnerInsights.minThreshold` can only RAISE it) persist with
 **zeroed counts** and status `insufficient_data` — the true counts never
-exist anywhere readable. Composite index: `companyId ASC, periodType ASC,
+exist anywhere readable. Corrected documents have `consentVersion: 1`; old
+unmarked events/aggregates are never promoted, and readers suppress old data.
+This does not change the separate exact operational redemption counts.
+Composite index: `companyId ASC, periodType ASC,
 periodStart DESC`.
 
 ---

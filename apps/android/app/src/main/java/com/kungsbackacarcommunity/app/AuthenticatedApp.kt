@@ -301,6 +301,8 @@ import com.kungsbackacarcommunity.app.privacy.LeaderboardVisibilityRepository
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRepository
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRoute
+import com.kungsbackacarcommunity.app.privacy.PartnerStatsConsentState
+import com.kungsbackacarcommunity.app.privacy.allowsOptionalAnalytics
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
 import com.kungsbackacarcommunity.app.live.LiveCommandResult
 import com.kungsbackacarcommunity.app.live.LiveLocation
@@ -940,7 +942,7 @@ fun AuthenticatedApp(
                         scope.launch { c.submit(name, partnerStatsOptIn) }
                     }
                 },
-                // Anonymised partner statistics are default-on / opt-out; only
+                // Optional partner statistics start OFF; only
                 // surface the onboarding step when the feature is enabled so it
                 // stays consistent with the Settings entry's gate.
                 partnerStatsEnabled =
@@ -1702,12 +1704,17 @@ fun AuthenticatedApp(
                     tappedBillboardId?.let { id -> visibleBillboards.firstOrNull { it.id == id } }
                 }
 
+            val partnerStatsConsent by key(uid, partnerStatsRepository) {
+                remember { partnerStatsRepository?.observeConsent(uid) ?: flowOf(PartnerStatsConsentState.Unknown) }
+                    .collectAsState(initial = PartnerStatsConsentState.Unknown)
+            }
+            val optionalPartnerAnalyticsAllowed = partnerStatsConsent.allowsOptionalAnalytics()
             val partnerNavigationAvailable = com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.available(partnersEnabled, partnersRepository != null)
             LaunchedEffect(tappedBillboard?.id, partnerNavigationAvailable) {
                 val destination = com.kungsbackacarcommunity.app.billboards.BillboardPartnerNavigation.directCompanyId(tappedBillboard, partnerNavigationAvailable)
                 if (destination != null) {
                     val id = tappedBillboard?.id
-                    if (id != null) scope.launch { runCatching { billboardsRepository?.recordInteraction(id, BillboardInteractionType.OPEN) } }
+                    if (id != null && optionalPartnerAnalyticsAllowed) scope.launch { runCatching { billboardsRepository?.recordInteraction(id, BillboardInteractionType.OPEN) } }
                     pendingPartnerCompanyId = destination
                     pendingPartnerFromBillboard = true
                     mapSurface.consumeBillboardTap()
@@ -7221,8 +7228,9 @@ fun AuthenticatedApp(
                                     // contract is that analytics never block the
                                     // member's action, so a failure here must
                                     // not surface or retry.
+                                    // Consent arriving later must not replay an earlier open.
                                     LaunchedEffect(openBillboard.id, billboardsRepository) {
-                                        runCatching {
+                                        if (optionalPartnerAnalyticsAllowed) runCatching {
                                             billboardsRepository?.recordInteraction(
                                                 openBillboard.id,
                                                 BillboardInteractionType.OPEN,
@@ -7236,7 +7244,7 @@ fun AuthenticatedApp(
                                         ctaLabel = action?.let { stringResource(it.labelRes) },
                                         onCallToAction = {
                                             val target = action ?: return@BillboardMapPopup
-                                            scope.launch {
+                                            if (optionalPartnerAnalyticsAllowed) scope.launch {
                                                 runCatching {
                                                     billboardsRepository?.recordInteraction(
                                                         openBillboard.id,

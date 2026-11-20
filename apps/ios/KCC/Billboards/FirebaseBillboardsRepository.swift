@@ -1,3 +1,4 @@
+import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
 import Foundation
@@ -35,6 +36,23 @@ final class FirebaseBillboardsRepository: BillboardsRepository, @unchecked Senda
     }
 
     func recordInteraction(billboardId: String, type: BillboardInteractionType) async throws {
+        // Viewing an advert or following its action still works without
+        // optional analytics. Never send the analytics callable using cached,
+        // pending, unreadable, or legacy consent; the backend rechecks as well.
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let snapshot: DocumentSnapshot
+        do {
+            snapshot = try await firestore.collection("userPrivate").document(uid).getDocument(source: .server)
+        } catch { return }
+        guard Auth.auth().currentUser?.uid == uid,
+              let authoritative = PrivacySettingsSnapshot.authoritative(
+                data: snapshot.data(),
+                isFromCache: snapshot.metadata.isFromCache,
+                hasPendingWrites: snapshot.metadata.hasPendingWrites,
+                consentTimestamp: (snapshot.get("anonymousPartnerStatsConsentAt") as? Timestamp)?.dateValue()
+              ),
+              case .loaded(let choices) = authoritative,
+              choices.partnerStatsOptIn else { return }
         _ = try await functions.call(
             "billboards-recordInteraction",
             payload: ["billboardId": billboardId, "interactionType": type.rawValue]

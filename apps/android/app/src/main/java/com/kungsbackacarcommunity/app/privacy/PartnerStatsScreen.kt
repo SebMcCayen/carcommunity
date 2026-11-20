@@ -15,7 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,20 +44,15 @@ fun PartnerStatsScreen(
     leaderboardSaveStatus: LeaderboardVisibilitySaveStatus = LeaderboardVisibilitySaveStatus.Idle,
     onSaveLeaderboard: ((shown: Boolean) -> Unit)? = null,
 ) {
-    // Seed the pending toggle from the first DEFINITIVE read ONCE — decoupled
-    // from later Firestore emissions so a live update doesn't overwrite an edit
-    // the user is in the middle of making. Anonymised partner statistics are
-    // DEFAULT-ON / opt-out, so the toggle shows ON while unresolved; but Save
-    // stays DISABLED until a definitive read ([seeded]) so a transient read
-    // error (Unknown) can never persist the default-on value over an explicitly
-    // opted-out member's real choice.
-    var pending by rememberSaveable { mutableStateOf(true) }
-    var seeded by rememberSaveable { mutableStateOf(false) }
+    // Seed once from an authoritative read without overwriting an in-progress edit.
+    // Unknown (including later read errors) always disables Save.
+    var pending by remember { mutableStateOf(false) }
+    var seeded by remember { mutableStateOf(false) }
     LaunchedEffect(consent) {
         if (!seeded) {
             when (consent) {
-                PartnerStatsConsentState.DefaultOn -> {
-                    pending = true
+                PartnerStatsConsentState.DefaultOff -> {
+                    pending = false
                     seeded = true
                 }
                 is PartnerStatsConsentState.Chosen -> {
@@ -105,6 +100,7 @@ fun PartnerStatsScreen(
                                 value = pending,
                                 role = Role.Switch,
                                 onValueChange = { pending = it },
+                                enabled = consent != PartnerStatsConsentState.Unknown && saveStatus != PartnerStatsSaveStatus.Saving,
                             )
                             .semantics(mergeDescendants = true) {},
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -145,9 +141,8 @@ fun PartnerStatsScreen(
 
                 Button(
                     onClick = { onSave(pending) },
-                    // Disabled until a definitive read: never let the default-on value
-                    // be persisted over an unresolved/errored (Unknown) read.
-                    enabled = seeded && saveStatus != PartnerStatsSaveStatus.Saving,
+                    // An earlier successful read cannot make a later read error saveable.
+                    enabled = seeded && consent != PartnerStatsConsentState.Unknown && saveStatus != PartnerStatsSaveStatus.Saving,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(text = stringResource(R.string.privacySettings_saveButton))

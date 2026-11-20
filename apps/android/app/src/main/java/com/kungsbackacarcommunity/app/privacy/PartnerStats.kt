@@ -1,9 +1,11 @@
 package com.kungsbackacarcommunity.app.privacy
 
 import android.content.Context
+import com.google.firebase.Timestamp
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.MetadataChanges
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
@@ -15,37 +17,52 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-/**
- * Observed anonymised-partner-statistics consent. Deliberately distinguishes a
- * read that has NOT resolved (or failed) from one that resolved to "no explicit
- * choice": a transient Firestore error must NEVER be mistaken for default-on and
- * silently overwrite an explicitly opted-out member on the next Save.
- */
+/** Consent remains unknown until an authoritative server snapshot resolves. */
 sealed interface PartnerStatsConsentState {
-    /** Not yet read, or the read failed. The UI shows the default-on value but
-     * must NOT let it be persisted (Save disabled) until a definitive read. */
     data object Unknown : PartnerStatsConsentState
 
-    /** Read succeeded with no explicit choice stored → default-on (opt-out). */
-    data object DefaultOn : PartnerStatsConsentState
+    /** Missing or legacy consent never grants optional analytics. Malformed fields remain unknown. */
+    data object DefaultOff : PartnerStatsConsentState
 
-    /** Read succeeded with an explicit stored choice. */
     data class Chosen(val optIn: Boolean) : PartnerStatsConsentState
 }
 
-/**
- * Anonymised partner-statistics consent (Phase 12 slice 19). A privacy toggle
- * on `userPrivate/{uid}.anonymousPartnerStatsOptIn` — DEFAULT-ON / opt-out,
- * owner-only, a direct rules-validated write. A missing field (no explicit
- * choice) is treated as ON both here and in the backend recordInteraction gate,
- * which excludes a member only on an explicit `false`. Firebase-free interface
- * for testability.
- */
+const val PARTNER_STATS_CONSENT_VERSION = 1
+
+/** A stored legacy `true` was auto-provisioned and is not affirmative consent. */
+fun partnerStatsConsentState(
+    data: Map<String, Any?>?,
+    fromCache: Boolean = false,
+    hasPendingWrites: Boolean = false,
+): PartnerStatsConsentState {
+    if (data == null || fromCache || hasPendingWrites) return PartnerStatsConsentState.Unknown
+    val choice = data["anonymousPartnerStatsOptIn"]
+    if (data.containsKey("anonymousPartnerStatsOptIn") && choice !is Boolean) return PartnerStatsConsentState.Unknown
+    val version = data["anonymousPartnerStatsConsentVersion"]
+    val numericVersion = (version as? Number)?.toDouble()
+    if (data.containsKey("anonymousPartnerStatsConsentVersion") &&
+        (numericVersion == null || !numericVersion.isFinite() || numericVersion % 1.0 != 0.0)
+    ) return PartnerStatsConsentState.Unknown
+    val timestamp = data["anonymousPartnerStatsConsentAt"] as? Timestamp
+    if (data.containsKey("anonymousPartnerStatsConsentAt") &&
+        (timestamp == null || timestamp.seconds < 0 || (timestamp.seconds == 0L && timestamp.nanoseconds == 0))
+    ) return PartnerStatsConsentState.Unknown
+    if (choice == false) return PartnerStatsConsentState.Chosen(false)
+    return if (choice == true && numericVersion == PARTNER_STATS_CONSENT_VERSION.toDouble() && timestamp != null) {
+        PartnerStatsConsentState.Chosen(true)
+    } else {
+        PartnerStatsConsentState.DefaultOff
+    }
+}
+
+/** Authoritative consent controls optional Partner Insights, including billboard interactions. */
+fun PartnerStatsConsentState.allowsOptionalAnalytics(): Boolean =
+    this == PartnerStatsConsentState.Chosen(true)
+
 interface PartnerStatsRepository {
-    /** The caller's consent state: [PartnerStatsConsentState.Unknown] until the
-     * first snapshot resolves (or on read error), then DefaultOn / Chosen. */
     fun observeConsent(uid: String): Flow<PartnerStatsConsentState>
 
+    /** Explicit Save records both the choice and current consent evidence atomically. */
     suspend fun setOptIn(uid: String, optIn: Boolean)
 }
 
@@ -96,22 +113,17 @@ class FirebasePartnerStatsRepository private constructor(
 
     override fun observeConsent(uid: String): Flow<PartnerStatsConsentState> = callbackFlow {
         val registration =
-            firestore.collection(USER_PRIVATE).document(uid).addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    // A read error is NOT "no explicit choice": surface Unknown so
-                    // the UI never overwrites a real (possibly opted-out) value
-                    // with the default-on assumption.
-                    trySend(PartnerStatsConsentState.Unknown)
-                    return@addSnapshotListener
+            firestore.collection(USER_PRIVATE).document(uid).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                val consent = if (error != null || snapshot == null) {
+                    PartnerStatsConsentState.Unknown
+                } else {
+                    partnerStatsConsentState(
+                        data = snapshot.data ?: if (snapshot.exists()) null else emptyMap(),
+                        fromCache = snapshot.metadata.isFromCache,
+                        hasPendingWrites = snapshot.metadata.hasPendingWrites(),
+                    )
                 }
-                val stored = snapshot?.getBoolean("anonymousPartnerStatsOptIn")
-                trySend(
-                    if (stored == null) {
-                        PartnerStatsConsentState.DefaultOn
-                    } else {
-                        PartnerStatsConsentState.Chosen(stored)
-                    },
-                )
+                trySend(consent)
             }
         awaitClose { registration.remove() }
     }
@@ -120,6 +132,8 @@ class FirebasePartnerStatsRepository private constructor(
         val update =
             mapOf(
                 "anonymousPartnerStatsOptIn" to optIn,
+                "anonymousPartnerStatsConsentVersion" to PARTNER_STATS_CONSENT_VERSION,
+                "anonymousPartnerStatsConsentAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp(),
             )
         suspendCancellableCoroutine { continuation ->

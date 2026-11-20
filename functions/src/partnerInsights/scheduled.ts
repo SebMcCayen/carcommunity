@@ -5,7 +5,7 @@
  * - partnerInsights-aggregateDaily (03:00 Europe/Stockholm): aggregates
  *   yesterday's events into partnerInsights/{aggregateId} documents for
  *   every company that had events — per interaction type, for the day /
- *   week / month periods — with the anonymous_pass_by minimum-contributor
+ *   week / month periods — with the all-interaction minimum-contributor
  *   threshold enforced (below threshold → counts ZEROED, status
  *   insufficient_data). The threshold floor is 10 and configuration can
  *   only raise it (config/partnerInsights.minThreshold).
@@ -34,6 +34,7 @@ import {
 } from './insights-core';
 import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
+import { PARTNER_STATS_CONSENT_VERSION } from './consent';
 
 const CLEANUP_BATCH_SIZE = 500;
 
@@ -74,11 +75,13 @@ export async function runInsightsAggregation(date: Date): Promise<{ aggregatesWr
         .where('companyId', '==', companyId)
         .where('occurredAt', '>=', Timestamp.fromDate(bounds.start))
         .where('occurredAt', '<', Timestamp.fromDate(bounds.end))
-        .select('interactionType', 'userReferenceHash')
+        .select('interactionType', 'userReferenceHash', 'consentVersion')
         .get();
 
       const byType = new Map<string, { total: number; contributors: Set<string> }>();
       for (const doc of periodEvents.docs) {
+        const data = doc.data();
+        if (data.consentVersion !== PARTNER_STATS_CONSENT_VERSION) continue;
         const type = doc.data().interactionType as string;
         const entry = byType.get(type) ?? { total: 0, contributors: new Set<string>() };
         entry.total += 1;
@@ -98,9 +101,15 @@ export async function runInsightsAggregation(date: Date): Promise<{ aggregatesWr
           entry?.contributors.size ?? 0,
           threshold,
         );
-        // no_data periods are skipped entirely — an all-zero document adds
-        // nothing and would bloat the collection for every company × type.
+        // Remove an older slice if no eligible versioned events remain;
+        // do not retain history collected without explicit current consent.
         if (metric.resultStatus === 'no_data') {
+          // A former generation must not survive an overwrite with no eligible data.
+          batch.delete(
+            db
+              .collection('partnerInsights')
+              .doc(aggregateId(companyId, interactionType, periodType, bounds.start)),
+          );
           continue;
         }
         batch.set(
@@ -116,6 +125,7 @@ export async function runInsightsAggregation(date: Date): Promise<{ aggregatesWr
             totalCount: metric.totalCount,
             uniqueContributorCount: metric.uniqueContributorCount,
             resultStatus: metric.resultStatus,
+            consentVersion: PARTNER_STATS_CONSENT_VERSION,
             updatedAt: Timestamp.fromDate(new Date()),
           },
         );

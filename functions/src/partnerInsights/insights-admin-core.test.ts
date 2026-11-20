@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PARTNER_INTERACTION_TYPES } from './insights-core';
 import {
   applyReadThreshold,
   coerceResultStatus,
@@ -9,13 +10,19 @@ describe('parseAdminInsightsSummaryInput', () => {
   it('accepts companyId with optional period + date', () => {
     expect(parseAdminInsightsSummaryInput({ companyId: 'co1' }).ok).toBe(true);
     expect(
-      parseAdminInsightsSummaryInput({ companyId: 'co1', periodType: 'week', date: '2026-07-01T00:00:00.000Z' }).ok,
+      parseAdminInsightsSummaryInput({
+        companyId: 'co1',
+        periodType: 'week',
+        date: '2026-07-01T00:00:00.000Z',
+      }).ok,
     ).toBe(true);
   });
 
   it('rejects a missing companyId, bad period, or extra fields', () => {
     expect(parseAdminInsightsSummaryInput({}).ok).toBe(false);
-    expect(parseAdminInsightsSummaryInput({ companyId: 'co1', periodType: 'yearly' }).ok).toBe(false);
+    expect(parseAdminInsightsSummaryInput({ companyId: 'co1', periodType: 'yearly' }).ok).toBe(
+      false,
+    );
     expect(parseAdminInsightsSummaryInput({ companyId: 'co1', date: 'not-a-date' }).ok).toBe(false);
     expect(parseAdminInsightsSummaryInput({ companyId: 'co1', foo: 1 }).ok).toBe(false);
   });
@@ -74,15 +81,51 @@ describe('applyReadThreshold', () => {
       { totalCount: 40, uniqueContributorCount: 12, resultStatus: 'available' },
       10,
     );
-    expect(result).toMatchObject({ totalCount: 40, uniqueContributorCount: 12, status: 'available' });
+    expect(result).toMatchObject({
+      totalCount: 40,
+      uniqueContributorCount: 12,
+      status: 'available',
+    });
   });
 
-  it('never re-zeroes non-pass-by types or already-safe statuses', () => {
+  it.each(PARTNER_INTERACTION_TYPES)('reapplies raise-only read thresholds to %s', (type) => {
     expect(
-      applyReadThreshold('map_view', { totalCount: 3, uniqueContributorCount: 2, resultStatus: 'available' }, 10),
-    ).toMatchObject({ totalCount: 3, status: 'available' });
+      applyReadThreshold(
+        type,
+        { totalCount: 40, uniqueContributorCount: 9, resultStatus: 'available' },
+        1,
+      ),
+    ).toMatchObject({ totalCount: 0, uniqueContributorCount: null, status: 'insufficient_data' });
     expect(
-      applyReadThreshold('anonymous_pass_by', { totalCount: 0, uniqueContributorCount: null, resultStatus: 'insufficient_data' }, 10),
-    ).toMatchObject({ status: 'insufficient_data', totalCount: 0 });
+      applyReadThreshold(
+        type,
+        { totalCount: 40, uniqueContributorCount: 14, resultStatus: 'available' },
+        15,
+      ),
+    ).toMatchObject({ totalCount: 0, uniqueContributorCount: null, status: 'insufficient_data' });
+    expect(
+      applyReadThreshold(
+        type,
+        { totalCount: 40, uniqueContributorCount: 15, resultStatus: 'available' },
+        15,
+      ),
+    ).toMatchObject({ totalCount: 40, uniqueContributorCount: 15, status: 'available' });
+  });
+
+  it.each([
+    { totalCount: -1, uniqueContributorCount: 10, resultStatus: 'available' as const },
+    { totalCount: Number.NaN, uniqueContributorCount: 10, resultStatus: 'available' as const },
+    { totalCount: 20.5, uniqueContributorCount: 10, resultStatus: 'available' as const },
+    { totalCount: 10, uniqueContributorCount: 11, resultStatus: 'available' as const },
+    { totalCount: 20, uniqueContributorCount: null, resultStatus: 'available' as const },
+    { totalCount: 20, uniqueContributorCount: -1, resultStatus: 'available' as const },
+    { totalCount: 20, uniqueContributorCount: 10.5, resultStatus: 'available' as const },
+    { totalCount: 20, uniqueContributorCount: 10, resultStatus: 'insufficient_data' as const },
+    { totalCount: 20, uniqueContributorCount: 10, resultStatus: 'no_data' as const },
+  ])('never exposes malformed counts or suppressed status: %j', (stored) => {
+    const result = applyReadThreshold('profile_view', stored, 10);
+    expect(result.totalCount).toBe(0);
+    expect(result.uniqueContributorCount).toBeNull();
+    expect(result.status).not.toBe('available');
   });
 });

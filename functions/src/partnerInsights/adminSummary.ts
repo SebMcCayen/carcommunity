@@ -36,6 +36,7 @@ import {
   type StoredAggregateMetric,
 } from './insights-admin-core';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
+import { PARTNER_STATS_CONSENT_VERSION } from './consent';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -95,16 +96,17 @@ export const adminSummary = onCall(
     const metrics = PARTNER_INTERACTION_TYPES.map((interactionType, index) => {
       const snap = snaps[index];
       const data = snap?.exists ? snap.data() : undefined;
-      const stored: StoredAggregateMetric | null = data
-        ? {
-            totalCount: (data.totalCount as number | undefined) ?? 0,
-            uniqueContributorCount:
-              (data.uniqueContributorCount as number | null | undefined) ?? null,
-            // Untrusted stored value — coerce to a known status, failing closed
-            // to no_data if the aggregate doc is corrupt/legacy.
-            resultStatus: coerceResultStatus(data.resultStatus),
-          }
-        : null;
+      const stored: StoredAggregateMetric | null =
+        data?.consentVersion === PARTNER_STATS_CONSENT_VERSION
+          ? {
+              totalCount: (data.totalCount as number | undefined) ?? 0,
+              uniqueContributorCount:
+                (data.uniqueContributorCount as number | null | undefined) ?? null,
+              // Untrusted stored value — coerce to a known status, failing closed
+              // to no_data if the aggregate doc is corrupt/legacy.
+              resultStatus: coerceResultStatus(data.resultStatus),
+            }
+          : null;
       return applyReadThreshold(interactionType, stored, threshold);
     });
 

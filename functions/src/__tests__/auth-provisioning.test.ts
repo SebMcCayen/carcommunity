@@ -139,7 +139,7 @@ describe('buildUserPrivateDocument', () => {
       licenceConfirmedAt: null,
       termsAcceptedAt: null,
       privacyPolicyAcceptedAt: null,
-      anonymousPartnerStatsOptIn: true,
+      anonymousPartnerStatsOptIn: false,
       createdAt: SERVER_TIMESTAMP,
       updatedAt: SERVER_TIMESTAMP,
     });
@@ -150,8 +150,10 @@ describe('buildUserPrivateDocument', () => {
     expect(doc).not.toHaveProperty('email');
   });
 
-  it('defaults partner stats to ON (default-on / opt-out consent model)', () => {
+  it('defaults optional partner statistics OFF without manufacturing consent evidence', () => {
     const doc = buildUserPrivateDocument({ uid: 'uid-1' }, serverTimestamp);
-    expect(doc.anonymousPartnerStatsOptIn).toBe(true);
+    expect(doc.anonymousPartnerStatsOptIn).toBe(false);
+    expect(doc).not.toHaveProperty('anonymousPartnerStatsConsentVersion');
+    expect(doc).not.toHaveProperty('anonymousPartnerStatsConsentAt');
   });
 });

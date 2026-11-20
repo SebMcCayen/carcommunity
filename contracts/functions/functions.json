@@ -30,7 +30,7 @@
     {
       "name": "auth.completeOnboarding",
       "domain": "auth",
-      "description": "Marks onboarding complete for the calling user; backend writes onboardingCompletedAt and consent timestamps. Also accepts an optional anonymousPartnerStatsOptIn boolean (anonymised partner statistics are DEFAULT-ON / opt-out): the onboarding step surfaces the toggle pre-enabled and the member's choice persists to userPrivate/{uid}.anonymousPartnerStatsOptIn in the same transaction. Deployed via grouped export as auth-completeOnboarding (functions/src/auth/completeOnboarding.ts).",
+      "description": "Completes mandatory onboarding. On the first completion only, an optional anonymousPartnerStatsOptIn boolean paired with anonymousPartnerStatsConsentVersion:1 records an explicit optional analytics choice and server consent timestamp. Missing choice defaults OFF; legacy true cannot grant; legacy false may decline. Later onboarding retries preserve Privacy choices. No client consent timestamp is accepted. Deployed as auth-completeOnboarding.",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
