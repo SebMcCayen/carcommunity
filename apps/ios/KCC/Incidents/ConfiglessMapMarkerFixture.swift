@@ -25,12 +25,23 @@ struct ConfiglessMapMarkerFixture: View {
         GeometryReader { geometry in
             let origin = geometry.frame(in: .global).origin
             ZStack {
-                ForEach(Array(points.enumerated()), id: \.offset) { index, point in
-                    MapTapMarker(center: CGPoint(x: point.x - origin.x, y: point.y - origin.y),
-                                 interactive: true, accessibilityLabel: "Test roadwork marker",
-                                 identifier: "map.fixture.covered.\(index)", select: { selected = true }) {
-                        IncidentMarkerBadge(marker: marker(.roadwork, id: "covered-\(index)"))
+                let centers = points
+                let bounds = centers.reduce(CGRect.null) { result, point in
+                    result.union(CGRect(x: point.x - 24, y: point.y - 24, width: 48, height: 48))
+                }
+                if !bounds.isNull {
+                    ZStack {
+                        ForEach(Array(centers.enumerated()), id: \.offset) { index, point in
+                            MapTapMarker(center: CGPoint(x: point.x - origin.x, y: point.y - origin.y),
+                                         interactive: true, accessibilityLabel: "Test roadwork marker",
+                                         identifier: "map.fixture.covered.\(index)", select: { selected = true }) {
+                                IncidentMarkerBadge(marker: marker(.roadwork, id: "covered-\(index)"))
+                            }
+                        }
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("map.fixture.markerField")
+                    .accessibilityFrame(bounds)
                 }
                 ForEach(Array(IncidentType.allCases.enumerated()), id: \.offset) { index, type in
                     VStack(spacing: 12) {

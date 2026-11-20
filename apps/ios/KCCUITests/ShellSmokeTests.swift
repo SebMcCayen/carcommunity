@@ -1092,10 +1092,15 @@ final class ShellSmokeTests: XCTestCase {
         XCTAssertTrue(center.waitForExistence(timeout: 5))
         let zoom = app.staticTexts["shell.mapZoomProbe"]
         let selected = app.staticTexts["map.fixture.wrongTarget"]
-        app.pinch(withScale: 2, velocity: 1)
+        let field = app.descendants(matching: .any)["map.fixture.markerField"].firstMatch
+        XCTAssertTrue(field.exists)
+        XCTAssertEqual(field.frame.midX, screen.midX, accuracy: 1)
+        XCTAssertEqual(field.frame.midY, screen.midY, accuracy: 1)
+        XCTAssertEqual(field.frame.size, CGSize(width: 312, height: 224))
+        field.pinch(withScale: 2, velocity: 1)
         XCTAssertTrue(zoom.wait(for: \.label, toEqual: "in", timeout: 5))
         XCTAssertFalse(selected.exists)
-        app.pinch(withScale: 0.5, velocity: -1)
+        field.pinch(withScale: 0.5, velocity: -1)
         XCTAssertTrue(zoom.wait(for: \.label, toEqual: "out", timeout: 5))
         XCTAssertFalse(selected.exists)
         center.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
