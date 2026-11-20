@@ -233,7 +233,13 @@ private fun PartnerQrImage(token: String) {
             Bitmap.createBitmap(pixels, 640, 640, Bitmap.Config.ARGB_8888)
         }
     }
-    bitmap?.let { Image(it.asImageBitmap(), contentDescription = stringResource(R.string.partnerPortal_showQr), modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp).aspectRatio(1f)) }
+    bitmap?.let {
+        // Bound both dimensions before choosing the square. Forcing the full
+        // width first can crop the lower finder/quiet zone on wide windows.
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Image(it.asImageBitmap(), contentDescription = stringResource(R.string.partnerPortal_showQr), modifier = Modifier.widthIn(max = 280.dp).aspectRatio(1f))
+        }
+    }
 }
 @Composable
 private fun PartnerSensitiveWindowEffect() {

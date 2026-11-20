@@ -16,7 +16,7 @@ import java.time.Instant
 class PartnerPortalScreensTest {
     @get:Rule val compose = createComposeRule()
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
-    private class FakePortal : PartnerPortalRepository {
+    internal class FakePortal(reservationStatus: String = "reserved") : PartnerPortalRepository {
         var reservedVersion: Int? = null
         var inspectCount = 0
         var redeemCount = 0
@@ -25,7 +25,8 @@ class PartnerPortalScreensTest {
         var secondRequestId: String? = null
         var failFirstReserve = false
         var alreadyUsed = false
-        val reservation = PartnerReservation("fixture-reservation", "offer", "company", "Fixture business", "Fixture offer", "Fixture terms", "reserved", Instant.now().plusSeconds(3600).toString(), null)
+        var tokenCount = 0
+        val reservation = PartnerReservation("fixture-reservation", "offer", "company", "Fixture business", "Fixture offer", "Fixture terms", reservationStatus, Instant.now().plusSeconds(3600).toString(), null)
         override suspend fun offer(offerId: String) = PartnerOfferReservationDetail(ManagedPartnerOffer("offer", "company", "Fixture offer", "Teaser", "Description", "Fixture terms", "active", 3, 0, 0, 7, 20, null, null, false, 5, 2), null, alreadyUsed)
         override suspend fun reserve(offerId: String, requestId: String, expectedVersion: Int): PartnerReservation {
             reserveCount++; reservedVersion = expectedVersion
@@ -34,7 +35,10 @@ class PartnerPortalScreensTest {
             return reservation
         }
         override suspend fun reservations() = listOf(reservation)
-        override suspend fun token(reservationId: String) = PartnerReservationToken("fixture-opaque-token-1234567890", Instant.now().plusSeconds(60).toString())
+        override suspend fun token(reservationId: String): PartnerReservationToken {
+            tokenCount++
+            return PartnerReservationToken("fixture-opaque-token-1234567890", Instant.now().plusSeconds(60).toString())
+        }
         override suspend fun cancel(reservationId: String) = reservation.copy(status = "cancelled")
         override suspend fun inspect(token: String): PartnerReservation { inspectCount++; return reservation }
         override suspend fun redeem(token: String, requestId: String): PartnerReservation { redeemCount++; return reservation.copy(status = "redeemed") }
@@ -97,7 +101,24 @@ class PartnerPortalScreensTest {
         compose.onNodeWithText(text(R.string.partnerPortal_confirmRedeem)).performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(1, repo.redeemCount)
-        compose.onNodeWithText(text(R.string.partnerPortal_redeemSuccess)).performScrollTo().assertIsDisplayed()
+        val confirmed = compose.onNodeWithText(text(R.string.partnerPortal_redeemSuccess))
+        confirmed.performScrollTo()
+        // Clearing the consumed token can resize the native window while the
+        // IME closes, after Compose itself is idle. Require actual visibility.
+        compose.waitUntil(timeoutMillis = 5_000) { confirmed.isDisplayed() }
+        confirmed.assertIsDisplayed()
+    }
+
+    @Test fun serverExpiredReservationDoesNotExposeQrEvenIfLocalExpiryLooksFuture() {
+        val repo = FakePortal(reservationStatus = "expired")
+        compose.setContent { KccTheme { PartnerReservationsRoute(repo, {}) } }
+        compose.onNodeWithText("Fixture offer").performScrollTo().performClick()
+        compose.onNodeWithText("Fixture terms").assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerPortal_expired)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerPortal_showQr)).assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.partnerPortal_refreshQr)).assertDoesNotExist()
+        compose.onNodeWithContentDescription(text(R.string.partnerPortal_showQr)).assertDoesNotExist()
+        assertEquals(0, repo.tokenCount)
     }
 
     private fun capturePreview(filename: String) {

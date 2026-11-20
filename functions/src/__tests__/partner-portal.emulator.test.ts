@@ -8,11 +8,12 @@ process.env.FUNCTIONS_EMULATOR = 'true';
 
 import { randomUUID } from 'node:crypto';
 import { PNG } from 'pngjs';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { initializeApp as initializeClientApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails } from '@firebase/rules-unit-testing';
@@ -92,6 +93,41 @@ async function campaign(capacity = 3) {
   });
   await db.collection('offers').doc(result.offerId).update({ status: 'active' });
   return result.offerId;
+}
+
+async function expectAdminDemotionToBlockMutation(run: () => Promise<unknown>) {
+  const audits = db.collection('adminAuditEvents').where('adminId', '==', admin);
+  const before = await audits.get();
+  const actorContext = await import('../admin/actorContext');
+  const originalGuard = actorContext.requireAdminActor;
+  let demotedAfterVerifiedGuard = false;
+  const spy = vi
+    .spyOn(actorContext, 'requireAdminActor')
+    .mockImplementationOnce(async (request) => {
+      // Execute the complete real claim, current-role and product-access guard.
+      // Its access initialization has its own transactions even for warm users,
+      // so ordinal transaction hooks cannot reliably identify this race window.
+      const actor = await originalGuard(request);
+      expect(actor).toMatchObject({ uid: admin, state: { role: 'admin' } });
+      // Keep the verified JWT claim and actual authorized actor unchanged; only
+      // commit the authoritative demotion after that full entry guard succeeds.
+      await db.collection('users').doc(admin).update({ role: 'user' });
+      demotedAfterVerifiedGuard = true;
+      return actor;
+    });
+  try {
+    const attempt = run();
+    await Promise.allSettled([attempt]);
+    // Prove the injected demotion occurred even in the vulnerable baseline,
+    // before assessing whether the resulting operation was correctly denied.
+    expect(demotedAfterVerifiedGuard).toBe(true);
+    expect((await db.collection('users').doc(admin).get()).data()?.role).toBe('user');
+    await expect(attempt).rejects.toMatchObject({ code: 'permission-denied' });
+    expect((await audits.get()).size).toBe(before.size);
+  } finally {
+    spy.mockRestore();
+    await db.collection('users').doc(admin).update({ role: 'admin' });
+  }
 }
 beforeAll(async () => {
   ({ portal, expireReservations } = await import('../partners/portal'));
@@ -195,8 +231,13 @@ describe('partner reservations under real contention', () => {
     ).rejects.toThrow();
     const q = (await db.collection('partnerOfferQuotas').doc(id).get()).data()!;
     expect(q).toMatchObject({ reservedCount: 0, redeemedCount: 1 });
+    const outbox = await db.collection('partnerRedemptionOutbox').where('offerId', '==', id).get();
+    expect(outbox.size).toBe(1);
+    const processedMarker = outbox.docs[0]!.ref;
     await publishPortalStatistics();
+    expect((await processedMarker.get()).data()).toEqual({ processed: true });
     await publishPortalStatistics();
+    expect((await processedMarker.get()).data()).toEqual({ processed: true });
     const stats = await call(manager, 'statistics', { companyId });
     expect(stats.totalRedeemed).toBe(1);
     expect(JSON.stringify(stats)).not.toContain(uid);
@@ -286,6 +327,133 @@ describe('portal publication and private storage rules', () => {
       httpsCallable(functions, 'partners-portal')({ action: 'workspace' }),
     ).rejects.toMatchObject({ code: 'functions/unauthenticated' });
   });
+  it.each(['publish', 'request_changes'] as const)(
+    'admin demotion before the %s transaction prevents application changes and grants',
+    async (decision) => {
+      const applicant = await seed();
+      const application = await call(applicant, 'submitApplication', {
+        companyName: 'Role Revocation Partner',
+        category: 'car_care',
+        contactName: 'Private Contact',
+        contactEmail: `${applicant}@example.test`,
+        description: 'Public description',
+        address: 'Public address',
+        selfServiceRequested: true,
+        billboardRequested: false,
+      });
+      await expectAdminDemotionToBlockMutation(() =>
+        call(admin, 'reviewApplication', {
+          applicationId: application.applicationId,
+          decision,
+          expectedRevision: 1,
+          grantSelfService: true,
+          reason: 'Review fixture',
+          latitude: 57.5,
+          longitude: 12.1,
+        }),
+      );
+      expect(
+        (
+          await db
+            .collection('partnerApplications')
+            .doc(application.applicationId as string)
+            .get()
+        ).data(),
+      ).toMatchObject({ status: 'submitted', revision: 1 });
+      expect(
+        (
+          await db
+            .collection('companies')
+            .where('sourceApplicationId', '==', application.applicationId)
+            .get()
+        ).empty,
+      ).toBe(true);
+      expect(
+        (await db.collection('partnerMembers').where('uid', '==', applicant).get()).empty,
+      ).toBe(true);
+    },
+  );
+  it('admin demotion before the membership transaction prevents a staff grant', async () => {
+    const target = await seed();
+    await expectAdminDemotionToBlockMutation(() =>
+      call(admin, 'membership', { companyId, uid: target, role: 'manager', enabled: true }),
+    );
+    expect((await db.collection('partnerMembers').where('uid', '==', target).get()).empty).toBe(
+      true,
+    );
+  });
+  it('admin demotion after the entry guard prevents the billboard binding and audit', async () => {
+    const company = `${prefix}-billboard-company`;
+    const billboard = `${prefix}-billboard`;
+    const path = `companyImages/${company}/source.png`;
+    await getStorage()
+      .bucket()
+      .file(path)
+      .save(PNG.sync.write(new PNG({ width: 16, height: 16 })), {
+        resumable: false,
+        contentType: 'image/png',
+      });
+    await db.collection('companies').doc(company).set({
+      name: 'Billboard Role Fixture',
+      category: 'car_care',
+      status: 'active',
+      logoPath: path,
+    });
+    await db.collection('billboards').doc(billboard).set({
+      status: 'draft',
+      partnerCompanyId: company,
+    });
+    await expectAdminDemotionToBlockMutation(() =>
+      call(admin, 'billboardLogo', { billboardId: billboard }),
+    );
+    expect((await db.collection('billboards').doc(billboard).get()).data()).toEqual({
+      status: 'draft',
+      partnerCompanyId: company,
+    });
+  });
+  it.each(['updateOffer', 'setOfferStatus'] as const)(
+    'admin demotion before the legacy %s transaction prevents offer changes',
+    async (method) => {
+      const { updateOffer, setOfferStatus } = await import('../partners/manageOffer');
+      const company = `${prefix}-legacy-company-${method}`;
+      const id = `${prefix}-legacy-offer-${method}`;
+      await db.collection('companies').doc(company).set({
+        name: 'Legacy Offer Role Fixture',
+        category: 'car_care',
+        status: 'active',
+      });
+      const original = {
+        companyId: company,
+        title: 'Original offer',
+        teaserText: 'Fixture teaser',
+        offerType: 'member_benefit',
+        status: 'draft',
+        redemptionMode: method === 'setOfferStatus' ? 'reservation' : 'shared_code',
+        version: 1,
+        capacity: 3,
+        remainingCount: 3,
+        availableFrom: null,
+        availableUntil: null,
+      };
+      const ref = db.collection('offers').doc(id);
+      await ref.set(original);
+      await ref.collection('details').doc('member').set({
+        description: 'Fixture description',
+        terms: 'Fixture terms',
+      });
+      const handler = method === 'updateOffer' ? updateOffer : setOfferStatus;
+      await expectAdminDemotionToBlockMutation(() =>
+        handler.run({
+          auth: { uid: admin, token: { admin: true } },
+          data:
+            method === 'updateOffer'
+              ? { offerId: id, title: 'Unexpected changed offer' }
+              : { offerId: id, action: 'activate', expectedVersion: 1 },
+        } as unknown as CallableRequest),
+      );
+      expect((await ref.get()).data()).toEqual(original);
+    },
+  );
   it('rechecks customer subscription and CarCommunity restrictions for QR and redemption', async () => {
     const id = await campaign(),
       uid = users[10]!;

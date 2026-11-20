@@ -92,6 +92,23 @@ sidebar, a visibly labelled test business/logo, real form fields and no invented
 offer cards before any offer has been submitted and approved. No production
 profile, role, offer, billboard or customer record was changed for visual QA.
 
+## Statistics navigation and Hosting cache regressions
+
+`partner-statistics-navigation.test.tsx` uses the real memory router to exercise
+company-to-total navigation and browser back/forward. The company input and offer
+selection follow the URL scope; period changes and report refreshes preserve
+unsubmitted company text, and changing companies preserves the selected period.
+
+Hosting matches headers against the original request path, before SPA rewrites
+([Firebase documentation](https://firebase.google.com/docs/hosting/full-config#headers)).
+The admin site's global no-store header therefore covers `/` and deep links,
+while the later `/assets/**` rule retains immutable hashed-asset caching.
+`functions/src/__tests__/hosting-cache.test.ts` serves loopback fixture files
+through the same Superstatic strict stack used by Firebase's Hosting emulator.
+It verifies HTML response headers for root/deep links and immutable asset/security
+headers without starting a Firebase client or contacting production. An already
+loaded old shell may still need one normal reload; no reload loop is added.
+
 ## Storage preflight before production activation
 
 The admin logo preview uses authenticated `getBlob`, with no persistent public

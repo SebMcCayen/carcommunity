@@ -17,7 +17,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { onCall } from '../access/callable';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireAdminActor } from '../admin/actorContext';
+import { requireAdminActor, requireAdminActorInTransaction } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import { requirePaidOrAdminActor } from '../shared/memberActor';
 import {
@@ -110,6 +110,7 @@ export const updateOffer = onCall(CALLABLE_OPTS, async (request): Promise<OfferI
   const serverTimestamp = () => FieldValue.serverTimestamp();
 
   const status = await db.runTransaction(async (tx) => {
+    await requireAdminActorInTransaction(request, tx);
     const snap = await tx.get(offerRef);
     if (!snap.exists) {
       throw new HttpsError('not-found', 'Partner offer not found.');
@@ -186,6 +187,7 @@ export const setOfferStatus = onCall(CALLABLE_OPTS, async (request): Promise<Off
   const serverTimestamp = () => FieldValue.serverTimestamp();
 
   const status = await db.runTransaction(async (tx) => {
+    await requireAdminActorInTransaction(request, tx);
     const snap = await tx.get(offerRef);
     if (!snap.exists) {
       throw new HttpsError('not-found', 'Partner offer not found.');
