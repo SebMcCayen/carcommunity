@@ -66,6 +66,14 @@ configuration and the inherited network guard limit service requests to loopback
 The tests do not prove production Google sign-in or device App Check attestation.
 All owned emulators and listeners were stopped after completion.
 
+The first full CI feature-group run exposed an incomplete aggregate fixture left
+by the account-erasure suite. The fixture now uses the production aggregate
+shape, asserts exact preservation and deletes only its owned aggregate/marker
+after the suite. A fresh standard full-index emulator lifetime then passed all
+11 erasure cases, explicitly verified fixture cleanup and passed the SDK/HTTP
+workflow afterward. A local broad-group attempt was stopped for shared-host
+memory pressure and is not counted as a pass; the full group remains a CI gate.
+
 ## CI and remaining gates
 
 The PR must pass every registered current-head check, including full native iOS

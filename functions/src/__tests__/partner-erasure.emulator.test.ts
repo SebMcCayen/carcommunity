@@ -25,6 +25,8 @@ const app =
   });
 const db = getFirestore(app);
 const prefix = `perase-${randomUUID().slice(0, 8)}`;
+const preservedStats = db.doc(`partnerRedemptionStats/${hash(`${prefix}-offer:all`)}`);
+const processedRedemption = db.doc(`partnerRedemptionOutbox/${prefix}`);
 let erase: typeof import('../partners/portal-erasure').erasePartnerAccountData;
 let purge: typeof import('../account/scheduled').purgeUserData;
 let portal: typeof import('../partners/portal').portal;
@@ -38,6 +40,9 @@ beforeAll(async () => {
   await db.doc('config/featureFlags').set({ partnerSelfService: true }, { merge: true });
 });
 afterAll(async () => {
+  // Aggregate publishers inspect the whole collection in other test files.
+  // Remove only this suite's explicitly owned preservation fixtures.
+  await Promise.all([preservedStats.delete(), processedRedemption.delete()]);
   await db
     .doc('config/featureFlags')
     .set({ partnerSelfService: previousFlag ?? FieldValue.delete() }, { merge: true });
@@ -102,8 +107,16 @@ describe('partner records in canonical account erasure', () => {
         .doc(`partnerPortalRequests/${id}-receipt`)
         .set({ reservation: { reservationId: id } });
     }
-    await db.doc(`partnerRedemptionStats/${prefix}`).set({ totalRedeemed: 2 });
-    await db.doc(`partnerRedemptionOutbox/${prefix}`).set({ processed: true, count: 1 });
+    const aggregate = {
+      companyId: `${prefix}-company`,
+      companyName: 'Erasure business',
+      offerId,
+      title: 'Erasure offer',
+      period: 'all',
+      totalRedeemed: 2,
+    };
+    await preservedStats.set(aggregate);
+    await processedRedemption.set({ processed: true });
     await erase(uid);
     await erase(uid);
     expect((await db.doc(`partnerOfferQuotas/${offerId}`).get()).data()).toMatchObject({
@@ -127,8 +140,8 @@ describe('partner records in canonical account erasure', () => {
       `partnerPortalRequests/${foreign}`,
     ])
       expect((await db.doc(path).get()).exists).toBe(true);
-    expect((await db.doc(`partnerRedemptionStats/${prefix}`).get()).data()!.totalRedeemed).toBe(2);
-    expect((await db.doc(`partnerRedemptionOutbox/${prefix}`).get()).data()!.processed).toBe(true);
+    expect((await preservedStats.get()).data()).toEqual(aggregate);
+    expect((await processedRedemption.get()).data()).toEqual({ processed: true });
   });
 
   it('erases used tombstones without an original reservation or offer parent and preserves other customers', async () => {
