@@ -1728,19 +1728,23 @@ final class ShellSmokeTests: XCTestCase {
             let availableHeight = min(viewport.height, keyboardViewportHeight)
             let candidate = evidence.historyAnchorCandidate(maximumTextHeight: availableHeight - 2 * margin)
             let targetTop = viewport.minY + margin
-            if let candidate, evidence.readsHistory(hiding: "Fixture reply"),
+            let readsHistory = evidence.readsHistory(hiding: "Fixture reply")
+            if let candidate, readsHistory,
                viewport.contains(candidate.frame), candidate.frame.minY >= targetTop,
                candidate.frame.minY <= targetTop + margin {
                 print("CHAT_HISTORY_ANCHOR id=\(candidate.identifier) frame=\(candidate.frame) viewport=\(viewport)")
                 return candidate.identifier
             }
             let limit = min(viewport.height * 0.4, 240)
-            // Aim inside the setup band so native drag recognition/rounding
-            // cannot leave the row balanced on its boundary.
-            var distance = candidate.map { targetTop + margin / 2 - $0.frame.minY } ?? limit
-            // If the row is already aligned but the reply is still visible,
-            // move farther into history rather than accepting that setup.
-            if abs(distance) < 8 { distance = limit }
+            // Hide the sent reply before fine alignment. A nearly aligned
+            // old row alone is not a history-read starting state.
+            var distance = limit
+            if !evidence.messageIntersectsViewport(label: "Fixture reply"), let candidate {
+                let correction = targetTop + margin / 2 - candidate.frame.minY
+                // CI consumed 10pt recognizing a pan. A 24pt minimum crosses
+                // that threshold without jumping across the 24pt setup band.
+                distance = correction >= 0 ? max(margin, correction) : min(-margin, correction)
+            }
             distance = max(-limit, min(limit, distance))
             let startY = viewport.minY + viewport.height * (distance > 0 ? 0.25 : 0.75)
             let origin = app.coordinate(withNormalizedOffset: .zero)
@@ -2136,12 +2140,16 @@ private struct ChatViewportEvidence {
                 $0.identifier.hasPrefix("chat.message.text.fixture-") &&
                 usable($0.frame) && viewport.contains($0.frame)
         }
-        let newestIntersects = elements.contains {
+        return hasVisibleOlderMessage && !messageIntersectsViewport(label: label)
+    }
+
+    func messageIntersectsViewport(label: String) -> Bool {
+        guard let viewport = readableViewport else { return false }
+        return elements.contains {
             $0.inMessageThread && $0.type == .staticText && $0.label == label &&
                 usable($0.frame) && !$0.frame.intersection(viewport).isNull &&
                 !$0.frame.intersection(viewport).isEmpty
         }
-        return hasVisibleOlderMessage && !newestIntersects
     }
 
     func historyAnchorCandidate(maximumTextHeight: CGFloat) -> Element? {
