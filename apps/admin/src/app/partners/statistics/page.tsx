@@ -18,6 +18,12 @@ export default function PartnerStatisticsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
+  // The URL owns the report scope, including Link and browser-history changes.
+  // A draft being typed should survive period changes and report refreshes.
+  useEffect(() => {
+    setInput(companyId);
+    setOfferId('');
+  }, [companyId]);
   const load = useCallback(async () => {
     const run = ++generation.current;
     setLoading(true);

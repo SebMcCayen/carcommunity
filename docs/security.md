@@ -126,9 +126,10 @@ This document defines baseline security requirements for CarCommunity. It is a t
 - Enforce cooldowns and max limits.
 - Maintain risk score and queue suspicious activity for admin review.
 
-## Partner statistics privacy
+## Partner interaction and location analytics privacy
 
-- Partner statistics are opt-in only.
+- These analytics requirements apply to Partner Insights interaction and location-derived metrics. Server-confirmed offer redemption accounting has a separate, limited purpose below.
+- Partner interaction and location analytics are opt-in only.
 - Share aggregated data only.
 - Enforce minimum threshold of `PARTNER_STATS_MIN_UNIQUE_USERS` unique users before sharing, applied per partner report slice (time window + metric + geographic segment); privacy risk assessment may increase this threshold.
 - Do not share personal data with companies.
@@ -143,6 +144,18 @@ This document defines baseline security requirements for CarCommunity. It is a t
 - Partner Insights never exposes user-level partner data, identities, conversations, live positions, routes, or exact event timestamps to partners.
 - Partner data is not sold, and partner companies never receive drive history or individual tracking data.
 - A dedicated privacy review must be completed before any future partner portal launch or wider partner self-service analytics rollout.
+
+## Partner offer redemption accounting
+
+- Count only server-confirmed offer redemptions. This is operational accounting requested by the partner feature, separate from profile-view, click, pass-by, route or location analytics.
+- Reserving or redeeming an offer must not be interpreted as consent to Partner Insights or other optional analytics. Existing analytics consent and minimum-contributor requirements remain unchanged.
+- Partners receive delayed aggregate counts for their own company and offers, never a customer list, customer UID, unique-person count or individual event feed. Only current company managers may access these reports; redeemers have operational QR access without reporting access. Active administrators may access company-scoped or global aggregates.
+- Exact small redemption totals are permitted by the approved operational reporting contract, including limited campaigns. They are aggregated counts, not a claim of mathematical anonymity: a merchant may infer activity from small groups, its own visits or changes between published totals. Do not label them as anonymous people or location statistics.
+- Publish immutable daily snapshots, offer only closed UTC calendar months, and expose no arbitrary time, demographic or geographic segmentation. Do not add finer filters or combine reports with individual tracking without a new privacy review.
+- Keep the minimal protected account linkage needed for reservation ownership, capacity, one use per account/campaign, retry safety and access controls outside all statistical projections. Campaign-scoped UID hashes and account-derived anti-abuse keys are pseudonymous data, not anonymous data.
+- Canonical account erasure removes reservations and their QR/retry references, campaign claims, private applications and staff bindings. Aggregate counts and separately managed business records survive. Hashed minute-level rate budgets become eligible for expiry cleanup after 24 hours; canonical erasure does not actively enumerate those counters, and asynchronous TTL/sweep deletion can lag. Do not claim that every derivable operational pseudonym disappears immediately at account purge.
+- After a redemption is aggregated, retain only the random processed outbox document ID and processed bit for replay protection; discard its redundant per-event business/month fields. No customer identifier is stored in that ledger. Existing historical processed rows require separately authorized, bounded cleanup if present.
+- The dedicated source review and remaining activation gates are recorded in [Partner portal prelaunch review](security/partner-portal-prelaunch-review.md). This is not a legal compliance certification or permission to activate the feature.
 
 ## Digital billboard safety and advertising controls
 
@@ -254,7 +267,7 @@ This document defines baseline security requirements for CarCommunity. It is a t
 - [ ] Blocking rules prevent visibility leaks.
 - [ ] Saved drives require explicit save and support delete.
 - [ ] Kronjakt anti-fraud validations are backend-enforced.
-- [ ] Partner statistics sharing is opt-in, aggregated, thresholded, and non-personal.
+- [ ] Partner Insights sharing is opt-in, aggregated, thresholded, and non-personal; operational redemption accounting follows its separate minimization and scoped-reporting requirements above.
 - [ ] Digital billboards are safely labeled and non-distracting in driving mode.
 - [ ] Error reporting to GitHub is sanitized.
 - [ ] Pagination and required rate limiting are implemented.

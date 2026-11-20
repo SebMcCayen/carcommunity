@@ -13,6 +13,7 @@
 
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { CallableRequest } from 'firebase-functions/v2/https';
+import type { Transaction } from 'firebase-admin/firestore';
 import { requireCarCommunityAccess } from '../access/carCommunity';
 import { db } from '../firebase';
 import { guardActorIsActiveAdmin } from './claims-core';
@@ -48,5 +49,35 @@ export async function requireAdminActor(request: CallableRequest): Promise<Admin
   }
 
   await requireCarCommunityAccess(auth.uid);
+  return { uid: auth.uid, state };
+}
+
+/**
+ * Rechecks privileged writes using the transaction's read set, in addition to
+ * requireAdminActor at the entrypoint. Access initialization and other external
+ * service calls stay outside a retried Firestore transaction.
+ */
+export async function requireAdminActorInTransaction(
+  request: CallableRequest,
+  tx: Transaction,
+): Promise<AdminActor> {
+  const auth = request.auth;
+  if (!auth) throw new HttpsError('unauthenticated', 'Sign in to perform admin operations.');
+  if (auth.token.admin !== true || auth.token.suspended === true)
+    throw new HttpsError('permission-denied', 'Admin privileges are required for this operation.');
+
+  const [user, deletion, progress] = await Promise.all([
+    tx.get(db.collection('users').doc(auth.uid)),
+    tx.get(db.collection('accountDeletionRequests').doc(auth.uid)),
+    tx.get(db.collection('accountPurgeProgress').doc(auth.uid)),
+  ]);
+  const state = toUserAccessState(user.data());
+  const guard = guardActorIsActiveAdmin(state);
+  if (!guard.ok) throw new HttpsError(guard.code, guard.message);
+  if (
+    ['pending', 'processed'].includes(deletion.data()?.status) ||
+    progress.data()?.partnerErasureActive === true
+  )
+    throw new HttpsError('permission-denied', 'Account access is restricted.');
   return { uid: auth.uid, state };
 }

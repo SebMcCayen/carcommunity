@@ -15,9 +15,9 @@ import {
   requirePaidActor,
   requirePaidOrAdminActor,
 } from '../shared/memberActor';
-import { requireAdminActor } from '../admin/actorContext';
-import { toUserAccessState, isRestricted } from '../shared/access';
+import { requireAdminActor, requireAdminActorInTransaction } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
+import { toUserAccessState, isRestricted } from '../shared/access';
 import { buildApplicationDocument, normalizePartnerWebsiteUrl } from './partners-core';
 import { MAX_INSTANCES_MEMBER, MAX_INSTANCES_ADMIN, CPU_SCHEDULED } from '../shared/instanceLimits';
 import {
@@ -398,7 +398,7 @@ async function handlePortal(request: CallableRequest) {
       const snap = await tx.get(ref);
       if (!snap.exists) missing();
       const data = snap.data()!;
-      await assertNotErasing(uid, tx);
+      await requireAdminActorInTransaction(request, tx);
       // A revised application must be re-read and re-approved; never publish an older logo/review.
       if (data.revision !== initialData.revision) fail('Application changed. Reload the review.');
       if (data.partnerCompanyId)
@@ -491,7 +491,7 @@ async function handlePortal(request: CallableRequest) {
     if (a.enabled && (!target.emailVerified || target.disabled))
       fail('A verified active account is required.');
     return db.runTransaction(async (tx) => {
-      await assertNotErasing(uid, tx);
+      await requireAdminActorInTransaction(request, tx);
       await assertNotErasing(a.uid, tx);
       const [company, user] = await Promise.all([
         tx.get(db.collection('companies').doc(a.companyId)),
@@ -1044,6 +1044,7 @@ async function handlePortal(request: CallableRequest) {
     const imagePath = `billboardImages/${b.id}/${hash(path)}.png`;
     await adminStorage.bucket().file(path).copy(adminStorage.bucket().file(imagePath));
     await db.runTransaction(async (tx) => {
+      await requireAdminActorInTransaction(request, tx);
       const current = await tx.get(ref);
       if (!current.exists || current.data()!.partnerCompanyId !== company.id)
         fail('Billboard changed. Reload.');

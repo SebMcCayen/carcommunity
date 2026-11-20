@@ -36,7 +36,9 @@ export async function aggregatePortalStatistics() {
             totalRedeemed: Number(snapshots[i]?.data()?.totalRedeemed ?? 0) + 1,
           }),
         );
-        tx.update(s.ref, { processed: true });
+        // Replay needs only this random outbox ID and processed bit once both
+        // aggregate counters commit. Drop the per-event business/month context.
+        tx.set(s.ref, { processed: true });
       });
   }
 }
