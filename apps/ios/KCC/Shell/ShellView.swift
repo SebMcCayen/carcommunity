@@ -97,6 +97,7 @@ struct ShellView: View {
     @State private var leaderboardCoordinator: LeaderboardCoordinator?
     @State private var clubChatCoordinator: ClubChatCoordinator?
     @State private var notificationsCoordinator: NotificationsInboxCoordinator?
+    @State private var epicLocationEnabled: Bool?
     @State private var notificationSettingsCoordinator: NotificationSettingsCoordinator?
     @State private var notificationSettingsAvailable = false
     @State private var notificationsAvailable = false
@@ -225,6 +226,20 @@ struct ShellView: View {
                     initialMapExplanationShown = true
                     initialMapPermissionPrompt = true
                 }
+            }
+            .task(id: signedInUid) {
+                epicLocationEnabled = nil
+                guard let uid = signedInUid,
+                      let settings = FirebaseNotificationSettingsRepository.createIfAvailable() else { return }
+                for await snapshot in settings.preferences(uid: uid) {
+                    guard !Task.isCancelled else { return }
+                    if case .loaded(let preferences) = snapshot {
+                        epicLocationEnabled = preferences.effective(.epicCrown).inApp
+                    } else { epicLocationEnabled = nil }
+                }
+            }
+            .task(id: epicLocationSubscriptionKey) {
+                await observeEpicNotificationLocation()
             }
             .task(id: savedPlacesLocationSubscriptionKey) {
                 await observeSavedPlacesLocation()
@@ -2239,6 +2254,10 @@ struct ShellView: View {
     private func openNotificationDeepLink(_ link: NotificationDeepLink) {
         guard signedInUid != nil else { return }
         switch link.target {
+        case .map:
+            selectedTab = .map
+            routes = .empty
+            dismissMapReading()
         case .dm:
             if let uid = link.entityId { openDm(uid: uid, displayName: nil) }
             else { routes = routes.opening(.conversations) }
@@ -3099,6 +3118,29 @@ struct ShellView: View {
     private var currentMapCenter: MapPoint? {
         mapSurface.cameraSnapshot.map {
             MapPoint(longitude: $0.longitude, latitude: $0.latitude)
+        }
+    }
+
+    private var epicLocationSubscriptionKey: String {
+        "\(signedInUid ?? "")|\(scenePhase)|\(locationProvider.authorization)|\(String(describing: epicLocationEnabled))|\(access.isRestricted)"
+    }
+
+    private func observeEpicNotificationLocation() async {
+        guard signedInUid != nil, !access.isRestricted,
+              let repository = FirebaseNotificationsRepository.createIfAvailable() else { return }
+        if epicLocationEnabled == false || !locationProvider.authorization.isAuthorized {
+            try? await repository.updateEpicLocation(nil)
+            return
+        }
+        guard epicLocationEnabled == true, scenePhase == .active else { return }
+        while !Task.isCancelled {
+            // Release this feature's positioning demand before uploading/sleeping.
+            // Chat and settings must not leave the GPS running for five minutes.
+            let fix = await locationProvider.freshFix()
+            guard !Task.isCancelled else { return }
+            if let fix { try? await repository.updateEpicLocation(fix) }
+            do { try await Task.sleep(for: .seconds(300)) }
+            catch { return }
         }
     }
 

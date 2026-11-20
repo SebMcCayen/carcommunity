@@ -191,6 +191,13 @@ final class NotificationsModelTests: XCTestCase {
         XCTAssertEqual(link, NotificationDeepLink(target: .friends, entityId: "requester-uid"))
     }
 
+    func testEngagementNotificationsOpenMapWithoutExposingIdentity() {
+        for category in [NotificationCategory.friendLive, .epicCrown] {
+            XCTAssertEqual(Notifications.deepLink(category: category, relatedEntityId: "ignored", recipientUid: recipient),
+                           NotificationDeepLink(target: .map, entityId: nil))
+        }
+    }
+
     func testDeepLinkWaveFallsBackToTheList() {
         let link = Notifications.deepLink(
             category: .wave, relatedEntityId: "waver-uid", recipientUid: recipient

@@ -1,3 +1,7 @@
+import { updateEpicLocation } from './notifications/epicLocation';
+import { onEpicCrownClaimed } from './crownHunt/epicAnnouncement';
+import { acknowledgeWave } from './live/acknowledgeWave';
+import { onFriendLiveStarted, onEpicCrownSpawned } from './notifications/engagement';
 import {
   listPublicReports,
   listMemberMessages,
@@ -674,6 +678,8 @@ export const points = {
  * arriving fast, ever.
  */
 export const crownHunt = {
+  onEpicCrownClaimed,
+  onEpicCrownSpawned,
   submitClaim,
   createPoint,
   updatePoint,
@@ -891,6 +897,7 @@ export const billboards = {
  * registry (functions/src/notifications/sendPush.ts).
  */
 export const notifications = {
+  updateEpicLocation,
   markRead,
   markAllRead,
   markSeen: markNotificationsSeen,
@@ -1193,6 +1200,8 @@ export const account = {
  * wave-core.ts.
  */
 export const live = {
+  acknowledgeWave,
+  onFriendLiveStarted,
   startSession,
   updatePosition,
   stopSession,

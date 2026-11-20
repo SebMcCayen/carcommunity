@@ -133,6 +133,15 @@ final class FirebaseNotificationsRepository: NotificationsRepository, @unchecked
         _ = try await functions.call(Self.markSeenCallable, payload: [:])
     }
 
+    func updateEpicLocation(_ fix: LocationFix?) async throws {
+        let location: Any
+        if let fix {
+            location = ["latitude": fix.latitude, "longitude": fix.longitude,
+                        "recordedAtMillis": fix.timestamp.timeIntervalSince1970 * 1000]
+        } else { location = NSNull() }
+        _ = try await functions.call("notifications-updateEpicLocation", payload: ["location": location])
+    }
+
     func currentUserId() -> String? {
         Auth.auth().currentUser?.uid
     }

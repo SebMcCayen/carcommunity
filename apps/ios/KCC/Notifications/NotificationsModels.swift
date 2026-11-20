@@ -46,6 +46,8 @@ enum NotificationCategory: String, Equatable, Sendable, CaseIterable {
     /// A nearby live sharer waved at you OUTSIDE a convoy (backend
     /// `live.sendWave`). Social, opt-out-able.
     case wave
+    case friendLive = "friend_live"
+    case epicCrown = "epic_crown"
 
     /// The Firestore wire value (identical to the raw value; kept as an
     /// explicit accessor so call sites read like Android's `category.wire`).
@@ -82,6 +84,8 @@ enum NotificationCategory: String, Equatable, Sendable, CaseIterable {
         case .convoyInvite: return "notifications.categoryConvoyInvite"
         case .convoyUpdate: return "notifications.categoryConvoyUpdate"
         case .wave: return "notifications.categoryWave"
+        case .friendLive: return "notifications.categoryFriendLive"
+        case .epicCrown: return "notifications.categoryEpicCrown"
         }
     }
 }
@@ -207,6 +211,7 @@ enum NotificationDeepLinkTarget: String, Equatable, Sendable, CaseIterable {
     /// The notifications list itself — the fallback destination for a notice
     /// with no per-entity anchor (system notices, waves, admin messages).
     case notifications
+    case map
 }
 
 /// A resolved tap destination: the ``NotificationDeepLinkTarget`` plus the
@@ -338,6 +343,8 @@ enum Notifications {
             return NotificationDeepLink(target: .convoys, entityId: entityIdOrNil(relatedEntityId))
         case .friendRequest:
             return NotificationDeepLink(target: .friends, entityId: entityIdOrNil(relatedEntityId))
+        case .friendLive, .epicCrown:
+            return NotificationDeepLink(target: .map, entityId: nil)
         case .wave:
             // The inbox has no profile deep-link target, so a tap lands on the
             // list rather than handing an arbitrary uid to a navigator with no

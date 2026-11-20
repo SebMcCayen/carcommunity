@@ -1769,7 +1769,10 @@
     "convoyEndedLabel": "Convoy has ended",
     "convoyEndedRowDescription": "%1$s. Convoy has ended.",
     "convoyInviteAnsweredLabel": "You have already answered this invite",
-    "categoryConvoyUpdate": "Convoy updates"
+    "categoryConvoyUpdate": "Convoy updates",
+    "categoryFriendLive": "Friends going live",
+    "categoryEpicCrown": "Nearby Epic crowns",
+    "epicCrownLocationBody": "Uses your private last-known position for up to 24 hours. At most two notifications per day."
   },
   "feedback": {
     "title": "Report a problem",
@@ -1864,7 +1867,9 @@
     "mentionPicker": "Mention a member",
     "mentionLimit": "You can mention up to %1$d members in one message.",
     "mentionsNotDelivered": "Your message was posted, but some members you mentioned couldn't be notified.",
-    "locationLink": "📍 Show on map"
+    "locationLink": "📍 Show on map",
+    "epicSystem": "CarCommunity",
+    "epicCaught": "caught an Epic crown! 👑"
   },
   "chatHub": {
     "title": "Chat",

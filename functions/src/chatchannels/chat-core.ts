@@ -298,6 +298,7 @@ export interface ChatReplyTo {
 
 /** One chat message as returned by communityChat.list / convoyChat.list. */
 export interface ChatMessageSummary {
+  systemEvent?: 'epic_crown_claimed';
   reactionCounts?: Record<string, number>;
   id: string;
   senderUid: string;
@@ -704,6 +705,7 @@ export function toChatMessageSummary(
   }
   // Present only on a reply whose snapshot was stored; omitted for an ordinary
   // message so the read shape stays additive.
+  if (data.systemEvent === 'epic_crown_claimed') summary.systemEvent = data.systemEvent;
   const replyTo = toChatReplyTo(data.replyTo);
   if (replyTo) {
     summary.replyTo = replyTo;

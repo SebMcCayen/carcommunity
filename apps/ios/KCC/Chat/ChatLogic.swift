@@ -283,7 +283,8 @@ enum ChannelResponseParser {
             mentionedUids: parseMentionedUids(map["mentionedUids"]),
             clientId: (map["clientId"] as? String).flatMap { $0.isEmpty ? nil : $0 },
             replyTo: parseReplyTo(map["replyTo"]),
-            reactionCounts: MessageReactionParser.counts(map["reactionCounts"])
+            reactionCounts: MessageReactionParser.counts(map["reactionCounts"]),
+            systemEvent: map["systemEvent"] as? String
         )
     }
 

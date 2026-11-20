@@ -49,8 +49,8 @@ class FirebaseNotificationsRepository private constructor(
 
     override fun observeUnread(uid: String): Flow<Boolean> {
         // Two cheap listeners, both bound while the dot is on screen: the newest
-        // inbox item (a limit(1) createdAt-DESC query, the same automatic index
-        // observeNotifications uses) and the caller's userPrivate last-seen
+        // unread inbox item (a limit(1) read=false/createdAt-DESC query)
+        // and the caller's userPrivate last-seen
         // marker. The dot lights when the newest notification post-dates the
         // marker — the exact mirror of the community chat dot, and lighter than
         // the old full-inbox listener the aggregate used to run.
@@ -60,6 +60,7 @@ class FirebaseNotificationsRepository private constructor(
                     .collection(NOTIFICATIONS)
                     .document(uid)
                     .collection(ITEMS)
+                    .whereEqualTo("read", false)
                     .orderBy(CREATED_AT, Query.Direction.DESCENDING)
                     .limit(1)
                     .addSnapshotListener { snapshot, error ->
@@ -109,6 +110,13 @@ class FirebaseNotificationsRepository private constructor(
         }
     }
 
+    override suspend fun updateEpicLocation(latitude: Double?, longitude: Double?, recordedAtMillis: Long?) {
+        val location = if (latitude != null && longitude != null && recordedAtMillis != null) {
+            mapOf("latitude" to latitude, "longitude" to longitude, "recordedAtMillis" to recordedAtMillis)
+        } else null
+        call("notifications-updateEpicLocation", mapOf("location" to location))
+    }
+
     override suspend fun markRead(notificationId: String) {
         call(MARK_READ, mapOf("notificationId" to notificationId))
     }
@@ -129,7 +137,7 @@ class FirebaseNotificationsRepository private constructor(
         call(DELETE_ALL, emptyMap())
     }
 
-    private suspend fun call(name: String, data: Map<String, Any>) {
+    private suspend fun call(name: String, data: Map<String, Any?>) {
         functions.getHttpsCallable(name).call(data)
             .awaitOrThrow { "$name failed without a cause" }
     }

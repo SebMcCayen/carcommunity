@@ -45,7 +45,8 @@ enum ChatFirestore {
             mentionedUids: ChannelResponseParser.parseMentionedUids(document.get("mentionedUids")),
             clientId: (document.get("clientId") as? String).flatMap { $0.isEmpty ? nil : $0 },
             replyTo: ChannelResponseParser.parseReplyTo(document.get("replyTo")),
-            reactionCounts: MessageReactionParser.counts(document.get("reactionCounts"))
+            reactionCounts: MessageReactionParser.counts(document.get("reactionCounts")),
+            systemEvent: document.get("systemEvent") as? String
         )
     }
 

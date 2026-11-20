@@ -94,6 +94,18 @@ class ChannelChatContentTest {
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
     @Test
+    fun epicSystemMessageOpensCollectorProfileIncludingOwnCatch() {
+        var opened: String? = null
+        setContent(
+            messages = listOf(message("epic-catch", "me", "Epic Driver").copy(systemEvent = "epic_crown_claimed")),
+            onViewProfile = { opened = it },
+        )
+        composeTestRule.onNodeWithText(str(R.string.channel_epicCaught)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Epic Driver").performClick()
+        composeTestRule.runOnIdle { assertEquals("me", opened) }
+    }
+
+    @Test
     fun selectedChannelQuoteTracksLoadedTextAndDisappearsWithMessage() {
         val messages = mutableStateOf(listOf(message("local-one", "other", "Local author")))
         composeTestRule.setContent {

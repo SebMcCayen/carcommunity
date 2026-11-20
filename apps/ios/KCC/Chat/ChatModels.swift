@@ -79,6 +79,7 @@ struct ChannelReplyTo: Equatable, Sendable {
 /// denormalized sender profile lets the channel render the author's name/avatar
 /// without a lookup. Android: `ChannelMessage`.
 struct ChannelMessage: Equatable, Sendable, Identifiable {
+    let systemEvent: String?
     let id: String
     let senderUid: String
     let text: String
@@ -123,9 +124,11 @@ struct ChannelMessage: Equatable, Sendable, Identifiable {
         deliveryState: ChannelDeliveryState = .sent,
         sendError: ChannelSendError? = nil,
         replyTo: ChannelReplyTo? = nil,
-        reactionCounts: [String: Int] = [:]
+        reactionCounts: [String: Int] = [:],
+        systemEvent: String? = nil
     ) {
         self.id = id
+        self.systemEvent = systemEvent
         self.senderUid = senderUid
         self.text = text
         self.senderDisplayName = senderDisplayName

@@ -1655,6 +1655,9 @@
     <string name="notifications_convoyEndedRowDescription">%1$s. Konvojen är avslutad.</string>
     <string name="notifications_convoyInviteAnsweredLabel">Du har redan svarat på inbjudan</string>
     <string name="notifications_categoryConvoyUpdate">Konvojuppdateringar</string>
+    <string name="notifications_categoryFriendLive">Vänner som går live</string>
+    <string name="notifications_categoryEpicCrown">Epic-kronor i närheten</string>
+    <string name="notifications_epicCrownLocationBody">Använder din privata senast kända position i upp till 24 timmar. Högst två notiser per dygn.</string>
     <string name="feedback_title">Rapportera ett problem</string>
     <string name="feedback_openButton">Rapportera ett problem</string>
     <string name="feedback_publicNoticeTitle">Rapporten är offentlig</string>
@@ -1740,6 +1743,8 @@
     <string name="channel_mentionLimit">Du kan nämna högst %1$d medlemmar i ett meddelande.</string>
     <string name="channel_mentionsNotDelivered">Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras.</string>
     <string name="channel_locationLink">📍 Visa på kartan</string>
+    <string name="channel_epicSystem">CarCommunity</string>
+    <string name="channel_epicCaught">fångade en Epic-krona! 👑</string>
     <string name="chatHub_title">Chatt</string>
     <string name="chatHub_tabChats">Chattar</string>
     <string name="chatHub_tabDriver">Driver</string>

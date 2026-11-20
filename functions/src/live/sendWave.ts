@@ -64,7 +64,7 @@ import {
   isWithinRadius,
 } from '../incidents/incidents-core';
 import { isBlockedAgainstAnyPeer, resolvePeerBlockPairs } from '../convoy/convoy-core';
-import { writeInAppNotification } from '../notifications/deliver';
+import { writeWaveNotice } from './acknowledgeWave';
 import { LIVE_SESSION_ACTIVE_STATUS } from './nearby-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { badgeProgressRef } from '../badges/tierAwards';
@@ -333,7 +333,14 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   for (let i = 0; i < recipients.length; i += WRITE_BATCH_LIMIT) {
     const batch = db.batch();
     for (const rid of recipients.slice(i, i + WRITE_BATCH_LIMIT)) {
-      batch.set(inboxRef(rid, waveId), payload);
+      batch.set(
+        inboxRef(rid, waveId),
+        {
+          ...payload,
+          notificationId: waveNotificationId(actor.uid, rid, stampedAtMs),
+        },
+        { merge: true },
+      );
     }
     await batch.commit();
   }
@@ -391,8 +398,10 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   for (let i = 0; i < notifRecipients.length; i += NOTIF_WRITE_CONCURRENCY) {
     const results = await Promise.allSettled(
       notifRecipients.slice(i, i + NOTIF_WRITE_CONCURRENCY).map((recipientUid) =>
-        writeInAppNotification(
+        writeWaveNotice(
+          db,
           recipientUid,
+          waveId,
           {
             category: 'wave',
             title: 'Ny vinkning',

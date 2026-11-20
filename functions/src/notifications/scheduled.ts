@@ -1,3 +1,4 @@
+import { clearExpiredEpicLocations } from './epicLocation';
 /**
  * Notifications scheduled cleanup (Phase 9l).
  *
@@ -78,6 +79,8 @@ export const cleanupExpired = onSchedule(
     schedule: '0 5 * * *',
   },
   withServerErrorReporting('notifications.cleanupExpired', async () => {
-    await runNotificationsCleanup(new Date());
+    const now = new Date();
+    await runNotificationsCleanup(now);
+    await clearExpiredEpicLocations(db, now.getTime());
   }),
 );

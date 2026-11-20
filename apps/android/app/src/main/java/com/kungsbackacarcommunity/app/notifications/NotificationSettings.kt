@@ -58,6 +58,8 @@ object NotificationCategories {
             "club_invite",
             "convoy_update",
             "wave",
+            "friend_live",
+            "epic_crown",
             "account_warning",
             "account_suspension",
         )
@@ -77,6 +79,8 @@ object NotificationCategories {
             "club_invite",
             "convoy_update",
             "wave",
+            "friend_live",
+            "epic_crown",
         )
 
     /** Essential account notices — cannot be disabled in-app or push. */

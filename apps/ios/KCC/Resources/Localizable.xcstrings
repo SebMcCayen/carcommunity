@@ -4132,6 +4132,40 @@
         }
       }
     },
+    "channel.epicCaught": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fångade en Epic-krona! 👑"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "caught an Epic crown! 👑"
+          }
+        }
+      }
+    },
+    "channel.epicSystem": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarCommunity"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarCommunity"
+          }
+        }
+      }
+    },
     "channel.inputPlaceholder": {
       "extractionState": "manual",
       "localizations": {
@@ -24974,6 +25008,23 @@
         }
       }
     },
+    "notifications.categoryEpicCrown": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Epic-kronor i närheten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nearby Epic crowns"
+          }
+        }
+      }
+    },
     "notifications.categoryEvent": {
       "extractionState": "manual",
       "localizations": {
@@ -25055,6 +25106,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Update"
+          }
+        }
+      }
+    },
+    "notifications.categoryFriendLive": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vänner som går live"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Friends going live"
           }
         }
       }
@@ -25463,6 +25531,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "No notifications yet."
+          }
+        }
+      }
+    },
+    "notifications.epicCrownLocationBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Använder din privata senast kända position i upp till 24 timmar. Högst två notiser per dygn."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses your private last-known position for up to 24 hours. At most two notifications per day."
           }
         }
       }

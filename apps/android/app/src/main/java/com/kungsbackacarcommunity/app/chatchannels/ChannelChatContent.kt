@@ -983,6 +983,20 @@ private fun ChannelMessageRow(
     showSender: Boolean = true,
     collapsedBodyLines: Int = 8,
 ) {
+    if (message.systemEvent == "epic_crown_claimed") {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s2),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(stringResource(R.string.channel_epicSystem), style = MaterialTheme.typography.labelSmall)
+            TextButton(onClick = { onViewProfile?.invoke(message.senderUid) }, enabled = onViewProfile != null) {
+                Text(message.senderDisplayName ?: stringResource(R.string.channel_unknownSender))
+            }
+            Text(stringResource(R.string.channel_epicCaught), style = MaterialTheme.typography.bodyMedium)
+            MessageTimeText(millis = message.createdAtMillis, dates = dates)
+        }
+        return
+    }
     val bringIntoView = remember { BringIntoViewRequester() }
     LaunchedEffect(highlighted) {
         if (highlighted) bringIntoView.bringIntoView()

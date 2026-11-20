@@ -107,6 +107,7 @@ data class ChannelMessage(
      */
     val replyTo: ChannelReplyTo? = null,
     val reactionCounts: Map<String, Long> = emptyMap(),
+    val systemEvent: String? = null,
 )
 
 /**
@@ -437,6 +438,7 @@ object ChannelResponseParser {
             senderUid = senderUid,
             text = map["text"] as? String ?: "",
             senderDisplayName = map["senderDisplayName"] as? String,
+            systemEvent = (map["systemEvent"] as? String)?.takeIf { it == "epic_crown_claimed" },
             senderAvatarPath = map["senderAvatarPath"] as? String,
             createdAtMillis = iso?.let(::channelIsoToMillisOrNull),
             createdAtIso = iso,

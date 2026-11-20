@@ -204,6 +204,11 @@ private fun CategoryRow(
                     if (compact) CategoryChannels(category, preference, essential, onToggle, true)
                 }
                 if (!compact) CategoryChannels(category, preference, essential, onToggle, false)
+                if (category == "epic_crown") {
+                    Text(stringResource(R.string.notifications_epicCrownLocationBody),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (essential) {
                     Text(
                         text = stringResource(R.string.notifications_settingsEssential),

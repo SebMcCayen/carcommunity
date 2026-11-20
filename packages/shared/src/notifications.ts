@@ -63,6 +63,8 @@ export const NOTIFICATION_CATEGORIES = [
   'convoy_invite',
   'convoy_update',
   'wave',
+  'friend_live',
+  'epic_crown',
 ] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 

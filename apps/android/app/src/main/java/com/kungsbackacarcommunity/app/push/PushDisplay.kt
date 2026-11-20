@@ -102,10 +102,12 @@ object PushDisplay {
             // A nearby live sharer waved at you (live.sendWave): member-to-member
             // activity, so it rides the social channel with the rest.
             NotificationCategory.WAVE,
+            NotificationCategory.FRIEND_LIVE,
             -> PushChannel.SOCIAL
 
             NotificationCategory.SUBSCRIPTION_STATUS,
             NotificationCategory.SYSTEM_NOTICE,
+            NotificationCategory.EPIC_CROWN,
             -> PushChannel.GENERAL
         }
 

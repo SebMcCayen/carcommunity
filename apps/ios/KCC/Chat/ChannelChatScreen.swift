@@ -371,7 +371,25 @@ struct MessageRow: View {
         self.onViewProfile = onViewProfile
     }
 
+    @ViewBuilder
     var body: some View {
+        if message.systemEvent == "epic_crown_claimed" {
+            VStack(spacing: KccSpacing.s1) {
+                Text("channel.epicSystem").font(.caption).foregroundStyle(.secondary)
+                senderNameView.foregroundStyle(KccChatColors.readingAccent)
+                Text("channel.epicCaught").font(.subheadline)
+                if let timestamp = message.createdAt {
+                    Text(timestamp, style: .time).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, KccSpacing.s2)
+            .frame(maxWidth: .infinity)
+        } else {
+            ordinaryMessage
+        }
+    }
+
+    private var ordinaryMessage: some View {
         HStack(alignment: .top, spacing: 0) {
             if !isOwn {
                 if showSender {

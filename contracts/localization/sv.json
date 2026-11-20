@@ -1769,7 +1769,10 @@
     "convoyEndedLabel": "Konvojen är avslutad",
     "convoyEndedRowDescription": "%1$s. Konvojen är avslutad.",
     "convoyInviteAnsweredLabel": "Du har redan svarat på inbjudan",
-    "categoryConvoyUpdate": "Konvojuppdateringar"
+    "categoryConvoyUpdate": "Konvojuppdateringar",
+    "categoryFriendLive": "Vänner som går live",
+    "categoryEpicCrown": "Epic-kronor i närheten",
+    "epicCrownLocationBody": "Använder din privata senast kända position i upp till 24 timmar. Högst två notiser per dygn."
   },
   "feedback": {
     "title": "Rapportera ett problem",
@@ -1864,7 +1867,9 @@
     "mentionPicker": "Nämn en medlem",
     "mentionLimit": "Du kan nämna högst %1$d medlemmar i ett meddelande.",
     "mentionsNotDelivered": "Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras.",
-    "locationLink": "📍 Visa på kartan"
+    "locationLink": "📍 Visa på kartan",
+    "epicSystem": "CarCommunity",
+    "epicCaught": "fångade en Epic-krona! 👑"
   },
   "chatHub": {
     "title": "Chatt",

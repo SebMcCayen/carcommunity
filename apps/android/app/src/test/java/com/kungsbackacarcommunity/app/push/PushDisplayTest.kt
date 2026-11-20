@@ -80,6 +80,7 @@ class PushDisplayTest {
         // there without a case here would silently fall back to the inbox.
         val wireValues =
             listOf(
+                "map",
                 "dm",
                 "community_chat",
                 "convoy_chat",
@@ -183,6 +184,8 @@ class PushDisplayTest {
                 NotificationCategory.CLUB_INVITE to PushChannel.SOCIAL,
                 NotificationCategory.CONVOY_UPDATE to PushChannel.SOCIAL,
                 NotificationCategory.WAVE to PushChannel.SOCIAL,
+                NotificationCategory.FRIEND_LIVE to PushChannel.SOCIAL,
+                NotificationCategory.EPIC_CROWN to PushChannel.GENERAL,
             )
         // Exhaustive: a new category must be assigned a channel here too.
         assertEquals(NotificationCategory.entries.toSet(), expected.keys)

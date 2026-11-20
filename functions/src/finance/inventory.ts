@@ -366,14 +366,15 @@ export const REPOSITORY_SCHEDULED_JOBS: ScheduledJob[] = [
     schedule: '0 5 * * *',
     runsPerDay: 1,
     // Deletes read items past 7 days + unread past 30 days (collectionGroup
-    // 'items'); no writes. Delete volume is small at this scale.
-    writesPerRun: 0,
-    readsPerRun: 20,
+    // 'items'), plus an expired private-location query and field cleanup.
+    // Reference: 20 expired private positions/day, each queried and re-read.
+    writesPerRun: 20,
+    readsPerRun: 60,
     deletesPerRun: 20,
     avgSeconds: 15,
     cpu: CPU_SCHEDULED,
     memoryGiB: 0.25,
-    note: 'Daily retention sweep — deletes read items >7d and unread >30d.',
+    note: 'Daily retention sweep — deletes read items >7d and unread >30d; clears expired 24-hour Epic notification positions without deleting private user documents.',
   },
   {
     // RELABELLED 2026-08-20: was `account-lastLoginSweep`, but its 30 3 * * *
@@ -753,6 +754,8 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'live.extendSession': 'variable-member',
   'live.listNearby': 'variable-member',
   'live.sendWave': 'variable-member',
+  'live.acknowledgeWave': 'variable-member',
+  'notifications.updateEpicLocation': 'variable-member',
   'drives.save': 'variable-member',
   // Subscription read + bounded ride page; first page also performs one
   // (Community) or two (Plus) count aggregations for the hidden-history UX.

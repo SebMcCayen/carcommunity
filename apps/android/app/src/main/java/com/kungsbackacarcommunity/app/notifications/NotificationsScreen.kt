@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.notifications
 
+import com.kungsbackacarcommunity.app.push.PushNavigator
+import com.kungsbackacarcommunity.app.push.PushDeepLink
+import com.kungsbackacarcommunity.app.push.PushTarget
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -267,6 +271,9 @@ fun NotificationsScreen(
                             val eventId = EventNotifications.eventId(item)
                             val onOpen: (() -> Unit)? =
                                 when {
+                                    item.category in setOf(NotificationCategory.FRIEND_LIVE, NotificationCategory.EPIC_CROWN) -> ({
+                                        PushNavigator.publish(PushDeepLink(PushTarget.MAP))
+                                    })
                                     item.category == NotificationCategory.CLUB_INVITE && onOpenClub != null -> onOpenClub
                                     eventId != null && onOpenEvent != null -> ({
                                             onOpenEvent(eventId)

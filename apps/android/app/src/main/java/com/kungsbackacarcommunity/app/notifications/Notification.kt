@@ -48,6 +48,8 @@ enum class NotificationCategory(val wire: String) {
      * the durable "{name} waved at you" record on the Notifications page.
      */
     WAVE("wave"),
+    FRIEND_LIVE("friend_live"),
+    EPIC_CROWN("epic_crown"),
     ;
 
     companion object {

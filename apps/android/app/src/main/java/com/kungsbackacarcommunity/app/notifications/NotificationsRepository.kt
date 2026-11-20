@@ -27,6 +27,9 @@ sealed interface NotificationsState {
  * row read.
  */
 interface NotificationsRepository {
+    /** Private last-known own fix for Epic notices; null coordinates clear it. */
+    suspend fun updateEpicLocation(latitude: Double?, longitude: Double?, recordedAtMillis: Long? = null) {}
+
     fun observeNotifications(uid: String): Flow<NotificationsState>
 
     /**

@@ -116,6 +116,8 @@ export const NOTIFICATION_CATEGORIES = [
   'convoy_invite',
   'convoy_update',
   'wave',
+  'friend_live',
+  'epic_crown',
 ] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
@@ -132,6 +134,8 @@ export const SOCIAL_NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'convoy_invite',
   'convoy_update',
   'wave',
+  'friend_live',
+  'epic_crown',
 ] as const;
 
 /**
@@ -406,6 +410,7 @@ export function pushPreviewsEnabled(preferences: unknown): boolean {
  * destinations, not a new navigation graph.
  */
 export const PUSH_DEEP_LINK_TARGETS = [
+  'map',
   'dm',
   'community_chat',
   'convoy_chat',
@@ -489,6 +494,9 @@ export function buildPushDeepLink(
       return { target: 'clubs', entityId: entityIdOrNull(relatedEntityId) };
     case 'friend_request':
       return { target: 'friends', entityId: entityIdOrNull(relatedEntityId) };
+    case 'friend_live':
+    case 'epic_crown':
+      return { target: 'map', entityId: null };
     case 'wave':
       // A nearby live sharer waved at you (live.sendWave). relatedEntityId is the
       // waver's uid, but the notifications inbox has no profile deep-link target,
@@ -683,6 +691,8 @@ export function selectEvictableTokenIds(
 
 export interface InAppNotificationInput {
   category: NotificationCategory;
+  /** Internal producer acknowledgement; never accepted from notification clients. */
+  read?: boolean;
   title: string;
   previewText: string;
   body?: string | null;
@@ -715,8 +725,8 @@ export function buildNotificationDocument(
     actionType: input.actionType ?? 'none',
     relatedEntityId: input.relatedEntityId ?? null,
     batchId: input.batchId ?? null,
-    read: false,
-    readAt: null,
+    read: input.read === true,
+    readAt: input.read === true ? serverTimestamp() : null,
     createdAt: serverTimestamp(),
   };
 }
