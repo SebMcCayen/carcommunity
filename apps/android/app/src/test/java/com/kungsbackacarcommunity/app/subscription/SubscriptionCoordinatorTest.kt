@@ -154,7 +154,10 @@ class SubscriptionCoordinatorTest {
 
         coordinator.reconcileOwnedPurchases()
 
-        assertEquals(PurchaseFlowStatus.Success("supporter"), coordinator.status.value)
+        assertEquals(
+            PurchaseFlowStatus.Success("supporter", SubscriptionOperation.Verification),
+            coordinator.status.value,
+        )
         assertEquals("supporter-token", verifier.verifiedToken)
         assertEquals(SUPPORTER_MONTHLY_PRODUCT_ID, productIdForOwnedPurchase(coordinator.ownedPurchase.value))
     }
@@ -185,6 +188,73 @@ class SubscriptionCoordinatorTest {
         )
         assertEquals(null, verifier.verifiedToken)
     }
+
+    @Test
+    fun `explicit restore and retry report different successful operations`() = runTest {
+        val purchase = OwnedPurchase("owned", setOf(SUPPORTER_MONTHLY_PRODUCT_ID), OwnedPurchaseState.Purchased)
+        val billing = FakeBilling(owned = listOf(purchase))
+        val coordinator = SubscriptionCoordinator(billing, FakeVerifier(shouldFail = false, tier = "supporter"))
+
+        coordinator.reconcileOwnedPurchases(SubscriptionOperation.Restore)
+        assertEquals(PurchaseFlowStatus.Success("supporter", SubscriptionOperation.Restore), coordinator.status.value)
+
+        billing.queryFails = true
+        coordinator.reconcileOwnedPurchases(SubscriptionOperation.Restore)
+        assertEquals(PurchaseFlowStatus.Failed(PurchaseFailureReason.Restore), coordinator.status.value)
+        assertEquals(purchase, coordinator.ownedPurchase.value)
+
+        billing.queryFails = false
+        coordinator.reconcileOwnedPurchases()
+        assertEquals(PurchaseFlowStatus.Success("supporter", SubscriptionOperation.Verification), coordinator.status.value)
+    }
+
+    @Test
+    fun `restore with no purchases reports no active subscriptions without verification`() = runTest {
+        val verifier = FakeVerifier(shouldFail = false)
+        val coordinator = SubscriptionCoordinator(FakeBilling(), verifier)
+
+        coordinator.reconcileOwnedPurchases(SubscriptionOperation.Restore)
+
+        assertEquals(PurchaseFlowStatus.Failed(PurchaseFailureReason.NoPurchasesToRestore), coordinator.status.value)
+        assertEquals(null, verifier.verifiedToken)
+    }
+
+    @Test
+    fun `restore connection failure uses restore feedback`() = runTest {
+        val coordinator = SubscriptionCoordinator(
+            FakeBilling(connect = BillingConnectionResult.Failed), FakeVerifier(shouldFail = false),
+        )
+
+        coordinator.reconcileOwnedPurchases(SubscriptionOperation.Restore)
+
+        assertEquals(PurchaseFlowStatus.Failed(PurchaseFailureReason.Restore), coordinator.status.value)
+    }
+
+    @Test
+    fun `restore verification failure is distinct from a purchase failure`() = runTest {
+        val billing = FakeBilling(owned = listOf(
+            OwnedPurchase("owned", setOf(PLUS_MONTHLY_PRODUCT_ID), OwnedPurchaseState.Purchased),
+        ))
+        val coordinator = SubscriptionCoordinator(billing, FakeVerifier(shouldFail = true))
+
+        coordinator.reconcileOwnedPurchases(SubscriptionOperation.Restore)
+        assertEquals(PurchaseFlowStatus.Failed(PurchaseFailureReason.RestoreVerification), coordinator.status.value)
+
+        coordinator.reconcileOwnedPurchases()
+        assertEquals(PurchaseFlowStatus.Failed(PurchaseFailureReason.MembershipVerification), coordinator.status.value)
+    }
+
+    @Test
+    fun `restored purchase without verified access never reports restoration success`() = runTest {
+        val billing = FakeBilling(owned = listOf(
+            OwnedPurchase("inactive", setOf(PLUS_MONTHLY_PRODUCT_ID), OwnedPurchaseState.Purchased),
+        ))
+        val coordinator = SubscriptionCoordinator(billing, FakeVerifier(shouldFail = false, grantsAccess = false))
+
+        coordinator.reconcileOwnedPurchases(SubscriptionOperation.Restore)
+
+        assertEquals(PurchaseFlowStatus.Failed(PurchaseFailureReason.NoPurchasesToRestore), coordinator.status.value)
+    }
 }
 
 private class FakeBilling(
@@ -194,6 +264,7 @@ private class FakeBilling(
 ) : BillingRepository {
     var connectCalled = false
         private set
+    var queryFails = false
 
     // No replay: the happy-path tests prove the coordinator subscribes before
     // the synchronous fake launch emits.
@@ -226,7 +297,10 @@ private class FakeBilling(
         replacement: SubscriptionReplacement?,
     ): PurchaseLaunchResult = PurchaseLaunchResult.Launched
 
-    override suspend fun queryOwnedPurchases(): List<OwnedPurchase> = owned
+    override suspend fun queryOwnedPurchases(): List<OwnedPurchase> {
+        if (queryFails) error("Store query failed")
+        return owned
+    }
 
     override fun close() = Unit
 }

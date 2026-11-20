@@ -102,6 +102,14 @@ Verify each scenario in sandbox, including the resulting server record and claim
   and later approval; network/backend failure followed by unfinished-transaction retry.
 - Restore after reinstall; sign out and switch CarCommunity account. A purchase
   bound to one Firebase UID must never grant another UID access.
+- Membership feedback (S80, also mirrored on Android): only a completed purchase
+  shows the purchase confirmation. Explicit restore shows the restoration
+  confirmation; opening, refreshing and Retry show the membership-active
+  confirmation. Verify both Swedish and English copy for Plus and Supporter.
+  A store synchronization failure must show a restore error and preserve the
+  previously verified tier. A subsequent Retry verifies existing access without
+  claiming a new purchase or a successful restore. Check no-purchases and
+  backend-verification failures separately; neither may report restore success.
 - Automatic renewal while the app is closed; reopening membership; opening and
   dismissing Apple's in-app subscription management sheet.
 - Plus → Supporter upgrade and scheduled Supporter → Plus downgrade.

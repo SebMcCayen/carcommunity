@@ -104,6 +104,17 @@ enum class PurchaseFailureReason {
     /** The purchase completed but `subscription-verify` did not confirm it. */
     Verification,
 
+    /** Existing access could not be checked; this does not describe a new payment. */
+    MembershipVerification,
+
+    /** The store could not synchronize previously owned purchases. */
+    Restore,
+
+    /** Store synchronization succeeded but backend verification failed. */
+    RestoreVerification,
+
+    NoPurchasesToRestore,
+
     /** Play accepted payment but the secure backend did not confirm active access. */
     InactivePurchase,
 
@@ -116,6 +127,8 @@ enum class PurchaseFailureReason {
  * (Idle → Connecting → Ready → Purchasing → Verifying → Success) with a
  * [Failed] terminal that carries the [PurchaseFailureReason].
  */
+enum class SubscriptionOperation { Purchase, Restore, Verification }
+
 sealed interface PurchaseFlowStatus {
     data object Idle : PurchaseFlowStatus
 
@@ -125,10 +138,15 @@ sealed interface PurchaseFlowStatus {
 
     data object Purchasing : PurchaseFlowStatus
 
+    data object Restoring : PurchaseFlowStatus
+
     data object Verifying : PurchaseFlowStatus
 
     /** Verified paid access, retaining the exact tier for UI confirmation. */
-    data class Success(val tier: String) : PurchaseFlowStatus
+    data class Success(
+        val tier: String,
+        val operation: SubscriptionOperation = SubscriptionOperation.Purchase,
+    ) : PurchaseFlowStatus
 
     /** Play reports a pending payment; no entitlement is granted or acknowledged. */
     data object Pending : PurchaseFlowStatus
@@ -151,6 +169,7 @@ object PurchaseFlow {
             -> true
             PurchaseFlowStatus.Connecting,
             PurchaseFlowStatus.Purchasing,
+            PurchaseFlowStatus.Restoring,
             PurchaseFlowStatus.Verifying,
             PurchaseFlowStatus.Pending,
             -> false

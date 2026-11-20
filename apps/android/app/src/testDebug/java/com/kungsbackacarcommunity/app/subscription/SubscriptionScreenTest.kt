@@ -26,6 +26,51 @@ class SubscriptionScreenTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
+    @Test
+    fun purchaseConfirmation_onlyAppearsForPurchase_thenRestoreAndRetryUseTheirOwnCopy() {
+        var status by androidx.compose.runtime.mutableStateOf<PurchaseFlowStatus>(
+            PurchaseFlowStatus.Success("supporter"),
+        )
+        composeTestRule.setContent {
+            KccTheme {
+                SubscriptionScreen(
+                    isActiveMember = true,
+                    currentTier = "supporter",
+                    status = status,
+                    canSubscribe = true,
+                    canChangePlan = true,
+                    canManageSubscription = true,
+                    onSubscribe = {},
+                    onManageSubscription = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.subscription_statusSuccess)).performScrollTo().assertIsDisplayed()
+
+        composeTestRule.runOnIdle {
+            status = PurchaseFlowStatus.Success("supporter", SubscriptionOperation.Restore)
+        }
+        composeTestRule.onNodeWithText(str(R.string.subscription_statusRestored)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.subscription_statusSuccess)).assertDoesNotExist()
+
+        composeTestRule.runOnIdle {
+            status = PurchaseFlowStatus.Success("supporter", SubscriptionOperation.Verification)
+        }
+        composeTestRule.onNodeWithText(str(R.string.subscription_statusVerified)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.subscription_statusRestored)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.subscription_statusSuccess)).assertDoesNotExist()
+    }
+
+    @Test
+    fun failedRestore_doesNotDescribeAFailedPurchase() {
+        setScreen(isActiveMember = true, currentTier = "supporter",
+            status = PurchaseFlowStatus.Failed(PurchaseFailureReason.Restore))
+
+        composeTestRule.onNodeWithText(str(R.string.subscription_errorRestore)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.subscription_errorPurchase)).assertDoesNotExist()
+    }
+
     private fun setScreen(
         isActiveMember: Boolean,
         currentTier: String? = null,

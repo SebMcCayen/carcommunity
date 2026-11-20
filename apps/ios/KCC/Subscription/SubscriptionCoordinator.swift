@@ -53,7 +53,7 @@ final class SubscriptionCoordinator {
                 currentTier = nil
                 return
             }
-            await verify(preferred)
+            await verify(preferred, operation: .verification)
         } catch is CancellationError {
             status = .idle
         } catch {
@@ -77,7 +77,7 @@ final class SubscriptionCoordinator {
         do {
             switch try await store.purchase(productID: productID, appAccountToken: token) {
             case .purchased(let transaction):
-                await verify(transaction)
+                await verify(transaction, operation: .purchase)
             case .pending:
                 status = .pending
             case .cancelled:
@@ -92,24 +92,24 @@ final class SubscriptionCoordinator {
 
     func restore() async {
         guard !status.isBusy, let store, verifier != nil, uid != nil else { return }
-        status = .loading
+        status = .restoring
         do {
             try await store.synchronize()
             let entitlements = await store.currentEntitlements()
             guard let preferred = Self.preferred(entitlements) else {
                 currentTier = nil
-                status = .failed(.inactivePurchase)
+                status = .failed(.noPurchasesToRestore)
                 return
             }
-            await verify(preferred)
+            await verify(preferred, operation: .restore)
         } catch is CancellationError {
             status = .ready
         } catch {
-            status = .failed(.purchase)
+            status = .failed(.restore)
         }
     }
 
-    private func verify(_ transaction: StoreSignedTransaction) async {
+    private func verify(_ transaction: StoreSignedTransaction, operation: SubscriptionOperation) async {
         guard let verifier, let store, let uid else {
             status = .failed(.unavailable)
             return
@@ -119,13 +119,19 @@ final class SubscriptionCoordinator {
             let result = try await verifier.verify(signedTransaction: transaction.signedTransaction, expectedUID: uid)
             await store.finish(transactionID: transaction.id)
             currentTier = result.grantsAccess ? result.tier : nil
-            status = result.grantsAccess ? .success(result.tier) : .failed(.inactivePurchase)
+            status = result.grantsAccess
+                ? .success(result.tier, operation: operation)
+                : .failed(operation == .restore ? .noPurchasesToRestore : .inactivePurchase)
         } catch is CancellationError {
             status = .ready
         } catch {
             // Deliberately do not finish: StoreKit will redeliver the verified
             // transaction so a transient backend failure cannot lose access.
-            status = .failed(.verification)
+            switch operation {
+            case .purchase: status = .failed(.verification)
+            case .restore: status = .failed(.restoreVerification)
+            case .verification: status = .failed(.membershipVerification)
+            }
         }
     }
 
