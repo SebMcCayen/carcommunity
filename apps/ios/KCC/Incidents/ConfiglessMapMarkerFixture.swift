@@ -26,14 +26,11 @@ struct ConfiglessMapMarkerFixture: View {
             let origin = geometry.frame(in: .global).origin
             ZStack {
                 ForEach(Array(points.enumerated()), id: \.offset) { index, point in
-                    Button { selected = true } label: {
+                    MapTapMarker(center: CGPoint(x: point.x - origin.x, y: point.y - origin.y),
+                                 interactive: true, accessibilityLabel: "Test roadwork marker",
+                                 identifier: "map.fixture.covered.\(index)", select: { selected = true }) {
                         IncidentMarkerBadge(marker: marker(.roadwork, id: "covered-\(index)"))
-                            .frame(width: 44, height: 44).contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Test roadwork marker")
-                    .accessibilityIdentifier("map.fixture.covered.\(index)")
-                    .position(x: point.x - origin.x, y: point.y - origin.y)
                 }
                 ForEach(Array(IncidentType.allCases.enumerated()), id: \.offset) { index, type in
                     VStack(spacing: 12) {
@@ -56,6 +53,7 @@ struct ConfiglessMapMarkerFixture: View {
                     Text("Covered marker selected").accessibilityIdentifier("map.fixture.wrongTarget")
                 }
             }
+            .allowsHitTesting(false)
         }
     }
 

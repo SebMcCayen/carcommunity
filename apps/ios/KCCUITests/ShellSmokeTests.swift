@@ -1077,6 +1077,31 @@ final class ShellSmokeTests: XCTestCase {
         }
     }
 
+    func testPinchingAcrossTrafficMarkersReachesMapAndSingleTapSelects() {
+        let baseline = launch(language: "en")
+        let screen = baseline.frame
+        baseline.terminate()
+        // Cover the middle of the map so both fingers can start on badges.
+        let points = (-2...2).flatMap { row in
+            (-3...3).map { column in
+                CGPoint(x: screen.midX + CGFloat(column) * 44, y: screen.midY + CGFloat(row) * 44)
+            }
+        }
+        let app = launch(language: "en", markerPoints: points, mapGestureFixture: true)
+        let center = app.buttons["map.fixture.covered.17"]
+        XCTAssertTrue(center.waitForExistence(timeout: 5))
+        let zoom = app.staticTexts["shell.mapZoomProbe"]
+        let selected = app.staticTexts["map.fixture.wrongTarget"]
+        app.pinch(withScale: 2, velocity: 1)
+        XCTAssertTrue(zoom.wait(for: \.label, toEqual: "in", timeout: 5))
+        XCTAssertFalse(selected.exists)
+        app.pinch(withScale: 0.5, velocity: -1)
+        XCTAssertTrue(zoom.wait(for: \.label, toEqual: "out", timeout: 5))
+        XCTAssertFalse(selected.exists)
+        center.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(selected.waitForExistence(timeout: 5))
+    }
+
     func testMapBackdropRemainsVisibleAfterTabAndSettingsRoundTrip() {
         let app = launch(language: "en", mapGestureFixture: true)
         let placeholder = app.staticTexts["shell.mapPlaceholder"]
