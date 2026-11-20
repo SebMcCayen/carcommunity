@@ -30,18 +30,20 @@ struct ConfiglessMapMarkerFixture: View {
                     result.union(CGRect(x: point.x - 24, y: point.y - 24, width: 48, height: 48))
                 }
                 if !bounds.isNull {
-                    ZStack {
-                        ForEach(Array(centers.enumerated()), id: \.offset) { index, point in
-                            MapTapMarker(center: CGPoint(x: point.x - origin.x, y: point.y - origin.y),
-                                         interactive: true, accessibilityLabel: "Test roadwork marker",
-                                         identifier: "map.fixture.covered.\(index)", select: { selected = true }) {
-                                IncidentMarkerBadge(marker: marker(.roadwork, id: "covered-\(index)"))
-                            }
-                        }
+                    // Bound XCTest's physical pinch to the occupied map area.
+                    Color.clear
+                        .frame(width: bounds.width, height: bounds.height)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Traffic marker field")
+                        .accessibilityIdentifier("map.fixture.markerField")
+                        .position(x: bounds.midX - origin.x, y: bounds.midY - origin.y)
+                }
+                ForEach(Array(centers.enumerated()), id: \.offset) { index, point in
+                    MapTapMarker(center: CGPoint(x: point.x - origin.x, y: point.y - origin.y),
+                                 interactive: true, accessibilityLabel: "Test roadwork marker",
+                                 identifier: "map.fixture.covered.\(index)", select: { selected = true }) {
+                        IncidentMarkerBadge(marker: marker(.roadwork, id: "covered-\(index)"))
                     }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("map.fixture.markerField")
-                    .accessibilityFrame(bounds)
                 }
                 ForEach(Array(IncidentType.allCases.enumerated()), id: \.offset) { index, type in
                     VStack(spacing: 12) {
