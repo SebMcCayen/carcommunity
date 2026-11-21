@@ -80,6 +80,7 @@ final class MapLayerPreferences {
     private enum Key {
         static let traffic = "map.layers.traffic"
         static let trafficAlerts = "map.layers.trafficAlerts"
+        static let crownHunt = "map.layers.crownHunt"
         static let cameraPrefix = "map.layers.camera."
         static let mode = "map.layers.mode"
         static let basemap = "map.layers.basemap"
@@ -91,6 +92,7 @@ final class MapLayerPreferences {
     @ObservationIgnored private let defaults: UserDefaults
 
     private(set) var cameraLayers: Set<RoadCameraType>
+    private(set) var crownHuntVisible: Bool
     private(set) var trafficEnabled: Bool
     private(set) var trafficAlertsEnabled: Bool
     /// Nil means follow the current system/app appearance.
@@ -108,6 +110,7 @@ final class MapLayerPreferences {
             storedCameraLayers.formUnion([.traffic, .roadCondition])
         }
         cameraLayers = storedCameraLayers
+        crownHuntVisible = defaults.object(forKey: Key.crownHunt) as? Bool ?? true
         incidentMaxAge = IncidentAgeOption.fromStoredName(defaults.string(forKey: Key.incidentMaxAge))
         trafficEnabled = defaults.object(forKey: Key.traffic) as? Bool
             ?? Self.trafficDefault
@@ -146,6 +149,12 @@ final class MapLayerPreferences {
         for cameraType in types {
             defaults.set(enabled, forKey: Key.cameraPrefix + cameraType.rawValue)
         }
+    }
+
+    func setCrownHuntVisible(_ visible: Bool) {
+        guard visible != crownHuntVisible else { return }
+        crownHuntVisible = visible
+        defaults.set(visible, forKey: Key.crownHunt)
     }
 
     func setTrafficEnabled(_ enabled: Bool) {

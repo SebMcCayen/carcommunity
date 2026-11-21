@@ -33,6 +33,9 @@ final class CrownHuntMapCoordinator {
     @ObservationIgnored private var lastCellKeys: [String]?
     @ObservationIgnored private var pointsLoaded = false
 
+    @ObservationIgnored private var layerVisible = true
+    @ObservationIgnored private var layerGeneration = 0
+
     private(set) var points: [CrownMapPoint] = []
     private(set) var spawns: [CrownSpawn] = []
     private(set) var latestFix: LocationFix?
@@ -203,15 +206,31 @@ final class CrownHuntMapCoordinator {
         }
     }
 
+    func setLayerVisible(_ visible: Bool) {
+        guard layerVisible != visible else { return }
+        layerVisible = visible
+        if !visible {
+            clearLayer()
+            claimStatus = .idle
+        }
+    }
+
     func stop() {
         fixTask?.cancel()
         fixTask = nil
         refreshTask?.cancel()
         refreshTask = nil
-        evidenceTask?.cancel()
-        evidenceTask = nil
         readinessTask?.cancel()
         readinessTask = nil
+        latestFix = nil
+        tracker = CrownFixTracker()
+        clearLayer()
+    }
+
+    private func clearLayer() {
+        layerGeneration += 1
+        evidenceTask?.cancel()
+        evidenceTask = nil
         evidenceStartedAt = nil
         evidenceRelevant = false
         evidenceRetryAt = .distantPast
@@ -219,15 +238,14 @@ final class CrownHuntMapCoordinator {
         points = []
         spawns = []
         selectedTarget = nil
-        latestFix = nil
         collectedSpawnIds = []
-        tracker = CrownFixTracker()
         lastCellKeys = nil
         pointsLoaded = false
     }
 
     func refresh(camera: MapCameraSnapshot?, visibleRadiusMeters: Double?, force: Bool = false) async {
-        guard isAvailable, let repository else { return }
+        guard layerVisible, isAvailable, let repository else { return }
+        let generation = layerGeneration
         let keys: [String]
         if spawnEnabled, let camera {
             keys = CrownSpawnQuery.cellKeys(
@@ -252,7 +270,7 @@ final class CrownHuntMapCoordinator {
                 let (newPoints, newSpawns, collected) = try await (
                     pointRead, spawnRead, collectedRead
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, generation == layerGeneration else { return }
                 points = newPoints
                 pointsLoaded = true
                 spawns = newSpawns
@@ -262,7 +280,7 @@ final class CrownHuntMapCoordinator {
                 lastCellKeys = keys
             } else {
                 let newPoints = try await pointRead
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, generation == layerGeneration else { return }
                 points = newPoints
                 pointsLoaded = true
                 if !spawnEnabled { spawns = [] }
@@ -350,6 +368,7 @@ final class CrownHuntMapCoordinator {
               collectState(now: now) == .ready,
               let target = selectedTarget,
               let repository else { return }
+        let generation = layerGeneration
         claimStatus = .collecting
         do {
             switch target {
@@ -363,6 +382,7 @@ final class CrownHuntMapCoordinator {
                     fix: fix,
                     idempotencyKey: claimIdempotencyKey
                 )
+                guard generation == layerGeneration else { return }
                 claimStatus = .point(outcome)
             case .spawn(let spawn):
                 guard let proof = tracker.proof(for: spawn, now: now) else {
@@ -372,6 +392,7 @@ final class CrownHuntMapCoordinator {
                 var outcome = try await repository.submitSpawnClaim(
                     spawnId: spawn.id, proof: proof, idempotencyKey: claimIdempotencyKey
                 )
+                guard generation == layerGeneration else { return }
                 if outcome.result == .positionTooOld {
                     // The first response is a definitive non-award. A new key is
                     // safe here; transport errors continue to reuse their key.
@@ -384,6 +405,7 @@ final class CrownHuntMapCoordinator {
                         outcome = try await repository.submitSpawnClaim(
                             spawnId: spawn.id, proof: fresh, idempotencyKey: claimIdempotencyKey
                         )
+                        guard generation == layerGeneration else { return }
                     }
                     if outcome.result == .positionTooOld {
                         claimIdempotencyKey = UUID().uuidString.lowercased()
@@ -402,8 +424,10 @@ final class CrownHuntMapCoordinator {
                 }
             }
         } catch let error as KccFunctionsError {
+            guard generation == layerGeneration else { return }
             claimStatus = .failed(code: error.code.rawValue)
         } catch {
+            guard generation == layerGeneration else { return }
             claimStatus = .failed(code: nil)
         }
     }

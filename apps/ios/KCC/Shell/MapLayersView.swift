@@ -122,6 +122,12 @@ struct MapLayersSheet: View {
                                  icon: "cube", binding: threeDBinding, id: "shell.layers3d")
                     }
                     Divider()
+                    layerRow("shell.layersCrownHunt", help: "shell.layersCrownMapHelp",
+                             icon: "crown.fill", binding: Binding(
+                                get: { preferences.crownHuntVisible },
+                                set: { preferences.setCrownHuntVisible($0) }
+                             ), id: "shell.layersCrownHunt")
+                    Divider()
                     appearanceControls
                     Button { focusExpanded.toggle() } label: {
                         HStack(spacing: KccSpacing.s2) {
