@@ -617,24 +617,23 @@ struct MapHomeView: View {
             // coordinate events here checks touch delivery rather than the AX
             // hit point of the decorative "Map" label.
             mapPlaceholderContent
-                .contentShape(Rectangle())
-                .onTapGesture(coordinateSpace: .local) { point in
-                    markerTaps.send(point)
-                    placeholderTapCount += 1
+                .overlay {
+                    MapGestureProbeView(onTap: { point in
+                        markerTaps.send(point)
+                        placeholderTapCount += 1
+                    }, onPan: {
+                        surface.suspendConvoyFitForInteraction()
+                        surface.suspendSelfFollowForInteraction()
+                        placeholderPanCount += 1
+                    }, onPinch: { scale in
+                        placeholderZoomDirection = scale > 1 ? "in" : "out"
+                    })
                 }
-                .simultaneousGesture(MagnifyGesture().onEnded { value in
-                    placeholderZoomDirection = value.magnification > 1 ? "in" : "out"
-                })
                 .overlay(alignment: .bottomTrailing) {
                     Text(verbatim: placeholderZoomDirection)
                         .accessibilityIdentifier("shell.mapZoomProbe")
                         .allowsHitTesting(false)
                 }
-                .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { _ in
-                    surface.suspendConvoyFitForInteraction()
-                    surface.suspendSelfFollowForInteraction()
-                    placeholderPanCount += 1
-                })
                 .overlay(alignment: .bottomLeading) {
                     Text(verbatim: "\(placeholderTapCount)|\(placeholderPanCount)")
                         .accessibilityIdentifier("shell.mapGestureProbe")
@@ -669,6 +668,48 @@ struct MapHomeView: View {
     }
 
 
+}
+
+/// Config-less stand-in for the native map's gesture surface in UI tests.
+private struct MapGestureProbeView: UIViewRepresentable {
+    let onTap: (CGPoint) -> Void
+    let onPan: () -> Void
+    let onPinch: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isMultipleTouchEnabled = true
+        let coordinator = context.coordinator
+        let tap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.tap(_:)))
+        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.pan(_:)))
+        pan.maximumNumberOfTouches = 1
+        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(Coordinator.pinch(_:)))
+        view.addGestureRecognizer(tap)
+        view.addGestureRecognizer(pan)
+        view.addGestureRecognizer(pinch)
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) { context.coordinator.probe = self }
+
+    @MainActor final class Coordinator: NSObject {
+        var probe: MapGestureProbeView
+        init(_ probe: MapGestureProbeView) { self.probe = probe }
+
+        @objc func tap(_ gesture: UITapGestureRecognizer) {
+            probe.onTap(gesture.location(in: gesture.view))
+        }
+
+        @objc func pan(_ gesture: UIPanGestureRecognizer) {
+            if gesture.state == .ended { probe.onPan() }
+        }
+
+        @objc func pinch(_ gesture: UIPinchGestureRecognizer) {
+            if gesture.state == .ended { probe.onPinch(gesture.scale) }
+        }
+    }
 }
 
 /// Mapbox's stock iOS puck adds a fixed 1.1-second interpolator. Reuse its
