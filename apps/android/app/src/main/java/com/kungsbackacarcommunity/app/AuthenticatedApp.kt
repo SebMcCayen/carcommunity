@@ -513,6 +513,8 @@ import com.kungsbackacarcommunity.app.whatsnew.WhatsNewDialog
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewRoute
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Calendar
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -890,11 +892,15 @@ fun AuthenticatedApp(
         pushRegistrationCoordinator?.registerCurrentToken()
     }
 
-    // Sign-in-time last-login recording: best-effort auth-recordLogin, once per
-    // signed-in uid, keeping userLifecycle/{uid}.lastLoginAt fresh for the inactive-
-    // account sweep. Failures stay inside the coordinator and never block the UI.
-    LaunchedEffect(uid, loginRecordCoordinator) {
-        loginRecordCoordinator?.recordLogin()
+    val accessLifecycle = LocalLifecycleOwner.current.lifecycle
+    var recordedLoginDay by remember(uid) { mutableStateOf<LocalDate?>(null) }
+    LaunchedEffect(uid, loginRecordCoordinator, accessLifecycle) {
+        accessLifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val today = LocalDate.now(ZoneId.of("Europe/Stockholm"))
+            if (recordedLoginDay != today && loginRecordCoordinator?.recordLogin() == true) {
+                recordedLoginDay = today
+            }
+        }
     }
 
     val accessContext = LocalContext.current
@@ -903,7 +909,6 @@ fun AuthenticatedApp(
     val productAccess = if ((collectedProductAccess as? CarCommunityGateState.Ready)?.status?.uid?.let { it != uid } == true) CarCommunityGateState.Loading else collectedProductAccess
     // Foreground refresh repairs initialization/provider changes without polling
     // in the background. Live own-metadata changes remove the shell immediately.
-    val accessLifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(uid, productAccessRepository, accessLifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event -> if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) productAccessRepository?.refresh(uid) }
         accessLifecycle.addObserver(observer)
@@ -6243,6 +6248,7 @@ fun AuthenticatedApp(
                         },
                         badgesRepository = badgesRepository,
                         badgeProgressRepository = badgeProgressRepository,
+                        recordedLoginDay = recordedLoginDay,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
                         memberProfileRepository = memberProfileRepository,
@@ -8528,6 +8534,7 @@ private fun RouteHost(
     clubDeepLinkId: String?,
     onClubDeepLinkConsumed: () -> Unit,
     uid: String,
+    recordedLoginDay: LocalDate?,
     profileActiveMember: Boolean,
     // Backend-managed admin/owner role (users/{uid}.role), from the observed
     // profile. Admins are admitted to admin-bypass server paths regardless of
@@ -8809,7 +8816,7 @@ private fun RouteHost(
             //     same bounded newest-first entries listener the Kronpoäng screen
             //     uses (credits only are shown — see Points.recentEarnings);
             //   • badge progress → the owner-only badges-getMyProgress callable,
-            //     which hands this member their own seven ladder counters so
+            //     which hands this member their own ladder counters so
             //     every ladder can draw a bar (issue #799); the backend-only
             //     badgeProgress doc stays unreadable to clients.
             //   • member since → users/{uid}.createdAt, already on `profile`.
@@ -8833,19 +8840,23 @@ private fun RouteHost(
                     pointsRepository?.observeEntries(uid) ?: flowOf(PointsEntriesState.Loading)
                 }
                     .collectAsState(initial = PointsEntriesState.Loading)
-            // The signed-in member's OWN seven ladder counters, fetched once per
-            // route composition from the owner-only badges-getMyProgress callable.
+            // The signed-in member's own counters refresh when the profile resumes
+            // and after a new day's login is recorded, from the owner-only badges-getMyProgress callable.
             // Null until it resolves (or when unavailable in a config-less build),
             // in which case the wall renders every ladder's goal without a bar —
             // never a fabricated number. OWN-profile only: the callable derives
             // the uid from the auth context, so it can only ever be this member.
+            val profileLifecycle = LocalLifecycleOwner.current.lifecycle
             val badgeCounters by
                 produceState<BadgeCounters?>(
                     initialValue = null,
                     badgeProgressRepository,
                     uid,
+                    recordedLoginDay,
                 ) {
-                    value = badgeProgressRepository?.fetchMyProgress()
+                    profileLifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                        value = badgeProgressRepository?.fetchMyProgress()
+                    }
                 }
             // Start of the current calendar month (device time zone) — required by
             // the shared fold; the profile summary reads only its all-time fields,

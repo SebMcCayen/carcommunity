@@ -29,6 +29,7 @@ import com.kungsbackacarcommunity.app.badges.BADGE_TIER_POINTS
 import com.kungsbackacarcommunity.app.badges.BadgeGlyph
 import com.kungsbackacarcommunity.app.badges.BadgeGridRows
 import com.kungsbackacarcommunity.app.badges.BadgeLadder
+import com.kungsbackacarcommunity.app.badges.BadgeLadderId
 import com.kungsbackacarcommunity.app.badges.BadgeMedallion
 import com.kungsbackacarcommunity.app.badges.BadgeMedallionTile
 import com.kungsbackacarcommunity.app.badges.BadgeRung
@@ -172,6 +173,7 @@ fun ProfileBadgesSection(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                LadderCounts(progress)
             }
 
             HorizontalDivider()
@@ -189,7 +191,8 @@ fun ProfileBadgesSection(
     }
 
     selected?.let { detail ->
-        BadgeDetailDialog(detail = detail, onDismiss = { selected = null })
+        val id = (detail.glyph as? BadgeGlyph.Ladder)?.id
+        BadgeDetailDialog(detail, showcase.ladders.firstOrNull { it.ladder.id == id }) { selected = null }
     }
 }
 
@@ -335,20 +338,11 @@ private fun LadderProgressRow(progress: LadderProgress) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            val fraction = progress.fractionToNext
-            val observed = progress.observedValue
-            if (fraction != null && observed != null) {
+            progress.fractionToNext?.let { fraction ->
                 LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
-                Text(
-                    text = stringResource(
-                        R.string.badgeShowcase_progressCount,
-                        formatLadderValue(ladder.unit, observed),
-                        threshold,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
+            }
+            LadderCounts(progress, threshold)
+            if (progress.observedValue == null && progress.personalBest == null) {
                 // Do not invent a counter when the owner-only read is unavailable.
                 Text(
                     text = stringResource(ladderTaglineRes(ladder.id)),
@@ -357,6 +351,23 @@ private fun LadderProgressRow(progress: LadderProgress) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LadderCounts(progress: LadderProgress, target: String? = null) {
+    progress.observedValue?.let { value ->
+        val formatted = formatLadderValue(progress.ladder.unit, value)
+        val count = if (target == null) formatted else stringResource(R.string.badgeShowcase_progressCount, formatted, target)
+        val label = when (progress.ladder.id) {
+            BadgeLadderId.TROGEN -> stringResource(R.string.badgeShowcase_currentStreak, count)
+            BadgeLadderId.SAMLARE -> stringResource(R.string.badgeShowcase_currentGarage, count)
+            else -> if (target == null) stringResource(R.string.badgeShowcase_total, count) else count
+        }
+        Text(label, style = MaterialTheme.typography.bodySmall)
+    }
+    progress.personalBest?.let {
+        Text(stringResource(R.string.badgeShowcase_personalBest, it.toString()), style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -481,7 +492,7 @@ private fun rememberRungDetail(
     )
 
 @Composable
-private fun BadgeDetailDialog(detail: BadgeDetail, onDismiss: () -> Unit) {
+private fun BadgeDetailDialog(detail: BadgeDetail, progress: LadderProgress?, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -506,6 +517,7 @@ private fun BadgeDetailDialog(detail: BadgeDetail, onDismiss: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
+                if (progress != null) LadderCounts(progress)
                 if (detail.earned) {
                     detail.awardedAtMillis?.let { millis ->
                         Text(
@@ -531,11 +543,13 @@ private fun BadgeDetailDialog(detail: BadgeDetail, onDismiss: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(
-                        text = stringResource(R.string.badgeShowcase_progressUnavailable),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (progress?.observedValue == null && progress?.personalBest == null) {
+                        Text(
+                            text = stringResource(R.string.badgeShowcase_progressUnavailable),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         },

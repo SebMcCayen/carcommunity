@@ -369,6 +369,28 @@ export function readStreakState(data: Record<string, unknown> | undefined): Stre
   };
 }
 
+/** Include a verified login even when its Firestore trigger is still queued. */
+export function readProfileStreak(
+  data: Record<string, unknown> | undefined,
+  lastLoginDay: string | null,
+  today: string,
+): Pick<StreakState, 'currentDayStreak' | 'bestDayStreak'> {
+  let state = readStreakState(data);
+  if (
+    lastLoginDay &&
+    lastLoginDay <= today &&
+    (!state.lastStreakDayKey || lastLoginDay > state.lastStreakDayKey)
+  ) {
+    state = advanceStreak(state, lastLoginDay).state;
+  }
+  const last = state.lastStreakDayKey;
+  return {
+    currentDayStreak:
+      last && (last === today || isNextDay(last, today)) ? state.currentDayStreak : 0,
+    bestDayStreak: state.bestDayStreak,
+  };
+}
+
 /**
  * Advances a streak for an app open on `dayKey`.
  *

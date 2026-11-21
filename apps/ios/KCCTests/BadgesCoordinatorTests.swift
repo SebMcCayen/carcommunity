@@ -310,7 +310,7 @@ final class BadgesCoordinatorTests: XCTestCase {
     // MARK: - lifecycle
 
     @MainActor
-    func testStartIsIdempotent() async {
+    func testReturningToWallRefreshesProgressWithoutReplacingListener() async {
         let repository = FakeBadgesRepository()
         repository.scriptProgress(nil)
         repository.scriptBadges([.loaded([Badge(key: "first_event", fallbackName: "First", awardedAt: nil)])])
@@ -320,7 +320,11 @@ final class BadgesCoordinatorTests: XCTestCase {
             if case .loaded = coordinator.state { return true }
             return false
         }
+        await wait { repository.progressFetchCount == 1 }
+        repository.scriptProgress(BadgeCounters(crownsCollected: 3))
         coordinator.start()
+        await wait { self.kronjagareFraction(coordinator.state) == 0.3 }
+        XCTAssertEqual(repository.progressFetchCount, 2)
         XCTAssertEqual(repository.subscribeCount, 1)
     }
 

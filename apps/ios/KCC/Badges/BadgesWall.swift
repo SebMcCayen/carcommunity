@@ -17,6 +17,8 @@ import SwiftUI
 /// Presentational only beyond the coordinator it drives: it renders the
 /// pre-folded ``BadgeShowcase`` and reads no backend itself.
 struct BadgesWall: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.recordedLoginDay) private var recordedLoginDay
     @State private var coordinator: BadgesCoordinator
     private let isEmbedded: Bool
 
@@ -50,7 +52,12 @@ struct BadgesWall: View {
             }
         }
         .tint(KccTheme.driver)
-        .task { coordinator.start() }
+        .task(id: recordedLoginDay) {
+            if scenePhase == .active { coordinator.start() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { coordinator.start() }
+        }
     }
 
     private var wallContent: some View {
@@ -158,16 +165,12 @@ struct LadderProgressRow: View {
                     .font(.subheadline)
                     .foregroundStyle(KccTheme.secondary)
 
-                if let fraction = progress.fractionToNext, let observed = progress.observedValue {
+                if let fraction = progress.fractionToNext {
                     ProgressView(value: fraction)
                         .tint(KccTheme.driver)
-                    Text(BadgeText.progressCount(
-                        current: formatLadderValue(unit: ladder.unit, value: observed),
-                        target: threshold
-                    ))
-                    .font(.footnote)
-                    .foregroundStyle(KccTheme.secondary)
-                } else {
+                }
+                LadderCounts(progress: progress, target: threshold)
+                if progress.observedValue == nil && progress.personalBest == nil {
                     // No honest client-readable counter yet — say so rather
                     // than draw a bar the app cannot back up.
                     Text(LocalizedStringKey(BadgeStrings.ladderTaglineKey(ladder.id)))
@@ -182,6 +185,30 @@ struct LadderProgressRow: View {
 
     private func tierName(_ tier: BadgeTier) -> String {
         String(localized: String.LocalizationValue(BadgeStrings.tierNameKey(tier)))
+    }
+}
+
+private struct LadderCounts: View {
+    let progress: LadderProgress
+    var target: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KccSpacing.s1) {
+            if let value = progress.observedValue {
+                let formatted = formatLadderValue(unit: progress.ladder.unit, value: value)
+                let count = target.map { BadgeText.progressCount(current: formatted, target: $0) } ?? formatted
+                switch progress.ladder.id {
+                case .trogen: Text(BadgeText.count("badgeShowcase.currentStreak", count))
+                case .samlare: Text(BadgeText.count("badgeShowcase.currentGarage", count))
+                default: Text(target == nil ? BadgeText.count("badgeShowcase.total", count) : count)
+                }
+            }
+            if let best = progress.personalBest {
+                Text(BadgeText.count("badgeShowcase.personalBest", String(best)))
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(KccTheme.secondary)
     }
 }
 
@@ -206,6 +233,7 @@ private struct AllAwardsGrid: View {
                 VStack(alignment: .leading, spacing: KccSpacing.s3) {
                     Text(LocalizedStringKey(BadgeStrings.ladderNameKey(progress.ladder.id)))
                         .font(.headline)
+                    if progress.isComplete { LadderCounts(progress: progress) }
                     LazyVGrid(columns: columns, alignment: .leading, spacing: KccSpacing.s3) {
                         ForEach(progress.ladder.rungs, id: \.badgeKey) { rung in
                             let earned = earnedKeys.contains(rung.badgeKey)
@@ -392,6 +420,10 @@ enum BadgeText {
     /// `%1$@ / %2$@`.
     static func progressCount(current: String, target: String) -> String {
         String.localizedStringWithFormat(template("badgeShowcase.progressCount"), current, target)
+    }
+
+    static func count(_ key: String, _ value: String) -> String {
+        String.localizedStringWithFormat(template(key), value)
     }
 
     /// The ladder's requirement sentence with its single threshold.

@@ -727,13 +727,17 @@ describe('badges-getMyProgress (owner counters)', () => {
       crownsCollected: 34,
       lifetimeDistanceMeters: 234_567.8,
       completedEventsAttended: 7,
-      bestDayStreak: 12,
+      bestDayStreak: 60,
+      currentDayStreak: 60,
+      lastStreakDayKey: '2020-01-01',
       convoysLed: 3,
       vehiclesInGarage: 4,
       seasonsWon: -5, // nonsense → 0
     });
 
+    await adminDb.collection('vehicles').add({ userId: owner.uid });
     await signInAs(owner);
+    await call('auth-recordLogin', {});
     const result = (await call('badges-getMyProgress', {})).data as Record<string, number>;
 
     expect(result).toEqual({
@@ -741,12 +745,14 @@ describe('badges-getMyProgress (owner counters)', () => {
       // Fractional metres are floored by the defensive projection.
       lifetimeDistanceMeters: 234_567,
       verifiedEventsAttended: 7,
-      bestDayStreak: 12,
+      bestDayStreak: 60,
       convoysLed: 3,
       vehiclesInGarage: 4,
       seasonsWon: 0,
       // Absent from the seeded doc → sanitises to 0 (Vinkare / waves-sent).
       wavesSent: 0,
+      currentDayStreak: 1,
+      currentVehiclesInGarage: 1,
     });
   }, 120_000);
 
@@ -766,6 +772,8 @@ describe('badges-getMyProgress (owner counters)', () => {
       vehiclesInGarage: 0,
       seasonsWon: 0,
       wavesSent: 0,
+      currentDayStreak: 0,
+      currentVehiclesInGarage: 0,
     });
   }, 120_000);
 

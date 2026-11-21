@@ -101,6 +101,8 @@ object BadgeProgressResponseParser {
             vehiclesInGarage = data.counter("vehiclesInGarage"),
             seasonsWon = data.counter("seasonsWon"),
             wavesSent = data.counter("wavesSent"),
+            currentDayStreak = data.counter("currentDayStreak"),
+            currentVehiclesInGarage = data.counter("currentVehiclesInGarage"),
         )
 
     /**
