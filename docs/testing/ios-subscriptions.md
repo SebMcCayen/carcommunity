@@ -113,6 +113,21 @@ Verify each scenario in sandbox, including the resulting server record and claim
 - Automatic renewal while the app is closed; reopening membership; opening and
   dismissing Apple's in-app subscription management sheet.
 - Plus → Supporter upgrade and scheduled Supporter → Plus downgrade.
+  A scheduled downgrade must show its effective date and keep Supporter as the
+  active tier until renewal. The Plus action remains visible but disabled with
+  a scheduled-change label. Cancelling the change in store management or
+  verifying the next Plus period removes the scheduled display.
+  iOS reads this display-only preference from verified StoreKit renewal and
+  transaction data matched to the current account and period. Product catalogue
+  failures retain the last displayed products; cold failures still render both
+  plan actions with no invented price. Checkout stays disabled until a fresh
+  complete catalogue is available and always re-queries before payment.
+  Android reads the optional `subscription.verify.scheduledChange` projection
+  from Play's verified `deferredItemReplacement` and current expiry. Older
+  responses without this field remain compatible. This Android projection needs
+  a separate deployment of `subscription-verify` before configured-device testing;
+  the iOS preference display does not require a backend deployment. No future
+  tier from either source is used as an access grant.
 - Cancel renewal: retain access through the paid deadline. Expiry and refund:
   remove access. Billing retry: remove access unless the verified grace period
   is still effective; recover on renewal.

@@ -45,6 +45,58 @@ function expectCode(run: () => unknown, code: GooglePlayVerificationError['code'
 }
 
 describe('Google Play subscription verification core', () => {
+  it('projects a verified deferred downgrade without granting the future tier early', () => {
+    const outcome = parseGooglePlaySubscription(
+      response({
+        lineItems: [
+          {
+            productId: 'supporter_monthly',
+            expiryTime: '2026-09-29T12:00:00Z',
+            autoRenewingPlan: { autoRenewEnabled: true },
+            deferredItemReplacement: { productId: 'plus_monthly' },
+          },
+        ],
+      }),
+      ACCOUNT_ID,
+      NOW,
+    );
+    expect(outcome.tier).toBe('supporter');
+    expect(outcome.entitlement).toBe('member_monthly');
+    expect(outcome.scheduledChange).toEqual({ tier: 'plus', effectiveAt: outcome.expiresAt });
+  });
+
+  it.each([
+    { autoRenewEnabled: false, replacement: 'plus_monthly' },
+    { autoRenewEnabled: true, replacement: 'supporter_monthly' },
+    { autoRenewEnabled: true, replacement: 'unknown' },
+    { autoRenewEnabled: true, replacement: undefined },
+  ])(
+    'omits cancelled or unsupported display-only renewal metadata: %j',
+    ({ autoRenewEnabled, replacement }) => {
+      const outcome = parseGooglePlaySubscription(
+        response({
+          lineItems: [
+            {
+              productId: 'supporter_monthly',
+              expiryTime: '2026-09-29T12:00:00Z',
+              autoRenewingPlan: { autoRenewEnabled },
+              deferredItemReplacement: { productId: replacement },
+            },
+          ],
+        }),
+        ACCOUNT_ID,
+        NOW,
+      );
+      expect(outcome.tier).toBe('supporter');
+      expect(outcome.scheduledChange).toBeUndefined();
+    },
+  );
+
+  it('clears the display-only change when Plus becomes the current product', () => {
+    expect(
+      parseGooglePlaySubscription(response(), ACCOUNT_ID, NOW).scheduledChange,
+    ).toBeUndefined();
+  });
   it('classifies rejected purchase tokens separately from retryable provider failures', () => {
     for (const status of [400, 404, 410]) {
       expect(classifyGooglePlayGetError({ response: { status } })).toBe('invalid_purchase');

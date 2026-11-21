@@ -279,3 +279,9 @@ export interface AdminUserSubscriptionSummary {
 export function isSubscriptionActiveStatus(status: SubscriptionStatus): boolean {
   return status === 'active' || status === 'grace_period' || status === 'cancelled';
 }
+
+/** Display-only metadata from verified store state; never an access grant. */
+export interface ScheduledSubscriptionChange {
+  tier: 'plus';
+  effectiveAt: string;
+}

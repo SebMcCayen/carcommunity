@@ -11,6 +11,10 @@ enum SubscriptionTier: String, Equatable, Sendable {
     case supporter
 }
 
+enum SubscriptionStoreFailure: Error {
+    case catalogueUnavailable
+}
+
 struct StoreSubscriptionProduct: Equatable, Sendable, Identifiable {
     let id: String
     let displayPrice: String
@@ -24,9 +28,25 @@ struct StoreSignedTransaction: Equatable, Sendable {
     var expiresAt: Date? = nil
     var isRevoked = false
     var isUpgraded = false
+    var originalID: UInt64? = nil
+    var subscriptionGroupID: String? = nil
 
     func isInactive(at now: Date) -> Bool {
         isRevoked || isUpgraded || expiresAt.map { $0 <= now } == true
+    }
+}
+
+/// Display-only renewal preference. Never grants the future tier early.
+struct ScheduledSubscriptionChange: Equatable, Sendable {
+    let productID: String
+    let effectiveAt: Date
+
+    static func downgrade(currentProductID: String, nextProductID: String?,
+                          willAutoRenew: Bool, effectiveAt: Date?, now: Date) -> Self? {
+        guard currentProductID == supporterMonthlyProductID,
+              nextProductID == plusMonthlyProductID, willAutoRenew,
+              let effectiveAt, effectiveAt > now else { return nil }
+        return Self(productID: plusMonthlyProductID, effectiveAt: effectiveAt)
     }
 }
 
@@ -40,6 +60,7 @@ enum SubscriptionOperation: Equatable, Sendable {
     case purchase
     case restore
     case verification
+    case planChange
 }
 
 enum SubscriptionFlowStatus: Equatable, Sendable {
@@ -73,6 +94,7 @@ enum SubscriptionFlowStatus: Equatable, Sendable {
             case .purchase: "subscription.statusSuccess"
             case .restore: "subscription.statusRestored"
             case .verification: "subscription.statusVerified"
+            case .planChange: "subscription.statusChangeScheduled"
             }
         case .pending: "subscription.statusPending"
         case .failed(let reason):

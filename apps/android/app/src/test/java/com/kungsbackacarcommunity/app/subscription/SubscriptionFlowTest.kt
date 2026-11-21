@@ -6,6 +6,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SubscriptionFlowTest {
+    @Test
+    fun `scheduled change is optional display metadata and never changes current access`() {
+        val future = java.time.Instant.now().plusSeconds(3600)
+        val payload = mapOf("entitlement" to "member_monthly", "status" to "active", "tier" to "supporter",
+            "scheduledChange" to mapOf("tier" to "plus", "effectiveAt" to future.toString()))
+        val result = parseVerificationResult(payload)
+        assertEquals("supporter", result.tier)
+        assertTrue(result.grantsAccess)
+        assertEquals(ScheduledSubscriptionChange("plus", future), result.scheduledChange)
+        assertEquals(null, parseVerificationResult(payload - "scheduledChange").scheduledChange)
+        for (change in listOf(
+            mapOf("tier" to "plus", "effectiveAt" to "malformed"),
+            mapOf("tier" to "plus", "effectiveAt" to "2000-01-01T00:00:00Z"),
+            mapOf("tier" to "unknown", "effectiveAt" to future.toString()),
+        )) {
+            assertEquals(null, parseVerificationResult(payload + ("scheduledChange" to change)).scheduledChange)
+        }
+        assertEquals(null, parseVerificationResult(payload + ("tier" to "plus")).scheduledChange)
+        assertEquals(null, parseVerificationResult(payload + ("status" to "cancelled")).scheduledChange)
+    }
 
     @Test
     fun `only the two tier product ids are purchasable`() {
