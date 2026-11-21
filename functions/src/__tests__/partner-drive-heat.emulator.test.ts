@@ -75,7 +75,21 @@ async function createUser(prefix: string): Promise<TestUser> {
   const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
   const password = 'password-123';
   const credential = await createUserWithEmailAndPassword(auth, email, password);
-  return { uid: credential.user.uid, email, password };
+  const uid = credential.user.uid;
+  // Auth signup completes before its background onCreate transaction. Heat
+  // correctly requires a public profile as well as explicit private consent;
+  // wait for real provisioning before assigning roles or seeding that choice.
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    const [profile, privacy] = await adminDb.getAll(
+      adminDb.collection('users').doc(uid),
+      adminDb.collection('userPrivate').doc(uid),
+    );
+    if (profile?.exists && privacy?.exists) return { uid, email, password };
+    if (Date.now() >= deadline)
+      throw new Error('Timed out waiting for drive-heat Auth profile and private provisioning.');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
 
 /** A straight line of GPS fixes at a fixed latitude, `stepM` metres apart. */
