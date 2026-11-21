@@ -17,6 +17,23 @@ class PartnerPortalScreensTest {
     @get:Rule val compose = createComposeRule()
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
     internal class FakePortal(reservationStatus: String = "reserved") : PartnerPortalRepository {
+        var workspaceRole: String? = null
+        var heatReads = 0
+        var failFirstHeat = false
+        var heat = PartnerTrafficHeatSnapshot(null, 90, 0, false, emptyList())
+        private var trafficIdentity: String? = "fixture-manager"
+        private val trafficListeners = mutableListOf<(String?) -> Unit>()
+        override val trafficSessionKey get() = trafficIdentity
+        override fun observeTrafficSession(onChange: (String?) -> Unit): AutoCloseable {
+            trafficListeners += onChange
+            return AutoCloseable { trafficListeners -= onChange }
+        }
+        fun changeTrafficAccount(value: String?) { trafficIdentity = value; trafficListeners.toList().forEach { it(value) } }
+        override suspend fun driveHeat(companyId: String): PartnerTrafficHeatSnapshot {
+            heatReads++
+            if (failFirstHeat && heatReads == 1) error("Synthetic denied request")
+            return heat
+        }
         var reservedVersion: Int? = null
         var inspectCount = 0
         var redeemCount = 0
@@ -42,7 +59,9 @@ class PartnerPortalScreensTest {
         override suspend fun cancel(reservationId: String) = reservation.copy(status = "cancelled")
         override suspend fun inspect(token: String): PartnerReservation { inspectCount++; return reservation }
         override suspend fun redeem(token: String, requestId: String): PartnerReservation { redeemCount++; return reservation.copy(status = "redeemed") }
-        override suspend fun workspace() = PartnerWorkspace(emptyList(), null)
+        override suspend fun workspace() = PartnerWorkspace(workspaceRole?.let { role ->
+            listOf(PartnerWorkspaceCompany("company", "Fixture business", "Public presentation", role, "active", null, null, null))
+        }.orEmpty(), null)
         override suspend fun offers(companyId: String): List<ManagedPartnerOffer> = emptyList()
         override suspend fun submitOffer(companyId: String, fields: Map<String, Any?>) = Unit
         override suspend fun pause(companyId: String, offerId: String, paused: Boolean) = Unit
@@ -119,6 +138,55 @@ class PartnerPortalScreensTest {
         compose.onNodeWithText(text(R.string.partnerPortal_refreshQr)).assertDoesNotExist()
         compose.onNodeWithContentDescription(text(R.string.partnerPortal_showQr)).assertDoesNotExist()
         assertEquals(0, repo.tokenCount)
+    }
+
+
+    @Test fun managerCanOpenHeatFromItsCompanyWorkspace() {
+        val repo = FakePortal().apply { workspaceRole = "manager" }
+        compose.setContent { KccTheme { PartnerWorkspaceRoute(repo, {}) } }
+        compose.onNodeWithText("Fixture business").performScrollTo().performClick()
+        compose.onNodeWithText(text(R.string.partnerTraffic_title)).performScrollTo().performClick()
+        compose.onNodeWithText(text(R.string.partnerTraffic_empty)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerTraffic_privacy)).performScrollTo().assertIsDisplayed()
+        assertEquals(1, repo.heatReads)
+    }
+
+    @Test fun redeemerHasNoTrafficHeatEntryOrAutomaticHeatRead() {
+        val repo = FakePortal().apply { workspaceRole = "redeemer" }
+        compose.setContent { KccTheme { PartnerWorkspaceRoute(repo, {}) } }
+        compose.onNodeWithText("Fixture business").performScrollTo().performClick()
+        compose.onNodeWithText(text(R.string.partnerPortal_scan)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerTraffic_title)).assertDoesNotExist()
+        assertEquals(0, repo.heatReads)
+    }
+
+    @Test fun heatReadFailureOffersRetryAndAnEmptySnapshotDoesNotClaimZeroTraffic() {
+        val repo = FakePortal().apply { failFirstHeat = true }
+        compose.setContent { KccTheme { PartnerTrafficHeatScreen(repo, "company", {}, mapEnabled = false) } }
+        compose.onNodeWithText(text(R.string.partnerPortal_error)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerPortal_retry)).performScrollTo().performClick()
+        compose.onNodeWithText(text(R.string.partnerTraffic_empty)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerPortal_error)).assertDoesNotExist()
+        assertEquals(2, repo.heatReads)
+    }
+
+    @Test fun heatRetainsTextLegendAndCoverageWarningWithoutAMapAndClearsOnSignOut() {
+        val repo = FakePortal().apply {
+            heat = PartnerTrafficHeatSnapshot("2026-11-21T12:00:00Z", 90, 300, true, listOf(
+                PartnerHeatArea("8a0894310217fff", 57.49, 12.08, listOf(
+                    PartnerHeatCoordinate(57.48, 12.07), PartnerHeatCoordinate(57.50, 12.07), PartnerHeatCoordinate(57.49, 12.09)), 5),
+            ))
+        }
+        compose.setContent { KccTheme { PartnerTrafficHeatScreen(repo, "company", {}, mapEnabled = false) } }
+        compose.onNodeWithText(text(R.string.partnerTraffic_limited)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerTraffic_mapUnavailable)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerTraffic_band1)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerTraffic_areas)).performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { repo.changeTrafficAccount(null) }
+        compose.onNodeWithText(text(R.string.partnerPortal_accessDenied)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.partnerTraffic_band1)).assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.partnerTraffic_areas)).assertDoesNotExist()
+        assertEquals(1, repo.heatReads)
     }
 
     private fun capturePreview(filename: String) {

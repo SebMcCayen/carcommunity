@@ -140,7 +140,7 @@
       "default": false,
       "label": "Partner self-service and new reservations",
       "sensitivity": "standard",
-      "description": "Enables company-scoped partner profile/logo/offer changes and new personal offer reservations. Default OFF until the portal, rules, indexes and both native apps have been reviewed and deployed. Turning it off stops new changes/reservations; existing reservations can still be cancelled and safely redeemed, subject to current account, company, membership and offer checks."
+      "description": "Enables company-scoped partner profile/logo/offer changes, new personal offer reservations and manager-only aggregate traffic heat reads. Default OFF until the portal, rules, indexes and both native apps have been reviewed and deployed. Turning it off stops new changes/reservations and partner traffic heat reads; existing reservations can still be cancelled and safely redeemed, subject to current account, company, membership and offer checks."
     }
   ]
 }

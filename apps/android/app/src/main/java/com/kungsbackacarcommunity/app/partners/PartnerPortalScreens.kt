@@ -285,6 +285,7 @@ fun PartnerWorkspaceRoute(repository: PartnerPortalRepository, onBack: () -> Uni
 
 @Composable
 private fun PartnerManagedCompanyScreen(repository: PartnerPortalRepository, company: PartnerWorkspaceCompany, onBack: () -> Unit, onScan: () -> Unit) {
+    var heatOpen by remember(company.companyId) { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
     var offers by remember { mutableStateOf<List<ManagedPartnerOffer>?>(null) }
     var editing by remember { mutableStateOf<ManagedPartnerOffer?>(null) }
@@ -318,10 +319,15 @@ private fun PartnerManagedCompanyScreen(repository: PartnerPortalRepository, com
             editorOpen = false; scope.launch { operation.run { offers = repository.offers(company.companyId) } }
         }); return
     }
+    if (heatOpen && manager) {
+        PartnerTrafficHeatScreen(repository, company.companyId, onBack = { heatOpen = false })
+        return
+    }
     AeroPage(title = company.name, ownerShortcutEnabled = false, compactTitleWithBack = true) {
         PartnerLogo(logoPath, Modifier.size(96.dp)); PortalStatus(company.status)
         Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_scan)) }
         if (!manager) return@AeroPage
+        OutlinedButton(onClick = { heatOpen = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerTraffic_title)) }
         TabRow(selectedTabIndex = tab) {
             listOf(R.string.partnerPortal_offers, R.string.partnerPortal_profile, R.string.partnerPortal_statistics).forEachIndexed { index, label ->
                 Tab(selected = tab == index, onClick = { tab = index }, text = { Text(stringResource(label)) })

@@ -2637,5 +2637,23 @@
     "validUntil": "Offer valid until: %1$s",
     "reservationWindow": "Your reservation is valid for up to %1$d days. The exact expiry appears in your confirmation.",
     "alreadyUsed": "This account cannot use this campaign again."
+  },
+  "partnerTraffic": {
+    "title": "Traffic heatmap",
+    "purpose": "Explore potential billboard locations. The map shows relative driving activity in areas over the last 90 days, based on saved drives from consenting app accounts. This is a sample of app activity, not a measurement of all road traffic.",
+    "privacy": "An area is shown only after at least 10 different accounts have contributed. Drive starts and ends are removed before aggregation. No people or individual routes are shown.",
+    "updated": "Compiled: %1$s",
+    "expired": "The map data has expired. Fetch a new snapshot.",
+    "empty": "There are no current areas to show. Data may be unavailable or too sparse to meet the privacy threshold. This does not mean the road has no traffic.",
+    "limited": "Showing the 1,000 most active areas. Other areas are not included in this view.",
+    "areas": "Top 20 areas – centre and activity level",
+    "map": "Map of aggregate driving activity",
+    "mapUnavailable": "The map could not be displayed. Areas and activity levels are listed below.",
+    "band1": "Very low relative activity",
+    "band2": "Low relative activity",
+    "band3": "Medium relative activity",
+    "band4": "High relative activity",
+    "band5": "Very high relative activity",
+    "area": "%1$s – %2$s"
   }
 }

@@ -1410,9 +1410,10 @@ service cloud.firestore {
     // cells, each holding only { h3Index, contributorCount, weight } with a
     // ≥10 unique-contributor floor and drive endpoints trimmed. It is written
     // ONLY by the scheduled partnerInsights-aggregateDriveHeat job (Admin SDK,
-    // which bypasses these rules) and read ONLY through the admin-gated
-    // partnerInsights.driveHeat callable — never client-readable, so no partner
-    // or member can pull the aggregate directly.
+    // which bypasses these rules). Authorized server callables project it:
+    // partnerInsights.driveHeat for admins; partners.portal driveHeat for
+    // current company managers (public geometry and relative bands only).
+    // No partner, member or admin can pull the aggregate directly.
     // -------------------------------------------------------------------------
     match /partnerDriveHeat/{docId} {
       allow read, write: if false;

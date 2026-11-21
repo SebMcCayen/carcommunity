@@ -4,10 +4,10 @@
  * Deployed via the `partnerInsights` export group as
  * `partnerInsights-driveHeat`.
  *
- * The read path for the anonymised DRIVE HEATMAP: returns the aggregated H3 heat
- * cells the admin/partner map renders. `partnerDriveHeat` is backend-only
- * (firestore.rules read,write:false — even for admins), so this callable is the
- * only way in. It is read-only: it simply returns the current aggregate document
+ * The admin read path for the aggregate DRIVE HEATMAP. The partner portal
+ * separately projects only public cell geometry and relative bands. `partnerDriveHeat` is backend-only
+ * (firestore.rules read,write:false — even for admins), so all reads require a
+ * server-authorized callable. It is read-only: it simply returns the current aggregate document
  * the scheduled `partnerInsights-aggregateDriveHeat` job wrote.
  *
  * Defense in depth: every cell is re-checked against the ≥10 unique-contributor
@@ -18,42 +18,14 @@
  * Admin-gated (requireAdminActor), App Check enforced.
  */
 
-import { Timestamp } from 'firebase-admin/firestore';
 import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
-import { MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD } from './insights-core';
-import {
-  DRIVE_HEAT_DOC_PATH,
-  DRIVE_HEAT_MAX_CELLS,
-  DRIVE_HEAT_WINDOW_DAYS,
-  DRIVE_HEAT_MAX_AGE_MS,
-} from './driveHeatAggregation';
-import { DRIVE_HEAT_H3_RESOLUTION } from './drive-heat-core';
-import { PARTNER_STATS_CONSENT_VERSION } from './consent';
+import { DRIVE_HEAT_DOC_PATH } from './driveHeatAggregation';
 
-/** One anonymised heat cell returned to the admin map. */
-export interface DriveHeatCellOut {
-  h3Index: string;
-  contributorCount: number;
-  weight: number;
-}
-
-/** Raw callable payload (no envelope — callAdmin returns this directly). */
-export interface DriveHeatResult {
-  cells: DriveHeatCellOut[];
-  /** H3 resolution the cells are at, so the client renders boundaries to match. */
-  resolution: number;
-  windowDays: number;
-  /** ISO 8601 build time of the aggregate, or null if it has never run. */
-  generatedAt: string | null;
-}
-
-/** A valid H3 index is 15–16 lowercase hex chars; reject anything else. */
-function isH3Index(value: unknown): value is string {
-  return typeof value === 'string' && /^[0-9a-f]{15,16}$/.test(value);
-}
+export type { DriveHeatCellOut, DriveHeatResult } from './drive-heat-snapshot';
+import { projectDriveHeatSnapshot, type DriveHeatResult } from './drive-heat-snapshot';
 
 export const driveHeat = onCall(
   {
@@ -72,51 +44,6 @@ export const driveHeat = onCall(
       .collection(DRIVE_HEAT_DOC_PATH.collection)
       .doc(DRIVE_HEAT_DOC_PATH.doc)
       .get();
-    const data = snap.exists ? snap.data() : undefined;
-
-    const generatedAt = data?.generatedAt;
-    const age = generatedAt instanceof Timestamp ? Date.now() - generatedAt.toMillis() : NaN;
-    const validSnapshot =
-      data?.consentVersion === PARTNER_STATS_CONSENT_VERSION &&
-      Number.isFinite(age) &&
-      age >= 0 &&
-      age <= DRIVE_HEAT_MAX_AGE_MS &&
-      data?.resolution === DRIVE_HEAT_H3_RESOLUTION &&
-      data?.windowDays === DRIVE_HEAT_WINDOW_DAYS &&
-      Array.isArray(data?.cells) &&
-      data.cells.length <= DRIVE_HEAT_MAX_CELLS;
-    const rawCells: unknown[] = validSnapshot ? data!.cells : [];
-    const valid: DriveHeatCellOut[] = [];
-    for (const raw of rawCells) {
-      if (!raw || typeof raw !== 'object') continue;
-      const cell = raw as Record<string, unknown>;
-      const contributorCount = cell.contributorCount;
-      const weight = cell.weight;
-      // Re-apply the privacy floor at read time (defense in depth) and validate
-      // the stored shape, failing closed on anything malformed.
-      if (!isH3Index(cell.h3Index)) continue;
-      if (
-        typeof contributorCount !== 'number' ||
-        !Number.isSafeInteger(contributorCount) ||
-        contributorCount < MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD
-      ) {
-        continue;
-      }
-      if (typeof weight !== 'number' || !Number.isSafeInteger(weight) || weight < contributorCount)
-        continue;
-      valid.push({ h3Index: cell.h3Index, contributorCount, weight });
-    }
-    // Sort by weight BEFORE capping so the "busiest areas are preserved"
-    // invariant holds even if the stored aggregate is ever unsorted/corrupt —
-    // capping a still-sorted-on-write array is then just a no-op.
-    valid.sort((a, b) => b.weight - a.weight || b.contributorCount - a.contributorCount);
-    const cells = valid.slice(0, DRIVE_HEAT_MAX_CELLS);
-
-    return {
-      cells,
-      resolution: DRIVE_HEAT_H3_RESOLUTION,
-      windowDays: DRIVE_HEAT_WINDOW_DAYS,
-      generatedAt: validSnapshot ? (generatedAt as Timestamp).toDate().toISOString() : null,
-    };
+    return projectDriveHeatSnapshot(snap.data(), Date.now());
   },
 );

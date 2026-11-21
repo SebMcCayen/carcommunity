@@ -771,3 +771,158 @@ describe('portal publication and private storage rules', () => {
     }
   });
 });
+
+describe('manager-only consented traffic heat', () => {
+  let previous: FirebaseFirestore.DocumentData | undefined;
+  const ref = db.collection('partnerDriveHeat').doc('current');
+  beforeAll(async () => {
+    previous = (await ref.get()).data();
+  });
+  afterAll(async () => {
+    if (previous) await ref.set(previous);
+    else await ref.delete();
+  });
+  async function heat() {
+    const { latLngToCell } = await import('h3-js');
+    await ref.set({
+      consentVersion: 1,
+      generatedAt: Timestamp.now(),
+      windowDays: 90,
+      resolution: 10,
+      cells: [
+        {
+          h3Index: latLngToCell(57.49, 12.07, 10),
+          contributorCount: 10,
+          weight: 15,
+          userId: 'never-project',
+        },
+      ],
+    });
+  }
+  it('returns aggregate geometry to the approved manager, not identities/counts', async () => {
+    await heat();
+    const result = await call<{ cells: { cellId: string; band: number }[] }>(manager, 'driveHeat', {
+      companyId,
+    });
+    expect(result.cells).toHaveLength(1);
+    expect(result.cells[0]!.band).toBe(5);
+    expect(JSON.stringify(result)).not.toMatch(/never-project|contributorCount|userId|weight/);
+    expect((await ref.get()).data()?.cells[0].userId).toBe('never-project');
+  });
+  it('rejects customers, cross-company scope and redeemer-only staff', async () => {
+    await expect(call(other, 'driveHeat', { companyId })).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    await expect(call(manager, 'driveHeat', { companyId: 'not-my-company' })).rejects.toMatchObject(
+      { code: 'permission-denied' },
+    );
+    const { hash } = await import('../partners/portal-core');
+    const member = db.collection('partnerMembers').doc(hash(`${companyId}:${manager}`));
+    const original = (await member.get()).data()!;
+    try {
+      await member.update({ role: 'redeemer' });
+      await expect(call(manager, 'driveHeat', { companyId })).rejects.toMatchObject({
+        code: 'permission-denied',
+      });
+    } finally {
+      await member.set(original);
+    }
+  });
+  it('rechecks revoked membership after the real actor guard and before reading heat', async () => {
+    const actors = await import('../shared/memberActor');
+    const real = actors.requireActiveActor;
+    const { hash } = await import('../partners/portal-core');
+    const member = db.collection('partnerMembers').doc(hash(`${companyId}:${manager}`));
+    const original = (await member.get()).data()!;
+    let reached = false;
+    const spy = vi.spyOn(actors, 'requireActiveActor').mockImplementationOnce(async (request) => {
+      const actor = await real(request);
+      await member.update({ enabled: false });
+      expect((await member.get()).data()?.enabled).toBe(false);
+      reached = true;
+      return actor;
+    });
+    try {
+      await expect(call(manager, 'driveHeat', { companyId })).rejects.toMatchObject({
+        code: 'permission-denied',
+      });
+      expect(reached).toBe(true);
+    } finally {
+      spy.mockRestore();
+      await member.set(original);
+    }
+  });
+  it('fails closed for inactive company, pending deletion and purge', async () => {
+    const company = db.collection('companies').doc(companyId);
+    try {
+      await company.update({ status: 'paused' });
+      await expect(call(manager, 'driveHeat', { companyId })).rejects.toMatchObject({
+        code: 'failed-precondition',
+      });
+    } finally {
+      await company.update({ status: 'active' });
+    }
+    for (const [group, value] of [
+      ['accountDeletionRequests', { status: 'pending' }],
+      ['accountPurgeProgress', { partnerErasureActive: true }],
+    ] as const) {
+      const marker = db.collection(group).doc(manager);
+      try {
+        await marker.set(value);
+        await expect(call(manager, 'driveHeat', { companyId })).rejects.toMatchObject({
+          code: 'permission-denied',
+        });
+      } finally {
+        await marker.delete();
+      }
+    }
+  });
+  it('allows current administrators but rejects a stale admin claim after authoritative demotion', async () => {
+    await heat();
+    expect(
+      (await call<{ cells: unknown[] }>(admin, 'driveHeat', { companyId })).cells,
+    ).toHaveLength(1);
+    const user = db.collection('users').doc(admin);
+    const original = (await user.get()).data()!;
+    try {
+      await user.update({ role: 'user' });
+      // call() intentionally retains the prior admin JWT claim.
+      await expect(call(admin, 'driveHeat', { companyId })).rejects.toMatchObject({
+        code: 'permission-denied',
+      });
+    } finally {
+      await user.set(original);
+    }
+  });
+  it('honours the dark-launch flag and rejects arbitrary cohort controls', async () => {
+    try {
+      await db.collection('config').doc('featureFlags').update({ partnerSelfService: false });
+      await expect(call(manager, 'driveHeat', { companyId })).rejects.toMatchObject({
+        code: 'failed-precondition',
+      });
+    } finally {
+      await db.collection('config').doc('featureFlags').update({ partnerSelfService: true });
+    }
+    await expect(
+      call(manager, 'driveHeat', { companyId, minimumContributors: 1 }),
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+  it('suppresses unmarked, stale and below-threshold published data', async () => {
+    await heat();
+    await ref.update({ consentVersion: 0 });
+    expect((await call<{ cells: unknown[] }>(manager, 'driveHeat', { companyId })).cells).toEqual(
+      [],
+    );
+    await heat();
+    await ref.update({ generatedAt: Timestamp.fromMillis(Date.now() - 49 * 3600000) });
+    expect((await call<{ cells: unknown[] }>(manager, 'driveHeat', { companyId })).cells).toEqual(
+      [],
+    );
+    await heat();
+    const data = (await ref.get()).data()!;
+    await ref.update({ cells: [{ ...data.cells[0], contributorCount: 9 }] });
+    expect((await call<{ cells: unknown[] }>(manager, 'driveHeat', { companyId })).cells).toEqual(
+      [],
+    );
+  });
+});

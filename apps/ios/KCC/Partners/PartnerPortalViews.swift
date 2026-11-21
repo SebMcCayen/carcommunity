@@ -122,6 +122,11 @@ private struct PartnerCompanyWorkspace: View {
                     NavigationLink {
                         PartnerBusinessStatisticsScreen(company: company)
                     } label: { Label(portalString("portal.statistics"), systemImage: "chart.bar") }
+                    NavigationLink {
+                        PartnerTrafficHeatScreen(companyId: company.companyId)
+                    } label: {
+                        Label(NSLocalizedString("partnerTraffic.title", comment: ""), systemImage: "map")
+                    }.frame(minHeight: 48).accessibilityIdentifier("partnerTraffic.open")
                     Button { selectedOffer = nil; editorPresented = true } label: {
                         Label(portalString("portal.createOffer"), systemImage: "plus.circle")
                     }.frame(minHeight: 48)

@@ -66,6 +66,19 @@ final class PartnerDesignTests: XCTestCase {
         assertWrapping(PartnerApplicationSubmitLabel(submitting: true))
     }
 
+    func testTrafficHeatReadableAlternativeAndEmptyStateWrapInBothLanguages() {
+        let cell = PartnerHeatArea(cellId: "8a0882d9d667fff", latitude: 57.49, longitude: 12.08,
+            boundary: [PartnerHeatCoordinate(latitude: 57.49, longitude: 12.08),
+                PartnerHeatCoordinate(latitude: 57.50, longitude: 12.08),
+                PartnerHeatCoordinate(latitude: 57.49, longitude: 12.09)], band: 5)
+        for cells in [[], [cell]] {
+            let value = PartnerTrafficHeatSnapshot(generatedAt: "2026-11-21T12:00:00Z", windowDays: 90,
+                expiresInSeconds: 60, truncated: !cells.isEmpty, cells: cells)
+            // No map token, GPS, network, or Firebase is needed for the text/legend surface.
+            assertWrapping(VStack(alignment: .leading) { PartnerTrafficHeatContent(snapshot: value, mapEnabled: false) })
+        }
+    }
+
     private func assertWrapping<Content: View>(_ view: Content, file: StaticString = #filePath, line: UInt = #line) {
         for (language, dark) in [("sv", true), ("en", false)] {
             for width: CGFloat in [288, 358] {

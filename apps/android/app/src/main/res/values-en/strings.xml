@@ -2464,4 +2464,20 @@
     <string name="partnerPortal_validUntil">Offer valid until: %1$s</string>
     <string name="partnerPortal_reservationWindow">Your reservation is valid for up to %1$d days. The exact expiry appears in your confirmation.</string>
     <string name="partnerPortal_alreadyUsed">This account cannot use this campaign again.</string>
+    <string name="partnerTraffic_title">Traffic heatmap</string>
+    <string name="partnerTraffic_purpose">Explore potential billboard locations. The map shows relative driving activity in areas over the last 90 days, based on saved drives from consenting app accounts. This is a sample of app activity, not a measurement of all road traffic.</string>
+    <string name="partnerTraffic_privacy">An area is shown only after at least 10 different accounts have contributed. Drive starts and ends are removed before aggregation. No people or individual routes are shown.</string>
+    <string name="partnerTraffic_updated">Compiled: %1$s</string>
+    <string name="partnerTraffic_expired">The map data has expired. Fetch a new snapshot.</string>
+    <string name="partnerTraffic_empty">There are no current areas to show. Data may be unavailable or too sparse to meet the privacy threshold. This does not mean the road has no traffic.</string>
+    <string name="partnerTraffic_limited">Showing the 1,000 most active areas. Other areas are not included in this view.</string>
+    <string name="partnerTraffic_areas">Top 20 areas – centre and activity level</string>
+    <string name="partnerTraffic_map">Map of aggregate driving activity</string>
+    <string name="partnerTraffic_mapUnavailable">The map could not be displayed. Areas and activity levels are listed below.</string>
+    <string name="partnerTraffic_band1">Very low relative activity</string>
+    <string name="partnerTraffic_band2">Low relative activity</string>
+    <string name="partnerTraffic_band3">Medium relative activity</string>
+    <string name="partnerTraffic_band4">High relative activity</string>
+    <string name="partnerTraffic_band5">Very high relative activity</string>
+    <string name="partnerTraffic_area">%1$s – %2$s</string>
 </resources>

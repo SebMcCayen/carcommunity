@@ -77,6 +77,10 @@ reservation: Reservation|null, alreadyUsed: boolean }`. The last field prevents
   No state change, no customer identity. Must still confirm `redeem` explicitly.
 - `redeem`: `{ token, requestId }` -> `{ reservation: Reservation, receiptId }`.
   Scoped staff, online atomic single redemption; retries return same receipt.
+- `driveHeat`: `{ companyId }` -> `partnerDriveHeatResponse` in
+  `contracts/schemas/partner-insights.schema.json`. Active company manager or
+  current admin only; reads authority and the snapshot in the same transaction.
+  Requires `partnerSelfService`. No direct collection access is added.
 - `statistics`: `{ companyId, period?: 'all'|YYYY-MM }` -> `Statistics`.
   Manager of this company only, or admin. No raw redemption-list endpoint.
 
@@ -173,7 +177,7 @@ exception is required.
 
 `partnerSelfService` is default OFF. Deploy and review code, rules, indexes and
 both native builds first; separately enable it through the existing audited
-admin feature-flag control. Off stops new reservations and partner mutations,
+admin feature-flag control. Off stops new reservations, partner traffic heat reads and partner mutations,
 while own cancellations and valid pre-existing QR redemption remain available.
 No merge, deployment, flag activation or app publication is authorized by this PR.
 
@@ -187,3 +191,45 @@ older account-erasure revisions unaware of the new private records. The existing
 `admin-setFeatureFlag` must know the new flag before it can be enabled. Review the
 finance-model consumers with that rollout as well. This is a source dependency
 checklist, not deployment approval or a command to execute.
+
+## Partner traffic heat planning
+
+Android and iOS expose **Trafikvärmekarta / Traffic heatmap** inside the managed
+company workspace, alongside profile, offers and statistics. Redeemer-only staff
+see no entry. UI visibility is a convenience; `partners-portal` rechecks the
+current account, erasure state, exact enabled company membership/manager role
+and active company for every read. The existing administrative
+`partnerInsights-driveHeat` endpoint stays admin-only.
+
+This is a global location-planning view of consented app activity, not measured
+road traffic, unique vehicles, billboard impressions or attributable customers.
+The unchanged producer takes only future saved drives after explicit v1 consent,
+trims both endpoints and requires at least ten distinct contributing accounts per
+resolution-10 H3 cell. Shared snapshot projection rejects missing provenance,
+future timestamps, malformed metadata, oversized payloads and data over 48 hours
+old. Live location is not a source. Consent withdrawal/retention follows
+[the consent contract](partner-analytics-consent-v1.md).
+
+The partner projection returns only public H3 IDs, centres/polygon boundaries and
+five relative activity bands, plus generation time, a 90-day window, remaining
+validity and an explicit truncation flag. It strips exact weights, contributor
+counts and unknown fields. At most the 1,000 highest-activity eligible unique
+areas are returned; the UI states this limit when reached. All companies see the
+same global snapshot; companyId authorizes access, never selects a cohort. No
+arbitrary time, user, route, partner, viewport or contributor-threshold filter is
+accepted. Geographic polygons are public cell boundaries, not saved route points.
+There is no raw-route, participant, customer or export API.
+
+Native views hold snapshots only in memory, use monotonic expiry measured from
+request start, discard late responses after account/company changes, clear on
+background/disappearance and errors, and refresh authority at least every minute
+while foregrounded. Expired data is removed and can be retried. No new GPS
+permission or user-location layer is enabled. Mapbox is reused; a text list of the
+20 leading area centres and activity bands remains readable without the map.
+Empty data is described as unavailable/insufficient, never zero traffic. There
+is no new flag, data collection, scheduled job, index or dependency.
+
+Thresholding and coarse bands reduce disclosure; they are not mathematical
+anonymity or proof against many independently controlled accounts. No stronger
+claim is made. Changing the producer, consent or anonymity model requires a
+separate design/security review.

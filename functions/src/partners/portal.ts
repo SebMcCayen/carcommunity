@@ -1,4 +1,5 @@
 /** Partner-scoped command boundary. Private operational records never become analytics. */
+import { projectPartnerDriveHeat } from '../partnerInsights/drive-heat-snapshot';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
@@ -284,9 +285,14 @@ async function handlePortal(request: CallableRequest) {
   await assertNotErasing(actor.uid);
   if (ADMIN.has(action)) await requireAdminActor(request);
   if (
-    ['uploadLogo', 'updateProfile', 'submitOffer', 'pauseReservations', 'reserve'].includes(
-      action,
-    ) &&
+    [
+      'uploadLogo',
+      'updateProfile',
+      'submitOffer',
+      'pauseReservations',
+      'reserve',
+      'driveHeat',
+    ].includes(action) &&
     !(await readFeatureFlag('partnerSelfService'))
   )
     fail('Partner self-service is not enabled.');
@@ -968,6 +974,15 @@ async function handlePortal(request: CallableRequest) {
         processed: false,
       });
       return { reservation: projection, receiptId };
+    });
+  }
+  if (action === 'driveHeat') {
+    // Re-read authority in the SAME transaction as the published snapshot.
+    // Entry guards and a cached workspace role do not authorize this read.
+    return db.runTransaction(async (tx) => {
+      await staff(tx, request, input.companyId as string, true);
+      const snapshot = await tx.get(db.collection('partnerDriveHeat').doc('current'));
+      return projectPartnerDriveHeat(snapshot.data(), Date.now());
     });
   }
   if (action === 'statistics' || action === 'adminStatistics') {

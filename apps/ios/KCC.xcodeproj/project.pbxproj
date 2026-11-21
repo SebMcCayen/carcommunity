@@ -490,6 +490,9 @@
 		93273B3B9A5321C1F48C6054 /* MapCameraResumePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05147463551E15DFD1D12166 /* MapCameraResumePolicyTests.swift */; };
 		184BDE088DA813EFBCE5C130 /* MapDensityPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D27EB67F7199507438C425 /* MapDensityPolicyTests.swift */; };
 		DD1D60D95BE0B0F29B0AE129 /* MapPresencePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D945C18BF584BEA13F4A5E6A /* MapPresencePolicyTests.swift */; };
+		FB72531D59CD13EA78105A86 /* PartnerTrafficHeat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1FB6236F8C88A5BD92F65BD /* PartnerTrafficHeat.swift */; };
+		7DDEF01673BBB7150D1B6C79 /* PartnerTrafficHeatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE2C1F9645CFB6FC64CE3CDC /* PartnerTrafficHeatScreen.swift */; };
+		3615AB4876A971E96E45A8E6 /* PartnerTrafficHeatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620FF69F09F4466F3F1F3646 /* PartnerTrafficHeatTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -987,6 +990,9 @@
 		05147463551E15DFD1D12166 /* MapCameraResumePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCameraResumePolicyTests.swift; sourceTree = "<group>"; };
 		D4D27EB67F7199507438C425 /* MapDensityPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapDensityPolicyTests.swift; sourceTree = "<group>"; };
 		D945C18BF584BEA13F4A5E6A /* MapPresencePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPresencePolicyTests.swift; sourceTree = "<group>"; };
+		A1FB6236F8C88A5BD92F65BD /* PartnerTrafficHeat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerTrafficHeat.swift; sourceTree = "<group>"; };
+		DE2C1F9645CFB6FC64CE3CDC /* PartnerTrafficHeatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerTrafficHeatScreen.swift; sourceTree = "<group>"; };
+		620FF69F09F4466F3F1F3646 /* PartnerTrafficHeatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerTrafficHeatTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1438,6 +1444,8 @@
 				096BE0E843B02B5C3CF4AAE2 /* PartnerQRScanner.swift */,
 				9D49E399C469BE10A0ABF370 /* PartnerPortalViews.swift */,
 				F02A0F1B909AA21491076EA4 /* PartnerPortalModels.swift */,
+				A1FB6236F8C88A5BD92F65BD /* PartnerTrafficHeat.swift */,
+				DE2C1F9645CFB6FC64CE3CDC /* PartnerTrafficHeatScreen.swift */,
 				A2D57050238C4B56EBF42738 /* PartnerPortalClient.swift */,
 				041AE965323F38573BA289F3 /* PartnerLogoView.swift */,
 				846F570710B4634050890322 /* FirebasePartnerApplicationRepository.swift */,
@@ -1835,6 +1843,7 @@
 				A3E1C6462E869AFDD18B4796 /* NotificationsModelTests.swift */,
 				07AB0F95F655E836F1DD7719 /* OnboardingTests.swift */,
 				A7315551383B456AF6D1C808 /* PartnerApplicationTests.swift */,
+				620FF69F09F4466F3F1F3646 /* PartnerTrafficHeatTests.swift */,
 				8D624ECAC20FAE894DB5B71B /* PartnerDesignTests.swift */,
 				E840D1554DADFB7C1F1FCBB6 /* PartnersCoordinatorTests.swift */,
 				9791A5716F88255A07D026EB /* PartnersModelTests.swift */,
@@ -2370,6 +2379,8 @@
 				ED27A1E471A4323C49C03123 /* PartnerQRScanner.swift in Sources */,
 				3668EB40CB9AC7B8B054431A /* PartnerPortalViews.swift in Sources */,
 				DDAB4D5F766A0811DCB2CAB1 /* PartnerPortalModels.swift in Sources */,
+				FB72531D59CD13EA78105A86 /* PartnerTrafficHeat.swift in Sources */,
+				7DDEF01673BBB7150D1B6C79 /* PartnerTrafficHeatScreen.swift in Sources */,
 				97673D2475814E1711A3F03D /* PartnerPortalClient.swift in Sources */,
 				E4E28E5510ACB9DD610A425C /* PartnerLogoView.swift in Sources */,
 				3FAE9497EE7C18118B9006B6 /* PerkBalanceRepository.swift in Sources */,
@@ -2530,6 +2541,7 @@
 				06E872075AE65B7E0357334F /* NotificationsModelTests.swift in Sources */,
 				D0794A7BDDC1BAD685733BE0 /* OnboardingTests.swift in Sources */,
 				BC7A17F064986D8843FB68CE /* PartnerApplicationTests.swift in Sources */,
+				3615AB4876A971E96E45A8E6 /* PartnerTrafficHeatTests.swift in Sources */,
 				003C04899120AC69BFE96E40 /* PartnerDesignTests.swift in Sources */,
 				F6A91B404F8D01C380E5F28A /* PartnersCoordinatorTests.swift in Sources */,
 				A97B00551DC3EE20B429DACA /* PartnersModelTests.swift in Sources */,

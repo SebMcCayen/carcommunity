@@ -13,7 +13,8 @@ import { connectAuthEmulator, getAuth as clientAuth, signInWithCustomToken } fro
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { latLngToCell } from 'h3-js';
+import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore';
 
 const projectId = 'demo-test';
 if (
@@ -134,6 +135,49 @@ it('carries real client identities through approval, reviewed capacity, one-use 
     longitude: 12,
   });
   const companyId = published.companyId;
+  // Read through real Auth/HTTP transport. The raw aggregate remains private.
+  const heatRef = db.collection('partnerDriveHeat').doc('current');
+  const previousHeat = (await heatRef.get()).data();
+  try {
+    await heatRef.set({
+      consentVersion: 1,
+      generatedAt: Timestamp.now(),
+      resolution: 10,
+      windowDays: 90,
+      cells: [{ h3Index: latLngToCell(57.49, 12.08, 10), contributorCount: 10, weight: 30 }],
+    });
+    const snapshot = await manager.call<{ cells: Record<string, unknown>[] }>('partners-portal', {
+      action: 'driveHeat',
+      companyId,
+    });
+    expect(snapshot.cells).toHaveLength(1);
+    expect(Object.keys(snapshot.cells[0]!).sort()).toEqual([
+      'band',
+      'boundary',
+      'cellId',
+      'latitude',
+      'longitude',
+    ]);
+    expect(JSON.stringify(snapshot)).not.toMatch(
+      /contributorCount|weight|uid|userId|route|customer/i,
+    );
+    await expect(
+      buyers[0]!.call('partners-portal', { action: 'driveHeat', companyId }),
+    ).rejects.toMatchObject({ code: 'functions/permission-denied' });
+    await expect(
+      anonymous.call('partners-portal', { action: 'driveHeat', companyId }),
+    ).rejects.toMatchObject({ code: 'functions/unauthenticated' });
+    const { hash } = await import('../partners/portal-core');
+    const member = db.collection('partnerMembers').doc(hash(`${companyId}:${managerUid}`));
+    await member.update({ role: 'redeemer' });
+    await expect(
+      manager.call('partners-portal', { action: 'driveHeat', companyId }),
+    ).rejects.toMatchObject({ code: 'functions/permission-denied' });
+    await member.update({ role: 'manager' });
+  } finally {
+    if (previousHeat) await heatRef.set(previousHeat);
+    else await heatRef.delete();
+  }
   const offer = await manager.call<{ offerId: string }>('partners-portal', {
     action: 'submitOffer',
     companyId,
