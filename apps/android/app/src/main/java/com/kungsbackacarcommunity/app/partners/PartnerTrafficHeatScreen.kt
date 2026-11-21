@@ -98,8 +98,7 @@ internal fun PartnerTrafficHeatScreen(repository: PartnerPortalRepository, compa
 
 @Composable
 private fun PartnerTrafficMap(data: PartnerTrafficHeatSnapshot, enabled: Boolean) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val token = context.getString(R.string.mapbox_access_token)
+    val token = stringResource(R.string.mapbox_access_token)
     val description = stringResource(R.string.partnerTraffic_map)
     var failed by remember(data.generatedAt, data.cells) { mutableStateOf(false) }
     if (!enabled || token.isBlank() || failed) { Text(stringResource(R.string.partnerTraffic_mapUnavailable)); return }
