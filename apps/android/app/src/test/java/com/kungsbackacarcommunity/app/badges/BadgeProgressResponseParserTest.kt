@@ -24,6 +24,8 @@ class BadgeProgressResponseParserTest {
                     "lifetimeDistanceMeters" to 234_567L,
                     "verifiedEventsAttended" to 7L,
                     "bestDayStreak" to 12L,
+                    "currentDayStreak" to 1L,
+                    "currentVehiclesInGarage" to 0L,
                     "convoysLed" to 3L,
                     "vehiclesInGarage" to 4L,
                     "seasonsWon" to 1L,
@@ -35,6 +37,8 @@ class BadgeProgressResponseParserTest {
         assertEquals(234_567L, counters.lifetimeDistanceMeters)
         assertEquals(7L, counters.verifiedEventsAttended)
         assertEquals(12L, counters.bestDayStreak)
+        assertEquals(1L, counters.currentDayStreak)
+        assertEquals(0L, counters.currentVehiclesInGarage)
         assertEquals(3L, counters.convoysLed)
         assertEquals(4L, counters.vehiclesInGarage)
         assertEquals(1L, counters.seasonsWon)

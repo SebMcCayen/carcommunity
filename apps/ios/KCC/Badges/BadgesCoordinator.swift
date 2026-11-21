@@ -31,8 +31,8 @@ enum BadgesUiState: Equatable, Sendable {
     case failed(code: String?)
 }
 
-/// Orchestrates the badge wall: subscribes the earned-badges listener, fires
-/// the owner-only progress callable once, and MERGES both into the full
+/// Orchestrates the badge wall: subscribes the earned-badges listener, refreshes
+/// the owner-only counters on profile entry, and MERGES both into the full
 /// ``BadgeShowcase`` (every ladder rung + milestone, earned and unearned, with
 /// progress bars wherever a counter is known). Pure Swift (no Firebase/SwiftUI
 /// types) so it is unit-testable with a fake repository — the same shape as
@@ -81,13 +81,10 @@ final class BadgesCoordinator {
         progressTask?.cancel()
     }
 
-    /// Begins observing on first appearance. Idempotent: a second call (e.g.
-    /// SwiftUI re-running `.task` after a tab switch) keeps the live
-    /// subscription and its current state instead of flashing back to loading.
-    /// No-op when unavailable.
+    /// A return to the profile refreshes the counters while keeping the award listener.
     func start() {
-        guard subscription == nil, repository != nil, uid != nil else { return }
-        subscribe()
+        guard repository != nil, uid != nil else { return }
+        if subscription == nil { subscribe() } else { refreshProgress() }
     }
 
     /// The "try again" affordance — tears the current listener down, returns
@@ -107,14 +104,7 @@ final class BadgesCoordinator {
         latestCounters = .none
         guard let repository, let uid else { return }
 
-        // Fire the owner-only progress callable ONCE per subscribe. Its result
-        // only enriches the wall with bars, so it is best-effort: a nil (or a
-        // late arrival) simply re-merges with absent counters, never a failure.
-        progressTask = Task { [weak self] in
-            let counters = await repository.fetchMyProgress()
-            guard !Task.isCancelled, let self, let counters else { return }
-            self.applyCounters(counters)
-        }
+        refreshProgress()
 
         // The stream is created HERE, not inside the task, so the listener is
         // attached synchronously — reload() has re-subscribed by the time it
@@ -126,6 +116,16 @@ final class BadgesCoordinator {
                 guard !Task.isCancelled, let self else { return }
                 self.apply(snapshot)
             }
+        }
+    }
+
+    private func refreshProgress() {
+        guard let repository else { return }
+        progressTask?.cancel()
+        progressTask = Task { [weak self] in
+            let counters = await repository.fetchMyProgress()
+            guard !Task.isCancelled, let self else { return }
+            self.applyCounters(counters ?? .none)
         }
     }
 

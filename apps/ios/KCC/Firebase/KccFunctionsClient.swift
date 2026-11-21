@@ -52,6 +52,11 @@ final class KccFunctionsClient: @unchecked Sendable {
         }
     }
 
+    /// Records a foreground login using the server timestamp.
+    func recordLogin() async throws {
+        _ = try await call("auth-recordLogin", payload: [:])
+    }
+
     /// Translates an SDK callable failure into the contract vocabulary.
     /// Codes outside the contract (cancelled, deadline, data-loss, …) fold to
     /// ``KccFunctionsErrorCode/unknown`` rather than inventing a contract code.

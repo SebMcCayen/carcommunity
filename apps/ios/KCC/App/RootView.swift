@@ -14,6 +14,17 @@ enum ConfiglessChatKeyboardFixture {
 }
 #endif
 
+private struct RecordedLoginDayKey: EnvironmentKey {
+    static let defaultValue: Date? = nil
+}
+
+extension EnvironmentValues {
+    var recordedLoginDay: Date? {
+        get { self[RecordedLoginDayKey.self] }
+        set { self[RecordedLoginDayKey.self] = newValue }
+    }
+}
+
 /// The auth-state switch — the iOS port of Android's `AppRoot.kt`:
 /// signed out → ``SignInScreen``; signed in → the tab shell; unavailable
 /// (config-less build) → the bare shell so CI and clone-and-run builds still
@@ -29,6 +40,9 @@ struct RootView: View {
         store: StoreKitSubscriptionStore(),
         verifier: FirebaseAppleSubscriptionVerifier.createIfAvailable()
     )
+
+    @State private var recordedLoginUid: String?
+    @State private var recordedDay: Date?
 
     var body: some View {
         Group {
@@ -47,6 +61,23 @@ struct RootView: View {
                 #endif
             case .signedIn(let uid, let displayName):
                 authenticatedContent(uid: uid, displayName: displayName)
+            }
+        }
+        .environment(\.recordedLoginDay, recordedLoginUid == signedInUid ? recordedDay : nil)
+        .task(id: scenePhase == .active ? signedInUid : nil) {
+            guard scenePhase == .active, let uid = signedInUid,
+                  let functions = KccFunctionsClient.createIfAvailable() else { return }
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: "Europe/Stockholm")!
+            let day = calendar.startOfDay(for: .now)
+            guard recordedLoginUid != uid || recordedDay != day else { return }
+            do {
+                try await functions.recordLogin()
+                guard !Task.isCancelled, signedInUid == uid else { return }
+                recordedLoginUid = uid
+                recordedDay = day
+            } catch {
+                // Best effort. Retry on the next foreground entry.
             }
         }
         .task(id: signedInUid) { accessSession.bind(uid: signedInUid) }

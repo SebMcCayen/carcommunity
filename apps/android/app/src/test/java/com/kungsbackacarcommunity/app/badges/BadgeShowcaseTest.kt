@@ -108,7 +108,7 @@ class BadgeShowcaseTest {
 
     @Test
     fun `every ladder draws a bar once its counter is present`() {
-        // The server hands over all seven counters; each maps to exactly one
+        // The server hands over all eight ladder values; each maps to exactly one
         // ladder, so every ladder yields an observed value AND a fraction toward
         // its (unheld) first rung — no ladder is bar-less any more.
         val counters =
@@ -116,10 +116,12 @@ class BadgeShowcaseTest {
                 crownsCollected = 5, // Kronjägare: 5 / 10 to Brons
                 lifetimeDistanceMeters = 50_000, // Vägfarare: 50 / 100 km
                 verifiedEventsAttended = 3, // Träffräv: 3 / 5 to Silver (Brons=1 held? no badges)
-                bestDayStreak = 4, // Trogen
+                bestDayStreak = 60,
+                currentDayStreak = 4, // Trogen
                 convoysLed = 1, // Konvojledare
-                vehiclesInGarage = 2, // Samlare
+                currentVehiclesInGarage = 2, // Samlare
                 seasonsWon = 1, // Säsongsmästare
+                wavesSent = 3, // Vinkare
             )
         val showcase = BadgeShowcase.from(badges = emptyList(), counters = counters)
 
@@ -132,7 +134,9 @@ class BadgeShowcaseTest {
                 BadgeLadderId.KONVOJLEDARE to 1L,
                 BadgeLadderId.SAMLARE to 2L,
                 BadgeLadderId.SASONGSMASTARE to 1L,
+                BadgeLadderId.VINKARE to 3L,
             )
+        assertEquals(60L, ladderOf(showcase, BadgeLadderId.TROGEN).personalBest)
         for ((id, value) in expected) {
             val progress = ladderOf(showcase, id)
             assertEquals(value, progress.observedValue)
@@ -205,7 +209,7 @@ class BadgeShowcaseTest {
                 badges = kronjagare.badgeKeys.map { badge(it) },
                 // Even with a counter present, a finished ladder has no next rung
                 // and therefore no fraction to fill.
-                counters = BadgeCounters(crownsCollected = 1_000, vehiclesInGarage = 5),
+                counters = BadgeCounters(crownsCollected = 1_000, currentVehiclesInGarage = 5),
             )
         val progress = ladderOf(showcase, BadgeLadderId.KRONJAGARE)
 
@@ -227,9 +231,11 @@ class BadgeShowcaseTest {
         val showcase =
             BadgeShowcase.from(
                 badges = samlare.badgeKeys.map { badge(it) },
-                counters = BadgeCounters(vehiclesInGarage = 10),
+                counters = BadgeCounters(vehiclesInGarage = 10, currentVehiclesInGarage = 2),
             )
         val progress = ladderOf(showcase, BadgeLadderId.SAMLARE)
+        assertEquals(2L, progress.observedValue)
+        assertEquals(10L, progress.personalBest)
         assertTrue(progress.isComplete)
         assertNull(progress.fractionToNext)
     }
@@ -261,7 +267,7 @@ class BadgeShowcaseTest {
     @Test
     fun `a count ladder reads its own unit without a suffix`() {
         val showcase =
-            BadgeShowcase.from(badges = emptyList(), counters = BadgeCounters(vehiclesInGarage = 2))
+            BadgeShowcase.from(badges = emptyList(), counters = BadgeCounters(currentVehiclesInGarage = 2))
         val samlare = ladderOf(showcase, BadgeLadderId.SAMLARE)
 
         assertEquals(2L, samlare.observedValue)
@@ -284,7 +290,7 @@ class BadgeShowcaseTest {
                 counters =
                     BadgeCounters(
                         lifetimeDistanceMeters = -1,
-                        vehiclesInGarage = -3,
+                        currentVehiclesInGarage = -3,
                     ),
             )
         assertNull(ladderOf(showcase, BadgeLadderId.VAGFARARE).observedValue)
@@ -300,7 +306,7 @@ class BadgeShowcaseTest {
                 // Only two counters are known here; the rest are still null, so
                 // this exercises the ordering between ladders that have a bar and
                 // ladders that (for now) do not.
-                counters = BadgeCounters(lifetimeDistanceMeters = 90_000, vehiclesInGarage = 0),
+                counters = BadgeCounters(lifetimeDistanceMeters = 90_000, currentVehiclesInGarage = 0),
             )
         val order = showcase.laddersInProgress.map { it.ladder.id }
 

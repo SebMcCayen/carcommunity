@@ -67,7 +67,9 @@ enum BadgeProgressResponseParser {
             convoysLed: counter(data, "convoysLed"),
             vehiclesInGarage: counter(data, "vehiclesInGarage"),
             seasonsWon: counter(data, "seasonsWon"),
-            wavesSent: counter(data, "wavesSent")
+            wavesSent: counter(data, "wavesSent"),
+            currentDayStreak: counter(data, "currentDayStreak"),
+            currentVehiclesInGarage: counter(data, "currentVehiclesInGarage")
         )
     }
 

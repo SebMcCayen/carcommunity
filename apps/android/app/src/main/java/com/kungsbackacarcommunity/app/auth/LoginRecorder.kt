@@ -20,8 +20,8 @@ interface LoginRecorder {
 }
 
 /**
- * Fire-and-forget coordinator for last-login recording. Invoked once per
- * signed-in uid (a LaunchedEffect in AuthenticatedApp), it calls the backend
+ * Best-effort coordinator for last-login recording. The signed-in shell calls it
+ * on foreground entry until one login succeeds for the current Stockholm day. It calls the backend
  * best-effort: recording last-login is non-critical and must NEVER block or
  * break the signed-in UI, so every non-cancellation failure is swallowed.
  *
@@ -41,14 +41,15 @@ class LoginRecordCoordinator(
     // (e.g. recomposition) is a no-op rather than a duplicate backend call.
     private val actionLock = Mutex()
 
-    suspend fun recordLogin() {
-        if (!actionLock.tryLock()) return
+    suspend fun recordLogin(): Boolean {
+        if (!actionLock.tryLock()) return false
         try {
             recorder.recordLogin()
+            return true
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            // Best-effort: last-login recording must never surface an error.
+            return false
         } finally {
             actionLock.unlock()
         }

@@ -1837,6 +1837,40 @@
         }
       }
     },
+    "badgeShowcase.currentGarage": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fordon i garaget just nu: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehicles in your garage now: %1$@"
+          }
+        }
+      }
+    },
+    "badgeShowcase.currentStreak": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dagar i rad just nu: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current streak (days): %1$@"
+          }
+        }
+      }
+    },
     "badgeShowcase.emptyBody": {
       "extractionState": "manual",
       "localizations": {
@@ -2398,6 +2432,23 @@
         }
       }
     },
+    "badgeShowcase.personalBest": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rekord: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal best: %1$@"
+          }
+        }
+      }
+    },
     "badgeShowcase.progressCount": {
       "extractionState": "manual",
       "localizations": {
@@ -2598,6 +2649,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "My awards"
+          }
+        }
+      }
+    },
+    "badgeShowcase.total": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Totalt: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total: %1$@"
           }
         }
       }

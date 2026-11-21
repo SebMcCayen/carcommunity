@@ -322,6 +322,8 @@ struct BadgeCounters: Equatable, Sendable {
     var vehiclesInGarage: Int64?
     var seasonsWon: Int64?
     var wavesSent: Int64?
+    var currentDayStreak: Int64?
+    var currentVehiclesInGarage: Int64?
 
     init(
         crownsCollected: Int64? = nil,
@@ -331,7 +333,9 @@ struct BadgeCounters: Equatable, Sendable {
         convoysLed: Int64? = nil,
         vehiclesInGarage: Int64? = nil,
         seasonsWon: Int64? = nil,
-        wavesSent: Int64? = nil
+        wavesSent: Int64? = nil,
+        currentDayStreak: Int64? = nil,
+        currentVehiclesInGarage: Int64? = nil
     ) {
         self.crownsCollected = crownsCollected
         self.lifetimeDistanceMeters = lifetimeDistanceMeters
@@ -341,6 +345,8 @@ struct BadgeCounters: Equatable, Sendable {
         self.vehiclesInGarage = vehiclesInGarage
         self.seasonsWon = seasonsWon
         self.wavesSent = wavesSent
+        self.currentDayStreak = currentDayStreak
+        self.currentVehiclesInGarage = currentVehiclesInGarage
     }
 
     /// No counters known — a bar-less-but-complete wall.
@@ -356,9 +362,9 @@ struct BadgeCounters: Equatable, Sendable {
         case .kronjagare: value = crownsCollected
         case .vagfarare: value = lifetimeDistanceMeters
         case .traffrav: value = verifiedEventsAttended
-        case .trogen: value = bestDayStreak
+        case .trogen: value = currentDayStreak
         case .konvojledare: value = convoysLed
-        case .samlare: value = vehiclesInGarage
+        case .samlare: value = currentVehiclesInGarage
         case .sasongsmastare: value = seasonsWon
         case .vinkare: value = wavesSent
         }
@@ -379,6 +385,7 @@ struct LadderProgress: Equatable, Sendable, Identifiable {
     let nextRung: BadgeRung?
     /// Client-observable counter, or nil when only the server knows it.
     let observedValue: Int64?
+    let personalBest: Int64?
 
     var id: BadgeLadderId { ladder.id }
 
@@ -515,11 +522,18 @@ struct BadgeShowcase: Equatable, Sendable {
             // The next rung is the lowest UNHELD one, so a gap left by a
             // partial write is offered again rather than skipped.
             let next = ladder.rungs.first { !heldKeys.contains($0.badgeKey) }
+            let best: Int64?
+            switch ladder.id {
+            case .trogen: best = counters.bestDayStreak
+            case .samlare: best = counters.vehiclesInGarage
+            default: best = nil
+            }
             return LadderProgress(
                 ladder: ladder,
                 earnedRungs: earned,
                 nextRung: next,
-                observedValue: counters.observedValue(for: ladder.id)
+                observedValue: counters.observedValue(for: ladder.id),
+                personalBest: best.flatMap { $0 >= 0 ? $0 : nil }
             )
         }
 

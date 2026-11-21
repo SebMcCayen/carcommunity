@@ -1199,6 +1199,10 @@
     <string name="badgeShowcase_progressTitle">Nästa nivå</string>
     <string name="badgeShowcase_nextTier">Nästa: %1$s</string>
     <string name="badgeShowcase_ladderComplete">Alla nivåer klara</string>
+    <string name="badgeShowcase_currentStreak">Dagar i rad just nu: %1$s</string>
+    <string name="badgeShowcase_currentGarage">Fordon i garaget just nu: %1$s</string>
+    <string name="badgeShowcase_personalBest">Rekord: %1$s</string>
+    <string name="badgeShowcase_total">Totalt: %1$s</string>
     <string name="badgeShowcase_progressCount">%1$s / %2$s</string>
     <string name="badgeShowcase_noTierYet">Ingen nivå ännu</string>
     <string name="badgeShowcase_showAll">Visa alla utmärkelser</string>

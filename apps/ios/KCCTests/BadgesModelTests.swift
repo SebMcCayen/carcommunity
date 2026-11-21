@@ -161,19 +161,38 @@ final class BadgesModelTests: XCTestCase {
             convoysLed: 5,
             vehiclesInGarage: 6,
             seasonsWon: 7,
-            wavesSent: 8
+            wavesSent: 8,
+            currentDayStreak: 1,
+            currentVehiclesInGarage: 0
         )
         XCTAssertEqual(counters.observedValue(for: .kronjagare), 1)
         XCTAssertEqual(counters.observedValue(for: .vagfarare), 2)
         XCTAssertEqual(counters.observedValue(for: .traffrav), 3)
-        XCTAssertEqual(counters.observedValue(for: .trogen), 4)
+        XCTAssertEqual(counters.observedValue(for: .trogen), 1)
         XCTAssertEqual(counters.observedValue(for: .konvojledare), 5)
-        XCTAssertEqual(counters.observedValue(for: .samlare), 6)
+        XCTAssertEqual(counters.observedValue(for: .samlare), 0)
         XCTAssertEqual(counters.observedValue(for: .sasongsmastare), 7)
         XCTAssertEqual(counters.observedValue(for: .vinkare), 8)
     }
 
     // MARK: - Showcase fold
+
+    func testRestartedStreakAndCompletedGarageKeepCurrentAndBestSeparate() {
+        let counters = BadgeProgressResponseParser.parse([
+            "currentDayStreak": 3, "bestDayStreak": 60,
+            "currentVehiclesInGarage": 0, "vehiclesInGarage": 10
+        ])
+        let garage = badgeLadders.first { $0.id == .samlare }!
+        let awards = garage.rungs.map { Badge(key: $0.badgeKey, fallbackName: nil, awardedAt: nil) }
+        let wall = BadgeShowcase.from(badges: awards, counters: counters)
+        let streak = wall.ladders.first { $0.id == .trogen }
+        XCTAssertEqual(streak?.observedValue, 3)
+        XCTAssertEqual(streak?.personalBest, 60)
+        let collection = wall.ladders.first { $0.id == .samlare }
+        XCTAssertEqual(collection?.isComplete, true)
+        XCTAssertEqual(collection?.observedValue, 0)
+        XCTAssertEqual(collection?.personalBest, 10)
+    }
 
     func testEmptyShowcaseRendersFullLockedCatalog() {
         let showcase = BadgeShowcase.from(badges: [])

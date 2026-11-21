@@ -1199,6 +1199,10 @@
     <string name="badgeShowcase_progressTitle">Next tier</string>
     <string name="badgeShowcase_nextTier">Next: %1$s</string>
     <string name="badgeShowcase_ladderComplete">All tiers complete</string>
+    <string name="badgeShowcase_currentStreak">Current streak (days): %1$s</string>
+    <string name="badgeShowcase_currentGarage">Vehicles in your garage now: %1$s</string>
+    <string name="badgeShowcase_personalBest">Personal best: %1$s</string>
+    <string name="badgeShowcase_total">Total: %1$s</string>
     <string name="badgeShowcase_progressCount">%1$s / %2$s</string>
     <string name="badgeShowcase_noTierYet">No tier yet</string>
     <string name="badgeShowcase_showAll">Show all awards</string>

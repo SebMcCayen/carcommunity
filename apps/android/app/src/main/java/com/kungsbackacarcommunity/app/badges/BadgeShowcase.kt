@@ -60,6 +60,8 @@ data class BadgeCounters(
     val vehiclesInGarage: Long? = null,
     val seasonsWon: Long? = null,
     val wavesSent: Long? = null,
+    val currentDayStreak: Long? = null,
+    val currentVehiclesInGarage: Long? = null,
 ) {
     /**
      * The observable value for [ladder], or null when the client does not yet
@@ -73,9 +75,9 @@ data class BadgeCounters(
             BadgeLadderId.KRONJAGARE -> crownsCollected
             BadgeLadderId.VAGFARARE -> lifetimeDistanceMeters
             BadgeLadderId.TRAFFRAV -> verifiedEventsAttended
-            BadgeLadderId.TROGEN -> bestDayStreak
+            BadgeLadderId.TROGEN -> currentDayStreak
             BadgeLadderId.KONVOJLEDARE -> convoysLed
-            BadgeLadderId.SAMLARE -> vehiclesInGarage
+            BadgeLadderId.SAMLARE -> currentVehiclesInGarage
             BadgeLadderId.SASONGSMASTARE -> seasonsWon
             BadgeLadderId.VINKARE -> wavesSent
         }?.takeIf { it >= 0 }
@@ -94,6 +96,7 @@ data class LadderProgress(
     val nextRung: BadgeRung?,
     /** Client-observable counter, or null when only the server knows it. */
     val observedValue: Long?,
+    val personalBest: Long?,
 ) {
     /** Highest rung held, or null when the ladder has not been started. */
     val highestRung: BadgeRung? get() = earnedRungs.lastOrNull()
@@ -228,6 +231,11 @@ data class BadgeShowcase(
                         earnedRungs = earned,
                         nextRung = next,
                         observedValue = counters.observedValue(ladder.id),
+                        personalBest = when (ladder.id) {
+                            BadgeLadderId.TROGEN -> counters.bestDayStreak
+                            BadgeLadderId.SAMLARE -> counters.vehiclesInGarage
+                            else -> null
+                        }?.takeIf { it >= 0 },
                     )
                 }
 

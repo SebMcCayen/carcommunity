@@ -39,6 +39,7 @@ import {
   qualifiedTierBadges,
   readBadgeCounters,
   readStreakState,
+  readProfileStreak,
   rideDistanceDelta,
   streakDayKey,
   tierPointsReward,
@@ -915,5 +916,28 @@ describe('agrees with docs/gamification-system.md §7.2', () => {
     const structure = doc.slice(doc.indexOf('### 7.1 Structure'), doc.indexOf('### 7.2'));
     // §7.1 must name the exception, so the rung count is never a surprise.
     expect(structure).toContain('**Trogen**');
+  });
+});
+
+describe('owner profile streak', () => {
+  const progress = { bestDayStreak: 60, currentDayStreak: 3, lastStreakDayKey: '2026-10-24' };
+  it('keeps a run alive through the following Stockholm day, then expires it', () => {
+    expect(readProfileStreak(progress, null, '2026-10-25')).toEqual({
+      bestDayStreak: 60,
+      currentDayStreak: 3,
+    });
+    expect(readProfileStreak(progress, null, '2026-10-26')).toEqual({
+      bestDayStreak: 60,
+      currentDayStreak: 0,
+    });
+  });
+  it('includes a newly recorded login and never counts the same day twice', () => {
+    expect(readProfileStreak(progress, '2026-10-24', '2026-10-24').currentDayStreak).toBe(3);
+    expect(readProfileStreak(progress, '2026-10-25', '2026-10-25').currentDayStreak).toBe(4);
+    expect(readProfileStreak(progress, '2026-10-27', '2026-10-27')).toEqual({
+      bestDayStreak: 60,
+      currentDayStreak: 1,
+    });
+    expect(readProfileStreak(undefined, null, '2026-10-27').currentDayStreak).toBe(0);
   });
 });
