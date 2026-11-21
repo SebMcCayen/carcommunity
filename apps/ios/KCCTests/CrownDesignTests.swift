@@ -10,6 +10,8 @@ final class CrownDesignTests: XCTestCase {
             rewardPoints: 130, latitude: 57, longitude: 12, geofenceRadiusMeters: 75)
         let spawn: CrownSpawn
         var lastPlacementReport: (CrownMapTarget, CrownPlacementReportReason, String)?
+        var pointReads = 0
+        var spawnReads = 0
         var showPoint = true
         var spawnClaimKeys: [String] = []
         var spawnClaimAction: ((CrownFixPair, String) async throws -> CrownSpawnClaimOutcome)?
@@ -27,8 +29,14 @@ final class CrownDesignTests: XCTestCase {
         func reportPlacement(target: CrownMapTarget, reason: CrownPlacementReportReason, comment: String) async throws {
             lastPlacementReport = (target, reason, comment)
         }
-        func activePoints() async throws -> [CrownMapPoint] { showPoint ? [point] : [] }
-        func nearbySpawns(cellKeys: [String], now: Date) async throws -> [CrownSpawn] { [spawn] }
+        func activePoints() async throws -> [CrownMapPoint] {
+            pointReads += 1
+            return showPoint ? [point] : []
+        }
+        func nearbySpawns(cellKeys: [String], now: Date) async throws -> [CrownSpawn] {
+            spawnReads += 1
+            return [spawn]
+        }
         func collectedSpawnIds(uid: String, now: Date) async throws -> Set<String> {
             if holdCollectedRead {
                 return await withCheckedContinuation { collectedContinuation = $0 }
@@ -43,6 +51,42 @@ final class CrownDesignTests: XCTestCase {
             if let spawnClaimAction { return try await spawnClaimAction(proof, idempotencyKey) }
             return CrownSpawnClaimOutcome(result: .awarded, pointsAwarded: 7, newBalance: 7, rarity: .rare)
         }
+    }
+
+    func testCrownLayerHidesPointsSpawnsAndSelectionUntilEnabledAgain() async throws {
+        let repository = Repository(now: Date())
+        let coordinator = makeCoordinator(repository, StubLocationProvider(authorization: .whileInUse))
+        let camera = MapCameraSnapshot.of(latitude: 57, longitude: 12, zoom: 14, bearing: 0, pitch: 0)
+        await coordinator.refresh(camera: camera, visibleRadiusMeters: 200)
+        coordinator.select(markerId: "spawn:spawn")
+        XCTAssertNotNil(coordinator.selectedTarget)
+
+        repository.holdCollectedRead = true
+        let pending = Task {
+            await coordinator.refresh(camera: .of(latitude: 57, longitude: 12.03, zoom: 14, bearing: 0, pitch: 0),
+                                      visibleRadiusMeters: 200)
+        }
+        defer { repository.resumeCollectedRead(); pending.cancel() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !repository.collectedReadPending, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        guard repository.collectedReadPending else { return XCTFail("Expected an in-flight refresh") }
+        coordinator.setLayerVisible(false)
+        XCTAssertNil(coordinator.selectedTarget)
+        repository.resumeCollectedRead()
+        await pending.value
+        repository.holdCollectedRead = false
+        let pointReads = repository.pointReads
+        let spawnReads = repository.spawnReads
+        await coordinator.refresh(camera: camera, visibleRadiusMeters: 200, force: true)
+        XCTAssertTrue(coordinator.markers.isEmpty)
+        XCTAssertEqual(repository.pointReads, pointReads)
+        XCTAssertEqual(repository.spawnReads, spawnReads)
+
+        coordinator.setLayerVisible(true)
+        await coordinator.refresh(camera: camera, visibleRadiusMeters: 200)
+        XCTAssertEqual(Set(coordinator.markers.map(\.id)), ["point:placed", "spawn:spawn"])
     }
 
     func testWarmStopUnlocksOnSelectionAndDemandEndsWithTheMapLifecycle() async throws {

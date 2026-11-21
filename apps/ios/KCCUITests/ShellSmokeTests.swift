@@ -1320,6 +1320,16 @@ final class ShellSmokeTests: XCTestCase {
         app.buttons["shell.mapLayers"].tap()
         XCTAssertTrue(app.navigationBars["Map layers"].waitForExistence(timeout: 5))
         let scroll = app.scrollViews["shell.layers.content"]
+        let crowns = app.switches["shell.layersCrownHunt"]
+        reveal(crowns, in: scroll, minimumHeight: 0)
+        XCTAssertTrue(crowns.isHittable)
+        let crownSwitch = crowns.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+        let initialValue = crowns.value as? String
+        XCTAssertTrue(initialValue == "1" || initialValue == "0")
+        crownSwitch.tap()
+        XCTAssertEqual(crowns.value as? String, initialValue == "1" ? "0" : "1")
+        crownSwitch.tap()
+        XCTAssertEqual(crowns.value as? String, initialValue)
         for id in ["night", "day", "system"] {
             let choice = app.buttons["shell.layersAppearance.\(id)"]
             reveal(choice, in: scroll, minimumHeight: 48)

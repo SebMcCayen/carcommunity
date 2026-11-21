@@ -1083,6 +1083,11 @@ struct ShellView: View {
                 do { try await Task.sleep(for: .seconds(86_400)) } catch {}
                 incidentMapCoordinator.stop()
             }
+            .onChange(of: mapLayerPreferences.crownHuntVisible) { _, visible in
+                guard let coordinator = crownHuntComposition?.mapCoordinator else { return }
+                coordinator.setLayerVisible(visible)
+                if foregroundMapWorkActive { updateCrownMapLocation(coordinator) }
+            }
             .onChange(of: foregroundMapWorkActive) { _, active in
                 // Cancel local evidence immediately, even if an earlier refresh
                 // is still waiting for its network response.
@@ -1092,7 +1097,7 @@ struct ShellView: View {
                 guard foregroundMapWorkActive,
                       let coordinator = crownHuntComposition?.mapCoordinator else { return }
                 let perkCoordinator = crownHuntComposition?.perkMapCoordinator
-                coordinator.start()
+                updateCrownMapLocation(coordinator)
                 perkCoordinator?.start()
                 await coordinator.refresh(
                     camera: mapSurface.cameraSnapshot,
@@ -1120,7 +1125,7 @@ struct ShellView: View {
                 await incidentMapCoordinator.refresh(surface: mapSurface)
             }
             .task(id: crownMapRefreshKey) {
-                guard foregroundMapWorkActive,
+                guard foregroundMapWorkActive, mapLayerPreferences.crownHuntVisible,
                       let coordinator = crownHuntComposition?.mapCoordinator else { return }
                 do { try await Task.sleep(for: .milliseconds(700)) } catch { return }
                 await coordinator.refresh(
@@ -3030,6 +3035,7 @@ struct ShellView: View {
             locationProvider: locationProvider
         )
         guard !Task.isCancelled, uid == signedInUid else { return }
+        composition.mapCoordinator?.setLayerVisible(mapLayerPreferences.crownHuntVisible)
         crownHuntComposition = composition
     }
 
@@ -3228,10 +3234,19 @@ struct ShellView: View {
         "\(signedInUid ?? "unavailable")|\(incidentMapCoordinator == nil ? "off" : "on")|\(foregroundMapWorkActive)"
     }
 
+    private func updateCrownMapLocation(_ coordinator: CrownHuntMapCoordinator) {
+        // Perk deployment also uses the current fix while crown markers are hidden.
+        if mapLayerPreferences.crownHuntVisible || crownHuntComposition?.perkMapCoordinator?.isAvailable == true {
+            coordinator.start()
+        } else {
+            coordinator.stop()
+        }
+    }
+
     private var crownMapLifecycleKey: String {
         [
             signedInUid ?? "unavailable",
-            crownHuntComposition?.mapCoordinator?.isAvailable == true ? "on" : "off",
+            crownHuntComposition?.mapCoordinator.map { String(describing: ObjectIdentifier($0)) } ?? "off",
             foregroundMapWorkActive ? "active" : "inactive"
         ].joined(separator: "|")
     }
@@ -3248,6 +3263,7 @@ struct ShellView: View {
         let camera = mapSurface.cameraSnapshot
         return [
             crownMapLifecycleKey,
+            String(mapLayerPreferences.crownHuntVisible),
             camera.map { "\($0.latitude)|\($0.longitude)|\($0.zoom)" } ?? "no-camera"
         ].joined(separator: "|")
     }
