@@ -83,6 +83,7 @@ export const portalSchemas = {
   token: z.object({ reservationId: id }).strict(),
   inspect: z.object({ token: z.string().min(20).max(512) }).strict(),
   redeem: z.object({ token: z.string().min(20).max(512), requestId: id.min(8) }).strict(),
+  driveHeat: z.object({ companyId: id }).strict(),
   statistics: z
     .object({
       companyId: id,

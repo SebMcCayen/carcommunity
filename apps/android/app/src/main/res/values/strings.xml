@@ -2464,4 +2464,20 @@
     <string name="partnerPortal_validUntil">Erbjudandet gäller till: %1$s</string>
     <string name="partnerPortal_reservationWindow">Reservationen gäller i upp till %1$d dagar. Sista giltighet visas i bekräftelsen.</string>
     <string name="partnerPortal_alreadyUsed">Det här kontot kan inte använda kampanjen igen.</string>
+    <string name="partnerTraffic_title">Trafikvärmekarta</string>
+    <string name="partnerTraffic_purpose">Hitta möjliga platser för er billboard. Kartan visar relativ köraktivitet i områden under de senaste 90 dagarna, baserat på sparade körningar från appkonton som har samtyckt. Det är ett urval av appens aktivitet, inte en mätning av all vägtrafik.</string>
+    <string name="partnerTraffic_privacy">Ett område visas först när minst 10 olika konton har bidragit. Start och slut av körningar tas bort före sammanställningen. Du ser inga personer eller individuella rutter.</string>
+    <string name="partnerTraffic_updated">Sammanställt: %1$s</string>
+    <string name="partnerTraffic_expired">Kartunderlaget har gått ut. Hämta en ny sammanställning.</string>
+    <string name="partnerTraffic_empty">Det finns inga aktuella områden att visa. Underlaget kan saknas eller vara för litet för integritetsskyddet. Det betyder inte att vägen saknar trafik.</string>
+    <string name="partnerTraffic_limited">De 1 000 områden som har högst aktivitet visas. Övriga områden ingår inte i den här vyn.</string>
+    <string name="partnerTraffic_areas">De 20 främsta områdena – mittpunkt och aktivitetsnivå</string>
+    <string name="partnerTraffic_map">Karta med aggregerad köraktivitet</string>
+    <string name="partnerTraffic_mapUnavailable">Kartan kunde inte visas. Områden och aktivitetsnivåer finns i listan nedan.</string>
+    <string name="partnerTraffic_band1">Mycket låg relativ aktivitet</string>
+    <string name="partnerTraffic_band2">Låg relativ aktivitet</string>
+    <string name="partnerTraffic_band3">Medelhög relativ aktivitet</string>
+    <string name="partnerTraffic_band4">Hög relativ aktivitet</string>
+    <string name="partnerTraffic_band5">Mycket hög relativ aktivitet</string>
+    <string name="partnerTraffic_area">%1$s – %2$s</string>
 </resources>

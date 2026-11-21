@@ -33,6 +33,9 @@ data class PartnerAggregateOffer(val offerId: String, val title: String, val tot
 data class PartnerAggregateStatistics(val updatedAt: String, val totalRedeemed: Long, val offers: List<PartnerAggregateOffer>)
 
 interface PartnerPortalRepository {
+    val trafficSessionKey: String? get() = null
+    fun observeTrafficSession(onChange: (String?) -> Unit): AutoCloseable = AutoCloseable { }
+    suspend fun driveHeat(companyId: String): PartnerTrafficHeatSnapshot = error("Traffic heat unavailable")
     suspend fun workspace(): PartnerWorkspace
     suspend fun offers(companyId: String): List<ManagedPartnerOffer>
     suspend fun submitOffer(companyId: String, fields: Map<String, Any?>)
@@ -54,6 +57,14 @@ class FirebasePartnerPortalRepository private constructor(private val functions:
         val result = functions.getHttpsCallable("partners-portal").call(fields + ("action" to action)).await().data
         return requireNotNull(result.portalMap()) { "Invalid partner response" }
     }
+    override val trafficSessionKey: String? get() = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+    override fun observeTrafficSession(onChange: (String?) -> Unit): AutoCloseable {
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val listener = com.google.firebase.auth.FirebaseAuth.AuthStateListener { onChange(it.currentUser?.uid) }
+        auth.addAuthStateListener(listener)
+        return AutoCloseable { auth.removeAuthStateListener(listener) }
+    }
+    override suspend fun driveHeat(companyId: String) = parsePartnerTrafficHeat(call("driveHeat", mapOf("companyId" to companyId)))
     override suspend fun workspace(): PartnerWorkspace {
         val data = call("workspace")
         return PartnerWorkspace(data.maps("companies").map { row ->

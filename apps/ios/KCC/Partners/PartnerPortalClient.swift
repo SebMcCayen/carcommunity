@@ -1,8 +1,14 @@
 import Foundation
 import Observation
+import FirebaseCore
+import FirebaseAuth
 
 @MainActor
 final class PartnerPortalClient {
+    var trafficSessionKey: String? {
+        guard let app = FirebaseApp.app() else { return nil }
+        return Auth.auth(app: app).currentUser?.uid
+    }
     private let transport: PartnerPortalTransport
     private init(functions: KccFunctionsClient) { transport = PartnerPortalTransport(functions: functions) }
     static func createIfAvailable() -> PartnerPortalClient? {

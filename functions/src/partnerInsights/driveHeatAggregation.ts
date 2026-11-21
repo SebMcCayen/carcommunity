@@ -44,19 +44,15 @@ import {
   MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD,
 } from './drive-heat-core';
 
-/** Rolling window of completed drives folded into the heatmap. */
-export const DRIVE_HEAT_WINDOW_DAYS = 90;
+import { DRIVE_HEAT_WINDOW_DAYS, DRIVE_HEAT_MAX_CELLS } from './drive-heat-policy';
+export {
+  DRIVE_HEAT_WINDOW_DAYS,
+  DRIVE_HEAT_MAX_CELLS,
+  DRIVE_HEAT_MAX_AGE_MS,
+} from './drive-heat-policy';
 
 /** Firestore document holding the single current anonymised aggregate. */
 export const DRIVE_HEAT_DOC_PATH = { collection: 'partnerDriveHeat', doc: 'current' } as const;
-
-/**
- * Cap on cells written to the single aggregate document, so it can never
- * approach Firestore's 1 MiB limit (each cell is ~40 bytes ⇒ 20 000 ≈ 0.8 MiB).
- * Cells are sorted by weight, so the cap keeps the busiest areas — exactly the
- * ones a billboard buyer cares about. Beyond this scale, move to per-cell docs.
- */
-export const DRIVE_HEAT_MAX_CELLS = 20_000;
 
 /** How many rides to page through Firestore at a time. */
 const RIDE_PAGE_SIZE = 500;
@@ -64,8 +60,6 @@ const RIDE_PAGE_SIZE = 500;
 const MAX_RIDES_PER_RUN = 5_000;
 const MAX_CONTRIBUTORS_PER_RUN = 250;
 const MAX_CONTRIBUTION_CELLS = 200_000;
-/** A missed daily rebuild may retain a valid anonymous snapshot for at most 48h. */
-export const DRIVE_HEAT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 function consentRefs(uid: string) {
   return [

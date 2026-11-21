@@ -2637,5 +2637,23 @@
     "validUntil": "Erbjudandet gäller till: %1$s",
     "reservationWindow": "Reservationen gäller i upp till %1$d dagar. Sista giltighet visas i bekräftelsen.",
     "alreadyUsed": "Det här kontot kan inte använda kampanjen igen."
+  },
+  "partnerTraffic": {
+    "title": "Trafikvärmekarta",
+    "purpose": "Hitta möjliga platser för er billboard. Kartan visar relativ köraktivitet i områden under de senaste 90 dagarna, baserat på sparade körningar från appkonton som har samtyckt. Det är ett urval av appens aktivitet, inte en mätning av all vägtrafik.",
+    "privacy": "Ett område visas först när minst 10 olika konton har bidragit. Start och slut av körningar tas bort före sammanställningen. Du ser inga personer eller individuella rutter.",
+    "updated": "Sammanställt: %1$s",
+    "expired": "Kartunderlaget har gått ut. Hämta en ny sammanställning.",
+    "empty": "Det finns inga aktuella områden att visa. Underlaget kan saknas eller vara för litet för integritetsskyddet. Det betyder inte att vägen saknar trafik.",
+    "limited": "De 1 000 områden som har högst aktivitet visas. Övriga områden ingår inte i den här vyn.",
+    "areas": "De 20 främsta områdena – mittpunkt och aktivitetsnivå",
+    "map": "Karta med aggregerad köraktivitet",
+    "mapUnavailable": "Kartan kunde inte visas. Områden och aktivitetsnivåer finns i listan nedan.",
+    "band1": "Mycket låg relativ aktivitet",
+    "band2": "Låg relativ aktivitet",
+    "band3": "Medelhög relativ aktivitet",
+    "band4": "Hög relativ aktivitet",
+    "band5": "Mycket hög relativ aktivitet",
+    "area": "%1$s – %2$s"
   }
 }

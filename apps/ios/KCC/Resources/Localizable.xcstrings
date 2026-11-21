@@ -29394,6 +29394,278 @@
         }
       }
     },
+    "partnerTraffic.area": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ – %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ – %2$@"
+          }
+        }
+      }
+    },
+    "partnerTraffic.areas": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De 20 främsta områdena – mittpunkt och aktivitetsnivå"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top 20 areas – centre and activity level"
+          }
+        }
+      }
+    },
+    "partnerTraffic.band1": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mycket låg relativ aktivitet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Very low relative activity"
+          }
+        }
+      }
+    },
+    "partnerTraffic.band2": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Låg relativ aktivitet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low relative activity"
+          }
+        }
+      }
+    },
+    "partnerTraffic.band3": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medelhög relativ aktivitet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medium relative activity"
+          }
+        }
+      }
+    },
+    "partnerTraffic.band4": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hög relativ aktivitet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "High relative activity"
+          }
+        }
+      }
+    },
+    "partnerTraffic.band5": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mycket hög relativ aktivitet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Very high relative activity"
+          }
+        }
+      }
+    },
+    "partnerTraffic.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det finns inga aktuella områden att visa. Underlaget kan saknas eller vara för litet för integritetsskyddet. Det betyder inte att vägen saknar trafik."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There are no current areas to show. Data may be unavailable or too sparse to meet the privacy threshold. This does not mean the road has no traffic."
+          }
+        }
+      }
+    },
+    "partnerTraffic.expired": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kartunderlaget har gått ut. Hämta en ny sammanställning."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The map data has expired. Fetch a new snapshot."
+          }
+        }
+      }
+    },
+    "partnerTraffic.limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De 1 000 områden som har högst aktivitet visas. Övriga områden ingår inte i den här vyn."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing the 1,000 most active areas. Other areas are not included in this view."
+          }
+        }
+      }
+    },
+    "partnerTraffic.map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Karta med aggregerad köraktivitet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map of aggregate driving activity"
+          }
+        }
+      }
+    },
+    "partnerTraffic.mapUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kartan kunde inte visas. Områden och aktivitetsnivåer finns i listan nedan."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The map could not be displayed. Areas and activity levels are listed below."
+          }
+        }
+      }
+    },
+    "partnerTraffic.privacy": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ett område visas först när minst 10 olika konton har bidragit. Start och slut av körningar tas bort före sammanställningen. Du ser inga personer eller individuella rutter."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An area is shown only after at least 10 different accounts have contributed. Drive starts and ends are removed before aggregation. No people or individual routes are shown."
+          }
+        }
+      }
+    },
+    "partnerTraffic.purpose": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hitta möjliga platser för er billboard. Kartan visar relativ köraktivitet i områden under de senaste 90 dagarna, baserat på sparade körningar från appkonton som har samtyckt. Det är ett urval av appens aktivitet, inte en mätning av all vägtrafik."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explore potential billboard locations. The map shows relative driving activity in areas over the last 90 days, based on saved drives from consenting app accounts. This is a sample of app activity, not a measurement of all road traffic."
+          }
+        }
+      }
+    },
+    "partnerTraffic.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trafikvärmekarta"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traffic heatmap"
+          }
+        }
+      }
+    },
+    "partnerTraffic.updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sammanställt: %1$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compiled: %1$@"
+          }
+        }
+      }
+    },
     "partners.applicationEntryHint": {
       "extractionState": "manual",
       "localizations": {

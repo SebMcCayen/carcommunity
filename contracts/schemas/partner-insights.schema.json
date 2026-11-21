@@ -205,6 +205,90 @@
       },
       "required": ["cells", "resolution", "windowDays", "generatedAt"],
       "additionalProperties": false
+    },
+    "partnerHeatCoordinate": {
+      "type": "object",
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      },
+      "required": ["latitude", "longitude"],
+      "additionalProperties": false
+    },
+    "partnerHeatArea": {
+      "type": "object",
+      "description": "Public resolution-10 H3 geometry and relative activity; no contributor count, route or account data.",
+      "properties": {
+        "cellId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{15,16}$"
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "boundary": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/partnerHeatCoordinate"
+          }
+        },
+        "band": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        }
+      },
+      "required": ["cellId", "latitude", "longitude", "boundary", "band"],
+      "additionalProperties": false
+    },
+    "partnerDriveHeatResponse": {
+      "type": "object",
+      "description": "partners.portal driveHeat manager-only global planning snapshot. Zero eligible cells means insufficient/unavailable data, never measured zero traffic. Snapshot validity is conservatively measured from client request start.",
+      "properties": {
+        "generatedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "windowDays": {
+          "type": "integer",
+          "const": 90
+        },
+        "expiresInSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 172800
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when only the 1,000 most active eligible areas are included."
+        },
+        "cells": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/partnerHeatArea"
+          }
+        }
+      },
+      "required": ["generatedAt", "windowDays", "expiresInSeconds", "truncated", "cells"],
+      "additionalProperties": false
     }
   }
 }
