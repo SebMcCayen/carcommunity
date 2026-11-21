@@ -1,0 +1,234 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // -------------------------------------------------------------------------
+    // Helper functions
+    // -------------------------------------------------------------------------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    // Preparation-compatible authority for business images only. Other member,
+    // route and Driver paths retain the existing release policy.
+    function isCurrentPartnerImageAdmin() {
+      return isAdmin() && isNotSuspended()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && currentPartnerImageAdminProfile()
+        && partnerImageProductAccessAllows();
+    }
+
+    // The existing preparation policy permits missing/uninitialized projections.
+    // Existing product restrictions still apply; at most two documents are read.
+    function partnerImageProductAccessAllows() {
+      return !firestore.exists(/databases/(default)/documents/carCommunityAccess/$(request.auth.uid))
+        || partnerImageProductProjectionAllows();
+    }
+
+    function partnerImageProductProjectionAllows() {
+      let state = firestore.get(/databases/(default)/documents/carCommunityAccess/$(request.auth.uid)).data;
+      return state.get('suspended', false) != true
+        && state.get('explicitBlacklistId', null) == null
+        && state.get('inheritedBlocked', false) != true;
+    }
+
+    function currentPartnerImageAdminProfile() {
+      let profile = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+      return profile.get('role', 'user') in ['admin', 'owner']
+        && profile.get('suspended', false) != true && profile.get('deleted', false) != true;
+    }
+
+    // Mirrors the Firestore rules helpers: suspension is a server-managed
+    // custom claim and always overrides feature access.
+    function isNotSuspended() {
+      return request.auth != null
+        && (!('suspended' in request.auth.token) || request.auth.token.suspended != true);
+    }
+
+    // Legacy compatibility helper: route replay is unchanged by this release.
+    // Drive saving has its own active-account guard and is free.
+    function isActiveMember() {
+      return isAuthenticated() && isNotSuspended();
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+    }
+
+    function isUnderMB(mb) {
+      return request.resource.size <= mb * 1024 * 1024;
+    }
+
+    function hasActiveDriverAccount() {
+      return isAuthenticated() && isNotSuspended()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('deleted', false) != true
+        && firestore.exists(/databases/(default)/documents/driverUsers/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/driverUsers/$(request.auth.uid)).data.get('onboardingComplete', false) == true
+        && firestore.get(/databases/(default)/documents/driverUsers/$(request.auth.uid)).data.get('status', 'active') == 'active';
+    }
+
+    // -------------------------------------------------------------------------
+    // Deny-all catch-all (rules below override for specific paths)
+    // -------------------------------------------------------------------------
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Shared logo uploads use exactly two Firestore documents (Storage's
+    // cross-service limit): the canonical account and the authoritative club.
+    // No Driver profile, global admin or subscription privilege grants access.
+    match /clubLogos/{clubId}/{ownerUid}/{fileName} {
+      function canCreateClubLogo() {
+        let user = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+        let club = firestore.get(/databases/(default)/documents/driverClubs/$(clubId)).data;
+        return user.get('onboardingCompletedAt', null) is timestamp
+          && user.get('suspended', false) != true && user.get('deleted', false) != true
+          && user.get('banned', false) != true
+          && !(user.get('status', '') in ['deleted', 'suspended', 'deletionPending', 'banned'])
+          && (!('banned' in request.auth.token) || request.auth.token.banned != true)
+          && club.get('schemaVersion', 0) == 2 && club.get('status', '') == 'active'
+          && club.ownerUid == request.auth.uid;
+      }
+      allow get: if isAuthenticated();
+      allow create: if resource == null
+        && isOwner(ownerUid) && isNotSuspended() && canCreateClubLogo()
+        && request.resource.size > 0 && request.resource.size <= 256 * 1024
+        && ((request.resource.contentType == 'image/jpeg' && fileName.matches('.+\\.(jpg|jpeg)'))
+          || (request.resource.contentType == 'image/webp' && fileName.matches('.+\\.webp')));
+      // Immutable objects: replacement uses a new filename and server-approved
+      // logoPath update. Cleanup/deletion is backend-owned, including for admins.
+    }
+
+    // -------------------------------------------------------------------------
+    // Profile images:  profileImages/{userId}/{imageId}
+    // Owner may upload images up to 5 MB. Any authenticated user may read.
+    // -------------------------------------------------------------------------
+    match /profileImages/{userId}/{imageId} {
+      allow read: if isAuthenticated();
+      // Deletes have no request.resource, so they must not call the upload
+      // validators. Owners need deletion for safe avatar replacement cleanup.
+      allow create, update: if isOwner(userId) && isImage() && isUnderMB(5);
+      allow delete: if isOwner(userId);
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Vehicle images:  vehicleImages/{userId}/{vehicleId}/{imageId}  (Phase 9e)
+    // Path per docs/migration/backend-domain-mapping.md — the vehicleId
+    // segment lets garage.deleteVehicle remove exactly one vehicle's images.
+    // Owner may upload images up to 10 MB — managing your own garage is NOT
+    // member-gated (Seb-approved ungate), so any signed-in, NON-SUSPENDED owner
+    // may upload a photo for their own vehicle; any authenticated user may read
+    // (vehicle docs are public-readable). isNotSuspended() is kept explicitly:
+    // it used to come in via isActiveMember(), and suspension must always
+    // override feature access.
+    //
+    // Deleted accounts: this upload goes DIRECTLY to Storage (no callable in the
+    // path), and Storage rules cannot read users/{uid}.deleted — a backend-managed
+    // Firestore field, not a claim, and Storage rules have no cross-service reads.
+    // Enforcement is at the identity layer: account.deleteAccount disables the Auth
+    // user and revokes refresh tokens, so no new sign-in or renewal is possible.
+    // That makes it TTL-bounded rather than immediate — an already-issued ID token
+    // is still accepted here until it expires (<= 1h), after which request.auth
+    // fails. isNotSuspended() is eventually consistent the same way: the claim only
+    // updates on token refresh.
+    // -------------------------------------------------------------------------
+    match /vehicleImages/{userId}/{vehicleId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isNotSuspended() && isImage() && isUnderMB(10);
+      allow write: if isAdmin();
+    }
+
+    // Driver community post media. Driver and CarCommunity share Auth, but
+    // Driver content has its own prefix and stricter 4 MB JPEG/WebP contract.
+    // Public reads match Driver's public active-thread feed; document
+    // moderation controls discoverability while backend deletion removes media.
+    match /driverThreadMedia/{userId}/{imageId} {
+      allow read: if true;
+      allow create: if isOwner(userId) && hasActiveDriverAccount()
+        && request.resource.size > 0 && request.resource.size <= 4 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|webp)');
+      allow update: if false;
+      // Privacy cleanup remains available even when Driver access is restricted.
+      allow delete: if isOwner(userId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Ride route data:  rideRoutes/{userId}/{rideId}/{filename}   (Phase 9d)
+    // route.bin (binary, polyline-encoded + optionally gzipped) and
+    // preview.png (static map image) both live under this owner + member-gated
+    // prefix. Member gating is currently DISABLED (see the isActiveMember()
+    // switch above), so today this is owner + non-suspended only. When gating
+    // is re-enabled, route visuals are member-only again (legacy parity:
+    // routeOverview is withheld from non-members; drives saved during a
+    // previous membership keep their Firestore metadata readable, but route
+    // files stay gated).
+    // The former world-readable ridePreviewImages/ prefix is retired: ride
+    // previews reveal the private route shape.
+    // Max 50 MB per file. drives.delete removes this prefix with the drive.
+    // -------------------------------------------------------------------------
+    match /rideRoutes/{userId}/{rideId}/{fileName} {
+      // Saving is free; replay keeps its existing tier gate. Both operations
+      // consult stored account state so stale tokens cannot bypass restrictions.
+      function hasActiveRouteAccount() {
+        return isAuthenticated() && isNotSuspended()
+          && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+          && storedRouteAccountIsUnrestricted();
+      }
+      function storedRouteAccountIsUnrestricted() {
+        let account = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+        return account.get('suspended', false) != true
+          && account.get('deleted', false) != true;
+      }
+      allow read: if isOwner(userId) && isActiveMember() && hasActiveRouteAccount();
+      // Only the two canonical files may exist under the prefix — anything
+      // else would be unmetered private storage and would make drives.delete
+      // cleanup unbounded.
+      allow write: if isOwner(userId) && hasActiveRouteAccount() && isUnderMB(50) &&
+        ((fileName == 'route.bin'
+            && request.resource.contentType.matches('application/(octet-stream|gzip|x-gzip)'))
+          || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
+      allow read: if isAdmin() && hasActiveRouteAccount();
+      allow write: if isAdmin() && hasActiveRouteAccount();
+    }
+
+    // -------------------------------------------------------------------------
+    // Company images (admin-managed):  companyImages/{companyId}/{imageId}
+    // Any authenticated user may read. Only admins may write.
+    // -------------------------------------------------------------------------
+    match /companyImages/{companyId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isCurrentPartnerImageAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Billboard images (admin-managed):  billboardImages/{billboardId}/{imageId}
+    // Any authenticated user may read (billboards are public while active).
+    // Only admins may write (Phase 9k).
+    // -------------------------------------------------------------------------
+    match /billboardImages/{billboardId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isCurrentPartnerImageAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Offer images (admin-managed):  offerImages/{companyId}/{imageId}
+    // Any authenticated user may read. Only admins may write.
+    // -------------------------------------------------------------------------
+    match /offerImages/{companyId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isCurrentPartnerImageAdmin();
+    }
+  }
+}
