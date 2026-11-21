@@ -1,0 +1,5 @@
+{
+  "storage": {
+    "rules": "firebase/storage.partner-images-preparing.rules"
+  }
+}
