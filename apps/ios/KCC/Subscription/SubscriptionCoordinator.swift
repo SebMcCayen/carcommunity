@@ -11,6 +11,11 @@ final class SubscriptionCoordinator {
     private(set) var products: [StoreSubscriptionProduct] = []
     private(set) var status: SubscriptionFlowStatus
     private(set) var currentTier: SubscriptionTier?
+    private(set) var catalogueUnavailable = false
+    private(set) var renewalInformationUnavailable = false
+    private(set) var scheduledChange: ScheduledSubscriptionChange?
+    private var catalogueIsCurrent = false
+    @ObservationIgnored private var scheduledTransactionID: UInt64?
     @ObservationIgnored private var started = false
 
     init(
@@ -25,7 +30,17 @@ final class SubscriptionCoordinator {
     }
 
     var canPurchase: Bool {
-        uid != nil && store != nil && verifier != nil && !status.isBusy && !products.isEmpty
+        uid != nil && store != nil && verifier != nil && !status.isBusy && catalogueIsCurrent && !products.isEmpty
+    }
+
+    var upcomingChange: ScheduledSubscriptionChange? {
+        guard currentTier == .supporter, let scheduledChange,
+              scheduledChange.effectiveAt > Date() else { return nil }
+        return scheduledChange
+    }
+
+    func isChangeScheduled(to productID: String) -> Bool {
+        upcomingChange?.productID == productID
     }
 
     func start() async {
@@ -41,16 +56,26 @@ final class SubscriptionCoordinator {
         }
         guard !status.isBusy else { return }
         status = .loading
-        // A temporarily unavailable catalogue must not prevent restore of an
-        // already-purchased entitlement. Never leave stale prices actionable.
-        products = []
+        // Keep the last display snapshot, but never make stale prices actionable.
+        catalogueIsCurrent = false
         do {
-            products = (try? await store.products()) ?? []
+            do {
+                let refreshed = try await store.products()
+                if !refreshed.isEmpty { products = refreshed }
+                catalogueIsCurrent = !refreshed.isEmpty
+                catalogueUnavailable = !catalogueIsCurrent
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                catalogueUnavailable = true
+            }
             try Task.checkCancellation()
             let entitlements = await store.currentEntitlements()
             guard let preferred = Self.preferred(entitlements) else {
-                status = products.isEmpty ? .failed(.unavailable) : .ready
+                status = catalogueIsCurrent ? .ready : .failed(.unavailable)
                 currentTier = nil
+                scheduledChange = nil
+                renewalInformationUnavailable = false
                 return
             }
             await verify(preferred, operation: .verification)
@@ -63,6 +88,8 @@ final class SubscriptionCoordinator {
 
     func purchase(_ productID: String) async {
         guard !status.isBusy,
+            !isChangeScheduled(to: productID),
+            catalogueIsCurrent,
             subscriptionProductIDs.contains(productID),
             products.contains(where: { $0.id == productID }),
             let uid,
@@ -78,13 +105,34 @@ final class SubscriptionCoordinator {
             switch try await store.purchase(productID: productID, appAccountToken: token) {
             case .purchased(let transaction):
                 await verify(transaction, operation: .purchase)
+                if isChangeScheduled(to: productID) {
+                    status = .success(currentTier ?? .supporter, operation: .planChange)
+                } else if productID == plusMonthlyProductID && currentTier == .supporter,
+                          case .success = status {
+                    status = .success(.supporter, operation: .verification)
+                }
             case .pending:
                 status = .pending
+                // A deferred downgrade may update renewal information without
+                // replacing the current transaction. Only signed state confirms it.
+                if productID == plusMonthlyProductID && currentTier == .supporter,
+                   let existing = Self.preferred(await store.currentEntitlements()) {
+                    await verify(existing, operation: .verification)
+                    if isChangeScheduled(to: productID) {
+                        status = .success(.supporter, operation: .planChange)
+                    } else if case .success = status {
+                        status = .pending
+                    }
+                }
             case .cancelled:
                 status = .ready
             }
         } catch is CancellationError {
             status = .ready
+        } catch SubscriptionStoreFailure.catalogueUnavailable {
+            catalogueIsCurrent = false
+            catalogueUnavailable = true
+            status = .failed(.productUnavailable)
         } catch {
             status = .failed(.purchase)
         }
@@ -98,6 +146,8 @@ final class SubscriptionCoordinator {
             let entitlements = await store.currentEntitlements()
             guard let preferred = Self.preferred(entitlements) else {
                 currentTier = nil
+                scheduledChange = nil
+                renewalInformationUnavailable = false
                 status = .failed(.noPurchasesToRestore)
                 return
             }
@@ -117,8 +167,9 @@ final class SubscriptionCoordinator {
         status = .verifying
         do {
             let result = try await verifier.verify(signedTransaction: transaction.signedTransaction, expectedUID: uid)
-            await store.finish(transactionID: transaction.id)
             currentTier = result.grantsAccess ? result.tier : nil
+            try await refreshScheduledChange(for: transaction)
+            await store.finish(transactionID: transaction.id)
             status = result.grantsAccess
                 ? .success(result.tier, operation: operation)
                 : .failed(operation == .restore ? .noPurchasesToRestore : .inactivePurchase)
@@ -131,7 +182,32 @@ final class SubscriptionCoordinator {
             case .purchase: status = .failed(.verification)
             case .restore: status = .failed(.restoreVerification)
             case .verification: status = .failed(.membershipVerification)
+            case .planChange: status = .failed(.membershipVerification)
             }
+        }
+    }
+
+    private func refreshScheduledChange(for transaction: StoreSignedTransaction) async throws {
+        guard currentTier == .supporter, let store, let uid,
+              let accountToken = SubscriptionAccountToken.forUID(uid) else {
+            scheduledChange = nil
+            renewalInformationUnavailable = false
+            return
+        }
+        if scheduledTransactionID != transaction.id { scheduledChange = nil }
+        do {
+            let candidate = try await store.scheduledChange(for: transaction, appAccountToken: accountToken)
+            try Task.checkCancellation()
+            scheduledChange = ScheduledSubscriptionChange.downgrade(
+                currentProductID: transaction.productID, nextProductID: candidate?.productID,
+                willAutoRenew: candidate != nil, effectiveAt: candidate?.effectiveAt, now: Date())
+            scheduledTransactionID = transaction.id
+            renewalInformationUnavailable = false
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // A temporary outage is not evidence that Apple cancelled the change.
+            renewalInformationUnavailable = true
         }
     }
 

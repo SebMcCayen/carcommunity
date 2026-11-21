@@ -8,6 +8,8 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -25,6 +27,38 @@ class SubscriptionScreenTest {
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+
+    @Test
+    fun scheduledDowngrade_showsDate_keepsSupporter_andDisablesDuplicateSwitch() {
+        var change by androidx.compose.runtime.mutableStateOf<ScheduledSubscriptionChange?>(
+            ScheduledSubscriptionChange("plus", java.time.Instant.now().plusSeconds(3600)))
+        composeTestRule.setContent {
+            KccTheme {
+                SubscriptionScreen(isActiveMember = true, currentTier = "supporter",
+                    status = PurchaseFlowStatus.Success("supporter", SubscriptionOperation.PlanChange),
+                    canSubscribe = true, canChangePlan = true, canManageSubscription = true,
+                    onSubscribe = {}, onManageSubscription = {}, onBack = {}, scheduledChange = change)
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.subscription_currentEntitlementSupporter)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag("membership_scheduled_change").assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.subscription_planChangeScheduledAction))
+            .performScrollTo().assertIsNotEnabled()
+        composeTestRule.onNodeWithText(str(R.string.subscription_statusSuccess)).assertDoesNotExist()
+        composeTestRule.runOnIdle { change = null }
+        composeTestRule.onNodeWithTag("membership_scheduled_change").assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.subscription_downgradePlusAction))
+            .performScrollTo().assertIsEnabled()
+    }
+
+    @Test
+    fun temporaryLoadingFailure_keepsBothPlanCardsVisible() {
+        setScreen(isActiveMember = true, currentTier = "supporter",
+            status = PurchaseFlowStatus.Failed(PurchaseFailureReason.Connection))
+        composeTestRule.onNodeWithTag("membership_plus").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("membership_supporter").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.subscription_currentPlanAction)).assertIsNotEnabled()
+    }
 
     @Test
     fun purchaseConfirmation_onlyAppearsForPurchase_thenRestoreAndRetryUseTheirOwnCopy() {

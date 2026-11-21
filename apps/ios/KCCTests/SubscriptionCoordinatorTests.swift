@@ -4,6 +4,109 @@ import Testing
 
 @Suite("StoreKit subscription flow")
 struct SubscriptionCoordinatorTests {
+    @Test("only a future Supporter-to-Plus renewal preference is a scheduled downgrade")
+    func scheduledChangePolicy() {
+        let now = Date()
+        let future = now.addingTimeInterval(3600)
+        #expect(ScheduledSubscriptionChange.downgrade(currentProductID: supporterMonthlyProductID,
+            nextProductID: plusMonthlyProductID, willAutoRenew: true, effectiveAt: future, now: now) != nil)
+        for target in [supporterMonthlyProductID, "unknown"] {
+            #expect(ScheduledSubscriptionChange.downgrade(currentProductID: supporterMonthlyProductID,
+                nextProductID: target, willAutoRenew: true, effectiveAt: future, now: now) == nil)
+        }
+        #expect(ScheduledSubscriptionChange.downgrade(currentProductID: supporterMonthlyProductID,
+            nextProductID: plusMonthlyProductID, willAutoRenew: false, effectiveAt: future, now: now) == nil)
+        #expect(ScheduledSubscriptionChange.downgrade(currentProductID: plusMonthlyProductID,
+            nextProductID: plusMonthlyProductID, willAutoRenew: true, effectiveAt: future, now: now) == nil)
+        #expect(ScheduledSubscriptionChange.downgrade(currentProductID: supporterMonthlyProductID,
+            nextProductID: plusMonthlyProductID, willAutoRenew: true, effectiveAt: now, now: now) == nil)
+    }
+
+    @Test("confirmed downgrade keeps Supporter and blocks another purchase of the scheduled plan")
+    @MainActor
+    func scheduledDowngrade() async {
+        let transaction = StoreSignedTransaction(id: 70, productID: supporterMonthlyProductID,
+            signedTransaction: "owned")
+        let store = FakeSubscriptionStore(purchaseResult: .purchased(transaction), entitlements: [transaction])
+        let verifier = FakeAppleVerifier(result: .success(SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: .supporter)))
+        let coordinator = SubscriptionCoordinator(uid: "member", store: store, verifier: verifier)
+        await coordinator.start()
+        let change = ScheduledSubscriptionChange(productID: plusMonthlyProductID,
+            effectiveAt: Date().addingTimeInterval(3600))
+        await store.setScheduledChange(.success(change))
+
+        await coordinator.purchase(plusMonthlyProductID)
+
+        #expect(coordinator.currentTier == .supporter)
+        #expect(coordinator.upcomingChange == change)
+        #expect(coordinator.isChangeScheduled(to: plusMonthlyProductID))
+        #expect(coordinator.status == .success(.supporter, operation: .planChange))
+        #expect(coordinator.status.messageKey == "subscription.statusChangeScheduled")
+        await coordinator.purchase(plusMonthlyProductID)
+        #expect(await store.purchaseCalls == 1)
+
+        // A temporary renewal lookup failure does not erase a confirmed change.
+        await store.setScheduledChange(.failure(TestError.failed))
+        await coordinator.reloadAndReconcile()
+        #expect(coordinator.upcomingChange == change)
+        #expect(coordinator.renewalInformationUnavailable)
+
+        // Apple cancellation of the downgrade removes its display and button lock.
+        await store.setScheduledChange(.success(nil))
+        await coordinator.reloadAndReconcile()
+        #expect(coordinator.upcomingChange == nil)
+        #expect(!coordinator.renewalInformationUnavailable)
+        #expect(!coordinator.isChangeScheduled(to: plusMonthlyProductID))
+
+        // The real renewal changes access only after the backend verifies Plus.
+        await store.setScheduledChange(.success(change))
+        await coordinator.reloadAndReconcile()
+        await store.setEntitlements([StoreSignedTransaction(id: 72, productID: plusMonthlyProductID,
+            signedTransaction: "renewed-plus")])
+        await verifier.setResult(.success(SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: .plus)))
+        await coordinator.reloadAndReconcile()
+        #expect(coordinator.currentTier == .plus)
+        #expect(coordinator.upcomingChange == nil)
+    }
+
+    @Test("catalogue refresh failure keeps displayed products and entitlement but pauses checkout")
+    @MainActor
+    func retainedCatalogueAfterFailure() async {
+        let transaction = StoreSignedTransaction(id: 71, productID: supporterMonthlyProductID,
+            signedTransaction: "owned")
+        let store = FakeSubscriptionStore(entitlements: [transaction])
+        let verifier = FakeAppleVerifier(result: .success(SubscriptionVerificationResult(
+            entitlement: "member_monthly", status: "active", tier: .supporter)))
+        let coordinator = SubscriptionCoordinator(uid: "member", store: store, verifier: verifier)
+        await coordinator.start()
+        let displayedProducts = coordinator.products
+        await store.setCatalogueUnavailable(true)
+
+        await coordinator.reloadAndReconcile()
+
+        #expect(coordinator.products == displayedProducts)
+        #expect(coordinator.currentTier == .supporter)
+        #expect(coordinator.catalogueUnavailable)
+        #expect(!coordinator.canPurchase)
+        await coordinator.purchase(plusMonthlyProductID)
+        #expect(await store.purchaseCalls == 0)
+
+        await store.setCatalogueUnavailable(false)
+        await coordinator.reloadAndReconcile()
+        #expect(!coordinator.catalogueUnavailable)
+        #expect(coordinator.canPurchase)
+
+        // A catalogue outage discovered by the mandatory pre-checkout query
+        // must also retain the cards and pause later checkout attempts.
+        await store.setPurchaseFailure(SubscriptionStoreFailure.catalogueUnavailable)
+        await coordinator.purchase(plusMonthlyProductID)
+        #expect(coordinator.products == displayedProducts)
+        #expect(coordinator.catalogueUnavailable)
+        #expect(!coordinator.canPurchase)
+        #expect(coordinator.currentTier == .supporter)
+    }
     @Test("account binding matches the backend UUID derivation")
     func accountToken() {
         #expect(SubscriptionAccountToken.forUID("member-apple-1")?.uuidString.lowercased() ==
@@ -328,8 +431,11 @@ struct SubscriptionCoordinatorTests {
 private actor FakeSubscriptionStore: SubscriptionStore {
     private let availableProducts: [StoreSubscriptionProduct]
     private let purchaseResult: StorePurchaseResult
-    private let entitlements: [StoreSignedTransaction]
-    private let catalogueUnavailable: Bool
+    private var entitlements: [StoreSignedTransaction]
+    private var catalogueUnavailable: Bool
+    private var scheduledResult: Result<ScheduledSubscriptionChange?, Error> = .success(nil)
+    private(set) var purchaseCalls = 0
+    private var purchaseFailure: Error?
     private let synchronizationFails: Bool
     private(set) var synchronizationCalls = 0
     private var unfinished: [StoreSignedTransaction]
@@ -363,10 +469,19 @@ private actor FakeSubscriptionStore: SubscriptionStore {
         return availableProducts
     }
     func purchase(productID: String, appAccountToken: UUID) async throws -> StorePurchaseResult {
+        purchaseCalls += 1
+        if let purchaseFailure { throw purchaseFailure }
         if case .purchased(let transaction) = purchaseResult { unfinished.append(transaction) }
         return purchaseResult
     }
     func currentEntitlements() async -> [StoreSignedTransaction] { entitlements }
+    func setEntitlements(_ value: [StoreSignedTransaction]) { entitlements = value }
+    func setCatalogueUnavailable(_ value: Bool) { catalogueUnavailable = value }
+    func setPurchaseFailure(_ value: Error?) { purchaseFailure = value }
+    func setScheduledChange(_ result: Result<ScheduledSubscriptionChange?, Error>) { scheduledResult = result }
+    func scheduledChange(for transaction: StoreSignedTransaction, appAccountToken: UUID) async throws -> ScheduledSubscriptionChange? {
+        try scheduledResult.get()
+    }
     func transactionUpdates() async -> AsyncStream<StoreSignedTransaction> { updates }
     func unfinishedTransactions() async -> [StoreSignedTransaction] {
         unfinishedReads += 1
@@ -381,13 +496,14 @@ private actor FakeSubscriptionStore: SubscriptionStore {
 }
 
 private actor FakeAppleVerifier: AppleSubscriptionVerifying {
-    private let result: Result<SubscriptionVerificationResult, Error>
+    private var result: Result<SubscriptionVerificationResult, Error>
     private(set) var calls = 0
     private(set) var signedTransactions: [String] = []
 
     init(result: Result<SubscriptionVerificationResult, Error>) {
         self.result = result
     }
+    func setResult(_ value: Result<SubscriptionVerificationResult, Error>) { result = value }
 
     func verify(signedTransaction: String, expectedUID: String) async throws -> SubscriptionVerificationResult {
         calls += 1

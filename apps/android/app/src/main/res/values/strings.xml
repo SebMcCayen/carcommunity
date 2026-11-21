@@ -320,6 +320,12 @@
     <string name="subscription_errorRestoreVerification">Dina köp hämtades från appbutiken, men medlemskapet kunde inte verifieras just nu. Försök igen.</string>
     <string name="subscription_errorMembershipVerification">Det gick inte att kontrollera ditt medlemskap just nu. Försök igen.</string>
     <string name="subscription_errorNoPurchasesToRestore">Inga aktiva prenumerationer kunde återställas. Kontrollera att du använder samma butikskonto som vid köpet.</string>
+    <string name="subscription_scheduledPlusBody">Byte till Plus är planerat till %1$s. Du behåller Supporter fram till dess.</string>
+    <string name="subscription_planChangeScheduledAction">Byte till Plus planerat</string>
+    <string name="subscription_statusChangeScheduled">Ditt byte till Plus är schemalagt.</string>
+    <string name="subscription_priceUnavailable">Priset är inte tillgängligt just nu.</string>
+    <string name="subscription_catalogueRefreshFailed">Butiksinformationen kunde inte uppdateras. Köp är tillfälligt pausade. Försök igen.</string>
+    <string name="subscription_renewalRefreshFailed">Det planerade bytet kunde inte kontrolleras just nu. Försök igen eller öppna Hantera medlemskap.</string>
     <string name="profile_title">Profil</string>
     <string name="profile_openSettings">Öppna inställningar</string>
     <string name="profile_openAbout">Öppna om appen</string>

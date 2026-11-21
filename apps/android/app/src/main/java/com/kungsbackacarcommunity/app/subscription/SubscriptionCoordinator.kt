@@ -32,6 +32,8 @@ class SubscriptionCoordinator(
 
     private val ownedPurchaseState = MutableStateFlow<OwnedPurchase?>(null)
     val ownedPurchase: StateFlow<OwnedPurchase?> = ownedPurchaseState.asStateFlow()
+    private val scheduledChangeState = MutableStateFlow<ScheduledSubscriptionChange?>(null)
+    val scheduledChange: StateFlow<ScheduledSubscriptionChange?> = scheduledChangeState.asStateFlow()
 
     /**
      * Runs the full flow for one immutable Play [productId]. [launchPurchase]
@@ -44,6 +46,8 @@ class SubscriptionCoordinator(
         launchPurchase: () -> PurchaseLaunchResult,
     ) {
         if (!PurchaseFlow.canStart(state.value)) return
+        if (productId == PLUS_MONTHLY_PRODUCT_ID &&
+            scheduledChangeState.value?.isUpcoming("supporter") == true) return
         if (productId !in SUBSCRIPTION_PRODUCT_IDS) {
             state.value = PurchaseFlow.failed(PurchaseFailureReason.ProductUnavailable)
             return
@@ -95,9 +99,14 @@ class SubscriptionCoordinator(
                         )
                     state.value = PurchaseFlowStatus.Verifying
                     val verified = verifier.verify(outcome.purchaseToken)
+                    scheduledChangeState.value = verified.scheduledChange?.takeIf {
+                verified.grantsAccess && it.isUpcoming(verified.tier)
+            }
                     state.value =
                         if (verified.grantsAccess) {
-                            PurchaseFlowStatus.Success(verified.tier)
+                            PurchaseFlowStatus.Success(verified.tier,
+                                if (productId == PLUS_MONTHLY_PRODUCT_ID && scheduledChangeState.value != null)
+                                    SubscriptionOperation.PlanChange else SubscriptionOperation.Purchase)
                         } else {
                             PurchaseFlow.failed(PurchaseFailureReason.InactivePurchase)
                         }
@@ -111,9 +120,14 @@ class SubscriptionCoordinator(
                         )
                     state.value = PurchaseFlowStatus.Verifying
                     val verified = verifier.verify(outcome.purchaseToken)
+                    scheduledChangeState.value = verified.scheduledChange?.takeIf {
+                verified.grantsAccess && it.isUpcoming(verified.tier)
+            }
                     state.value =
                         if (verified.grantsAccess) {
-                            PurchaseFlowStatus.Success(verified.tier)
+                            PurchaseFlowStatus.Success(verified.tier,
+                                if (productId == PLUS_MONTHLY_PRODUCT_ID && scheduledChangeState.value != null)
+                                    SubscriptionOperation.PlanChange else SubscriptionOperation.Purchase)
                         } else {
                             PurchaseFlowStatus.Pending
                         }
@@ -153,6 +167,7 @@ class SubscriptionCoordinator(
             val purchase = preferredPurchaseForReconciliation(billing.queryOwnedPurchases())
             ownedPurchaseState.value = purchase
             if (purchase == null) {
+                scheduledChangeState.value = null
                 state.value =
                     if (operation == SubscriptionOperation.Restore) {
                         PurchaseFlow.failed(PurchaseFailureReason.NoPurchasesToRestore)
@@ -161,6 +176,9 @@ class SubscriptionCoordinator(
             }
             state.value = PurchaseFlowStatus.Verifying
             val verified = verifier.verify(purchase.purchaseToken)
+            scheduledChangeState.value = verified.scheduledChange?.takeIf {
+                verified.grantsAccess && it.isUpcoming(verified.tier)
+            }
             state.value =
                 when {
                     verified.grantsAccess -> PurchaseFlowStatus.Success(verified.tier, operation)
@@ -185,5 +203,6 @@ class SubscriptionCoordinator(
 
     fun reset() {
         state.value = PurchaseFlowStatus.Idle
+        scheduledChangeState.value = null
     }
 }

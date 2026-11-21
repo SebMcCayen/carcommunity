@@ -3,6 +3,7 @@ import StoreKit
 
 struct MembershipScreen: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.locale) private var locale
     @State private var showingSubscriptions = false
 
     let access: AccountAccess
@@ -74,6 +75,13 @@ struct MembershipScreen: View {
             Text("subscription.currentPlanTitle").font(.headline)
             Text(currentEntitlementKey)
                 .foregroundStyle(KccTheme.secondary)
+            if let change = coordinator.upcomingChange {
+                Text(String.localizedStringWithFormat(
+                    NSLocalizedString("subscription.scheduledPlusBody", comment: ""),
+                    change.effectiveAt.formatted(.dateTime.year().month(.abbreviated).day().hour().minute().locale(locale))))
+                    .font(.footnote)
+                    .accessibilityIdentifier("membership.scheduledChange")
+            }
             Text("subscription.memberRequiredBody")
                 .font(.footnote)
                 .foregroundStyle(KccTheme.secondary)
@@ -110,21 +118,27 @@ struct MembershipScreen: View {
             if let product {
                 Text(String.localizedStringWithFormat(NSLocalizedString("iosStore.monthlyPrice", tableName: "AppStore", comment: "Store price and verified monthly duration"), product.displayPrice))
                     .font(.subheadline.weight(.semibold))
-                Button { Task { await coordinator.purchase(productID) } } label: {
-                    EditorSubmitLabel(title: isCurrent ? "subscription.currentPlanAction" : actionKey(for: productID))
-                }
-                .kccPrimaryAction()
-                .disabled(isCurrent || !coordinator.canPurchase || access.isRestricted)
-                .frame(maxWidth: .infinity, alignment: .leading)
             } else if coordinator.status == .loading {
                 ProgressView()
+            } else {
+                Text("subscription.priceUnavailable").font(.footnote)
             }
+            Button { Task { await coordinator.purchase(productID) } } label: {
+                EditorSubmitLabel(title: isCurrent ? "subscription.currentPlanAction" : actionKey(for: productID))
+            }
+            .kccPrimaryAction()
+            .disabled(isCurrent || coordinator.isChangeScheduled(to: productID)
+                || !coordinator.canPurchase || access.isRestricted)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .kccContentCard()
     }
 
     private func actionKey(for productID: String) -> LocalizedStringKey {
+        if coordinator.isChangeScheduled(to: productID) {
+            return "subscription.planChangeScheduledAction"
+        }
         if productID == supporterMonthlyProductID, coordinator.currentTier == .plus {
             return "subscription.upgradeSupporterAction"
         }
@@ -144,9 +158,18 @@ struct MembershipScreen: View {
                 .foregroundStyle(isFailure ? Color.red : Color.secondary)
                 .multilineTextAlignment(.center)
         }
-        if case .failed = coordinator.status {
+        if coordinator.catalogueUnavailable {
+            Text("subscription.catalogueRefreshFailed").font(.footnote)
+                .foregroundStyle(KccTheme.secondary)
+        }
+        if coordinator.renewalInformationUnavailable {
+            Text("subscription.renewalRefreshFailed").font(.footnote)
+                .foregroundStyle(KccTheme.secondary)
+        }
+        if isFailure || coordinator.catalogueUnavailable || coordinator.renewalInformationUnavailable {
             Button { Task { await coordinator.reloadAndReconcile() } } label: { Text("notifications.retry").frame(minHeight: 48) }
             .buttonStyle(.bordered)
+            .disabled(coordinator.status.isBusy)
         }
     }
 

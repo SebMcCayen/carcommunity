@@ -39237,6 +39237,23 @@
         }
       }
     },
+    "subscription.catalogueRefreshFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Butiksinformationen kunde inte uppdateras. Köp är tillfälligt pausade. Försök igen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Store information could not be refreshed. Purchases are temporarily paused. Please try again."
+          }
+        }
+      }
+    },
     "subscription.changePlanBody": {
       "extractionState": "manual",
       "localizations": {
@@ -39645,6 +39662,23 @@
         }
       }
     },
+    "subscription.planChangeScheduledAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byte till Plus planerat"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to Plus scheduled"
+          }
+        }
+      }
+    },
     "subscription.plusBody": {
       "extractionState": "manual",
       "localizations": {
@@ -39696,6 +39730,23 @@
         }
       }
     },
+    "subscription.priceUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Priset är inte tillgängligt just nu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The price is currently unavailable."
+          }
+        }
+      }
+    },
     "subscription.purchaseHandledExternally": {
       "extractionState": "manual",
       "localizations": {
@@ -39709,6 +39760,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Subscriptions are purchased through the App Store or Google Play."
+          }
+        }
+      }
+    },
+    "subscription.renewalRefreshFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det planerade bytet kunde inte kontrolleras just nu. Försök igen eller öppna Hantera medlemskap."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your scheduled change could not be checked right now. Try again or open Manage membership."
           }
         }
       }
@@ -39730,6 +39798,23 @@
         }
       }
     },
+    "subscription.scheduledPlusBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byte till Plus är planerat till %1$@. Du behåller Supporter fram till dess."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your switch to Plus is scheduled for %1$@. You keep Supporter until then."
+          }
+        }
+      }
+    },
     "subscription.screenTitle": {
       "extractionState": "manual",
       "localizations": {
@@ -39743,6 +39828,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Membership"
+          }
+        }
+      }
+    },
+    "subscription.statusChangeScheduled": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ditt byte till Plus är schemalagt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your switch to Plus is scheduled."
           }
         }
       }
