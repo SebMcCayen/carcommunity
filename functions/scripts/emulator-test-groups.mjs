@@ -98,7 +98,7 @@ export const GROUPS = [
     ],
   },
   {
-    name: 'Crown Hunt, Points, Badges, Incidents & Partners',
+    name: 'Crown Hunt, Points, Badges & Incidents',
     patterns: [
       'crownhunt*',
       'crown-allowance',
@@ -112,9 +112,6 @@ export const GROUPS = [
       'quota',
       'police',
       'phase11',
-      'partner*',
-      'insights',
-      'billboards',
       'diagnostics',
       'errors',
       'serverErrors',
@@ -123,6 +120,14 @@ export const GROUPS = [
       'metrics',
       'finance',
     ],
+  },
+  {
+    // The Functions emulator retains workers per invoked function. Give
+    // Partner transports their own fresh emulator lifecycle instead of
+    // accumulating them alongside the Crown/Points workers. The coverage
+    // guard still requires every test file exactly once across all groups.
+    name: 'Partners, Insights & Billboards',
+    patterns: ['partner*', 'insights', 'billboards'],
   },
 ];
 

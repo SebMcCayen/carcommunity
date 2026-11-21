@@ -77,7 +77,9 @@ describe('resolveTestFileArgs', () => {
 
   it('forwards a group file list as positional vitest args', () => {
     expect(
-      resolveTestFileArgs({ KCC_TEST_FILES: 'src/__tests__/a.emulator.test.ts src/__tests__/b.emulator.test.ts' }),
+      resolveTestFileArgs({
+        KCC_TEST_FILES: 'src/__tests__/a.emulator.test.ts src/__tests__/b.emulator.test.ts',
+      }),
     ).toEqual({ args: ['src/__tests__/a.emulator.test.ts', 'src/__tests__/b.emulator.test.ts'] });
   });
 
@@ -120,5 +122,21 @@ describe('emulator test-file group partition (coverage guard)', () => {
       expect(g.files.length).toBeGreaterThan(0);
     }
     expect(groups.length).toBe(GROUPS.length);
+  });
+
+  it('keeps Partner transport and Crown/Points in separate emulator suites', () => {
+    const partners = groups.find((group) =>
+      group.files.includes('src/__tests__/billboards.emulator.test.ts'),
+    );
+    const crown = groups.find((group) =>
+      group.files.includes('src/__tests__/points.emulator.test.ts'),
+    );
+    expect(partners).toBeDefined();
+    expect(crown).toBeDefined();
+    expect(partners?.name).not.toBe(crown?.name);
+    for (const file of ['insights', 'partner-consent', 'partner-portal-transport']) {
+      expect(partners?.files).toContain(`src/__tests__/${file}.emulator.test.ts`);
+    }
+    expect(crown?.files).toContain('src/__tests__/crownhunt.emulator.test.ts');
   });
 });
