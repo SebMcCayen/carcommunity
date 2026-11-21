@@ -268,6 +268,48 @@
         }
       ],
       "additionalProperties": false
+    },
+    "scheduledSubscriptionChange": {
+      "type": "object",
+      "description": "Optional display-only store-verified Supporter to Plus replacement. Does not grant Plus before effectiveAt or revoke current Supporter access.",
+      "properties": {
+        "tier": {
+          "const": "plus"
+        },
+        "effectiveAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "tier",
+        "effectiveAt"
+      ],
+      "additionalProperties": false
+    },
+    "verifySubscriptionResponse": {
+      "type": "object",
+      "description": "Backward-compatible result of subscription.verify. scheduledChange is optional and currently supplied for Google Play deferred replacements; iOS reads verified StoreKit renewal information.",
+      "properties": {
+        "entitlement": {
+          "$ref": "#/$defs/subscriptionEntitlement"
+        },
+        "status": {
+          "$ref": "#/$defs/subscriptionStatus"
+        },
+        "tier": {
+          "$ref": "#/$defs/subscriptionTier"
+        },
+        "scheduledChange": {
+          "$ref": "#/$defs/scheduledSubscriptionChange"
+        }
+      },
+      "required": [
+        "entitlement",
+        "status",
+        "tier"
+      ],
+      "additionalProperties": false
     }
   }
 }

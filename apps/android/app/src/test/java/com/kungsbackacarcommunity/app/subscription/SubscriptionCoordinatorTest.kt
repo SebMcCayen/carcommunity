@@ -9,6 +9,35 @@ import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class SubscriptionCoordinatorTest {
+    @Test
+    fun `verified deferred downgrade retains Supporter and prevents duplicate plan changes`() = runTest {
+        val billing = FakeBilling(owned = listOf(OwnedPurchase(
+            "supporter", setOf(SUPPORTER_MONTHLY_PRODUCT_ID), OwnedPurchaseState.Purchased)))
+        val verifier = FakeVerifier(shouldFail = false, tier = "supporter")
+        val coordinator = SubscriptionCoordinator(billing, verifier)
+        coordinator.reconcileOwnedPurchases()
+        val change = ScheduledSubscriptionChange("plus", java.time.Instant.now().plusSeconds(3600))
+        verifier.scheduled = change
+
+        coordinator.subscribe(PLUS_MONTHLY_PRODUCT_ID) {
+            billing.emitPurchase("replacement")
+            PurchaseLaunchResult.Launched
+        }
+
+        assertEquals(PurchaseFlowStatus.Success("supporter", SubscriptionOperation.PlanChange), coordinator.status.value)
+        assertEquals(change, coordinator.scheduledChange.value)
+        var duplicateLaunches = 0
+        coordinator.subscribe(PLUS_MONTHLY_PRODUCT_ID) { duplicateLaunches++; PurchaseLaunchResult.Launched }
+        assertEquals(0, duplicateLaunches)
+
+        billing.queryFails = true
+        coordinator.reconcileOwnedPurchases()
+        assertEquals(change, coordinator.scheduledChange.value)
+        billing.queryFails = false
+        verifier.scheduled = null
+        coordinator.reconcileOwnedPurchases()
+        assertEquals(null, coordinator.scheduledChange.value)
+    }
 
     @Test
     fun `happy path reaches Success and verifies the surfaced token`() = runTest {
@@ -310,6 +339,7 @@ private class FakeVerifier(
     private val grantsAccess: Boolean = true,
     private val tier: String = "plus",
 ) : SubscriptionVerifier {
+    var scheduled: ScheduledSubscriptionChange? = null
     var verifiedToken: String? = null
         private set
 
@@ -317,7 +347,7 @@ private class FakeVerifier(
         verifiedToken = purchaseToken
         if (shouldFail) throw IllegalStateException("verify failed closed")
         return if (grantsAccess) {
-                SubscriptionVerificationResult("member_monthly", "active", tier)
+                SubscriptionVerificationResult("member_monthly", "active", tier, scheduled)
             } else {
                 SubscriptionVerificationResult("none", "inactive", "plus")
             }

@@ -350,7 +350,13 @@
     "errorRestore": "Your purchases could not be restored from the app store. Please try again.",
     "errorRestoreVerification": "Your purchases were retrieved from the app store, but your membership could not be verified right now. Please try again.",
     "errorMembershipVerification": "Your membership could not be checked right now. Please try again.",
-    "errorNoPurchasesToRestore": "No active subscriptions could be restored. Check that you are using the same store account as when you purchased."
+    "errorNoPurchasesToRestore": "No active subscriptions could be restored. Check that you are using the same store account as when you purchased.",
+    "scheduledPlusBody": "Your switch to Plus is scheduled for %1$s. You keep Supporter until then.",
+    "planChangeScheduledAction": "Switch to Plus scheduled",
+    "statusChangeScheduled": "Your switch to Plus is scheduled.",
+    "priceUnavailable": "The price is currently unavailable.",
+    "catalogueRefreshFailed": "Store information could not be refreshed. Purchases are temporarily paused. Please try again.",
+    "renewalRefreshFailed": "Your scheduled change could not be checked right now. Try again or open Manage membership."
   },
   "profile": {
     "title": "Profile",

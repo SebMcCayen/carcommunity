@@ -75,6 +75,7 @@ export interface VerifySubscriptionResponse {
   entitlement: string;
   status: string;
   tier: SubscriptionTier;
+  scheduledChange?: { tier: 'plus'; effectiveAt: string };
 }
 
 export const verify = onCall(
@@ -203,6 +204,14 @@ export const verify = onCall(
         entitlement: outcome.entitlement,
         status: outcome.status,
         tier: outcome.tier,
+        ...(outcome.scheduledChange
+          ? {
+              scheduledChange: {
+                tier: outcome.scheduledChange.tier,
+                effectiveAt: outcome.scheduledChange.effectiveAt.toISOString(),
+              },
+            }
+          : {}),
       };
     } catch (error) {
       // Never interpolate provider errors: HTTP clients commonly include the

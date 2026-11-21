@@ -350,7 +350,13 @@
     "errorRestore": "Det gick inte att återställa dina köp från appbutiken. Försök igen.",
     "errorRestoreVerification": "Dina köp hämtades från appbutiken, men medlemskapet kunde inte verifieras just nu. Försök igen.",
     "errorMembershipVerification": "Det gick inte att kontrollera ditt medlemskap just nu. Försök igen.",
-    "errorNoPurchasesToRestore": "Inga aktiva prenumerationer kunde återställas. Kontrollera att du använder samma butikskonto som vid köpet."
+    "errorNoPurchasesToRestore": "Inga aktiva prenumerationer kunde återställas. Kontrollera att du använder samma butikskonto som vid köpet.",
+    "scheduledPlusBody": "Byte till Plus är planerat till %1$s. Du behåller Supporter fram till dess.",
+    "planChangeScheduledAction": "Byte till Plus planerat",
+    "statusChangeScheduled": "Ditt byte till Plus är schemalagt.",
+    "priceUnavailable": "Priset är inte tillgängligt just nu.",
+    "catalogueRefreshFailed": "Butiksinformationen kunde inte uppdateras. Köp är tillfälligt pausade. Försök igen.",
+    "renewalRefreshFailed": "Det planerade bytet kunde inte kontrolleras just nu. Försök igen eller öppna Hantera medlemskap."
   },
   "profile": {
     "title": "Profil",

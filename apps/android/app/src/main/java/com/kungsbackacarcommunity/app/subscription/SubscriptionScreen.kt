@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import androidx.compose.ui.platform.LocalConfiguration
+import java.text.DateFormat
+import java.util.Date
 
 /**
  * Subscription / membership purchase screen (Phase 12 slice 24). Shows the current membership
@@ -53,8 +56,11 @@ fun SubscriptionScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onRestore: (() -> Unit)? = null,
+    scheduledChange: ScheduledSubscriptionChange? = null,
 ) {
     val paidTier = currentTier?.takeIf { it == "plus" || it == "supporter" }
+    val upcoming = scheduledChange?.takeIf { it.isUpcoming(paidTier) }
+    val locale = LocalConfiguration.current.locales[0]
     val hasPaidMembership = isActiveMember || paidTier != null
     val currentProductId =
         when (paidTier) {
@@ -90,6 +96,17 @@ fun SubscriptionScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (upcoming != null) {
+                    val date = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale)
+                        .format(Date.from(upcoming.effectiveAt))
+                    Text(
+                        text = stringResource(R.string.subscription_scheduledPlusBody, date),
+                        modifier = Modifier.testTag("membership_scheduled_change")
+                            .semantics { liveRegion = LiveRegionMode.Polite },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     text = stringResource(R.string.subscription_memberRequiredBody),
                     style = MaterialTheme.typography.bodySmall,
@@ -145,11 +162,12 @@ fun SubscriptionScreen(
                 stringResource(
                     when (paidTier) {
                         "plus" -> R.string.subscription_currentPlanAction
-                        "supporter" -> R.string.subscription_downgradePlusAction
+                        "supporter" -> if (upcoming != null) R.string.subscription_planChangeScheduledAction
+                            else R.string.subscription_downgradePlusAction
                         else -> R.string.subscription_subscribePlusAction
                     }
                 ),
-            enabled = canStartNewPurchase && paidTier != "plus",
+            enabled = canStartNewPurchase && paidTier != "plus" && upcoming == null,
             onClick = { onSubscribe(PLUS_MONTHLY_PRODUCT_ID) },
         )
 
@@ -278,6 +296,7 @@ private fun statusTextRes(status: PurchaseFlowStatus): Int? =
             SubscriptionOperation.Purchase -> R.string.subscription_statusSuccess
             SubscriptionOperation.Restore -> R.string.subscription_statusRestored
             SubscriptionOperation.Verification -> R.string.subscription_statusVerified
+            SubscriptionOperation.PlanChange -> R.string.subscription_statusChangeScheduled
         }
         PurchaseFlowStatus.Pending -> R.string.subscription_statusPending
         is PurchaseFlowStatus.Failed ->

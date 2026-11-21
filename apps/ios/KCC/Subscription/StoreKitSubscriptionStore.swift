@@ -6,7 +6,15 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
     private var transactionsByID: [UInt64: Transaction] = [:]
 
     func products() async throws -> [StoreSubscriptionProduct] {
-        let products = try await Product.products(for: subscriptionProductIDs)
+        let fetched: [Product]
+        do {
+            fetched = try await Product.products(for: subscriptionProductIDs)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw SubscriptionStoreFailure.catalogueUnavailable
+        }
+        let products = fetched
             .sorted { subscriptionProductIDs.firstIndex(of: $0.id) ?? .max <
                 subscriptionProductIDs.firstIndex(of: $1.id) ?? .max }
         guard StoreCatalogPolicy.permits(products.map { product in
@@ -16,8 +24,7 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
                 groupID: product.subscription?.subscriptionGroupID)
         })
         else {
-            productsByID = [:]
-            throw StoreKitSubscriptionError.productUnavailable
+            throw SubscriptionStoreFailure.catalogueUnavailable
         }
         productsByID = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
         return products.map { StoreSubscriptionProduct(id: $0.id, displayPrice: $0.displayPrice) }
@@ -43,7 +50,8 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
                     appAccountToken: transaction.appAccountToken,
                     expiresAt: transaction.expirationDate,
                     isRevoked: transaction.revocationDate != nil,
-                    isUpgraded: transaction.isUpgraded
+                    isUpgraded: transaction.isUpgraded,
+                originalID: transaction.originalID, subscriptionGroupID: transaction.subscriptionGroupID
                 ))
             case .unverified:
                 throw StoreKitSubscriptionError.unverifiedTransaction
@@ -71,7 +79,8 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
                 appAccountToken: transaction.appAccountToken,
                 expiresAt: transaction.expirationDate,
                 isRevoked: transaction.revocationDate != nil,
-                isUpgraded: transaction.isUpgraded
+                isUpgraded: transaction.isUpgraded,
+                originalID: transaction.originalID, subscriptionGroupID: transaction.subscriptionGroupID
             ))
         }
         return values
@@ -88,6 +97,30 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
         }
         continuation.onTermination = { _ in task.cancel() }
         return stream
+    }
+
+    func scheduledChange(for transaction: StoreSignedTransaction, appAccountToken: UUID) async throws -> ScheduledSubscriptionChange? {
+        guard transaction.appAccountToken == appAccountToken,
+              let originalID = transaction.originalID,
+              let groupID = transaction.subscriptionGroupID else { return nil }
+        let statuses = try await Product.SubscriptionInfo.status(for: groupID)
+        for status in statuses {
+            guard case .verified(let current) = status.transaction,
+                  case .verified(let renewal) = status.renewalInfo else {
+                throw StoreKitSubscriptionError.unverifiedTransaction
+            }
+            guard current.id == transaction.id, current.originalID == originalID,
+                  current.appAccountToken == appAccountToken,
+                  renewal.originalTransactionID == originalID,
+                  renewal.currentProductID == current.productID,
+                  current.revocationDate == nil, !current.isUpgraded,
+                  current.expirationDate.map({ $0 > Date() }) == true else { continue }
+            return ScheduledSubscriptionChange.downgrade(
+                currentProductID: current.productID, nextProductID: renewal.autoRenewPreference,
+                willAutoRenew: renewal.willAutoRenew,
+                effectiveAt: renewal.renewalDate ?? current.expirationDate, now: Date())
+        }
+        return nil
     }
 
     func unfinishedTransactions() async -> [StoreSignedTransaction] {
@@ -107,7 +140,8 @@ actor StoreKitSubscriptionStore: SubscriptionStore {
                                       appAccountToken: transaction.appAccountToken,
                                       expiresAt: transaction.expirationDate,
                                       isRevoked: transaction.revocationDate != nil,
-                                      isUpgraded: transaction.isUpgraded)
+                                      isUpgraded: transaction.isUpgraded,
+                                      originalID: transaction.originalID, subscriptionGroupID: transaction.subscriptionGroupID)
     }
 
     func synchronize() async throws {

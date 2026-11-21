@@ -62,6 +62,34 @@ final class StoreKitSubscriptionIntegrationTests: XCTestCase {
         XCTFail("Refunded membership remained in current entitlements")
     }
 
+    func testVerifiedScheduledDowngradeKeepsCurrentSupporter() async throws {
+        let session = try session()
+        defer { session.clearTransactions() }
+        let store = StoreKitSubscriptionStore()
+        let token = try XCTUnwrap(SubscriptionAccountToken.forUID("storekit-scheduled-test"))
+        guard case .purchased = try await store.purchase(productID: supporterMonthlyProductID, appAccountToken: token) else {
+            return XCTFail("Expected Supporter before the deferred downgrade")
+        }
+        let current = try await waitForEntitlement(store) { $0.productID == supporterMonthlyProductID }
+        let initial = try await store.scheduledChange(for: current, appAccountToken: token)
+        XCTAssertNil(initial)
+        let otherToken = try XCTUnwrap(SubscriptionAccountToken.forUID("other-account"))
+        let unrelated = try await store.scheduledChange(for: current, appAccountToken: otherToken)
+        XCTAssertNil(unrelated)
+
+        _ = try await store.purchase(productID: plusMonthlyProductID, appAccountToken: token)
+        var scheduled: ScheduledSubscriptionChange?
+        for _ in 0..<100 {
+            scheduled = try await store.scheduledChange(for: current, appAccountToken: token)
+            if scheduled != nil { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(scheduled?.productID, plusMonthlyProductID)
+        XCTAssertEqual(scheduled?.effectiveAt, current.expiresAt)
+        let retained = await store.currentEntitlements()
+        XCTAssertTrue(retained.contains { $0.productID == supporterMonthlyProductID })
+    }
+
     func testPendingPurchaseAndApproval() async throws {
         let session = try session()
         defer { session.clearTransactions() }

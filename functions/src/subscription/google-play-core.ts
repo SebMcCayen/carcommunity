@@ -50,6 +50,8 @@ export interface GooglePlayEntitlementOutcome {
   acknowledgementRequired: boolean;
   /** SHA-256 of Play's old token for a verified upgrade/downgrade. */
   linkedPurchaseTokenHash: string | null;
+  /** Display-only deferred replacement; never changes current entitlement. */
+  scheduledChange?: { tier: 'plus'; effectiveAt: Date };
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -181,6 +183,19 @@ export function parseGooglePlaySubscription(
   const nowMs = now.getTime();
   const expiryMs = expiresAt?.getTime() ?? null;
   const futureExpiry = expiryMs !== null && expiryMs > nowMs;
+  const line = value.lineItems.length === 1 ? value.lineItems[0] : null;
+  const scheduledChange =
+    productId === SUPPORTER_MONTHLY_PRODUCT_ID &&
+    state === 'SUBSCRIPTION_STATE_ACTIVE' &&
+    futureExpiry &&
+    expiresAt &&
+    isRecord(line) &&
+    isRecord(line.autoRenewingPlan) &&
+    line.autoRenewingPlan.autoRenewEnabled === true &&
+    isRecord(line.deferredItemReplacement) &&
+    line.deferredItemReplacement.productId === PLUS_MONTHLY_PRODUCT_ID
+      ? { tier: 'plus' as const, effectiveAt: expiresAt }
+      : undefined;
 
   switch (state) {
     case 'SUBSCRIPTION_STATE_ACTIVE':
@@ -194,6 +209,7 @@ export function parseGooglePlaySubscription(
         expiresAt,
         acknowledgementRequired,
         linkedPurchaseTokenHash,
+        ...(scheduledChange ? { scheduledChange } : {}),
       };
     case 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD':
       if (!futureExpiry) malformed('Grace-period Play subscription has no future expiry.');

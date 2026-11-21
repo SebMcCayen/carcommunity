@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.subscription
 
 import java.security.MessageDigest
+import java.time.Instant
 
 /**
  * Pure Kotlin core for the subscriptions slice (Phase 12 slice 24). No Android
@@ -44,10 +45,16 @@ fun buildVerifyPayload(purchaseToken: String): Map<String, Any?> =
         "purchaseToken" to purchaseToken,
     )
 
+data class ScheduledSubscriptionChange(val tier: String, val effectiveAt: Instant) {
+    fun isUpcoming(currentTier: String?, now: Instant = Instant.now()): Boolean =
+        currentTier == "supporter" && tier == "plus" && effectiveAt.isAfter(now)
+}
+
 data class SubscriptionVerificationResult(
     val entitlement: String,
     val status: String,
     val tier: String,
+    val scheduledChange: ScheduledSubscriptionChange? = null,
 ) {
     val grantsAccess: Boolean
         get() =
@@ -70,7 +77,15 @@ fun parseVerificationResult(value: Any?): SubscriptionVerificationResult {
     if (entitlement == "member_monthly" && tier == "community") {
         error("Paid entitlement cannot use Community tier")
     }
-    return SubscriptionVerificationResult(entitlement, status, tier)
+    val change = data["scheduledChange"] as? Map<*, *>
+    val effectiveAt = (change?.get("effectiveAt") as? String)?.let {
+        runCatching { Instant.parse(it) }.getOrNull()
+    }
+    val scheduled = if (entitlement == "member_monthly" && status == "active" &&
+        tier == "supporter" && change?.get("tier") == "plus" && effectiveAt != null) {
+        ScheduledSubscriptionChange("plus", effectiveAt).takeIf { it.isUpcoming(tier) }
+    } else null
+    return SubscriptionVerificationResult(entitlement, status, tier, scheduled)
 }
 
 /** Picks one authoritative-looking owned purchase and avoids lower-tier overwrite races. */
@@ -127,7 +142,7 @@ enum class PurchaseFailureReason {
  * (Idle → Connecting → Ready → Purchasing → Verifying → Success) with a
  * [Failed] terminal that carries the [PurchaseFailureReason].
  */
-enum class SubscriptionOperation { Purchase, Restore, Verification }
+enum class SubscriptionOperation { Purchase, Restore, Verification, PlanChange }
 
 sealed interface PurchaseFlowStatus {
     data object Idle : PurchaseFlowStatus

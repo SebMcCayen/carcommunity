@@ -320,6 +320,12 @@
     <string name="subscription_errorRestoreVerification">Your purchases were retrieved from the app store, but your membership could not be verified right now. Please try again.</string>
     <string name="subscription_errorMembershipVerification">Your membership could not be checked right now. Please try again.</string>
     <string name="subscription_errorNoPurchasesToRestore">No active subscriptions could be restored. Check that you are using the same store account as when you purchased.</string>
+    <string name="subscription_scheduledPlusBody">Your switch to Plus is scheduled for %1$s. You keep Supporter until then.</string>
+    <string name="subscription_planChangeScheduledAction">Switch to Plus scheduled</string>
+    <string name="subscription_statusChangeScheduled">Your switch to Plus is scheduled.</string>
+    <string name="subscription_priceUnavailable">The price is currently unavailable.</string>
+    <string name="subscription_catalogueRefreshFailed">Store information could not be refreshed. Purchases are temporarily paused. Please try again.</string>
+    <string name="subscription_renewalRefreshFailed">Your scheduled change could not be checked right now. Try again or open Manage membership.</string>
     <string name="profile_title">Profile</string>
     <string name="profile_openSettings">Open settings</string>
     <string name="profile_openAbout">Open about app</string>

@@ -4,7 +4,7 @@ import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -13,6 +13,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.launch
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /**
  * Subscription integration route (Phase 12 slice 24): wires the billing repository + verifier into
@@ -37,9 +40,10 @@ fun SubscriptionRoute(
     val activity: Activity? = LocalActivity.current
     val context = LocalContext.current
     val managementUnavailableMessage = stringResource(R.string.subscription_manageUnavailable)
-    val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
+    val coordinator = remember(billing, verifier, uid) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
     val ownedPurchase by coordinator.ownedPurchase.collectAsState()
+    val scheduledChange by coordinator.scheduledChange.collectAsState()
     val scope = rememberCoroutineScope()
     val obfuscatedAccountId = remember(uid) { obfuscatedAccountIdForUid(uid) }
     val verifiedTier = (status as? PurchaseFlowStatus.Success)?.tier
@@ -67,14 +71,24 @@ fun SubscriptionRoute(
             ownedProductId != null &&
             ownedProductId == currentProductId
 
-    // Restore/reconcile on every route entry. Play owns the purchase history;
-    // no raw token is persisted locally, and reinstall/renewal needs no checkout.
-    LaunchedEffect(coordinator, uid) { coordinator.reconcileOwnedPurchases() }
+    // Lifecycle observers receive the current resumed state on registration.
+    // Refresh on entry and return from Play management, without a second request.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, coordinator) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch { coordinator.reconcileOwnedPurchases() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     SubscriptionScreen(
         isActiveMember = isActiveMember,
         currentTier = currentTier,
         status = status,
+        scheduledChange = scheduledChange,
         canSubscribe = activity != null && verifier != null,
         canChangePlan = canChangePlan,
         canManageSubscription = canManageSubscription,
