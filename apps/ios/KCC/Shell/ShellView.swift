@@ -1353,8 +1353,13 @@ struct ShellView: View {
             VStack(spacing: KccSpacing.s3) {
                 HStack(alignment: .top, spacing: 0) {
                     Spacer(minLength: 0)
-                    ScrollView(.vertical) { mapCommunicationControls }
-                        .scrollBounceBehavior(.basedOnSize)
+                    // A full-height scroll view intercepts a pinch that starts on
+                    // the map below the last button. Only scroll when the tools overflow.
+                    ViewThatFits(in: .vertical) {
+                        mapCommunicationControls.fixedSize(horizontal: false, vertical: true)
+                        ScrollView(.vertical) { mapCommunicationControls }
+                            .scrollBounceBehavior(.basedOnSize)
+                    }
                     .frame(width: 48 + KccSpacing.s4 * 2)
                 }
             }

@@ -1,5 +1,45 @@
 import SwiftUI
 
+/// The map owns the touches. Once it recognizes a tap, resolve the frontmost
+/// interactive badge at its displayed position (which can differ from its anchor).
+struct MapMarkerTapTarget {
+    let frame: CGRect
+    let select: @MainActor () -> Void
+}
+
+struct MapMarkerTapTargets: PreferenceKey {
+    static var defaultValue: [MapMarkerTapTarget] { [] }
+    static func reduce(value: inout [MapMarkerTapTarget], nextValue: () -> [MapMarkerTapTarget]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+struct MapTapMarker<Label: View>: View {
+    let center: CGPoint
+    let interactive: Bool
+    let accessibilityLabel: String
+    let identifier: String
+    let select: @MainActor () -> Void
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        let side: CGFloat = 48
+        let frame = CGRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side)
+        label()
+            .frame(width: side, height: side)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: accessibilityLabel))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { select() }
+            .accessibilityIdentifier(identifier)
+            .accessibilityHidden(!interactive)
+            .position(center)
+            .preference(key: MapMarkerTapTargets.self,
+                        value: interactive ? [MapMarkerTapTarget(frame: frame, select: select)] : [])
+    }
+}
+
 struct MapDensityContentItem: Identifiable, Equatable {
     let item: MapDensityItem
     let label: String
@@ -41,7 +81,7 @@ struct MapDensityOverlay: View {
                     let value = present.value
                     ZStack {
                         marker(value.group, entry: value.entry, lookup: lookup, projected: value.projected,
-                            position: value.position, opacity: present.alpha)
+                            position: value.position, opacity: present.alpha, interactive: present.interactive)
                     }
                 }
                 .onChange(of: input, initial: true) { _, value in
@@ -49,6 +89,7 @@ struct MapDensityOverlay: View {
                 }
             }
         }
+        .allowsHitTesting(false)
         .onChange(of: surface.cameraSnapshot?.zoom, initial: true) { _, value in
             bucket = zoom.update(value ?? 14)
         }
@@ -75,7 +116,8 @@ struct MapDensityOverlay: View {
     }
 
     @ViewBuilder private func marker(_ group: MapDensityGroup, entry: MapDensityContentItem,
-        lookup: [String: MapDensityContentItem], projected: MapScreenPoint, position: MapDensityScreenPoint, opacity: Double) -> some View {
+        lookup: [String: MapDensityContentItem], projected: MapScreenPoint, position: MapDensityScreenPoint, opacity: Double,
+        interactive: Bool) -> some View {
         let anchor = MapDensityScreenPoint(x: projected.x, y: projected.y)
         if position != anchor {
             Path { path in
@@ -85,18 +127,16 @@ struct MapDensityOverlay: View {
             Circle().fill(.white.opacity(opacity)).frame(width: 4, height: 4).position(x: anchor.x, y: anchor.y)
                 .allowsHitTesting(false)
         }
-        Button {
-            let current = group.members.compactMap { lookup[$0.id] }
-            if group.count > 1 { onGroup(current) } else { onSelect(entry) }
-        } label: {
+        MapTapMarker(center: CGPoint(x: position.x, y: position.y), interactive: interactive,
+                     accessibilityLabel: group.count > 1 ? groupLabel(group) : entry.label,
+                     identifier: "map.density." + group.id, select: {
+            if group.count > 1 { onGroup(group.members.compactMap { lookup[$0.id] }) }
+            else { onSelect(entry) }
+        }) {
             if group.count > 1 { MapDensityBadge(group: group, entry: entry, mapMode: surface.mapMode) }
             else { MapDensityGlyph(entry: entry, mapMode: surface.mapMode) }
         }
-        .buttonStyle(.plain)
-        .frame(width: 48, height: 48).contentShape(Rectangle())
-        .accessibilityLabel(group.count > 1 ? groupLabel(group) : entry.label)
-        .accessibilityIdentifier("map.density." + group.id)
-        .opacity(opacity).position(x: position.x, y: position.y)
+        .opacity(opacity)
     }
 
     private func groupLabel(_ group: MapDensityGroup) -> String {

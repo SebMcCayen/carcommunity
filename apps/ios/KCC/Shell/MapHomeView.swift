@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import MapboxMaps
 import CoreLocation
@@ -500,6 +501,8 @@ struct MapHomeView: View {
     private let featureHealthReporter: FeatureHealthReporter?
     private let markers: AnyView
     @State private var renderWatchdog: MapRenderWatchdog
+    @State private var markerTaps = PassthroughSubject<CGPoint, Never>()
+    @State private var placeholderZoomDirection = ""
     @State private var placeholderTapCount = 0
     @State private var placeholderPanCount = 0
 
@@ -531,7 +534,8 @@ struct MapHomeView: View {
                     locationProvider: locationProvider,
                     basemap: basemap,
                     bottomClearance: bottomClearance,
-                    markers: markers,
+                    markers: markerOverlay,
+                    onMapTap: { markerTaps.send($0) },
                     onLoadingError: { kind in
                         featureHealthReporter?.report(
                             kind,
@@ -547,7 +551,7 @@ struct MapHomeView: View {
                 }
             } else {
                 mapPlaceholder
-                    .overlay { markers }
+                    .overlay { markerOverlay }
                     .ignoresSafeArea(edges: .top)
             }
         }
@@ -596,6 +600,16 @@ struct MapHomeView: View {
         }
     }
 
+    private var markerOverlay: AnyView {
+        AnyView(markers.overlayPreferenceValue(MapMarkerTapTargets.self) { targets in
+            Color.clear
+                .allowsHitTesting(false)
+                .onReceive(markerTaps) { point in
+                    targets.last { $0.frame.contains(point) }?.select()
+                }
+        })
+    }
+
     @ViewBuilder private var mapPlaceholder: some View {
         if ProcessInfo.processInfo.arguments.contains("-KCCUITestMapGestures") {
             // Opt-in config-less acceptance surface, in the same position as
@@ -603,13 +617,23 @@ struct MapHomeView: View {
             // coordinate events here checks touch delivery rather than the AX
             // hit point of the decorative "Map" label.
             mapPlaceholderContent
-                .contentShape(Rectangle())
-                .onTapGesture { placeholderTapCount += 1 }
-                .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { _ in
-                    surface.suspendConvoyFitForInteraction()
-                    surface.suspendSelfFollowForInteraction()
-                    placeholderPanCount += 1
-                })
+                .overlay {
+                    MapGestureProbeView(onTap: { point in
+                        markerTaps.send(point)
+                        placeholderTapCount += 1
+                    }, onPan: {
+                        surface.suspendConvoyFitForInteraction()
+                        surface.suspendSelfFollowForInteraction()
+                        placeholderPanCount += 1
+                    }, onPinch: { scale in
+                        placeholderZoomDirection = scale > 1 ? "in" : "out"
+                    })
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    Text(verbatim: placeholderZoomDirection)
+                        .accessibilityIdentifier("shell.mapZoomProbe")
+                        .allowsHitTesting(false)
+                }
                 .overlay(alignment: .bottomLeading) {
                     Text(verbatim: "\(placeholderTapCount)|\(placeholderPanCount)")
                         .accessibilityIdentifier("shell.mapGestureProbe")
@@ -618,6 +642,8 @@ struct MapHomeView: View {
                 }
         } else {
             mapPlaceholderContent
+                .contentShape(Rectangle())
+                .onTapGesture(coordinateSpace: .local) { markerTaps.send($0) }
         }
     }
 
@@ -642,6 +668,48 @@ struct MapHomeView: View {
     }
 
 
+}
+
+/// Config-less stand-in for the native map's gesture surface in UI tests.
+private struct MapGestureProbeView: UIViewRepresentable {
+    let onTap: (CGPoint) -> Void
+    let onPan: () -> Void
+    let onPinch: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isMultipleTouchEnabled = true
+        let coordinator = context.coordinator
+        let tap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.tap(_:)))
+        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.pan(_:)))
+        pan.maximumNumberOfTouches = 1
+        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(Coordinator.pinch(_:)))
+        view.addGestureRecognizer(tap)
+        view.addGestureRecognizer(pan)
+        view.addGestureRecognizer(pinch)
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) { context.coordinator.probe = self }
+
+    @MainActor final class Coordinator: NSObject {
+        var probe: MapGestureProbeView
+        init(_ probe: MapGestureProbeView) { self.probe = probe }
+
+        @objc func tap(_ gesture: UITapGestureRecognizer) {
+            probe.onTap(gesture.location(in: gesture.view))
+        }
+
+        @objc func pan(_ gesture: UIPanGestureRecognizer) {
+            if gesture.state == .ended { probe.onPan() }
+        }
+
+        @objc func pinch(_ gesture: UIPinchGestureRecognizer) {
+            if gesture.state == .ended { probe.onPinch(gesture.scale) }
+        }
+    }
 }
 
 /// Mapbox's stock iOS puck adds a fixed 1.1-second interpolator. Reuse its
@@ -745,6 +813,7 @@ private struct MapboxStandardMap: View {
     let basemap: MapBasemap
     let bottomClearance: CGFloat
     let markers: AnyView
+    let onMapTap: (CGPoint) -> Void
     @State private var ownMotion = DriverPuckPresentation()
     private let puckImages = Puck2DConfiguration.makeDefault(showBearing: true)
     @State private var viewport: Viewport
@@ -772,6 +841,7 @@ private struct MapboxStandardMap: View {
         basemap: MapBasemap,
         bottomClearance: CGFloat,
         markers: AnyView,
+        onMapTap: @escaping (CGPoint) -> Void,
         onLoadingError: @escaping @MainActor (FeatureHealthKind) -> Void,
         onFullFrameRendered: @escaping @MainActor () -> Void,
         onLoaded: @escaping @MainActor () -> Void
@@ -783,6 +853,7 @@ private struct MapboxStandardMap: View {
         self.onLoaded = onLoaded
         self.bottomClearance = bottomClearance
         self.markers = markers
+        self.onMapTap = onMapTap
         self.onFullFrameRendered = onFullFrameRendered
         self.onLoadingError = onLoadingError
         _viewport = State(initialValue: .camera(
@@ -804,6 +875,10 @@ private struct MapboxStandardMap: View {
                 get: { MapHomeReadingViewportPolicy.applying(clearance: bottomClearance, to: viewport) },
                 set: { viewport = MapHomeReadingViewportPolicy.unpadded($0) }
             )) {
+                TapInteraction { context in
+                    onMapTap(context.point)
+                    return false
+                }
                 if MapHomePuckPolicy.isVisible(
                     authorization: locationAuthorization,
                     surfaceActive: surfaceActive,
