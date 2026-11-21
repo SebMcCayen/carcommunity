@@ -18,6 +18,8 @@ Real emulator coverage comprises onboarding/Auth 24, direct Insights transport 6
 
 The same final central-consent test file ran against corrected and baseline source. The fourteen selected baseline failures cover nine legacy-default interaction types and five changes of actual consent/account-deletion authority after company validation and before opening the real transaction. Reached-stage and changed-record assertions precede the expected rejection assertion. No authorization result, business transaction or retry was fabricated. A preliminary run with weaker assertion ordering was superseded and is not the decisive baseline evidence.
 
+The final empty-slice retention correction also passed the complete real Insights emulator file: eleven cases, zero failures/skips, outer CLI exit zero. The identical test file against unchanged `1ffcde6791f6b940d71d4914a6b1422971bd2c17` reproduced one selected assertion failure after creating a genuine v1 monthly aggregate, deleting its expired raw events and processing a later event of another type; ten unrelated cases were unselected and that outer CLI exited one. The corrected runner retains the original aggregate payload and update timestamp through both rebuild and replay, while five legacy/invalid marker variants are removed. This control is distinct from the earlier fourteen-failure consent baseline.
+
 Both local guarded emulator CLI lifetimes shut down cleanly. The baseline CLI exited one for its expected failures; the corrected CLI exited zero. No physical phones or production App Check attestation were involved. Full-index CI remains distinct from the local resource-bounded selected-export harness.
 
 ## Consent, reports and parity assertions

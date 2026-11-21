@@ -381,32 +381,114 @@ describe('runInsightsAggregation — threshold enforcement', () => {
     expect(passByAt10.uniqueContributorCount).toBe(10);
   });
 
-  it('removes a stale published slice when only historical unconsented events remain', async () => {
-    const company = 'pi-only-historical';
-    const day = new Date('2026-07-02T10:00:00Z');
-    const aggregate = adminDb
-      .collection('partnerInsights')
-      .doc(`${company}_profile_view_day_2026-07-02`);
-    await aggregate.set({
-      companyId: company,
-      interactionType: 'profile_view',
-      periodType: 'day',
-      consentVersion: 1,
-      totalCount: 40,
-      uniqueContributorCount: 20,
-      resultStatus: 'available',
-    });
-    await adminDb
-      .collection('partnerInsightsEvents')
-      .doc('seed-only-historical')
-      .set({
+  it.each([undefined, 0, 2, '1', true])(
+    'removes a legacy slice with consent marker %s when only unconsented events remain',
+    async (consentVersion) => {
+      const company = `pi-only-historical-${String(consentVersion)}`;
+      const day = new Date('2026-07-02T10:00:00Z');
+      const aggregate = adminDb
+        .collection('partnerInsights')
+        .doc(`${company}_profile_view_day_2026-07-02`);
+      await aggregate.set({
         companyId: company,
         interactionType: 'profile_view',
-        userReferenceHash: buildScopedHash(company, 'legacy-user'),
-        occurredAt: Timestamp.fromDate(day),
+        periodType: 'day',
+        ...(consentVersion === undefined ? {} : { consentVersion }),
+        totalCount: 40,
+        uniqueContributorCount: 20,
+        resultStatus: 'available',
       });
-    await runInsightsAggregation(day);
-    expect((await aggregate.get()).exists).toBe(false);
+      await adminDb
+        .collection('partnerInsightsEvents')
+        .doc(`seed-only-historical-${String(consentVersion)}`)
+        .set({
+          companyId: company,
+          interactionType: 'profile_view',
+          userReferenceHash: buildScopedHash(company, 'legacy-user'),
+          occurredAt: Timestamp.fromDate(day),
+        });
+      await runInsightsAggregation(day);
+      expect((await aggregate.get()).exists).toBe(false);
+    },
+  );
+
+  it('retains a versioned monthly aggregate after raw-event cleanup', async () => {
+    const company = 'pi-retained-month';
+    const earlyDay = new Date('2026-08-01T10:00:00Z');
+    const laterDay = new Date('2026-08-10T10:00:00Z');
+    await adminDb
+      .collection('config')
+      .doc('partnerInsights')
+      .set({ minThreshold: 10 }, { merge: true });
+    const seed = adminDb.batch();
+    for (let i = 0; i < 10; i += 1) {
+      seed.set(adminDb.collection('partnerInsightsEvents').doc(`retained-month-${i}`), {
+        companyId: company,
+        interactionType: 'profile_view',
+        userReferenceHash: buildScopedHash(company, `retained-viewer-${i}`),
+        consentVersion: 1,
+        occurredAt: Timestamp.fromDate(earlyDay),
+        aggregationDate: Timestamp.fromDate(new Date('2026-08-01T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-08-08T10:00:00Z')),
+      });
+    }
+    await seed.commit();
+    await runInsightsAggregation(earlyDay);
+    const monthly = adminDb
+      .collection('partnerInsights')
+      .doc(`${company}_profile_view_month_2026-08-01`);
+    const published = await monthly.get();
+    expect(published.exists).toBe(true);
+    expect(published.data()).toMatchObject({
+      consentVersion: 1,
+      totalCount: 10,
+      uniqueContributorCount: 10,
+      resultStatus: 'available',
+    });
+
+    await runInsightsCleanup(laterDay);
+    expect(
+      (await adminDb.collection('partnerInsightsEvents').where('companyId', '==', company).get())
+        .empty,
+    ).toBe(true);
+    await adminDb
+      .collection('partnerInsightsEvents')
+      .doc('retained-month-later-type')
+      .set({
+        companyId: company,
+        interactionType: 'map_view',
+        userReferenceHash: buildScopedHash(company, 'later-map-viewer'),
+        consentVersion: 1,
+        occurredAt: Timestamp.fromDate(laterDay),
+        aggregationDate: Timestamp.fromDate(new Date('2026-08-10T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-08-17T10:00:00Z')),
+      });
+
+    await runInsightsAggregation(laterDay);
+    const retained = await monthly.get();
+    expect(retained.exists).toBe(true);
+    expect(retained.data()).toEqual(published.data());
+    expect(retained.updateTime).toEqual(published.updateTime);
+    // Prove this company was processed, rather than passing because no daily
+    // events selected it. A different type still gets the current threshold.
+    expect(
+      (
+        await adminDb
+          .collection('partnerInsights')
+          .doc(`${company}_map_view_month_2026-08-01`)
+          .get()
+      ).data(),
+    ).toMatchObject({
+      consentVersion: 1,
+      totalCount: 0,
+      uniqueContributorCount: null,
+      resultStatus: 'insufficient_data',
+    });
+
+    await runInsightsAggregation(laterDay);
+    const replayed = await monthly.get();
+    expect(replayed.data()).toEqual(published.data());
+    expect(replayed.updateTime).toEqual(published.updateTime);
   });
 });
 

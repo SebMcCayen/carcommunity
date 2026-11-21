@@ -92,31 +92,42 @@ export async function runInsightsAggregation(date: Date): Promise<{ aggregatesWr
         byType.set(type, entry);
       }
 
-      const batch = db.batch();
-      for (const interactionType of PARTNER_INTERACTION_TYPES) {
+      const slices = PARTNER_INTERACTION_TYPES.map((interactionType) => {
         const entry = byType.get(interactionType);
-        const metric = computeAggregateMetric(
+        return {
           interactionType,
-          entry?.total ?? 0,
-          entry?.contributors.size ?? 0,
-          threshold,
-        );
-        // Remove an older slice if no eligible versioned events remain;
-        // do not retain history collected without explicit current consent.
-        if (metric.resultStatus === 'no_data') {
-          // A former generation must not survive an overwrite with no eligible data.
-          batch.delete(
-            db
-              .collection('partnerInsights')
-              .doc(aggregateId(companyId, interactionType, periodType, bounds.start)),
-          );
-          continue;
-        }
-        batch.set(
-          db
+          ref: db
             .collection('partnerInsights')
             .doc(aggregateId(companyId, interactionType, periodType, bounds.start)),
-          {
+          metric: computeAggregateMetric(
+            interactionType,
+            entry?.total ?? 0,
+            entry?.contributors.size ?? 0,
+            threshold,
+          ),
+        };
+      });
+      const emptySlices = slices.filter(({ metric }) => metric.resultStatus === 'no_data');
+      const updatedAt = Timestamp.fromDate(new Date());
+      aggregatesWritten += await db.runTransaction(async (transaction) => {
+        // At most nine reads, all before writes. The transaction protects a
+        // concurrent v1 replacement from being deleted using a stale version.
+        const previous = emptySlices.length
+          ? await transaction.getAll(...emptySlices.map(({ ref }) => ref))
+          : [];
+        const previousById = new Map(previous.map((snapshot) => [snapshot.id, snapshot]));
+        let written = 0;
+        for (const { interactionType, ref, metric } of slices) {
+          if (metric.resultStatus === 'no_data') {
+            // Raw TTL cleanup is not withdrawal of an already consented,
+            // thresholded result. Keep v1 unchanged; remove only legacy data.
+            const stored = previousById.get(ref.id);
+            if (stored?.exists && stored.data()?.consentVersion !== PARTNER_STATS_CONSENT_VERSION) {
+              transaction.delete(ref);
+            }
+            continue;
+          }
+          transaction.set(ref, {
             companyId,
             interactionType,
             periodType,
@@ -126,12 +137,13 @@ export async function runInsightsAggregation(date: Date): Promise<{ aggregatesWr
             uniqueContributorCount: metric.uniqueContributorCount,
             resultStatus: metric.resultStatus,
             consentVersion: PARTNER_STATS_CONSENT_VERSION,
-            updatedAt: Timestamp.fromDate(new Date()),
-          },
-        );
-        aggregatesWritten += 1;
-      }
-      await batch.commit();
+            updatedAt,
+          });
+          written += 1;
+        }
+        // Count only the successful attempt, not automatic transaction retries.
+        return written;
+      });
     }
   }
 
