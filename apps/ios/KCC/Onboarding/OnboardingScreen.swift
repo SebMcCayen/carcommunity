@@ -6,7 +6,7 @@ struct OnboardingScreen: View {
     @State private var licenceConfirmed = false
     @State private var termsAccepted = false
     @State private var privacyAccepted = false
-    @State private var partnerStatsOptIn = true
+    @State private var partnerStatsOptIn = false
     @State private var displayName = ""
 
     private var canSubmit: Bool {
@@ -52,6 +52,8 @@ struct OnboardingScreen: View {
                     .font(.headline)
                 Text("privacySettings.partnerStatsExplainer").foregroundStyle(KccTheme.secondary)
                 Toggle("onboarding.partnerStatsOptIn", isOn: $partnerStatsOptIn)
+                    .accessibilityIdentifier("onboarding.partnerStats")
+                Text("privacySettings.partnerStatsNotice").foregroundStyle(KccTheme.secondary)
                 Text("onboarding.partnerStatsNote")
                     .font(.subheadline).foregroundStyle(KccTheme.secondary)
 

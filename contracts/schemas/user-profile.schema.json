@@ -46,7 +46,9 @@
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,29}$",
           "description": "YouTube channel HANDLE without the leading '@' — NOT a URL and NOT a channel id. Rendered as https://www.youtube.com/@{youtube}. Case is PRESERVED (YouTube displays handles with case). Absent when unset. Owner-writable; Security Rules apply this exact pattern."
         },
-        "role": { "$ref": "common.schema.json#/$defs/userRole" },
+        "role": {
+          "$ref": "common.schema.json#/$defs/userRole"
+        },
         "activeMember": {
           "type": "boolean",
           "description": "Subscription entitlement — backend-managed only."
@@ -72,8 +74,12 @@
           "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
           "description": "Written by auth.completeOnboarding with a server timestamp — backend-managed only; null until onboarding is complete."
         },
-        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
-        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
+        "updatedAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        }
       },
       "required": [
         "displayName",
@@ -90,8 +96,14 @@
       "type": "object",
       "description": "Sensitive user data — Firestore `userPrivate/{uid}`. Owner-only read and write; no other users may access this collection. Email is a contact channel, not an identity key.",
       "properties": {
-        "email": { "type": "string", "maxLength": 320 },
-        "phone": { "type": "string", "maxLength": 32 },
+        "email": {
+          "type": "string",
+          "maxLength": 320
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 32
+        },
         "notificationPreferences": {
           "type": "object",
           "description": "Push/email preferences map. Intentionally left open-ended until the notifications domain contracts land (PR 2b) — the key/value shape is not yet contracted and must not be relied on for native codegen."
@@ -114,14 +126,27 @@
         },
         "anonymousPartnerStatsOptIn": {
           "type": "boolean",
-          "description": "Privacy setting for anonymised partner statistics. Defaults to false (explicit opt-in); owner-editable by direct Firestore write (Security Rules enforce boolean type)."
+          "description": "Optional partner analytics choice. New accounts default false; legacy true alone is not consent. Effective consent additionally requires version 1 and a valid server consent timestamp. Owner-only atomic writes; legacy false can revoke but boolean-only enabling is denied. Operational redemption counts are independent."
         },
         "leaderboardOptOut": {
           "type": "boolean",
           "description": "Social-leaderboard opt-OUT. Optional; ABSENT or false means the member participates (opt-out, not opt-in). When true, the scheduled leaderboard generator excludes the member from every category of the precomputed leaderboards/{scope} document (and the later public web JSON), so an opted-out member is never published. Owner-editable by direct Firestore write (Security Rules enforce boolean type); the Android settings toggle ships with the leaderboard UI PR."
         },
-        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
-        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
+        "updatedAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
+        "anonymousPartnerStatsConsentVersion": {
+          "type": "integer",
+          "const": 1,
+          "description": "Consent wording/version accepted by an explicit in-app choice. Never backfilled from legacy defaults."
+        },
+        "anonymousPartnerStatsConsentAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp",
+          "description": "Server timestamp of the explicit versioned choice. Must be request.time for an owner SDK update. Later onboarding retries do not overwrite Privacy choices."
+        }
       },
       "required": ["createdAt", "updatedAt"],
       "additionalProperties": false
@@ -130,17 +155,34 @@
       "type": "object",
       "description": "Admin-facing user summary as exposed by backend list endpoints (mirrors packages/shared/src/users.ts UserSummary).",
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uid" },
-        "displayName": { "type": ["string", "null"], "maxLength": 120 },
-        "email": { "type": ["string", "null"] },
-        "role": { "$ref": "common.schema.json#/$defs/userRole" },
-        "status": { "$ref": "common.schema.json#/$defs/userStatus" },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uid"
+        },
+        "displayName": {
+          "type": ["string", "null"],
+          "maxLength": 120
+        },
+        "email": {
+          "type": ["string", "null"]
+        },
+        "role": {
+          "$ref": "common.schema.json#/$defs/userRole"
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/userStatus"
+        },
         "subscriptionEntitlement": {
           "$ref": "common.schema.json#/$defs/subscriptionEntitlement"
         },
-        "lastActiveAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
-        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
-        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+        "lastActiveAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
+        "updatedAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        }
       },
       "required": [
         "id",

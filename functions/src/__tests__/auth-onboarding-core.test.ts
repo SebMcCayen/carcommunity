@@ -56,7 +56,7 @@ describe('parseCompleteOnboardingInput', () => {
     expect(parseCompleteOnboardingInput({ ...validInput, role: 'admin' }).ok).toBe(false);
   });
 
-  it('accepts the optional partner-stats opt-out choice (default-on / opt-out)', () => {
+  it('accepts old clients with a boolean-only optional choice', () => {
     expect(
       parseCompleteOnboardingInput({ ...validInput, anonymousPartnerStatsOptIn: false }),
     ).toStrictEqual({ ok: true, input: { ...validInput, anonymousPartnerStatsOptIn: false } });
@@ -65,9 +65,45 @@ describe('parseCompleteOnboardingInput', () => {
     ).toBe(true);
   });
 
-  it('rejects a non-boolean partner-stats choice', () => {
+  it.each([false, true])('accepts explicit version 1 optional consent (%s)', (choice) => {
+    const input = {
+      ...validInput,
+      anonymousPartnerStatsOptIn: choice,
+      anonymousPartnerStatsConsentVersion: 1,
+    };
+    expect(parseCompleteOnboardingInput(input)).toStrictEqual({ ok: true, input });
+  });
+
+  it.each(['yes', 1, 0, null, {}, []])('rejects non-boolean optional choice %j', (choice) => {
     expect(
-      parseCompleteOnboardingInput({ ...validInput, anonymousPartnerStatsOptIn: 'yes' }).ok,
+      parseCompleteOnboardingInput({ ...validInput, anonymousPartnerStatsOptIn: choice }).ok,
+    ).toBe(false);
+  });
+
+  it.each([0, 2, -1, 1.5, '1', true, null, {}, []])(
+    'rejects unsupported or malformed consent version %j',
+    (version) => {
+      expect(
+        parseCompleteOnboardingInput({
+          ...validInput,
+          anonymousPartnerStatsOptIn: true,
+          anonymousPartnerStatsConsentVersion: version,
+        }).ok,
+      ).toBe(false);
+    },
+  );
+
+  it('rejects a version marker without an optional choice and device-supplied consent times', () => {
+    expect(
+      parseCompleteOnboardingInput({ ...validInput, anonymousPartnerStatsConsentVersion: 1 }).ok,
+    ).toBe(false);
+    expect(
+      parseCompleteOnboardingInput({
+        ...validInput,
+        anonymousPartnerStatsOptIn: true,
+        anonymousPartnerStatsConsentVersion: 1,
+        anonymousPartnerStatsConsentAt: '2026-11-20T00:00:00.000Z',
+      }).ok,
     ).toBe(false);
   });
 
@@ -173,24 +209,71 @@ describe('computeOnboardingWrites', () => {
     expect(profileUpdate).not.toHaveProperty('displayName');
   });
 
-  it('writes the partner-stats opt-out choice when provided', () => {
-    const optedOut = computeOnboardingWrites(
+  it.each([false, true])(
+    'records first versioned optional choice %s with server evidence',
+    (choice) => {
+      const { privateUpdate } = computeOnboardingWrites(
+        {
+          ...validInput,
+          anonymousPartnerStatsOptIn: choice,
+          anonymousPartnerStatsConsentVersion: 1,
+        },
+        nothingSet,
+        serverTimestamp,
+      );
+      expect(privateUpdate).toMatchObject({
+        anonymousPartnerStatsOptIn: choice,
+        anonymousPartnerStatsConsentVersion: 1,
+        anonymousPartnerStatsConsentAt: SERVER_TIMESTAMP,
+        updatedAt: SERVER_TIMESTAMP,
+      });
+      expect(privateUpdate).not.toHaveProperty('leaderboardOptOut');
+    },
+  );
+
+  it('accepts a first legacy decline without manufacturing versioned consent evidence', () => {
+    const { privateUpdate } = computeOnboardingWrites(
       { ...validInput, anonymousPartnerStatsOptIn: false },
       nothingSet,
       serverTimestamp,
     );
-    expect(optedOut.privateUpdate.anonymousPartnerStatsOptIn).toBe(false);
+    expect(privateUpdate.anonymousPartnerStatsOptIn).toBe(false);
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsConsentVersion');
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsConsentAt');
+  });
 
-    const optedIn = computeOnboardingWrites(
+  it('ignores a first legacy preselected true rather than granting optional consent', () => {
+    const { privateUpdate } = computeOnboardingWrites(
       { ...validInput, anonymousPartnerStatsOptIn: true },
       nothingSet,
       serverTimestamp,
     );
-    expect(optedIn.privateUpdate.anonymousPartnerStatsOptIn).toBe(true);
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsOptIn');
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsConsentVersion');
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsConsentAt');
   });
 
-  it('omits the partner-stats field when no choice is sent (provisioning default stands)', () => {
+  it.each([
+    { anonymousPartnerStatsOptIn: true },
+    { anonymousPartnerStatsOptIn: false },
+    { anonymousPartnerStatsOptIn: true, anonymousPartnerStatsConsentVersion: 1 as const },
+    { anonymousPartnerStatsOptIn: false, anonymousPartnerStatsConsentVersion: 1 as const },
+    {},
+  ])('preserves later Privacy choices when completed onboarding is replayed with %j', (choice) => {
+    const { privateUpdate } = computeOnboardingWrites(
+      { ...validInput, ...choice },
+      { ...nothingSet, onboardingCompletedAt: 'already-completed' },
+      serverTimestamp,
+    );
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsOptIn');
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsConsentVersion');
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsConsentAt');
+  });
+
+  it('omits optional consent when no choice is sent, preserving provisioning or existing data', () => {
     const { privateUpdate } = computeOnboardingWrites(validInput, nothingSet, serverTimestamp);
     expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsOptIn');
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsConsentVersion');
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsConsentAt');
   });
 });

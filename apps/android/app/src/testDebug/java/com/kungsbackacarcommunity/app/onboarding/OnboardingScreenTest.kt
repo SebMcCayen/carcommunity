@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.onboarding
 
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -61,6 +62,7 @@ class OnboardingScreenTest {
                 )
             }
         }
+        composeTestRule.onNodeWithText(str(R.string.privacySettings_partnerStatsNotice)).performScrollTo().assertIsDisplayed()
         val continueBtn = str(R.string.onboarding_continueButton)
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
 
@@ -78,13 +80,12 @@ class OnboardingScreenTest {
             .performTextInput("Sebbe")
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsEnabled().performClick()
         assertEquals(1, submitted)
-        // Anonymised partner statistics are default-on / opt-out: untouched, the
-        // step reports true.
-        assertEquals(true, submittedPartnerStats)
+        // The optional step remains OFF without an affirmative action.
+        assertEquals(false, submittedPartnerStats)
     }
 
     @Test
-    fun partnerStatsCanBeOptedOutDuringOnboarding() {
+    fun partnerStatsRequiresAnExplicitOptInDuringOnboarding() {
         var submittedPartnerStats: Boolean? = null
         composeTestRule.setContent {
             KccTheme {
@@ -101,7 +102,7 @@ class OnboardingScreenTest {
             .onNodeWithText(str(R.string.onboarding_displayNameLabel))
             .performScrollTo()
             .performTextInput("Sebbe")
-        // Turn the default-on partner-stats toggle OFF.
+        // Turn the default-off partner-stats toggle ON.
         composeTestRule
             .onNodeWithText(str(R.string.onboarding_partnerStatsOptIn))
             .performScrollTo()
@@ -110,6 +111,6 @@ class OnboardingScreenTest {
             .onNodeWithText(str(R.string.onboarding_continueButton))
             .performScrollTo()
             .performClick()
-        assertEquals(false, submittedPartnerStats)
+        assertEquals(true, submittedPartnerStats)
     }
 }

@@ -131,6 +131,14 @@ beforeAll(async () => {
   await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
   await adminDb.collection('users').doc(adminUser.uid).set({ role: 'admin' }, { merge: true });
   user = await createProvisionedUser('bb-user');
+  await adminDb.collection('userPrivate').doc(user.uid).set(
+    {
+      anonymousPartnerStatsOptIn: true,
+      anonymousPartnerStatsConsentVersion: 1,
+      anonymousPartnerStatsConsentAt: Timestamp.now(),
+    },
+    { merge: true },
+  );
 
   await signInAs(adminUser);
   activePartnerId = (
@@ -260,6 +268,17 @@ describe('billboards-recordInteraction → insights bridge', () => {
     expect(events.size).toBe(1);
     // size asserted === 1 above, so docs[0] is present.
     expect(JSON.stringify(events.docs[0]!.data())).not.toContain(user.uid);
+    expect(events.docs[0]!.data().consentVersion).toBe(1);
+    expect(Object.keys(events.docs[0]!.data()).sort()).toEqual([
+      'aggregationDate',
+      'companyId',
+      'consentVersion',
+      'expiresAt',
+      'interactionType',
+      'occurredAt',
+      'relatedOfferId',
+      'userReferenceHash',
+    ]);
 
     // Same-day repeat dedupes through the same pipeline.
     const dupe = (

@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.privacy
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -41,7 +44,8 @@ class PartnerStatsScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.privacySettings_partnerStatsBody)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.privacySettings_partnerStatsNotice)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.privacySettings_partnerStatsBody)).performScrollTo().assertIsDisplayed()
         composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOff().performClick()
         composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOn()
         composeTestRule.onNodeWithText(str(R.string.privacySettings_saveButton)).performScrollTo().performClick()
@@ -49,30 +53,27 @@ class PartnerStatsScreenTest {
     }
 
     @Test
-    fun defaultsOn_whenNoExplicitChoice() {
-        // Default-on / opt-out: a null value (no explicit choice / still loading)
-        // renders the toggle ON, and Save persists that ON choice.
+    fun defaultsOff_whenNoExplicitConsent() {
+        // A server-resolved missing or legacy consent cannot grant optional analytics.
         var saved: Boolean? = null
         composeTestRule.setContent {
             KccTheme {
                 PartnerStatsScreen(
-                    consent = PartnerStatsConsentState.DefaultOn,
+                    consent = PartnerStatsConsentState.DefaultOff,
                     saveStatus = PartnerStatsSaveStatus.Idle,
                     onSave = { saved = it },
                     onBack = {},
                 )
             }
         }
-        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOn()
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOff()
         composeTestRule.onNodeWithText(str(R.string.privacySettings_saveButton)).performScrollTo().performClick()
-        assertEquals(true, saved)
+        assertEquals(false, saved)
     }
 
     @Test
     fun unknownState_disablesSave_soAReadErrorCannotOverwrite() {
-        // Unknown = still loading or a read error. The toggle shows the default-on
-        // value, but Save must be DISABLED so a transient error can never persist
-        // the default over an explicitly opted-out member's real choice.
+        // Cache-only, loading and failed reads must stay unsaveable.
         var saved: Boolean? = null
         composeTestRule.setContent {
             KccTheme {
@@ -84,12 +85,25 @@ class PartnerStatsScreenTest {
                 )
             }
         }
-        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOn()
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOff().assertIsNotEnabled()
         composeTestRule
             .onNodeWithText(str(R.string.privacySettings_saveButton))
             .performScrollTo()
             .assertIsNotEnabled()
         assertEquals(null, saved)
+    }
+
+    @Test
+    fun currentConsent_canBeWithdrawnWithExplicitSave() {
+        var saved: Boolean? = null
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerStatsScreen(PartnerStatsConsentState.Chosen(true), PartnerStatsSaveStatus.Idle, { saved = it }, {})
+            }
+        }
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).performScrollTo().assertIsOn().performClick().assertIsOff()
+        composeTestRule.onNodeWithText(str(R.string.privacySettings_saveButton)).performScrollTo().performClick()
+        assertEquals(false, saved)
     }
 
     @Test
@@ -104,6 +118,22 @@ class PartnerStatsScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.privacySettings_saved)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.privacySettings_saved)).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun laterReadError_disablesSaveEvenAfterSavedStatus() {
+        var consent by mutableStateOf<PartnerStatsConsentState>(PartnerStatsConsentState.Chosen(true))
+        var saved: Boolean? = null
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerStatsScreen(consent, PartnerStatsSaveStatus.Saved, { saved = it }, {})
+            }
+        }
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOn()
+        composeTestRule.runOnIdle { consent = PartnerStatsConsentState.Unknown }
+        composeTestRule.onNodeWithText(str(R.string.privacySettings_saveButton)).performScrollTo().assertIsNotEnabled()
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsNotEnabled()
+        assertEquals(null, saved)
     }
 }

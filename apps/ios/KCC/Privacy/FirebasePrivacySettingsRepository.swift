@@ -31,8 +31,12 @@ final class FirebasePrivacySettingsRepository: PrivacySettingsRepository, @unche
                 guard let authoritative = PrivacySettingsSnapshot.authoritative(
                     data: snapshot.data(),
                     isFromCache: snapshot.metadata.isFromCache,
-                    hasPendingWrites: snapshot.metadata.hasPendingWrites
-                ) else { return }
+                    hasPendingWrites: snapshot.metadata.hasPendingWrites,
+                    consentTimestamp: (snapshot.get(Self.partnerStatsConsentAtField) as? Timestamp)?.dateValue()
+                ) else {
+                    continuation.yield(.unconfirmed)
+                    return
+                }
                 continuation.yield(authoritative)
             }
             let box = PrivacyListenerBox(registration: registration)
@@ -41,19 +45,22 @@ final class FirebasePrivacySettingsRepository: PrivacySettingsRepository, @unche
     }
 
     func setPartnerStatsOptIn(uid: String, optIn: Bool) async throws {
-        try await update(uid: uid, field: Self.partnerStatsField, value: optIn)
+        try await update(uid: uid, fields: [
+            Self.partnerStatsField: optIn,
+            "anonymousPartnerStatsConsentVersion": PrivacySettingsChoices.partnerStatsConsentVersion,
+            Self.partnerStatsConsentAtField: FieldValue.serverTimestamp(),
+        ])
     }
 
     func setLeaderboardOptOut(uid: String, optOut: Bool) async throws {
-        try await update(uid: uid, field: Self.leaderboardOptOutField, value: optOut)
+        try await update(uid: uid, fields: [Self.leaderboardOptOutField: optOut])
     }
 
-    private func update(uid: String, field: String, value: Bool) async throws {
+    private func update(uid: String, fields: [String: Any]) async throws {
+        var fields = fields
+        fields[Self.updatedAtField] = FieldValue.serverTimestamp()
         do {
-            try await firestore.collection(Self.collection).document(uid).updateData([
-                field: value,
-                Self.updatedAtField: FieldValue.serverTimestamp(),
-            ])
+            try await firestore.collection(Self.collection).document(uid).updateData(fields)
         } catch {
             throw PrivacySettingsWriteError(
                 code: FirebaseEventsRepository.firestoreStatusName(error)
@@ -63,6 +70,7 @@ final class FirebasePrivacySettingsRepository: PrivacySettingsRepository, @unche
 
     private static let collection = "userPrivate"
     private static let partnerStatsField = "anonymousPartnerStatsOptIn"
+    private static let partnerStatsConsentAtField = "anonymousPartnerStatsConsentAt"
     private static let leaderboardOptOutField = "leaderboardOptOut"
     private static let updatedAtField = "updatedAt"
 

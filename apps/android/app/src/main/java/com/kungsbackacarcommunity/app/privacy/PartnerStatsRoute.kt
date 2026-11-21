@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.privacy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.flow.flowOf
@@ -25,8 +26,10 @@ fun PartnerStatsRoute(
 ) {
     val scope = rememberCoroutineScope()
     val consent by
-        remember(repository, uid) { repository.observeConsent(uid) }
-            .collectAsState(initial = PartnerStatsConsentState.Unknown)
+        key(repository, uid) {
+            remember { repository.observeConsent(uid) }
+                .collectAsState(initial = PartnerStatsConsentState.Unknown)
+        }
     val saveStatus by
         (coordinator?.saveStatus ?: flowOf(PartnerStatsSaveStatus.Idle))
             .collectAsState(initial = PartnerStatsSaveStatus.Idle)
@@ -39,21 +42,27 @@ fun PartnerStatsRoute(
         (leaderboardCoordinator?.saveStatus ?: flowOf(LeaderboardVisibilitySaveStatus.Idle))
             .collectAsState(initial = LeaderboardVisibilitySaveStatus.Idle)
 
-    PartnerStatsScreen(
-        consent = consent,
-        saveStatus = saveStatus,
-        onSave = { optIn -> coordinator?.let { c -> scope.launch { c.save(uid, optIn) } } },
-        onBack = {
-            coordinator?.reset()
-            leaderboardCoordinator?.reset()
-            onBack()
-        },
-        leaderboardVisibility = leaderboardVisibility,
-        leaderboardSaveStatus = leaderboardSaveStatus,
-        // The switch models "shown"; persist the inverse `leaderboardOptOut`.
-        onSaveLeaderboard =
-            leaderboardCoordinator?.let { c ->
-                { shown: Boolean -> scope.launch { c.save(uid, optOut = !shown) } }
+    key(uid) {
+        PartnerStatsScreen(
+            consent = consent,
+            saveStatus = saveStatus,
+            onSave = { optIn ->
+                if (consent != PartnerStatsConsentState.Unknown) {
+                    coordinator?.let { c -> scope.launch { c.save(uid, optIn) } }
+                }
             },
-    )
+            onBack = {
+                coordinator?.reset()
+                leaderboardCoordinator?.reset()
+                onBack()
+            },
+            leaderboardVisibility = leaderboardVisibility,
+            leaderboardSaveStatus = leaderboardSaveStatus,
+            // The switch models "shown"; persist the inverse `leaderboardOptOut`.
+            onSaveLeaderboard =
+                leaderboardCoordinator?.let { c ->
+                    { shown: Boolean -> scope.launch { c.save(uid, optOut = !shown) } }
+                },
+        )
+    }
 }

@@ -60,9 +60,8 @@ import com.kungsbackacarcommunity.app.navigation.openDefaultMapAppSettings
  * ([OnboardingForm.canSubmit]) and no submission is in flight.
  *
  * When [partnerStatsEnabled] is true a fourth, NON-mandatory step is shown: anonymised partner
- * statistics are DEFAULT-ON / opt-out, so the toggle starts enabled and the member may turn it off
- * here (or later under Privacy). The choice is passed to [onSubmit] as the second argument (null
- * when the step is hidden, so the backend keeps its provisioning default).
+ * statistics are optional and start OFF. The member may enable them here or later under Privacy. The choice is passed to [onSubmit] as the second argument (null
+ * when the step is hidden, so optional analytics remain disabled).
  *
  * The content scrolls and consumes safe-drawing insets (status/navigation bars and the IME) so the
  * submit button stays reachable under edge-to-edge and with the keyboard open. All copy is
@@ -80,9 +79,9 @@ fun OnboardingScreen(
     var privacy by remember { mutableStateOf(false) }
     // Starts empty on purpose — never prefilled with the Google account name.
     var displayName by remember { mutableStateOf("") }
-    // Default-on / opt-out: the toggle starts ON. Only meaningful when the step
+    // Optional analytics start OFF. Only meaningful when the step
     // is shown ([partnerStatsEnabled]); otherwise onSubmit is passed null.
-    var partnerStats by remember { mutableStateOf(true) }
+    var partnerStats by remember { mutableStateOf(false) }
 
     val submitting = status == OnboardingStatus.Submitting
     val canSubmit = OnboardingForm.canSubmit(licence, terms, privacy, displayName) && !submitting
@@ -198,7 +197,7 @@ fun OnboardingScreen(
                 onClick = {
                     onSubmit(
                         OnboardingForm.normalizedDisplayName(displayName),
-                        // null when the step is hidden → backend keeps its default.
+                        // Hidden step does not grant optional analytics.
                         if (partnerStatsEnabled) partnerStats else null,
                     )
                 },
@@ -216,9 +215,9 @@ fun OnboardingScreen(
 }
 
 /**
- * The optional anonymised-partner-statistics step (default-on / opt-out). Shows the same privacy
+ * The optional anonymised-partner-statistics step (default-off / opt-in). Shows the same privacy
  * reassurance as the Settings screen (companies never see the member's identity, live location or
- * drive history) with a Switch that starts ON; the member can turn it off here or later under
+ * drive history) with a Switch that starts OFF; the member can choose here or later under
  * Privacy.
  */
 @Composable

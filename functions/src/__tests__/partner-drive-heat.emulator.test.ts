@@ -41,12 +41,15 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { encodeRoute, type RoutePoint } from '../drives/route-codec';
 import { rideRoutePath } from '../drives/drives-core';
 import { routeCells, trimRouteEndpoints } from '../partnerInsights/drive-heat-core';
-import { runDriveHeatAggregation } from '../partnerInsights/driveHeatAggregation';
+import {
+  DRIVE_HEAT_MAX_AGE_MS,
+  runDriveHeatAggregation,
+} from '../partnerInsights/driveHeatAggregation';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -72,7 +75,21 @@ async function createUser(prefix: string): Promise<TestUser> {
   const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
   const password = 'password-123';
   const credential = await createUserWithEmailAndPassword(auth, email, password);
-  return { uid: credential.user.uid, email, password };
+  const uid = credential.user.uid;
+  // Auth signup completes before its background onCreate transaction. Heat
+  // correctly requires a public profile as well as explicit private consent;
+  // wait for real provisioning before assigning roles or seeding that choice.
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    const [profile, privacy] = await adminDb.getAll(
+      adminDb.collection('users').doc(uid),
+      adminDb.collection('userPrivate').doc(uid),
+    );
+    if (profile?.exists && privacy?.exists) return { uid, email, password };
+    if (Date.now() >= deadline)
+      throw new Error('Timed out waiting for drive-heat Auth profile and private provisioning.');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
 
 /** A straight line of GPS fixes at a fixed latitude, `stepM` metres apart. */
@@ -97,7 +114,14 @@ async function seedRide(
   await adminDb
     .collection('userPrivate')
     .doc(uid)
-    .set({ anonymousPartnerStatsOptIn: consented }, { merge: true });
+    .set(
+      {
+        anonymousPartnerStatsOptIn: consented,
+        anonymousPartnerStatsConsentVersion: 1,
+        anonymousPartnerStatsConsentAt: Timestamp.fromMillis(route[0]!.timestampMs - 1),
+      },
+      { merge: true },
+    );
   await adminDb
     .collection('rides')
     .doc(rideId)
@@ -126,6 +150,7 @@ const QUIET_CELLS = new Set(routeCells(trimRouteEndpoints(QUIET_ROUTE)));
 
 let adminUser: TestUser;
 let regularUser: TestUser;
+const busyUsers: TestUser[] = [];
 
 beforeAll(async () => {
   app = initializeApp(
@@ -145,6 +170,7 @@ beforeAll(async () => {
   // 10 CONSENTED users drive the identical BUSY route → clears the ≥10 floor.
   for (let i = 0; i < 10; i += 1) {
     const u = await createUser(`driveheat-busy-${i}`);
+    busyUsers.push(u);
     await seedRide(u.uid, `busy-${u.uid}`, BUSY_ROUTE, true);
   }
   // 1 NON-consented user drives the same BUSY route → must be EXCLUDED (so the
@@ -193,6 +219,131 @@ describe('runDriveHeatAggregation', () => {
       expect(c.contributorCount).toBeGreaterThanOrEqual(10);
     }
   }, 60_000);
+
+  it('rejects legacy and pre-consent rides before any route download', async () => {
+    const u = busyUsers[0]!;
+    const ref = adminDb.collection('userPrivate').doc(u.uid);
+    const original = (await ref.get()).data()!;
+    const prototype = Object.getPrototypeOf(adminBucket.file('probe'));
+    const download = vi.spyOn(prototype, 'download');
+    try {
+      for (const invalidConsent of [
+        { anonymousPartnerStatsOptIn: true },
+        { ...original, anonymousPartnerStatsConsentAt: Timestamp.now() },
+        { ...original, anonymousPartnerStatsConsentVersion: 2 },
+      ]) {
+        await ref.set(invalidConsent);
+        download.mockClear();
+        await runDriveHeatAggregation(new Date());
+        expect(
+          download.mock.contexts.some(
+            (file) => file.name === rideRoutePath(u.uid, `busy-${u.uid}`),
+          ),
+        ).toBe(false);
+        const snapshot = (
+          await adminDb.collection('partnerDriveHeat').doc('current').get()
+        ).data()!;
+        expect(
+          snapshot.cells.filter((cell: { h3Index: string }) => BUSY_CELLS.has(cell.h3Index)),
+        ).toEqual([]);
+      }
+    } finally {
+      download.mockRestore();
+      await ref.set(original);
+    }
+  }, 60_000);
+
+  it('discards a contribution revoked while the actual route download is in flight', async () => {
+    const u = busyUsers[0]!;
+    const ref = adminDb.collection('userPrivate').doc(u.uid);
+    const originalConsent = (await ref.get()).data()!;
+    const prototype = Object.getPrototypeOf(adminBucket.file('probe'));
+    const originalDownload = prototype.download;
+    let reachedDownload = false;
+    const download = vi.spyOn(prototype, 'download').mockImplementation(async function (
+      this: { name: string },
+      ...args: unknown[]
+    ) {
+      const result = await originalDownload.apply(this, args);
+      if (this.name === rideRoutePath(u.uid, `busy-${u.uid}`)) {
+        reachedDownload = true;
+        await ref.update({ anonymousPartnerStatsOptIn: false });
+      }
+      return result;
+    });
+    try {
+      await runDriveHeatAggregation(new Date());
+      expect(reachedDownload).toBe(true);
+      const snapshot = (await adminDb.collection('partnerDriveHeat').doc('current').get()).data()!;
+      expect(
+        snapshot.cells.filter((cell: { h3Index: string }) => BUSY_CELLS.has(cell.h3Index)),
+      ).toEqual([]);
+    } finally {
+      download.mockRestore();
+      await ref.set(originalConsent);
+    }
+  }, 60_000);
+
+  it.each(['revoke', 'new-epoch', 'purge', 'deletion-request', 'missing-user'])(
+    'discards %s immediately before the final publication transaction',
+    async (change) => {
+      const u = busyUsers[0]!;
+      const privateRef = adminDb.collection('userPrivate').doc(u.uid);
+      const userRef = adminDb.collection('users').doc(u.uid);
+      const originalConsent = (await privateRef.get()).data()!;
+      const originalUser = (await userRef.get()).data()!;
+      const originalRun = adminDb.runTransaction.bind(adminDb);
+      let reachedPublication = false;
+      const transaction = vi
+        .spyOn(adminDb, 'runTransaction')
+        .mockImplementation(async (...args: Parameters<typeof adminDb.runTransaction>) => {
+          reachedPublication = true;
+          if (change === 'revoke') await privateRef.update({ anonymousPartnerStatsOptIn: false });
+          if (change === 'new-epoch')
+            await privateRef.update({ anonymousPartnerStatsConsentAt: Timestamp.now() });
+          if (change === 'purge')
+            await adminDb
+              .collection('accountPurgeProgress')
+              .doc(u.uid)
+              .set({ partnerErasureActive: true });
+          if (change === 'deletion-request')
+            await adminDb
+              .collection('accountDeletionRequests')
+              .doc(u.uid)
+              .set({ status: 'pending' });
+          if (change === 'missing-user') await userRef.delete();
+          return originalRun(...args);
+        });
+      try {
+        await runDriveHeatAggregation(new Date());
+        expect(reachedPublication).toBe(true);
+        const snapshot = (
+          await adminDb.collection('partnerDriveHeat').doc('current').get()
+        ).data()!;
+        expect(
+          snapshot.cells.filter((cell: { h3Index: string }) => BUSY_CELLS.has(cell.h3Index)),
+        ).toEqual([]);
+        expect(snapshot.consentVersion).toBe(1);
+        expect(Object.keys(snapshot).sort()).toEqual([
+          'cellCount',
+          'cells',
+          'consentVersion',
+          'generatedAt',
+          'resolution',
+          'threshold',
+          'trimMeters',
+          'windowDays',
+        ]);
+      } finally {
+        transaction.mockRestore();
+        await privateRef.set(originalConsent);
+        await userRef.set(originalUser);
+        await adminDb.collection('accountPurgeProgress').doc(u.uid).delete();
+        await adminDb.collection('accountDeletionRequests').doc(u.uid).delete();
+      }
+    },
+    60_000,
+  );
 });
 
 describe('partnerInsights-driveHeat callable', () => {
@@ -218,6 +369,33 @@ describe('partnerInsights-driveHeat callable', () => {
       expect(Object.keys(c).sort()).toEqual(['contributorCount', 'h3Index', 'weight']);
     }
   }, 60_000);
+
+  it.each([
+    ['unmarked historical', { consentVersion: undefined }],
+    ['old version', { consentVersion: 0 }],
+    ['expired', { generatedAt: Timestamp.fromMillis(Date.now() - DRIVE_HEAT_MAX_AGE_MS - 60_000) }],
+    ['future', { generatedAt: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000) }],
+    ['malformed timestamp', { generatedAt: 'today' }],
+    ['malformed resolution', { resolution: '10' }],
+  ])(
+    'suppresses %s snapshot',
+    async (_name, patch) => {
+      await signInWithEmailAndPassword(auth, adminUser.email, adminUser.password);
+      const data: Record<string, unknown> = {
+        consentVersion: 1,
+        generatedAt: Timestamp.now(),
+        resolution: 10,
+        windowDays: 90,
+        cells: [{ h3Index: [...BUSY_CELLS][0]!, contributorCount: 10, weight: 10 }],
+        ...patch,
+      };
+      if (data.consentVersion === undefined) delete data.consentVersion;
+      await adminDb.collection('partnerDriveHeat').doc('current').set(data);
+      const result = await httpsCallable(functions, 'partnerInsights-driveHeat')({});
+      expect(result.data).toEqual({ cells: [], resolution: 10, windowDays: 90, generatedAt: null });
+    },
+    60_000,
+  );
 
   it('rejects a non-admin caller with permission-denied', async () => {
     await signInWithEmailAndPassword(auth, regularUser.email, regularUser.password);

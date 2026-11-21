@@ -5,7 +5,7 @@
  * - partnerInsights-aggregateDaily (03:00 Europe/Stockholm): aggregates
  *   yesterday's events into partnerInsights/{aggregateId} documents for
  *   every company that had events — per interaction type, for the day /
- *   week / month periods — with the anonymous_pass_by minimum-contributor
+ *   week / month periods — with the all-interaction minimum-contributor
  *   threshold enforced (below threshold → counts ZEROED, status
  *   insufficient_data). The threshold floor is 10 and configuration can
  *   only raise it (config/partnerInsights.minThreshold).
@@ -34,6 +34,7 @@ import {
 } from './insights-core';
 import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
+import { PARTNER_STATS_CONSENT_VERSION } from './consent';
 
 const CLEANUP_BATCH_SIZE = 500;
 
@@ -74,11 +75,13 @@ export async function runInsightsAggregation(date: Date): Promise<{ aggregatesWr
         .where('companyId', '==', companyId)
         .where('occurredAt', '>=', Timestamp.fromDate(bounds.start))
         .where('occurredAt', '<', Timestamp.fromDate(bounds.end))
-        .select('interactionType', 'userReferenceHash')
+        .select('interactionType', 'userReferenceHash', 'consentVersion')
         .get();
 
       const byType = new Map<string, { total: number; contributors: Set<string> }>();
       for (const doc of periodEvents.docs) {
+        const data = doc.data();
+        if (data.consentVersion !== PARTNER_STATS_CONSENT_VERSION) continue;
         const type = doc.data().interactionType as string;
         const entry = byType.get(type) ?? { total: 0, contributors: new Set<string>() };
         entry.total += 1;
@@ -89,25 +92,42 @@ export async function runInsightsAggregation(date: Date): Promise<{ aggregatesWr
         byType.set(type, entry);
       }
 
-      const batch = db.batch();
-      for (const interactionType of PARTNER_INTERACTION_TYPES) {
+      const slices = PARTNER_INTERACTION_TYPES.map((interactionType) => {
         const entry = byType.get(interactionType);
-        const metric = computeAggregateMetric(
+        return {
           interactionType,
-          entry?.total ?? 0,
-          entry?.contributors.size ?? 0,
-          threshold,
-        );
-        // no_data periods are skipped entirely — an all-zero document adds
-        // nothing and would bloat the collection for every company × type.
-        if (metric.resultStatus === 'no_data') {
-          continue;
-        }
-        batch.set(
-          db
+          ref: db
             .collection('partnerInsights')
             .doc(aggregateId(companyId, interactionType, periodType, bounds.start)),
-          {
+          metric: computeAggregateMetric(
+            interactionType,
+            entry?.total ?? 0,
+            entry?.contributors.size ?? 0,
+            threshold,
+          ),
+        };
+      });
+      const emptySlices = slices.filter(({ metric }) => metric.resultStatus === 'no_data');
+      const updatedAt = Timestamp.fromDate(new Date());
+      aggregatesWritten += await db.runTransaction(async (transaction) => {
+        // At most nine reads, all before writes. The transaction protects a
+        // concurrent v1 replacement from being deleted using a stale version.
+        const previous = emptySlices.length
+          ? await transaction.getAll(...emptySlices.map(({ ref }) => ref))
+          : [];
+        const previousById = new Map(previous.map((snapshot) => [snapshot.id, snapshot]));
+        let written = 0;
+        for (const { interactionType, ref, metric } of slices) {
+          if (metric.resultStatus === 'no_data') {
+            // Raw TTL cleanup is not withdrawal of an already consented,
+            // thresholded result. Keep v1 unchanged; remove only legacy data.
+            const stored = previousById.get(ref.id);
+            if (stored?.exists && stored.data()?.consentVersion !== PARTNER_STATS_CONSENT_VERSION) {
+              transaction.delete(ref);
+            }
+            continue;
+          }
+          transaction.set(ref, {
             companyId,
             interactionType,
             periodType,
@@ -116,12 +136,14 @@ export async function runInsightsAggregation(date: Date): Promise<{ aggregatesWr
             totalCount: metric.totalCount,
             uniqueContributorCount: metric.uniqueContributorCount,
             resultStatus: metric.resultStatus,
-            updatedAt: Timestamp.fromDate(new Date()),
-          },
-        );
-        aggregatesWritten += 1;
-      }
-      await batch.commit();
+            consentVersion: PARTNER_STATS_CONSENT_VERSION,
+            updatedAt,
+          });
+          written += 1;
+        }
+        // Count only the successful attempt, not automatic transaction retries.
+        return written;
+      });
     }
   }
 

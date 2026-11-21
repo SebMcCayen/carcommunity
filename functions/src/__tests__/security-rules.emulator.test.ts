@@ -1695,6 +1695,8 @@ describe('Firestore – userPrivate', () => {
     await assertSucceeds(
       updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), {
         anonymousPartnerStatsOptIn: true,
+        anonymousPartnerStatsConsentVersion: 1,
+        anonymousPartnerStatsConsentAt: serverTimestamp(),
       }),
     );
   });

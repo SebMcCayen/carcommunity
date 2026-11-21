@@ -7,15 +7,12 @@
  *
  * Records one partner interaction event (legacy recordInteraction parity):
  * - The event stores a PARTNER-SCOPED SHA-256 hash of the caller — never
- *   the raw UID — so events cannot be correlated across partners.
+ *   the raw UID — so the hash value differs across partners. It remains pseudonymous.
  * - One event per (company, type, UTC day, user): the dedupe is the
  *   deterministic document ID; duplicates return { recorded: false }.
- * - anonymous_pass_by requires the pass-by feature flag (contract default
- *   OFF). Consent is DEFAULT-ON / opt-out: the caller contributes unless
- *   anonymousPartnerStatsOptIn is explicitly `false` (missing/true both
- *   contribute). An opted-out contribution returns { recorded: false }
- *   silently — never an error — so opting out is unobservable from the
- *   response shape.
+ * - Every interaction requires an explicit versioned choice, checked in the
+ *   same transaction as event creation. Missing/legacy/declined consent records
+ *   nothing. Pass-by additionally requires its separate collection flag.
  * - Events carry expiresAt (+7 days) and are removed by the scheduled
  *   cleanup; only threshold-enforced aggregates persist.
  */
@@ -36,6 +33,8 @@ import {
   type PartnerInteractionType,
 } from './insights-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { isRestricted, toUserAccessState } from '../shared/access';
+import { readPartnerStatsConsent } from './consent';
 
 export interface RecordInteractionResponse {
   recorded: boolean;
@@ -63,17 +62,11 @@ export const recordInteraction = onCall(
     }
     const input = parsed.input;
 
-    // anonymous_pass_by: feature flag + default-on consent. Consent is
-    // opt-out — only an explicit `false` excludes the caller (a missing or
-    // true value contributes). Opt-out is silent (recorded: false), never an
-    // error — unobservable by design.
+    // The shared writer checks consent for ALL types, including the billboard
+    // bridge. This origin also has its own collection flag.
     if (input.interactionType === 'anonymous_pass_by') {
       if (!(await isPassByEnabled())) {
         throw new HttpsError('failed-precondition', 'Anonymous pass-by collection is disabled.');
-      }
-      const privateSnap = await db.collection('userPrivate').doc(actor.uid).get();
-      if (privateSnap.data()?.anonymousPartnerStatsOptIn === false) {
-        return { recorded: false };
       }
     }
 
@@ -83,11 +76,8 @@ export const recordInteraction = onCall(
 
 /**
  * Validates the partner/offer and writes one deduped insight event.
- * Shared with the billboards domain (billboards.recordInteraction maps
- * billboard taps to partner interaction types). Gates that depend on the
- * interaction origin (pass-by flag, opt-in) belong to the CALLERS — this
- * writer enforces only origin-independent invariants: active partner,
- * same-partner offer, scoped hash, per-day dedupe, TTL.
+ * Shared by both callable producers. Consent and account-erasure fences are
+ * in the same transaction read set as deduplication and event creation.
  */
 export async function writeInteractionEvent(
   uid: string,
@@ -136,13 +126,30 @@ export async function writeInteractionEvent(
 
   // Per-day dedupe: the deterministic ID makes the create transactional.
   return db.runTransaction(async (tx) => {
-    const existing = await tx.get(eventRef);
+    const [existing, privacy, user, deletion, purge] = await Promise.all([
+      tx.get(eventRef),
+      tx.get(db.collection('userPrivate').doc(uid)),
+      tx.get(db.collection('users').doc(uid)),
+      tx.get(db.collection('accountDeletionRequests').doc(uid)),
+      tx.get(db.collection('accountPurgeProgress').doc(uid)),
+    ]);
+    const consent = readPartnerStatsConsent(privacy.data());
+    if (
+      !consent ||
+      consent.grantedAt.toMillis() > now.getTime() ||
+      !user.exists ||
+      isRestricted(toUserAccessState(user.data())) ||
+      ['pending', 'processed'].includes(deletion.data()?.status) ||
+      purge.data()?.partnerErasureActive === true
+    )
+      return false;
     if (existing.exists) {
       return false;
     }
     tx.set(eventRef, {
       companyId: input.companyId,
       interactionType: input.interactionType,
+      consentVersion: consent.version,
       // Raw UID is never stored — scoped hash only.
       userReferenceHash,
       relatedOfferId: input.relatedOfferId ?? null,

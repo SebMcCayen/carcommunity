@@ -1,3 +1,4 @@
+import FirebaseFirestore
 import XCTest
 
 @testable import KCC
@@ -64,9 +65,9 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
         XCTFail("Timed out; state: \(coordinator.state)", file: file, line: line)
     }
 
-    func testDecoderUsesOptOutDefaultsOnlyForMissingFields() {
+    func testDecoderDefaultsOptionalAnalyticsOffAndKeepsLeaderboardDefault() {
         XCTAssertEqual(PrivacySettingsChoices.decode(nil), .contractDefaults)
-        XCTAssertTrue(PrivacySettingsChoices.contractDefaults.partnerStatsOptIn)
+        XCTAssertFalse(PrivacySettingsChoices.contractDefaults.partnerStatsOptIn)
         XCTAssertEqual(
             PrivacySettingsChoices.decode([
                 "anonymousPartnerStatsOptIn": false,
@@ -76,6 +77,79 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
         )
         XCTAssertNil(PrivacySettingsChoices.decode(["leaderboardOptOut": "yes"]))
         XCTAssertNil(PrivacySettingsChoices.decode(["anonymousPartnerStatsOptIn": 1]))
+    }
+
+    func testLegacyTrueAndIncompleteEvidenceCannotGrantConsent() {
+        let legacy: [String: Any] = ["anonymousPartnerStatsOptIn": true]
+        XCTAssertEqual(PrivacySettingsChoices.decode(legacy), .contractDefaults)
+        var data = legacy
+        data["anonymousPartnerStatsConsentVersion"] = 1
+        XCTAssertEqual(PrivacySettingsChoices.decode(data), .contractDefaults)
+        data.removeValue(forKey: "anonymousPartnerStatsConsentVersion")
+        data["anonymousPartnerStatsConsentAt"] = Timestamp(seconds: 1_000, nanoseconds: 0)
+        XCTAssertEqual(PrivacySettingsChoices.decode(data, consentTimestamp: Date(timeIntervalSince1970: 1_000)), .contractDefaults)
+    }
+
+    func testOnlyVersionedAffirmativeConsentEnablesOptionalAnalytics() {
+        let timestamp = Date(timeIntervalSince1970: 1_000)
+        let data: [String: Any] = [
+            "anonymousPartnerStatsOptIn": true,
+            "anonymousPartnerStatsConsentVersion": 1,
+            "anonymousPartnerStatsConsentAt": Timestamp(seconds: 1_000, nanoseconds: 0),
+            "leaderboardOptOut": true,
+        ]
+        XCTAssertEqual(
+            PrivacySettingsChoices.decode(data, consentTimestamp: timestamp),
+            PrivacySettingsChoices(partnerStatsOptIn: true, leaderboardShown: false)
+        )
+        for optIn in [false, true] {
+            var unknownVersion = data
+            unknownVersion["anonymousPartnerStatsOptIn"] = optIn
+            unknownVersion["anonymousPartnerStatsConsentVersion"] = 2
+            XCTAssertEqual(PrivacySettingsChoices.decode(unknownVersion, consentTimestamp: timestamp)?.partnerStatsOptIn, false)
+        }
+        var withdrawn = data
+        withdrawn["anonymousPartnerStatsOptIn"] = false
+        XCTAssertEqual(PrivacySettingsChoices.decode(withdrawn, consentTimestamp: timestamp)?.partnerStatsOptIn, false)
+    }
+
+    func testMalformedConsentEvidenceFailsClosed() {
+        let timestamp = Date(timeIntervalSince1970: 1_000)
+        let data: [String: Any] = [
+            "anonymousPartnerStatsOptIn": true,
+            "anonymousPartnerStatsConsentVersion": 1,
+            "anonymousPartnerStatsConsentAt": Timestamp(seconds: 1_000, nanoseconds: 0),
+        ]
+        for version in ["1", true, NSNull(), 1.5] as [Any] {
+            var malformed = data
+            malformed["anonymousPartnerStatsConsentVersion"] = version
+            XCTAssertNil(PrivacySettingsChoices.decode(malformed, consentTimestamp: timestamp))
+        }
+        for value in [1, NSNumber(value: 1), "true", NSNull()] as [Any] {
+            var malformed = data
+            malformed["anonymousPartnerStatsOptIn"] = value
+            XCTAssertNil(PrivacySettingsChoices.decode(malformed, consentTimestamp: timestamp))
+        }
+        XCTAssertNil(PrivacySettingsChoices.decode(data))
+        XCTAssertNil(PrivacySettingsChoices.decode(data, consentTimestamp: Date(timeIntervalSince1970: 0)))
+        XCTAssertNil(PrivacySettingsChoices.decode(data, consentTimestamp: Date(timeIntervalSince1970: -.infinity)))
+        XCTAssertEqual(PrivacySettingsSnapshot.authoritative(
+            data: data, isFromCache: false, hasPendingWrites: false
+        ), .failed(code: nil))
+    }
+
+    func testCompleteConsentIsStillNonAuthoritativeInCacheOrWithPendingWrites() {
+        let data: [String: Any] = [
+            "anonymousPartnerStatsOptIn": true,
+            "anonymousPartnerStatsConsentVersion": 1,
+            "anonymousPartnerStatsConsentAt": Timestamp(seconds: 1_000, nanoseconds: 0),
+        ]
+        for metadata in [(true, false), (false, true), (true, true)] {
+            XCTAssertNil(PrivacySettingsSnapshot.authoritative(
+                data: data, isFromCache: metadata.0, hasPendingWrites: metadata.1,
+                consentTimestamp: Date(timeIntervalSince1970: 1_000)
+            ))
+        }
     }
 
     func testOnlyServerConfirmedSnapshotBecomesAuthoritative() {
@@ -101,7 +175,7 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
         )
     }
 
-    func testAuthoritativeMissingFieldsKeepBackendOptOutDefaultsButMalformedDataFails() {
+    func testAuthoritativeMissingFieldsKeepAnalyticsOffButMalformedDataFails() {
         XCTAssertEqual(
             PrivacySettingsSnapshot.authoritative(
                 data: nil,
@@ -173,6 +247,22 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testLegacyConsentLoadsOffWithoutAutomaticWriteAndCanBeExplicitlyGranted() async throws {
+        let repository = FakeRepository()
+        let choices = try XCTUnwrap(PrivacySettingsChoices.decode(["anonymousPartnerStatsOptIn": true]))
+        repository.script([.loaded(choices)])
+        let coordinator = PrivacySettingsCoordinator(repository: repository, uid: "me")
+        coordinator.start()
+        await wait(coordinator) { $0.canEdit }
+        XCTAssertEqual(coordinator.draft?.partnerStatsOptIn, false)
+        XCTAssertTrue(repository.partnerWrites.isEmpty)
+        coordinator.setPendingPartnerStatsOptIn(true)
+        XCTAssertTrue(repository.partnerWrites.isEmpty)
+        await coordinator.savePartnerStats()
+        XCTAssertEqual(repository.partnerWrites, [true])
+    }
+
+    @MainActor
     func testListenerFailureAfterLoadLocksControlsWithoutOverwritingDraft() async {
         let repository = FakeRepository()
         let choices = PrivacySettingsChoices(partnerStatsOptIn: false, leaderboardShown: false)
@@ -188,6 +278,35 @@ final class PrivacySettingsCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.draft?.partnerStatsOptIn, true)
         await coordinator.savePartnerStats()
         XCTAssertTrue(repository.partnerWrites.isEmpty)
+    }
+
+    @MainActor
+    func testLossOfAuthoritativeMetadataLocksBothSavesAndPreservesDraftUntilConfirmedAgain() async {
+        let repository = FakeRepository()
+        let choices = PrivacySettingsChoices(partnerStatsOptIn: false, leaderboardShown: true)
+        repository.script([.loaded(choices)])
+        let coordinator = PrivacySettingsCoordinator(repository: repository, uid: "me")
+        coordinator.start()
+        await wait(coordinator) { $0.canEdit }
+        coordinator.setPendingPartnerStatsOptIn(true)
+        coordinator.setPendingLeaderboardShown(false)
+
+        repository.emit(.unconfirmed)
+        await wait(coordinator) { $0.state == .loading }
+        XCTAssertFalse(coordinator.canEdit)
+        XCTAssertEqual(coordinator.draft?.partnerStatsOptIn, true)
+        XCTAssertEqual(coordinator.draft?.leaderboardShown, false)
+        await coordinator.savePartnerStats()
+        await coordinator.saveLeaderboardVisibility()
+        XCTAssertTrue(repository.partnerWrites.isEmpty)
+        XCTAssertTrue(repository.leaderboardOptOutWrites.isEmpty)
+
+        repository.emit(.loaded(choices))
+        await wait(coordinator) { $0.canEdit }
+        XCTAssertEqual(coordinator.draft?.partnerStatsOptIn, true)
+        XCTAssertEqual(coordinator.draft?.leaderboardShown, false)
+        await coordinator.savePartnerStats()
+        XCTAssertEqual(repository.partnerWrites, [true])
     }
 
     @MainActor

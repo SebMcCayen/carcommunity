@@ -30,6 +30,19 @@ final class OnboardingTests: XCTestCase {
         XCTAssertEqual(repository.submissions.first?.1, false)
     }
 
+    func testPayloadAddsConsentVersionOnlyAlongsideExplicitChoice() {
+        for optIn in [false, true] {
+            let payload = FirebaseOnboardingRepository.payload(displayName: "Ada", anonymousPartnerStatsOptIn: optIn)
+            XCTAssertEqual(payload["anonymousPartnerStatsOptIn"] as? Bool, optIn)
+            XCTAssertEqual(payload["anonymousPartnerStatsConsentVersion"] as? Int, 1)
+            XCTAssertNil(payload["anonymousPartnerStatsConsentAt"], "Only the backend may stamp consent time")
+        }
+        let absent = FirebaseOnboardingRepository.payload(displayName: "Ada", anonymousPartnerStatsOptIn: nil)
+        XCTAssertNil(absent["anonymousPartnerStatsOptIn"])
+        XCTAssertNil(absent["anonymousPartnerStatsConsentVersion"])
+        XCTAssertNil(absent["anonymousPartnerStatsConsentAt"])
+    }
+
     @MainActor
     func testFailureIsGenericAndRetryable() async {
         let repository = FakeRepository(); repository.failure = Failure()

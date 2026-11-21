@@ -30,7 +30,7 @@
     {
       "name": "auth.completeOnboarding",
       "domain": "auth",
-      "description": "Marks onboarding complete for the calling user; backend writes onboardingCompletedAt and consent timestamps. Also accepts an optional anonymousPartnerStatsOptIn boolean (anonymised partner statistics are DEFAULT-ON / opt-out): the onboarding step surfaces the toggle pre-enabled and the member's choice persists to userPrivate/{uid}.anonymousPartnerStatsOptIn in the same transaction. Deployed via grouped export as auth-completeOnboarding (functions/src/auth/completeOnboarding.ts).",
+      "description": "Completes mandatory onboarding. On the first completion only, an optional anonymousPartnerStatsOptIn boolean paired with anonymousPartnerStatsConsentVersion:1 records an explicit optional analytics choice and server consent timestamp. Missing choice defaults OFF; legacy true cannot grant; legacy false may decline. Later onboarding retries preserve Privacy choices. No client consent timestamp is accepted. Deployed as auth-completeOnboarding.",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
@@ -750,7 +750,7 @@
     {
       "name": "partnerInsights.recordInteraction",
       "domain": "partnerInsights",
-      "description": "Records one partner interaction event with a PARTNER-SCOPED user hash (raw UIDs never stored), deduped to one event per company+type+UTC-day+user via a deterministic document ID. anonymous_pass_by requires the partnerInsightsPassBy flag (contract default OFF) AND the caller's anonymousPartnerStatsOptIn — non-opted-in contributions return { recorded: false } silently so opting out is unobservable. Events expire after 7 days; the scheduled partnerInsights-aggregateDaily writes threshold-enforced aggregates (min 10 unique contributors for pass-by, config can only raise) and partnerInsights-cleanupExpired removes expired raw events. Deployed via grouped export as partnerInsights-recordInteraction (functions/src/partnerInsights/recordInteraction.ts).",
+      "description": "Records an optional interaction only after current explicit version-1 consent and account/deletion fences are checked in the event transaction. Consent requires true plus the version and a server consent timestamp; legacy booleans do not qualify. Events retain a partner-scoped pseudonymous hash and constant consentVersion only, not a raw UID or copied consent timestamp. Dedupe is company+type+UTC-day+account. Pass-by additionally requires partnerInsightsPassBy (default OFF). Missing/declined consent records nothing. Seven-day raw-event cleanup eligibility and all-type contributor floors apply. No unknown-consent history is promoted. See docs/contracts/partner-analytics-consent-v1.md. Deployed as partnerInsights-recordInteraction.",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
@@ -759,7 +759,7 @@
     {
       "name": "partnerInsights.adminSummary",
       "domain": "partnerInsights",
-      "description": "The only read path for partner insights (partnerInsights and partnerInsightsEvents are backend-only, read/write:false, even for admins). Returns the threshold-enforced per-interaction-type aggregates for one company + period (day/week/month, defaulting to the last aggregated day). Looks up aggregates by deterministic id via getAll (no index); re-applies the minimum-unique-contributor floor at read time as defense in depth (an available anonymous_pass_by row below the floor is re-zeroed to insufficient_data). No user-level data is ever returned. Deployed via grouped export as partnerInsights-adminSummary (functions/src/partnerInsights/adminSummary.ts).",
+      "description": "Admin-only aggregate projection; raw events and stored aggregates remain backend-only. Returns company/period metrics by deterministic IDs, suppresses unmarked historical data and re-applies the minimum account-contributor floor to every optional interaction slice at read time. Counts are zeroed for insufficient or invalid data; configuration may only raise the floor of ten. No customer-level data is returned. Operational redemption totals use a separate contract. Deployed as partnerInsights-adminSummary.",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -768,7 +768,7 @@
     {
       "name": "partnerInsights.driveHeat",
       "domain": "partnerInsights",
-      "description": "Read path for the anonymised DRIVE HEATMAP shown to partners so they can buy in-app digital billboards in the busiest areas. Returns the current aggregate's H3 heat cells, each ONLY { h3Index, contributorCount, weight } — no user ids, no routes, no endpoints, no timestamps. The aggregate is built daily by the scheduled partnerInsights-aggregateDriveHeat over a rolling 90-day window of COMPLETED drives from users with anonymousPartnerStatsOptIn === true: each route.bin is decoded, its endpoints trimmed (~200 m off each end to hide the home/work reveal), binned into H3 res-10 cells (~150 m across, hugging roads), and every cell below the ≥10 unique-contributor floor (MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD, config can only raise) is OMITTED entirely. partnerDriveHeat is backend-only (firestore.rules read,write:false, even for admins) so this callable is the only way in; it re-applies the ≥10 floor at read time as defense in depth. Live sessions are NOT a source (they keep no path). Heat is SPARSE until drive volume clears the floor. Deployed via grouped export as partnerInsights-driveHeat (functions/src/partnerInsights/driveHeat.ts).",
+      "description": "Admin-only aggregate saved-drive heat projection. Future drives after explicit version-1 consent may contribute within the rolling 90-day window; current consent/account fences are checked before Storage downloads and transactionally before publication. Cells contain only H3 index, account-contributor count and weight, with endpoint trimming and at least ten contributors. No raw routes, participant index or per-cell timestamps leave the backend. Historical unmarked, malformed and older-than-48-hour snapshots are suppressed. Prior-valid published aggregate results persist until replacement/expiry; live sessions are not a source. See docs/contracts/partner-analytics-consent-v1.md. Deployed as partnerInsights-driveHeat.",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -813,7 +813,7 @@
     {
       "name": "billboards.recordInteraction",
       "domain": "billboards",
-      "description": "Records a billboard tap (impression/open/navigate/phone/website/offer_view), mapped onto partner-insights interaction types and written through the 9j privacy pipeline (scoped hashes, per-day dedupe, 7-day TTL). Gated by the digitalBillboards flag; analytics failure never blocks the action. Deployed via grouped export as billboards-recordInteraction (functions/src/billboards/manageBillboard.ts).",
+      "description": "Maps a billboard interaction to the shared optional Insights collector, which transactionally requires current explicit version-1 consent and account/deletion fences. The digitalBillboards flag and visible billboard checks also apply. Scoped pseudonyms, daily dedupe, versioned provenance and seven-day cleanup eligibility follow the Insights contract. Analytics is optional and never blocks navigation or other user actions. Deployed as billboards-recordInteraction.",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",

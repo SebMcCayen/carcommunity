@@ -18,6 +18,7 @@
  * Admin-gated (requireAdminActor), App Check enforced.
  */
 
+import { Timestamp } from 'firebase-admin/firestore';
 import { onCall } from '../access/callable';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -27,8 +28,10 @@ import {
   DRIVE_HEAT_DOC_PATH,
   DRIVE_HEAT_MAX_CELLS,
   DRIVE_HEAT_WINDOW_DAYS,
+  DRIVE_HEAT_MAX_AGE_MS,
 } from './driveHeatAggregation';
 import { DRIVE_HEAT_H3_RESOLUTION } from './drive-heat-core';
+import { PARTNER_STATS_CONSENT_VERSION } from './consent';
 
 /** One anonymised heat cell returned to the admin map. */
 export interface DriveHeatCellOut {
@@ -45,13 +48,6 @@ export interface DriveHeatResult {
   windowDays: number;
   /** ISO 8601 build time of the aggregate, or null if it has never run. */
   generatedAt: string | null;
-}
-
-function toIsoOrNull(value: unknown): string | null {
-  if (value && typeof (value as { toDate?: unknown }).toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().toISOString();
-  }
-  return null;
 }
 
 /** A valid H3 index is 15–16 lowercase hex chars; reject anything else. */
@@ -78,23 +74,36 @@ export const driveHeat = onCall(
       .get();
     const data = snap.exists ? snap.data() : undefined;
 
-    const rawCells = Array.isArray(data?.cells) ? (data!.cells as unknown[]) : [];
+    const generatedAt = data?.generatedAt;
+    const age = generatedAt instanceof Timestamp ? Date.now() - generatedAt.toMillis() : NaN;
+    const validSnapshot =
+      data?.consentVersion === PARTNER_STATS_CONSENT_VERSION &&
+      Number.isFinite(age) &&
+      age >= 0 &&
+      age <= DRIVE_HEAT_MAX_AGE_MS &&
+      data?.resolution === DRIVE_HEAT_H3_RESOLUTION &&
+      data?.windowDays === DRIVE_HEAT_WINDOW_DAYS &&
+      Array.isArray(data?.cells) &&
+      data.cells.length <= DRIVE_HEAT_MAX_CELLS;
+    const rawCells: unknown[] = validSnapshot ? data!.cells : [];
     const valid: DriveHeatCellOut[] = [];
     for (const raw of rawCells) {
       if (!raw || typeof raw !== 'object') continue;
       const cell = raw as Record<string, unknown>;
-      const contributorCount = Number(cell.contributorCount);
-      const weight = Number(cell.weight);
+      const contributorCount = cell.contributorCount;
+      const weight = cell.weight;
       // Re-apply the privacy floor at read time (defense in depth) and validate
       // the stored shape, failing closed on anything malformed.
       if (!isH3Index(cell.h3Index)) continue;
       if (
-        !Number.isFinite(contributorCount) ||
+        typeof contributorCount !== 'number' ||
+        !Number.isSafeInteger(contributorCount) ||
         contributorCount < MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD
       ) {
         continue;
       }
-      if (!Number.isFinite(weight) || weight < 0) continue;
+      if (typeof weight !== 'number' || !Number.isSafeInteger(weight) || weight < contributorCount)
+        continue;
       valid.push({ h3Index: cell.h3Index, contributorCount, weight });
     }
     // Sort by weight BEFORE capping so the "busiest areas are preserved"
@@ -105,13 +114,9 @@ export const driveHeat = onCall(
 
     return {
       cells,
-      resolution:
-        typeof data?.resolution === 'number'
-          ? (data.resolution as number)
-          : DRIVE_HEAT_H3_RESOLUTION,
-      windowDays:
-        typeof data?.windowDays === 'number' ? (data.windowDays as number) : DRIVE_HEAT_WINDOW_DAYS,
-      generatedAt: toIsoOrNull(data?.generatedAt),
+      resolution: DRIVE_HEAT_H3_RESOLUTION,
+      windowDays: DRIVE_HEAT_WINDOW_DAYS,
+      generatedAt: validSnapshot ? (generatedAt as Timestamp).toDate().toISOString() : null,
     };
   },
 );

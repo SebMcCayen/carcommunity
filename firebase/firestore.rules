@@ -271,7 +271,7 @@ service cloud.firestore {
     }
 
     // ---- userPrivate/{uid} owner-write validation (Phase 9a) ----------------
-    // The whitelist excludes the consent timestamps (licenceConfirmedAt, the
+    // The whitelist excludes mandatory consent timestamps (licenceConfirmedAt, the
     // legacy ageConfirmedAt, termsAcceptedAt, privacyPolicyAcceptedAt) —
     // backend-written compliance records (auth.completeOnboarding) that clients
     // can never set or modify.
@@ -282,6 +282,15 @@ service cloud.firestore {
         && (!keys.hasAny(['phone']) || (data.phone is string && data.phone.size() <= 32))
         && (!keys.hasAny(['notificationPreferences']) || data.notificationPreferences is map)
         && (!keys.hasAny(['anonymousPartnerStatsOptIn']) || data.anonymousPartnerStatsOptIn is bool)
+        && (!keys.hasAny(['anonymousPartnerStatsConsentVersion', 'anonymousPartnerStatsConsentAt'])
+          || (data.get('anonymousPartnerStatsConsentVersion', 0) == 1
+            && isServerTimestamp(data.get('anonymousPartnerStatsConsentAt', null))))
+        // A legacy boolean-only write may revoke. Enabling requires fresh
+        // evidence, even when a previous version/timestamp remains after revoke.
+        && (data.get('anonymousPartnerStatsOptIn', false) != true
+          || !keys.hasAny(['anonymousPartnerStatsOptIn', 'anonymousPartnerStatsConsentVersion', 'anonymousPartnerStatsConsentAt'])
+          || (data.get('anonymousPartnerStatsConsentVersion', 0) == 1
+            && isServerTimestamp(data.get('anonymousPartnerStatsConsentAt', null))))
         && (!keys.hasAny(['leaderboardOptOut']) || data.leaderboardOptOut is bool)
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
@@ -302,7 +311,8 @@ service cloud.firestore {
     function validUserPrivateUpdate() {
       let keys = request.resource.data.diff(resource.data).affectedKeys();
       return keys.hasOnly(['email', 'phone', 'notificationPreferences',
-          'anonymousPartnerStatsOptIn', 'leaderboardOptOut', 'updatedAt'])
+          'anonymousPartnerStatsOptIn', 'anonymousPartnerStatsConsentVersion',
+          'anonymousPartnerStatsConsentAt', 'leaderboardOptOut', 'updatedAt'])
         && validUserPrivateFields(keys);
     }
 
@@ -596,7 +606,8 @@ service cloud.firestore {
       allow read: if isOwner(userId);
       // No owner create: provisioned by backend alongside users/{uid}.
       // Owner updates are whitelist-based with field-level validation
-      // (Phase 9a); consent timestamps are excluded from the whitelist.
+      // Mandatory onboarding audit timestamps remain backend-only. Optional
+      // analytics choices have separate version/fresh-server-time validation.
       allow update: if isOwner(userId) && validUserPrivateUpdate();
       // No client deletes: account deletion is handled by backend functions.
 

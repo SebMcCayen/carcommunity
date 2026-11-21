@@ -138,12 +138,15 @@ This document defines baseline security requirements for CarCommunity. It is a t
 ## Partner Insights (Anonymiserad partnerstatistik)
 
 - Distinguish explicit interaction analytics (for example profile views, website clicks, offer actions) from location-derived pass-by statistics.
-- Anonymous pass-by statistics require explicit backend-verified consent via `anonymousPartnerStatsOptIn`; default is false.
-- Anonymous pass-by metrics must meet a minimum aggregation threshold of 10 unique opted-in users before any partner-facing reporting is available.
-- Raw partner interaction events are short-lived, retained for 7 days, and cleaned up through TTL-based deletion jobs.
+- Every optional interaction or location-derived contribution requires an explicit versioned choice: `anonymousPartnerStatsOptIn: true`, `anonymousPartnerStatsConsentVersion: 1` and a server consent timestamp. Legacy/default booleans are not consent. New accounts default OFF; existing values are never automatically promoted.
+- Every optional metric must meet a minimum threshold of ten distinct opted-in account contributors before reporting. Both aggregate writers and readers enforce the floor; configuration may only raise it. This is not a unique-physical-person or mathematical-anonymity guarantee.
+- Raw partner interaction events are pseudonymous, backend-only data, eligible for cleanup after seven days. Cleanup/TTL can lag. Withdrawal stops new contributions; prior-valid contributions may complete that pipeline and their thresholded aggregate results persist. Canonical purge is not claimed to immediately enumerate every historical scoped analytics hash.
+- Saved-drive analysis excludes drives started before the latest consent. Current consent and account-deletion fences are rechecked before downloads and transactionally before publication. Published aggregate heat snapshots require provenance, expire after 48 hours and contain no participant index; previously valid published results are not retroactively attributed to individual accounts.
+- Historical unmarked events and snapshots are not relabeled as consented. Old aggregates are suppressed until correctly rebuilt. The obsolete opt-in backfill refuses execution without opening Firebase.
 - Partner Insights never exposes user-level partner data, identities, conversations, live positions, routes, or exact event timestamps to partners.
 - Partner data is not sold, and partner companies never receive drive history or individual tracking data.
 - A dedicated privacy review must be completed before any future partner portal launch or wider partner self-service analytics rollout.
+- The corrected contract and scoped assessment are in [optional Partner consent v1](contracts/partner-analytics-consent-v1.md) and [the consent review](security/partner-consent-review.md). Neither source review nor CI authorizes deployment or activation.
 
 ## Partner offer redemption accounting
 

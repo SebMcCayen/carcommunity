@@ -5,9 +5,8 @@
  * Once a day, over a rolling {@link DRIVE_HEAT_WINDOW_DAYS}-day window of
  * completed drives from CONSENTED users, this:
  *  1. lists `rides/{rideId}` in the window,
- *  2. keeps only rides whose owner has `anonymousPartnerStatsOptIn === true`
- *     (userPrivate/{uid}) — the SAME consent flag the partner-stats pass-by
- *     feature gates on,
+ *  2. checks explicit, versioned consent and account/deletion fences before
+ *     reading a route; excludes rides started before the latest consent,
  *  3. downloads each `rideRoutes/{uid}/{rideId}/route.bin`, decodes the driven
  *     track (route-codec.ts), trims the endpoints (home/work reveal), and bins
  *     the surviving points into H3 cells (drive-heat-core.ts),
@@ -34,6 +33,8 @@ import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 import { decodeRoute } from '../drives/route-codec';
 import { rideRoutePath } from '../drives/drives-core';
+import { isRestricted, toUserAccessState } from '../shared/access';
+import { PARTNER_STATS_CONSENT_VERSION, readPartnerStatsConsent } from './consent';
 import {
   DriveHeatAccumulator,
   routeCells,
@@ -41,7 +42,6 @@ import {
   DRIVE_HEAT_H3_RESOLUTION,
   ENDPOINT_TRIM_METERS,
   MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD,
-  type DriveHeatCell,
 } from './drive-heat-core';
 
 /** Rolling window of completed drives folded into the heatmap. */
@@ -60,6 +60,33 @@ export const DRIVE_HEAT_MAX_CELLS = 20_000;
 
 /** How many rides to page through Firestore at a time. */
 const RIDE_PAGE_SIZE = 500;
+/** Fail without publishing a partial report when a bounded run is exhausted. */
+const MAX_RIDES_PER_RUN = 5_000;
+const MAX_CONTRIBUTORS_PER_RUN = 250;
+const MAX_CONTRIBUTION_CELLS = 200_000;
+/** A missed daily rebuild may retain a valid anonymous snapshot for at most 48h. */
+export const DRIVE_HEAT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+function consentRefs(uid: string) {
+  return [
+    db.collection('userPrivate').doc(uid),
+    db.collection('users').doc(uid),
+    db.collection('accountDeletionRequests').doc(uid),
+    db.collection('accountPurgeProgress').doc(uid),
+  ];
+}
+
+function permittedConsent(snaps: FirebaseFirestore.DocumentSnapshot[]) {
+  const [priv, user, deletion, progress] = snaps;
+  if (
+    !user?.exists ||
+    isRestricted(toUserAccessState(user.data())) ||
+    ['pending', 'processed'].includes(deletion?.data()?.status) ||
+    progress?.data()?.partnerErasureActive === true
+  )
+    return null;
+  return readPartnerStatsConsent(priv?.data());
+}
 
 /**
  * Aggregates the rolling window ending at `now` into the anonymised heat
@@ -74,29 +101,11 @@ export async function runDriveHeatAggregation(now: Date): Promise<{
   const cutoff = new Date(now.getTime() - DRIVE_HEAT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const bucket = adminStorage.bucket();
 
-  // Consent is looked up once per user and cached across all their rides.
-  const consentCache = new Map<string, boolean>();
-  const hasConsent = async (uid: string): Promise<boolean> => {
-    const cached = consentCache.get(uid);
-    if (cached !== undefined) return cached;
-    let allowed = false;
-    try {
-      const snap = await db.collection('userPrivate').doc(uid).get();
-      allowed = snap.data()?.anonymousPartnerStatsOptIn === true;
-    } catch (error) {
-      logger.warn('drive-heat: consent read failed; excluding user', { error: String(error) });
-      allowed = false;
-    }
-    consentCache.set(uid, allowed);
-    return allowed;
-  };
-
-  // Fold each drive into the accumulator as we page, so peak memory is bounded
-  // by the number of distinct cells (the aggregate size), NOT by the number of
-  // rides in the 90-day window — see DriveHeatAccumulator.
-  const accumulator = new DriveHeatAccumulator();
+  // Identities exist only in this bounded invocation, never in published heat.
+  // Keep per-ride contributions until the final transactional consent recheck.
+  const contributions = new Map<string, { grantedAt: Timestamp; rides: string[][] }>();
+  let contributionCells = 0;
   let ridesConsidered = 0;
-  let ridesContributing = 0;
 
   // Page through rides in the window by startedAt (single-field range → the
   // automatic index covers it; no composite index to hand-deploy).
@@ -105,6 +114,7 @@ export async function runDriveHeatAggregation(now: Date): Promise<{
     let query = db
       .collection('rides')
       .where('startedAt', '>=', Timestamp.fromDate(cutoff))
+      .where('startedAt', '<=', Timestamp.fromDate(now))
       .orderBy('startedAt', 'asc')
       .limit(RIDE_PAGE_SIZE);
     if (cursor) query = query.startAfter(cursor);
@@ -113,50 +123,88 @@ export async function runDriveHeatAggregation(now: Date): Promise<{
 
     for (const doc of page.docs) {
       ridesConsidered += 1;
+      if (ridesConsidered > MAX_RIDES_PER_RUN) throw new Error('Drive heat ride budget exceeded.');
       const data = doc.data();
       const uid = data.userId as string | undefined;
-      if (!uid) continue;
-      if (!(await hasConsent(uid))) continue;
+      if (typeof uid !== 'string' || !uid) continue;
+      const startedAt = data.startedAt;
+      if (!(startedAt instanceof Timestamp)) continue;
+      // Do not even download a saved personal route without current consent.
+      const consent = permittedConsent(await db.getAll(...consentRefs(uid)));
+      if (!consent || startedAt.toMillis() < consent.grantedAt.toMillis()) continue;
+      const existing = contributions.get(uid);
+      if (existing && !existing.grantedAt.isEqual(consent.grantedAt)) continue;
+      if (!existing && contributions.size >= MAX_CONTRIBUTORS_PER_RUN)
+        throw new Error('Drive heat contributor budget exceeded.');
 
       const cells = await cellsForRide(bucket, uid, doc.id);
       if (cells.length === 0) continue;
-      accumulator.add(uid, cells);
-      ridesContributing += 1;
+      contributionCells += cells.length;
+      if (contributionCells > MAX_CONTRIBUTION_CELLS)
+        throw new Error('Drive heat cell budget exceeded.');
+      const entry = existing ?? { grantedAt: consent.grantedAt, rides: [] };
+      entry.rides.push(cells);
+      contributions.set(uid, entry);
     }
 
     if (page.size < RIDE_PAGE_SIZE) break;
     cursor = page.docs[page.size - 1]!;
   }
 
-  const allCells = accumulator.finalize(MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD);
-  const cells: DriveHeatCell[] = allCells.slice(0, DRIVE_HEAT_MAX_CELLS);
-
-  await db
-    .collection(DRIVE_HEAT_DOC_PATH.collection)
-    .doc(DRIVE_HEAT_DOC_PATH.doc)
-    .set({
-      // Document-level metadata only — NOT per-user data.
+  const heatRef = db.collection(DRIVE_HEAT_DOC_PATH.collection).doc(DRIVE_HEAT_DOC_PATH.doc);
+  const entries = [...contributions.entries()];
+  const publication = await db.runTransaction(async (tx) => {
+    // No Storage/Auth I/O in this retriable transaction. Every authority read
+    // participates in conflict detection, including revoke/purge during publish.
+    const refs = entries.flatMap(([uid]) => consentRefs(uid));
+    const snapshots = refs.length ? await tx.getAll(...refs) : [];
+    const previous = await tx.get(heatRef);
+    const previousGeneratedAt = previous.data()?.generatedAt;
+    if (
+      previous.data()?.consentVersion === PARTNER_STATS_CONSENT_VERSION &&
+      previousGeneratedAt instanceof Timestamp &&
+      previousGeneratedAt.toMillis() <= Date.now() &&
+      previousGeneratedAt.toMillis() > now.getTime()
+    )
+      throw new Error('A newer drive heat snapshot has already been published.');
+    const accumulator = new DriveHeatAccumulator();
+    let ridesContributing = 0;
+    entries.forEach(([uid, entry], index) => {
+      const consent = permittedConsent(snapshots.slice(index * 4, index * 4 + 4));
+      if (!consent || !consent.grantedAt.isEqual(entry.grantedAt)) return;
+      for (const cells of entry.rides) {
+        accumulator.add(uid, cells);
+        ridesContributing += 1;
+      }
+    });
+    const cells = accumulator
+      .finalize(MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD)
+      .slice(0, DRIVE_HEAT_MAX_CELLS);
+    tx.set(heatRef, {
+      // Published cells retain no identity or participant index. Withdrawal
+      // stops new processing; a previously valid aggregate expires after 48h.
+      consentVersion: PARTNER_STATS_CONSENT_VERSION,
       generatedAt: Timestamp.fromDate(now),
       windowDays: DRIVE_HEAT_WINDOW_DAYS,
       resolution: DRIVE_HEAT_H3_RESOLUTION,
       trimMeters: ENDPOINT_TRIM_METERS,
       threshold: MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD,
       cellCount: cells.length,
-      // Each cell carries ONLY the anonymised triple.
       cells: cells.map((c) => ({
         h3Index: c.h3Index,
         contributorCount: c.contributorCount,
         weight: c.weight,
       })),
     });
+    return { ridesContributing, cellsWritten: cells.length };
+  });
 
   logger.info('drive-heat aggregation complete', {
     ridesConsidered,
-    ridesContributing,
-    cellsWritten: cells.length,
+    ...publication,
     windowDays: DRIVE_HEAT_WINDOW_DAYS,
   });
-  return { ridesConsidered, ridesContributing, cellsWritten: cells.length };
+  return { ridesConsidered, ...publication };
 }
 
 /**
@@ -174,7 +222,10 @@ async function cellsForRide(
   try {
     const [exists] = await file.exists();
     if (!exists) return [];
-    const [buffer] = await file.download();
+    // Bound compressed input independently of decoder's existing inflate cap.
+    const maxBytes = 2 * 1024 * 1024;
+    const [buffer] = await file.download({ start: 0, end: maxBytes, decompress: false });
+    if (buffer.length > maxBytes) return [];
     bytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   } catch (error) {
     logger.warn('drive-heat: route download failed; skipping ride', {
@@ -185,7 +236,7 @@ async function cellsForRide(
   }
 
   const points = decodeRoute(bytes);
-  if (!points || points.length < 2) return [];
+  if (!points || points.length < 2 || points.length > 20_000) return [];
   const trimmed = trimRouteEndpoints(points);
   if (trimmed.length === 0) return [];
   return routeCells(trimmed);

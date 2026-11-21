@@ -366,6 +366,10 @@ final class ShellSmokeTests: XCTestCase {
         let readable = ChatViewportEvidence(window: window, elements: chrome + [message])
         XCTAssertTrue(readable.keyboardPresented)
         XCTAssertTrue(readable.fullyReadable(identifier: id))
+        XCTAssertEqual(readable.historyAnchorCandidate(maximumTextHeight: 200)?.identifier, id)
+        XCTAssertNil(readable.historyAnchorCandidate(maximumTextHeight: 120),
+            "History setup must not choose a label too tall for the writing viewport")
+        XCTAssertNil(readable.historyAnchorCandidate(maximumTextHeight: .nan))
         for frame in [CGRect.zero, .null, .infinite,
                       CGRect(x: CGFloat.nan, y: 214, width: 280, height: 125.3),
                       CGRect(x: 68, y: 600, width: 280, height: 125.3),
@@ -416,6 +420,17 @@ final class ShellSmokeTests: XCTestCase {
             frame: CGRect(x: 68, y: 400, width: 100, height: 40), inMessageThread: true)
         XCTAssertFalse(ChatViewportEvidence(window: window, elements: chrome + [message, partiallyVisibleReply])
             .readsHistory(hiding: "Fixture reply"), "Even a partially reappearing newest message violates history position")
+
+        // Captured maximum-text history geometry: the reply stayed hidden,
+        // but neither old label fitted after the keyboard reduced the viewport.
+        let clippedHistory = [
+            Node(identifier: "chat.message.text.fixture-37", type: .staticText,
+                frame: CGRect(x: 68, y: 12.7, width: 280, height: 125.3), inMessageThread: true),
+            Node(identifier: "chat.message.text.fixture-38", type: .staticText,
+                frame: CGRect(x: 68, y: 280, width: 280, height: 125.3), inMessageThread: true),
+        ]
+        XCTAssertFalse(ChatViewportEvidence(window: window, elements: chrome + clippedHistory + [hiddenReply])
+            .readsHistory(hiding: "Fixture reply"), "Even slight clipping cannot substitute for a fully readable old message")
     }
 
     func testChatViewportEvidenceRequiresRealKeyboardAbsenceAndRestoredNavigation() {
@@ -591,17 +606,21 @@ final class ShellSmokeTests: XCTestCase {
                 message: "The history-read starting state must have no keyboard and restored navigation") {
                 $0.keyboardDismissed
             }
-            let messages = element("chat.thread.messages", in: app)
-            messages.swipeDown()
-            messages.swipeDown()
+            // Two inertial swipes can leave every old label at a viewport edge
+            // at maximum text size. Prepare a real old row near the top before
+            // focusing; the final assertion still requires that SAME full row.
+            let historyAnchor = try prepareHistoryForKeyboard(in: app,
+                keyboardViewportHeight: XCTUnwrap(writing.readableViewport).height)
             let history = try ChatViewportEvidence(capturing: app)
-            XCTAssertTrue(history.keyboardDismissed && history.readsHistory(hiding: "Fixture reply"),
+            XCTAssertTrue(history.keyboardDismissed && history.fullyReadable(identifier: historyAnchor) &&
+                history.readsHistory(hiding: "Fixture reply"),
                 "Reading older history must show older messages and move the sent reply out of view")
             XCTAssertTrue(focusComposerKeyboard(in: app),
                 "The history-read transition must focus the real composer")
             _ = try requireChatEvidence(in: app, name: "chat-history-keyboard-failure", timeout: 5,
                 message: "Opening the keyboard must preserve older history without revealing the sent reply") {
-                $0.keyboardPresented && $0.readsHistory(hiding: "Fixture reply")
+                $0.keyboardPresented && $0.fullyReadable(identifier: historyAnchor) &&
+                    $0.readsHistory(hiding: "Fixture reply")
             }
             app.terminate()
         }
@@ -1727,6 +1746,50 @@ final class ShellSmokeTests: XCTestCase {
             ?? app.descendants(matching: .any).matching(identifier: "chat.composer.input").firstMatch
     }
 
+    /// Set up history with bounded physical drags while the keyboard is absent.
+    /// Use the already-observed writing height to keep a complete old label
+    /// away from the part of the conversation the keyboard will cover.
+    private func prepareHistoryForKeyboard(in app: XCUIApplication, keyboardViewportHeight: CGFloat) throws -> String {
+        let margin: CGFloat = 24
+        for attempt in 0..<8 {
+            let evidence = try ChatViewportEvidence(capturing: app)
+            let viewport = try XCTUnwrap(evidence.readableViewport)
+            XCTAssertTrue(evidence.keyboardDismissed)
+            let availableHeight = min(viewport.height, keyboardViewportHeight)
+            let candidate = evidence.historyAnchorCandidate(maximumTextHeight: availableHeight - 2 * margin)
+            let targetTop = viewport.minY + margin
+            let readsHistory = evidence.readsHistory(hiding: "Fixture reply")
+            if let candidate, readsHistory,
+               viewport.contains(candidate.frame), candidate.frame.minY >= targetTop,
+               candidate.frame.minY <= targetTop + margin {
+                print("CHAT_HISTORY_ANCHOR id=\(candidate.identifier) frame=\(candidate.frame) viewport=\(viewport)")
+                return candidate.identifier
+            }
+            let limit = min(viewport.height * 0.4, 240)
+            // Hide the sent reply before fine alignment. A nearly aligned
+            // old row alone is not a history-read starting state.
+            var distance = limit
+            if !evidence.messageIntersectsViewport(label: "Fixture reply"), let candidate {
+                let correction = targetTop + margin / 2 - candidate.frame.minY
+                // CI consumed 10pt recognizing a pan. A 24pt minimum crosses
+                // that threshold without jumping across the 24pt setup band.
+                distance = correction >= 0 ? max(margin, correction) : min(-margin, correction)
+            }
+            distance = max(-limit, min(limit, distance))
+            let startY = viewport.minY + viewport.height * (distance > 0 ? 0.25 : 0.75)
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            // The gutter avoids long-pressing a message bubble. The window
+            // origin comes from this same snapshot, in screen coordinates.
+            let x = viewport.minX + 6 - evidence.window.minX
+            let start = origin.withOffset(CGVector(dx: x, dy: startY - evidence.window.minY))
+            let end = origin.withOffset(CGVector(dx: x, dy: startY + distance - evidence.window.minY))
+            print("CHAT_HISTORY_SETUP attempt=\(attempt) drag=\(distance) viewport=\(viewport)")
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
+        }
+        chatProof(app, name: "chat-history-setup-failure", tree: true)
+        return try XCTUnwrap(nil as String?, "History setup must align a readable old message before keyboard focus")
+    }
+
     /// Keyboard focus is setup for the viewport assertions below. SwiftUI can
     /// replace the vertical field's measuring editor during the first tap,
     /// leaving a hittable but unfocused field at accessibility text sizes.
@@ -2107,11 +2170,26 @@ private struct ChatViewportEvidence {
                 $0.identifier.hasPrefix("chat.message.text.fixture-") &&
                 usable($0.frame) && viewport.contains($0.frame)
         }
-        let newestIntersects = elements.contains {
+        return hasVisibleOlderMessage && !messageIntersectsViewport(label: label)
+    }
+
+    func messageIntersectsViewport(label: String) -> Bool {
+        guard let viewport = readableViewport else { return false }
+        return elements.contains {
             $0.inMessageThread && $0.type == .staticText && $0.label == label &&
                 usable($0.frame) && !$0.frame.intersection(viewport).isNull &&
                 !$0.frame.intersection(viewport).isEmpty
         }
-        return hasVisibleOlderMessage && !newestIntersects
+    }
+
+    func historyAnchorCandidate(maximumTextHeight: CGFloat) -> Element? {
+        guard maximumTextHeight.isFinite, maximumTextHeight > 0,
+              let viewport = readableViewport else { return nil }
+        return elements.filter {
+            $0.inMessageThread && $0.type == .staticText &&
+                $0.identifier.hasPrefix("chat.message.text.fixture-") && usable($0.frame) &&
+                $0.frame.height <= maximumTextHeight &&
+                !$0.frame.intersection(viewport).isNull && !$0.frame.intersection(viewport).isEmpty
+        }.min { $0.frame.minY < $1.frame.minY }
     }
 }

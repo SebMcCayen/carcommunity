@@ -1,43 +1,67 @@
+import CoreFoundation
 import Foundation
 
-/// The two owner-controlled privacy choices stored on `userPrivate/{uid}`.
-/// Partner statistics is opt-out; an absent field is enabled to match the
-/// Android client and backend interaction gate.
-/// Leaderboard visibility remains opt-out, so an absent field is shown.
+/// Owner-controlled privacy choices. Optional Partner Insights requires explicit
+/// versioned consent; historical booleans alone never grant it. Leaderboard
+/// visibility retains its existing opt-out contract.
 struct PrivacySettingsChoices: Equatable, Sendable {
     let partnerStatsOptIn: Bool
     let leaderboardShown: Bool
 
+    static let partnerStatsConsentVersion = 1
     static let contractDefaults = PrivacySettingsChoices(
-        partnerStatsOptIn: true,
+        partnerStatsOptIn: false,
         leaderboardShown: true
     )
 
-    /// Decodes a successful Firestore snapshot. Missing fields use the shared
-    /// defaults, while a PRESENT malformed field fails closed: the caller must
-    /// not turn invalid server data into a saveable default that could replace
-    /// an existing privacy choice.
-    static func decode(_ data: [String: Any]?) -> PrivacySettingsChoices? {
+    /// The Firebase adapter supplies a date only for a real Firestore Timestamp.
+    /// Missing consent evidence means OFF; present malformed evidence locks the
+    /// screen rather than replacing an existing choice with a saveable default.
+    static func decode(
+        _ data: [String: Any]?,
+        consentTimestamp: Date? = nil
+    ) -> PrivacySettingsChoices? {
         let data = data ?? [:]
         let partner: Bool
-        if data.keys.contains("anonymousPartnerStatsOptIn") {
-            guard let value = data["anonymousPartnerStatsOptIn"] as? Bool else { return nil }
+        if let value = data["anonymousPartnerStatsOptIn"] {
+            guard let value = strictBoolean(value) else { return nil }
             partner = value
         } else {
-            partner = true
+            partner = false
+        }
+
+        var hasCurrentVersion = false
+        if let value = data["anonymousPartnerStatsConsentVersion"] {
+            guard let number = value as? NSNumber,
+                  CFGetTypeID(number) != CFBooleanGetTypeID(),
+                  number.doubleValue.isFinite,
+                  number.doubleValue.rounded() == number.doubleValue
+            else { return nil }
+            hasCurrentVersion = number.doubleValue == Double(partnerStatsConsentVersion)
+        }
+        let hasTimestamp = data.keys.contains("anonymousPartnerStatsConsentAt")
+        if hasTimestamp {
+            guard let consentTimestamp, consentTimestamp.timeIntervalSince1970.isFinite,
+                  consentTimestamp.timeIntervalSince1970 > 0 else { return nil }
         }
 
         let leaderboardOptOut: Bool
-        if data.keys.contains("leaderboardOptOut") {
-            guard let value = data["leaderboardOptOut"] as? Bool else { return nil }
+        if let value = data["leaderboardOptOut"] {
+            guard let value = strictBoolean(value) else { return nil }
             leaderboardOptOut = value
         } else {
             leaderboardOptOut = false
         }
         return PrivacySettingsChoices(
-            partnerStatsOptIn: partner,
+            partnerStatsOptIn: partner && hasCurrentVersion && hasTimestamp,
             leaderboardShown: !leaderboardOptOut
         )
+    }
+
+    private static func strictBoolean(_ value: Any) -> Bool? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        return number.boolValue
     }
 }
 
@@ -45,6 +69,7 @@ struct PrivacySettingsChoices: Equatable, Sendable {
 /// default-valued snapshot; a read error or malformed privacy field is a
 /// failure and never a default.
 enum PrivacySettingsSnapshot: Equatable, Sendable {
+    case unconfirmed
     case loaded(PrivacySettingsChoices)
     case failed(code: String?)
 
@@ -54,10 +79,11 @@ enum PrivacySettingsSnapshot: Equatable, Sendable {
     static func authoritative(
         data: [String: Any]?,
         isFromCache: Bool,
-        hasPendingWrites: Bool
+        hasPendingWrites: Bool,
+        consentTimestamp: Date? = nil
     ) -> PrivacySettingsSnapshot? {
         guard !isFromCache, !hasPendingWrites else { return nil }
-        guard let choices = PrivacySettingsChoices.decode(data) else {
+        guard let choices = PrivacySettingsChoices.decode(data, consentTimestamp: consentTimestamp) else {
             return .failed(code: nil)
         }
         return .loaded(choices)

@@ -31,8 +31,7 @@ class OnboardingCoordinator(
      * Submits once; re-entrant calls while submitting are ignored.
      *
      * [anonymousPartnerStatsOptIn] carries the onboarding partner-statistics
-     * choice (default-on / opt-out). null omits it — the backend keeps the
-     * provisioning default (ON); false opts the member out.
+     * explicit choice. null omits consent and never grants optional analytics.
      */
     suspend fun submit(displayName: String?, anonymousPartnerStatsOptIn: Boolean? = null) {
         if (state.value == OnboardingStatus.Submitting) return

@@ -108,7 +108,7 @@ struct ChatHubScreen: View {
         }
         .padding(KccSpacing.s1)
         .background(KccTheme.surface, in: Capsule())
-        .overlay { Capsule().strokeBorder(KccTheme.border, lineWidth: 1) }
+        .overlay { Capsule().strokeBorder(KccTheme.border, lineWidth: 1).allowsHitTesting(false) }
         .padding(KccSpacing.s4)
     }
 
@@ -121,11 +121,11 @@ struct ChatHubScreen: View {
                 .padding(.horizontal, KccSpacing.s3)
                 .padding(.vertical, KccSpacing.s2)
                 .frame(maxWidth: .infinity, minHeight: 48)
-                // The unselected segment is transparent, but its entire 48pt
-                // label must remain a physical and accessible tap target.
-                .contentShape(Rectangle())
                 .foregroundStyle(showsDriver == driver ? KccTheme.onGold : KccTheme.text)
                 .background(showsDriver == driver ? KccPalette.crownGold : .clear, in: Capsule())
+                // Include the final background in the full 48pt interaction
+                // target, including when this segment is transparent.
+                .contentShape(.interaction, Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(driver ? "chatHub.source.driver" : "chatHub.source.chats")

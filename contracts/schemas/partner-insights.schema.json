@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/partner-insights.schema.json",
   "title": "Partner insights contract",
-  "description": "Language-neutral partner-insights shapes shared by iOS, Android, backend, and admin. PRIVACY-CRITICAL: insight events store only a partner-scoped SHA-256 user hash (raw UIDs never appear, cross-partner correlation impossible); anonymous_pass_by contributions require the partnerInsightsPassBy feature flag (default OFF) plus the user's explicit anonymousPartnerStatsOptIn, and a non-opted-in contribution is silently not recorded; aggregates for anonymous_pass_by below the minimum-unique-contributor threshold (floor 10 — configuration can only raise it) are ZEROED with status insufficient_data; raw events expire after 7 days and only threshold-enforced aggregates persist. Neither collection is ever client-readable. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "description": "Optional Partner analytics require explicit version-1 consent with a server timestamp for every interaction and future saved drive. No legacy defaults or historical unmarked events qualify. Events contain a partner-scoped pseudonymous hash, not a raw UID; hashes are not anonymous data. Every reporting slice has a minimum 10-contributor floor (configuration may raise it). Raw events expire after 7 days; eligible aggregate results persist. Neither raw events nor aggregates are client-readable. Operational offer redemption counts are a separate pipeline and do not imply optional analytics consent.",
   "$defs": {
     "partnerInteractionType": {
       "type": "string",
@@ -25,26 +25,41 @@
     "insightResultStatus": {
       "type": "string",
       "enum": ["available", "insufficient_data", "no_data"],
-      "description": "insufficient_data means the pass-by contributor threshold was not met — counts are zeroed, never exposed."
+      "description": "insufficient_data means the contributor floor was not met for this optional analytics slice. Counts are zeroed."
     },
     "partnerInsightsEvent": {
       "type": "object",
       "description": "Firestore `partnerInsightsEvents/{eventId}` — raw event, backend-only, 7-day TTL. Document ID = {companyId}_{type}_{utcDay}_{scopedHash} (per-day dedupe).",
       "properties": {
-        "companyId": { "type": "string" },
-        "interactionType": { "$ref": "#/$defs/partnerInteractionType" },
+        "companyId": {
+          "type": "string"
+        },
+        "interactionType": {
+          "$ref": "#/$defs/partnerInteractionType"
+        },
         "userReferenceHash": {
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
           "description": "SHA-256('kcc-pi:{companyId}:{uid}') — partner-scoped; the raw UID is never stored."
         },
-        "relatedOfferId": { "type": ["string", "null"] },
-        "occurredAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
-        "aggregationDate": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "relatedOfferId": {
+          "type": ["string", "null"]
+        },
+        "occurredAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
+        "aggregationDate": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
         "expiresAt": {
           "$ref": "common.schema.json#/$defs/isoTimestamp",
           "description": "occurredAt + 7 days; enforced by the partnerInsights-cleanupExpired scheduled function."
+        },
+        "consentVersion": {
+          "type": "integer",
+          "const": 1,
+          "description": "Backend-only marker: current explicit consent was checked atomically with recording. No UID or cross-partner consent timestamp is copied."
         }
       },
       "required": [
@@ -54,7 +69,8 @@
         "relatedOfferId",
         "occurredAt",
         "aggregationDate",
-        "expiresAt"
+        "expiresAt",
+        "consentVersion"
       ],
       "additionalProperties": false
     },
@@ -62,19 +78,40 @@
       "type": "object",
       "description": "Firestore `partnerInsights/{aggregateId}` — threshold-enforced aggregate, backend-only. Document ID = {companyId}_{type}_{periodType}_{periodStart}. Written by the partnerInsights-aggregateDaily scheduled function (idempotent overwrite).",
       "properties": {
-        "companyId": { "type": "string" },
-        "interactionType": { "$ref": "#/$defs/partnerInteractionType" },
-        "periodType": { "$ref": "#/$defs/aggregationPeriod" },
-        "periodStart": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
-        "periodEnd": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
-        "totalCount": { "type": "integer", "minimum": 0 },
+        "companyId": {
+          "type": "string"
+        },
+        "interactionType": {
+          "$ref": "#/$defs/partnerInteractionType"
+        },
+        "periodType": {
+          "$ref": "#/$defs/aggregationPeriod"
+        },
+        "periodStart": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
+        "periodEnd": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
+        "totalCount": {
+          "type": "integer",
+          "minimum": 0
+        },
         "uniqueContributorCount": {
           "type": ["integer", "null"],
           "minimum": 0,
           "description": "Null when zeroed by the threshold or when no data."
         },
-        "resultStatus": { "$ref": "#/$defs/insightResultStatus" },
-        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+        "resultStatus": {
+          "$ref": "#/$defs/insightResultStatus"
+        },
+        "updatedAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp"
+        },
+        "consentVersion": {
+          "type": "integer",
+          "const": 1
+        }
       },
       "required": [
         "companyId",
@@ -85,7 +122,8 @@
         "totalCount",
         "uniqueContributorCount",
         "resultStatus",
-        "updatedAt"
+        "updatedAt",
+        "consentVersion"
       ],
       "additionalProperties": false
     },
@@ -93,18 +131,28 @@
       "type": "object",
       "description": "Input for partnerInsights.recordInteraction (any active user). relatedOfferId must belong to the same partner.",
       "properties": {
-        "companyId": { "type": "string", "minLength": 1 },
-        "interactionType": { "$ref": "#/$defs/partnerInteractionType" },
-        "relatedOfferId": { "type": "string", "minLength": 1 }
+        "companyId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interactionType": {
+          "$ref": "#/$defs/partnerInteractionType"
+        },
+        "relatedOfferId": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "required": ["companyId", "interactionType"],
       "additionalProperties": false
     },
     "recordInteractionResponse": {
       "type": "object",
-      "description": "recorded=false covers BOTH the per-day dedupe and a non-opted-in pass-by contribution — deliberately indistinguishable so opting out is unobservable.",
+      "description": "recorded=false covers per-day deduplication and missing/declined/legacy consent for any interaction; no customer consent state is disclosed.",
       "properties": {
-        "recorded": { "type": "boolean" }
+        "recorded": {
+          "type": "boolean"
+        }
       },
       "required": ["recorded"],
       "additionalProperties": false
@@ -138,7 +186,9 @@
       "properties": {
         "cells": {
           "type": "array",
-          "items": { "$ref": "#/$defs/driveHeatCell" }
+          "items": {
+            "$ref": "#/$defs/driveHeatCell"
+          }
         },
         "resolution": {
           "type": "integer",

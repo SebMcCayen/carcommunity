@@ -371,6 +371,9 @@ jobs:
       # they'll cold-boot without a snapshot as a fallback.
       - name: Create AVD + snapshot (cache miss only)
         if: steps.avd-cache.outputs.cache-hit != 'true'
+        # Snapshot warming is optional. Bound a stalled cold boot/shutdown so
+        # the mandatory, retry-backed test attempts below can still run.
+        timeout-minutes: 15
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:

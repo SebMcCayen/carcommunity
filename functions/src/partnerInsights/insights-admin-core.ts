@@ -4,10 +4,10 @@
  * partnerInsights.adminSummary.
  *
  * partnerInsights aggregates are threshold-enforced at WRITE time (below the
- * minimum-unique-contributor floor, anonymous_pass_by counts are ZEROED and
+ * minimum-unique-contributor floor, optional interaction counts are ZEROED and
  * the status is insufficient_data). This module re-applies that guard at READ
  * time as defense-in-depth: if the configured floor was raised after an
- * aggregate was written, an otherwise-available anonymous_pass_by row that now
+ * aggregate was written, an otherwise-available optional-metric row that now
  * falls below the floor is re-zeroed before it is ever returned. Firebase-free
  * so it is unit-testable.
  */
@@ -16,6 +16,7 @@ import { z } from 'zod';
 import {
   AGGREGATION_PERIODS,
   INSIGHT_RESULT_STATUSES,
+  effectiveThreshold,
   type InsightResultStatus,
   type PartnerInteractionType,
 } from './insights-core';
@@ -82,7 +83,7 @@ export interface PartnerInsightsMetricOut {
 
 /**
  * Maps a stored aggregate (or its absence) into a safe returned metric.
- * A missing aggregate is no_data. An available anonymous_pass_by aggregate is
+ * A missing aggregate is no_data. An available optional interaction aggregate is
  * re-zeroed to insufficient_data if its unique-contributor count is now below
  * the effective threshold; every other stored status is already safe.
  */
@@ -91,13 +92,16 @@ export function applyReadThreshold(
   stored: StoredAggregateMetric | null,
   threshold: number,
 ): PartnerInsightsMetricOut {
-  if (stored === null) {
+  if (stored === null || stored.resultStatus === 'no_data') {
     return { interactionType, totalCount: 0, uniqueContributorCount: null, status: 'no_data' };
   }
   if (
-    stored.resultStatus === 'available' &&
-    interactionType === 'anonymous_pass_by' &&
-    (stored.uniqueContributorCount ?? 0) < threshold
+    stored.resultStatus !== 'available' ||
+    !Number.isSafeInteger(stored.totalCount) ||
+    stored.totalCount < 1 ||
+    !Number.isSafeInteger(stored.uniqueContributorCount) ||
+    (stored.uniqueContributorCount ?? 0) > stored.totalCount ||
+    (stored.uniqueContributorCount ?? 0) < effectiveThreshold(threshold)
   ) {
     return {
       interactionType,

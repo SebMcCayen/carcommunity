@@ -24,6 +24,9 @@ import {
   doc,
   getDoc,
   getFirestore,
+  serverTimestamp,
+  Timestamp,
+  updateDoc,
   type Firestore,
 } from 'firebase/firestore';
 import {
@@ -129,9 +132,10 @@ describe('auth-onUserCreate trigger', () => {
     expect(priv.ageConfirmedAt).toBeUndefined();
     expect(priv.termsAcceptedAt).toBeNull();
     expect(priv.privacyPolicyAcceptedAt).toBeNull();
-    // Default-on / opt-out consent: a newly provisioned member contributes
-    // anonymised partner statistics unless they explicitly opt out.
-    expect(priv.anonymousPartnerStatsOptIn).toBe(true);
+    // Provisioning cannot manufacture an affirmative optional-analysis choice.
+    expect(priv.anonymousPartnerStatsOptIn).toBe(false);
+    expect(priv.anonymousPartnerStatsConsentVersion).toBeUndefined();
+    expect(priv.anonymousPartnerStatsConsentAt).toBeUndefined();
   });
 });
 
@@ -155,6 +159,115 @@ describe('auth-completeOnboarding callable', () => {
       'functions/invalid-argument',
     );
   });
+
+  it.each([
+    { anonymousPartnerStatsConsentVersion: 1 },
+    { anonymousPartnerStatsOptIn: true, anonymousPartnerStatsConsentVersion: 2 },
+    { anonymousPartnerStatsOptIn: true, anonymousPartnerStatsConsentVersion: '1' },
+    { anonymousPartnerStatsOptIn: true, anonymousPartnerStatsConsentVersion: true },
+    {
+      anonymousPartnerStatsOptIn: true,
+      anonymousPartnerStatsConsentVersion: 1,
+      anonymousPartnerStatsConsentAt: 1_000,
+    },
+  ])('rejects malformed or device-stamped optional consent %j', async (choice) => {
+    await createUserWithEmailAndPassword(
+      auth,
+      `invalid-consent-${crypto.randomUUID()}@example.com`,
+      'password-123',
+    );
+    const callable = httpsCallable(functions, CALLABLE_NAME);
+    expect(await callableErrorCode(callable({ ...validInput, ...choice }))).toBe(
+      'functions/invalid-argument',
+    );
+  });
+
+  it.each([false, true])(
+    'records first version 1 optional choice %s using a server timestamp',
+    async (choice) => {
+      const { user } = await createUserWithEmailAndPassword(
+        auth,
+        `explicit-consent-${crypto.randomUUID()}@example.com`,
+        'password-123',
+      );
+      await httpsCallable(
+        functions,
+        CALLABLE_NAME,
+      )({
+        ...validInput,
+        anonymousPartnerStatsOptIn: choice,
+        anonymousPartnerStatsConsentVersion: 1,
+      });
+      const data = (await getDoc(doc(firestore, 'userPrivate', user.uid))).data();
+      expect(data?.anonymousPartnerStatsOptIn).toBe(choice);
+      expect(data?.anonymousPartnerStatsConsentVersion).toBe(1);
+      expect(data?.anonymousPartnerStatsConsentAt).toBeInstanceOf(Timestamp);
+      expect((data?.anonymousPartnerStatsConsentAt as Timestamp).toMillis()).toBeGreaterThan(0);
+      expect(data?.leaderboardOptOut).toBeUndefined();
+    },
+  );
+
+  it.each([undefined, false, true])(
+    'accepts a first legacy optional choice %s without granting versioned consent',
+    async (choice) => {
+      const { user } = await createUserWithEmailAndPassword(
+        auth,
+        `legacy-consent-${crypto.randomUUID()}@example.com`,
+        'password-123',
+      );
+      await httpsCallable(
+        functions,
+        CALLABLE_NAME,
+      )({
+        ...validInput,
+        ...(choice === undefined ? {} : { anonymousPartnerStatsOptIn: choice }),
+      });
+      const data = (await getDoc(doc(firestore, 'userPrivate', user.uid))).data();
+      expect(data?.anonymousPartnerStatsOptIn).toBe(false);
+      expect(data?.anonymousPartnerStatsConsentVersion).toBeUndefined();
+      expect(data?.anonymousPartnerStatsConsentAt).toBeUndefined();
+    },
+  );
+
+  it.each([
+    { staleChoice: true, versioned: true },
+    { staleChoice: false, versioned: true },
+    { staleChoice: true, versioned: false },
+    { staleChoice: false, versioned: false },
+  ])(
+    'onboarding replay preserves a later Privacy choice after %j',
+    async ({ staleChoice, versioned }) => {
+      const { user } = await createUserWithEmailAndPassword(
+        auth,
+        `consent-replay-${crypto.randomUUID()}@example.com`,
+        'password-123',
+      );
+      const callable = httpsCallable(functions, CALLABLE_NAME);
+      const request = {
+        ...validInput,
+        anonymousPartnerStatsOptIn: staleChoice,
+        ...(versioned ? { anonymousPartnerStatsConsentVersion: 1 } : {}),
+      };
+      await callable(request);
+      const privateRef = doc(firestore, 'userPrivate', user.uid);
+      // Exercise the actual owner Privacy write and rules before retrying the old
+      // onboarding payload, including the dangerous grant-after-withdrawal case.
+      await updateDoc(privateRef, {
+        anonymousPartnerStatsOptIn: !staleChoice,
+        anonymousPartnerStatsConsentVersion: 1,
+        anonymousPartnerStatsConsentAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      const before = (await getDoc(privateRef)).data();
+      await callable(request);
+      const after = (await getDoc(privateRef)).data();
+      expect(after?.anonymousPartnerStatsOptIn).toBe(!staleChoice);
+      expect(after?.anonymousPartnerStatsConsentVersion).toBe(
+        before?.anonymousPartnerStatsConsentVersion,
+      );
+      expect(after?.anonymousPartnerStatsConsentAt).toEqual(before?.anonymousPartnerStatsConsentAt);
+    },
+  );
 
   it('writes onboarding timestamps server-side and returns onboardingStatus', async () => {
     const email = `onboarding-${Date.now()}@example.com`;
@@ -227,6 +340,31 @@ describe('auth-completeOnboarding missing-profile stale-token bypass', () => {
     ({ adminAuth, db: adminDb } = await import('../firebase'));
     ({ completeOnboarding } = await import('../auth/completeOnboarding'));
   });
+
+  it.each([false, true])(
+    'provisioning never overwrites existing private choice %s or invents metadata',
+    async (choice) => {
+      const { provisionUserDocuments } = await import('../auth/onUserCreate');
+      const uid = `existing-consent-${crypto.randomUUID()}`;
+      const profileRef = adminDb.collection('users').doc(uid);
+      const privateRef = adminDb.collection('userPrivate').doc(uid);
+      const existing = {
+        anonymousPartnerStatsOptIn: choice,
+        leaderboardOptOut: true,
+        unrelated: 'preserved',
+      };
+      await privateRef.set(existing);
+      // Covers an orphan private document as well as duplicate trigger delivery.
+      expect(await provisionUserDocuments(adminDb, { uid })).toBe(true);
+      const first = (await privateRef.get()).data();
+      expect(first).toMatchObject(existing);
+      expect(first?.anonymousPartnerStatsConsentVersion).toBeUndefined();
+      expect(first?.anonymousPartnerStatsConsentAt).toBeUndefined();
+      expect(await provisionUserDocuments(adminDb, { uid })).toBe(false);
+      expect((await privateRef.get()).data()).toEqual(first);
+      await Promise.all([profileRef.delete(), privateRef.delete()]);
+    },
+  );
 
   it.each(['disabled', 'deleted', 'enabled'])(
     'only enabled live Auth can reprovision a missing profile (Auth=%s)',

@@ -429,9 +429,30 @@ struct ShellView: View {
     // depth and the value sizes carried through these nested getters in Release.
     // Each boundary wraps one stable layout/lifecycle segment, retaining the
     // shell's single map and coordinator identities through tab/route changes.
+    private var searchableTabContent: AnyView {
+        shellTabContent
+        // Search owns the content viewport, not the primary navigation below
+        // it. Its full-height native overlay must not intercept dock taps.
+        .overlay {
+            if addressSearchPresented, let savedPlacesCoordinator {
+                AddressSearchOverlay(
+                    coordinator: savedPlacesCoordinator,
+                    proximity: savedPlacesProximity,
+                    onSelect: showPlaceOnMap,
+                    onManage: {
+                        navSearchOpen = false
+                        routes = routes.opening(.savedPlaces)
+                    },
+                    onClose: { navSearchOpen = false }
+                )
+            }
+        }
+        .eraseToAnyView()
+    }
+
     private var shellBase: AnyView {
         VStack(spacing: 0) {
-            shellTabContent
+            searchableTabContent
             if !(selectedTab == .chat && chatKeyboardPresented) {
                 // Keep the footer above the map and its edge-to-edge overlays.
                 primaryNavigation
@@ -448,20 +469,6 @@ struct ShellView: View {
         .overlay {
             if let route = routes.current {
                 routeHost(for: route)
-            }
-        }
-        .overlay {
-            if addressSearchPresented, let savedPlacesCoordinator {
-                AddressSearchOverlay(
-                    coordinator: savedPlacesCoordinator,
-                    proximity: savedPlacesProximity,
-                    onSelect: showPlaceOnMap,
-                    onManage: {
-                        navSearchOpen = false
-                        routes = routes.opening(.savedPlaces)
-                    },
-                    onClose: { navSearchOpen = false }
-                )
             }
         }
         .eraseToAnyView()

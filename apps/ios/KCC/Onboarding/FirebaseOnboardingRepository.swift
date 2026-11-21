@@ -8,6 +8,14 @@ final class FirebaseOnboardingRepository: OnboardingRepository, @unchecked Senda
         displayName: String,
         anonymousPartnerStatsOptIn: Bool?
     ) async throws {
+        _ = try await functions.call(
+            "auth-completeOnboarding",
+            payload: Self.payload(displayName: displayName, anonymousPartnerStatsOptIn: anonymousPartnerStatsOptIn)
+        )
+    }
+
+    /// Consent time is stamped by the callable, never supplied by the device.
+    static func payload(displayName: String, anonymousPartnerStatsOptIn: Bool?) -> [String: Any] {
         var payload: [String: Any] = [
             "licenceConfirmed": true,
             "termsAccepted": true,
@@ -16,8 +24,9 @@ final class FirebaseOnboardingRepository: OnboardingRepository, @unchecked Senda
         ]
         if let anonymousPartnerStatsOptIn {
             payload["anonymousPartnerStatsOptIn"] = anonymousPartnerStatsOptIn
+            payload["anonymousPartnerStatsConsentVersion"] = PrivacySettingsChoices.partnerStatsConsentVersion
         }
-        _ = try await functions.call("auth-completeOnboarding", payload: payload)
+        return payload
     }
 
     static func createIfAvailable() -> OnboardingRepository? {

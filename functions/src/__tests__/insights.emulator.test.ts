@@ -4,7 +4,7 @@
  * Exercises the privacy-critical paths end-to-end:
  * - partnerInsights-recordInteraction (scoped hash, per-day dedupe,
  *   pass-by flag + opt-in gate with SILENT opt-out)
- * - runInsightsAggregation (threshold zeroing for anonymous_pass_by)
+ * - runInsightsAggregation (threshold zeroing for every optional interaction)
  * - runInsightsCleanup (7-day TTL)
  *
  * The scheduled runners are imported directly and driven against the
@@ -120,6 +120,14 @@ beforeAll(async () => {
   await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
   await adminDb.collection('users').doc(adminUser.uid).set({ role: 'admin' }, { merge: true });
   user = await createProvisionedUser('pi-user');
+  await adminDb.collection('userPrivate').doc(user.uid).set(
+    {
+      anonymousPartnerStatsOptIn: true,
+      anonymousPartnerStatsConsentVersion: 1,
+      anonymousPartnerStatsConsentAt: Timestamp.now(),
+    },
+    { merge: true },
+  );
 
   await signInAs(adminUser);
   companyId = (
@@ -158,6 +166,18 @@ describe('partnerInsights-recordInteraction', () => {
     // here from the auth credential, which CodeQL taint-tracks as a
     // password source.)
     expect(event.userReferenceHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(event.consentVersion).toBe(1);
+    // A global consent timestamp would correlate the same member across partners.
+    expect(Object.keys(event).sort()).toEqual([
+      'aggregationDate',
+      'companyId',
+      'consentVersion',
+      'expiresAt',
+      'interactionType',
+      'occurredAt',
+      'relatedOfferId',
+      'userReferenceHash',
+    ]);
     expect(JSON.stringify(event)).not.toContain(user.uid);
 
     // Per-day dedupe: same user + type + day → recorded: false, one event.
@@ -186,7 +206,7 @@ describe('partnerInsights-recordInteraction', () => {
     ).toBe('functions/not-found');
   });
 
-  it('pass-by requires the flag; consent is DEFAULT-ON — only an explicit opt-out is SILENTLY excluded', async () => {
+  it('pass-by requires the flag and explicit consent; missing or revoked consent is silently excluded', async () => {
     await signInAs(user);
     // Flag off (contract default): failed-precondition regardless of consent.
     expect(
@@ -226,19 +246,34 @@ describe('partnerInsights-recordInteraction', () => {
         ).size,
       ).toBe(0);
 
-      // No explicit choice (field absent) → DEFAULT-ON → recorded. A member who
-      // never touches the toggle contributes.
+      // A missing boolean cannot grant consent, even with a retained old marker.
       await adminDb
         .collection('userPrivate')
         .doc(user.uid)
         .update({ anonymousPartnerStatsOptIn: FieldValue.delete() });
-      const defaultOn = (
+      const missingChoice = (
         await call('partnerInsights-recordInteraction', {
           companyId,
           interactionType: 'anonymous_pass_by',
         })
       ).data as { recorded: boolean };
-      expect(defaultOn.recorded).toBe(true);
+      expect(missingChoice.recorded).toBe(false);
+      await adminDb.collection('userPrivate').doc(user.uid).set(
+        {
+          anonymousPartnerStatsOptIn: true,
+          anonymousPartnerStatsConsentVersion: 1,
+          anonymousPartnerStatsConsentAt: Timestamp.now(),
+        },
+        { merge: true },
+      );
+      expect(
+        (
+          await call('partnerInsights-recordInteraction', {
+            companyId,
+            interactionType: 'anonymous_pass_by',
+          })
+        ).data,
+      ).toEqual({ recorded: true });
     } finally {
       await adminDb
         .collection('config')
@@ -249,10 +284,13 @@ describe('partnerInsights-recordInteraction', () => {
 });
 
 describe('runInsightsAggregation — threshold enforcement', () => {
-  it('zeroes below-threshold pass-by aggregates and keeps regular metrics available', async () => {
+  it('zeroes below-threshold optional metrics and ignores unmarked historical events', async () => {
     // Pin the effective threshold to the floor (10) explicitly — the config doc
     // is shared across the emulator suite, so other tests may have raised it.
-    await adminDb.collection('config').doc('partnerInsights').set({ minThreshold: 10 }, { merge: true });
+    await adminDb
+      .collection('config')
+      .doc('partnerInsights')
+      .set({ minThreshold: 10 }, { merge: true });
 
     // Seed a dedicated company with 9 pass-by contributors (below the floor
     // of 10) and 2 profile views, directly via the Admin SDK.
@@ -266,6 +304,7 @@ describe('runInsightsAggregation — threshold enforcement', () => {
         interactionType: 'anonymous_pass_by',
         userReferenceHash: hash,
         relatedOfferId: null,
+        consentVersion: 1,
         occurredAt: Timestamp.fromDate(day),
         aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
         expiresAt: Timestamp.fromDate(new Date('2026-07-08T10:00:00Z')),
@@ -277,11 +316,20 @@ describe('runInsightsAggregation — threshold enforcement', () => {
         interactionType: 'profile_view',
         userReferenceHash: buildScopedHash(seededCompany, `viewer-${i}`),
         relatedOfferId: null,
+        consentVersion: 1,
         occurredAt: Timestamp.fromDate(day),
         aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
         expiresAt: Timestamp.fromDate(new Date('2026-07-08T10:00:00Z')),
       });
     }
+    // This tenth legacy pass-by would meet the floor if historical events
+    // without affirmative provenance were accidentally included.
+    batch.set(adminDb.collection('partnerInsightsEvents').doc('seed-pb-legacy'), {
+      companyId: seededCompany,
+      interactionType: 'anonymous_pass_by',
+      userReferenceHash: buildScopedHash(seededCompany, 'legacy-user'),
+      occurredAt: Timestamp.fromDate(day),
+    });
     await batch.commit();
 
     await runInsightsAggregation(day);
@@ -302,20 +350,25 @@ describe('runInsightsAggregation — threshold enforcement', () => {
         .doc(`${seededCompany}_profile_view_day_2026-07-01`)
         .get()
     ).data()!;
-    expect(profileViews.resultStatus).toBe('available');
-    expect(profileViews.totalCount).toBe(2);
-    expect(profileViews.uniqueContributorCount).toBe(2);
+    expect(profileViews.resultStatus).toBe('insufficient_data');
+    expect(profileViews.totalCount).toBe(0);
+    expect(profileViews.uniqueContributorCount).toBeNull();
+    expect(profileViews.consentVersion).toBe(1);
 
     // One more contributor reaches the floor → available with real counts.
-    await adminDb.collection('partnerInsightsEvents').doc('seed-pb-9').set({
-      companyId: seededCompany,
-      interactionType: 'anonymous_pass_by',
-      userReferenceHash: buildScopedHash(seededCompany, 'pass-by-user-9'),
-      relatedOfferId: null,
-      occurredAt: Timestamp.fromDate(day),
-      aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
-      expiresAt: Timestamp.fromDate(new Date('2026-07-08T10:00:00Z')),
-    });
+    await adminDb
+      .collection('partnerInsightsEvents')
+      .doc('seed-pb-9')
+      .set({
+        companyId: seededCompany,
+        interactionType: 'anonymous_pass_by',
+        userReferenceHash: buildScopedHash(seededCompany, 'pass-by-user-9'),
+        relatedOfferId: null,
+        consentVersion: 1,
+        occurredAt: Timestamp.fromDate(day),
+        aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-07-08T10:00:00Z')),
+      });
     await runInsightsAggregation(day);
     const passByAt10 = (
       await adminDb
@@ -327,37 +380,153 @@ describe('runInsightsAggregation — threshold enforcement', () => {
     expect(passByAt10.totalCount).toBe(10);
     expect(passByAt10.uniqueContributorCount).toBe(10);
   });
+
+  it.each([undefined, 0, 2, '1', true])(
+    'removes a legacy slice with consent marker %s when only unconsented events remain',
+    async (consentVersion) => {
+      const company = `pi-only-historical-${String(consentVersion)}`;
+      const day = new Date('2026-07-02T10:00:00Z');
+      const aggregate = adminDb
+        .collection('partnerInsights')
+        .doc(`${company}_profile_view_day_2026-07-02`);
+      await aggregate.set({
+        companyId: company,
+        interactionType: 'profile_view',
+        periodType: 'day',
+        ...(consentVersion === undefined ? {} : { consentVersion }),
+        totalCount: 40,
+        uniqueContributorCount: 20,
+        resultStatus: 'available',
+      });
+      await adminDb
+        .collection('partnerInsightsEvents')
+        .doc(`seed-only-historical-${String(consentVersion)}`)
+        .set({
+          companyId: company,
+          interactionType: 'profile_view',
+          userReferenceHash: buildScopedHash(company, 'legacy-user'),
+          occurredAt: Timestamp.fromDate(day),
+        });
+      await runInsightsAggregation(day);
+      expect((await aggregate.get()).exists).toBe(false);
+    },
+  );
+
+  it('retains a versioned monthly aggregate after raw-event cleanup', async () => {
+    const company = 'pi-retained-month';
+    const earlyDay = new Date('2026-08-01T10:00:00Z');
+    const laterDay = new Date('2026-08-10T10:00:00Z');
+    await adminDb
+      .collection('config')
+      .doc('partnerInsights')
+      .set({ minThreshold: 10 }, { merge: true });
+    const seed = adminDb.batch();
+    for (let i = 0; i < 10; i += 1) {
+      seed.set(adminDb.collection('partnerInsightsEvents').doc(`retained-month-${i}`), {
+        companyId: company,
+        interactionType: 'profile_view',
+        userReferenceHash: buildScopedHash(company, `retained-viewer-${i}`),
+        consentVersion: 1,
+        occurredAt: Timestamp.fromDate(earlyDay),
+        aggregationDate: Timestamp.fromDate(new Date('2026-08-01T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-08-08T10:00:00Z')),
+      });
+    }
+    await seed.commit();
+    await runInsightsAggregation(earlyDay);
+    const monthly = adminDb
+      .collection('partnerInsights')
+      .doc(`${company}_profile_view_month_2026-08-01`);
+    const published = await monthly.get();
+    expect(published.exists).toBe(true);
+    expect(published.data()).toMatchObject({
+      consentVersion: 1,
+      totalCount: 10,
+      uniqueContributorCount: 10,
+      resultStatus: 'available',
+    });
+
+    await runInsightsCleanup(laterDay);
+    expect(
+      (await adminDb.collection('partnerInsightsEvents').where('companyId', '==', company).get())
+        .empty,
+    ).toBe(true);
+    await adminDb
+      .collection('partnerInsightsEvents')
+      .doc('retained-month-later-type')
+      .set({
+        companyId: company,
+        interactionType: 'map_view',
+        userReferenceHash: buildScopedHash(company, 'later-map-viewer'),
+        consentVersion: 1,
+        occurredAt: Timestamp.fromDate(laterDay),
+        aggregationDate: Timestamp.fromDate(new Date('2026-08-10T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-08-17T10:00:00Z')),
+      });
+
+    await runInsightsAggregation(laterDay);
+    const retained = await monthly.get();
+    expect(retained.exists).toBe(true);
+    expect(retained.data()).toEqual(published.data());
+    expect(retained.updateTime).toEqual(published.updateTime);
+    // Prove this company was processed, rather than passing because no daily
+    // events selected it. A different type still gets the current threshold.
+    expect(
+      (
+        await adminDb
+          .collection('partnerInsights')
+          .doc(`${company}_map_view_month_2026-08-01`)
+          .get()
+      ).data(),
+    ).toMatchObject({
+      consentVersion: 1,
+      totalCount: 0,
+      uniqueContributorCount: null,
+      resultStatus: 'insufficient_data',
+    });
+
+    await runInsightsAggregation(laterDay);
+    const replayed = await monthly.get();
+    expect(replayed.data()).toEqual(published.data());
+    expect(replayed.updateTime).toEqual(published.updateTime);
+  });
 });
 
 describe('runInsightsCleanup — 7-day TTL', () => {
   it('deletes expired events and keeps fresh ones', async () => {
     const now = new Date('2026-07-10T00:00:00Z');
-    await adminDb.collection('partnerInsightsEvents').doc('ttl-expired').set({
-      companyId: 'ttl-co',
-      interactionType: 'map_view',
-      userReferenceHash: buildScopedHash('ttl-co', 'u-old'),
-      relatedOfferId: null,
-      occurredAt: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
-      aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
-      expiresAt: Timestamp.fromDate(new Date('2026-07-08T00:00:00Z')),
-    });
-    await adminDb.collection('partnerInsightsEvents').doc('ttl-fresh').set({
-      companyId: 'ttl-co',
-      interactionType: 'map_view',
-      userReferenceHash: buildScopedHash('ttl-co', 'u-new'),
-      relatedOfferId: null,
-      occurredAt: Timestamp.fromDate(new Date('2026-07-09T00:00:00Z')),
-      aggregationDate: Timestamp.fromDate(new Date('2026-07-09T00:00:00Z')),
-      expiresAt: Timestamp.fromDate(new Date('2026-07-16T00:00:00Z')),
-    });
+    await adminDb
+      .collection('partnerInsightsEvents')
+      .doc('ttl-expired')
+      .set({
+        companyId: 'ttl-co',
+        interactionType: 'map_view',
+        userReferenceHash: buildScopedHash('ttl-co', 'u-old'),
+        relatedOfferId: null,
+        occurredAt: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
+        aggregationDate: Timestamp.fromDate(new Date('2026-07-01T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-07-08T00:00:00Z')),
+      });
+    await adminDb
+      .collection('partnerInsightsEvents')
+      .doc('ttl-fresh')
+      .set({
+        companyId: 'ttl-co',
+        interactionType: 'map_view',
+        userReferenceHash: buildScopedHash('ttl-co', 'u-new'),
+        relatedOfferId: null,
+        occurredAt: Timestamp.fromDate(new Date('2026-07-09T00:00:00Z')),
+        aggregationDate: Timestamp.fromDate(new Date('2026-07-09T00:00:00Z')),
+        expiresAt: Timestamp.fromDate(new Date('2026-07-16T00:00:00Z')),
+      });
 
     const result = await runInsightsCleanup(now);
     expect(result.deletedCount).toBeGreaterThanOrEqual(1);
     expect(
       (await adminDb.collection('partnerInsightsEvents').doc('ttl-expired').get()).exists,
     ).toBe(false);
-    expect(
-      (await adminDb.collection('partnerInsightsEvents').doc('ttl-fresh').get()).exists,
-    ).toBe(true);
+    expect((await adminDb.collection('partnerInsightsEvents').doc('ttl-fresh').get()).exists).toBe(
+      true,
+    );
   });
 });
