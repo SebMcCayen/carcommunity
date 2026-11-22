@@ -88,6 +88,13 @@ reservation: Reservation|null, alreadyUsed: boolean }`. The last field prevents
 
 Admin lists may continue direct Firestore reads behind existing admin rules, using
 real cursor pagination and server filters. No first-page-only local filtering.
+Private `partnerApplications` and `partnerBillboardRequests` reads require both
+the admin token claim and a current, non-suspended, non-deleted canonical
+`users/{uid}` admin/owner profile, including during access preparation. A removed
+role or profile denies subsequent server document and list reads with the same
+already-issued token; token refresh is not required for revocation. Existing
+strict product access checks still apply, but this does not activate the global
+access migration. Previously downloaded data cannot be recalled from a client.
 
 - `reviewApplication`: `{ applicationId, decision: 'publish'|'request_changes',
 expectedRevision?: number, reason?: string, grantSelfService?: boolean, latitude?: number,
