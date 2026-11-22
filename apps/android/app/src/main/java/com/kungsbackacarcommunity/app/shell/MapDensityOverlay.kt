@@ -153,7 +153,8 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
                 Box(Modifier.offset { IntOffset((placed.x * density - sidePx / 2).roundToInt(), (placed.y * density - sidePx / 2).roundToInt()) }
                     .size(48.dp).graphicsLayer { alpha = present.alpha }.semantics { contentDescription = description }
                     .mapMarkerTap(MapMarkerLayer.Static, enabled = present.interactive) {
-                        selection = group.members.map { it.id }
+                        if (group.members.size == 1) surface.emitIncidentTap(entry.sourceId)
+                        else selection = group.members.map { it.id }
                     }
                     .then(if (present.interactive) Modifier else Modifier.clearAndSetSemantics {})
                     .testTag("map_density_group_${group.id}")) {

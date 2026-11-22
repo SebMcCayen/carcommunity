@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -46,6 +47,21 @@ class MapDensityOverlayTest {
             assertEquals(setOf("road-camera:1", "road-camera:2"), hidden)
             assertEquals(sites + hazard, stub.incidentMarkers.value)
         }
+    }
+
+    @Test fun multiDirectionSiteKeepsAccessibleCountAndOpensCameraWithOneTap() {
+        val surface = StubMapSurface(autoLoad = false)
+        surface.setCameraSnapshotForTest(MapCameraSnapshot.of(57.0, 12.0, 15.0, 0.0, 0.0))
+        surface.setProjectionForTest { _, _ -> MapScreenPoint(120f, 140f) }
+        val site = MapIncidentMarker("road-camera:a", 12.0, 57.0, 0xFF007582.toInt(),
+            R.drawable.ic_camera_traffic, 0xFFFFFFFF.toInt(), groupCount = 2)
+        compose.setContent { KccTheme { Box(Modifier.requiredSize(390.dp, 850.dp)) {
+            MapDensityOverlay(surface, listOf(site))
+        } } }
+        compose.onNodeWithText("2").assertDoesNotExist()
+        compose.onNodeWithContentDescription(compose.activity.getString(R.string.mapDensity_groupLabel, 2)).performClick()
+        compose.runOnIdle { assertEquals(site.id, surface.incidentTap.value) }
+        compose.onNodeWithTag("map_density_details").assertDoesNotExist()
     }
 
     @Test fun groupChooserPagesEveryMemberAndOpensTheExactOriginalDetail() {

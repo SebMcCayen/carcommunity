@@ -68,7 +68,7 @@ class RoadCameraLayersTest {
         val markers = state.markersNear(57.0, 12.0, 8.0, coordinatedDensity = true,
             viewport = MapViewportBounds(56.1, 11.8, 57.9, 12.2))
         assertEquals(setOf("road-camera:near", "road-camera:far"), markers.map { it.id }.toSet())
-        assertTrue(markers.all { it.groupCount == 1 })
+        assertEquals(2, markers.single { it.id == "road-camera:far" }.groupCount)
         assertEquals(listOf(far, reverse), state.viewsFor(far))
     }
 

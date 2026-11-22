@@ -112,9 +112,7 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
             val camera = group.camera
             MapIncidentMarker(ROAD_CAMERA_MARKER_PREFIX + camera.id, camera.longitude, camera.latitude,
                 cameraColor(camera.type), cameraGlyph(camera.type), cameraGlyphColor(camera.type),
-                // The home map groups sites. Individual directions belong in the camera sheet.
-                groupCount = if (coordinatedDensity) 1 else group.views.size,
-                opposingDirections = group.opposingDirections)
+                groupCount = group.views.size, opposingDirections = group.opposingDirections)
         }
     }
     val markers: List<MapIncidentMarker> get() = locations.map { it.camera }.filter { enabled(it.type) }.map {

@@ -2940,7 +2940,9 @@ class MapboxMapSurface(
             manager = manager,
             style = mapViewRef?.mapboxMap?.style,
             context = appContext,
-            markers = markers,
+            // The home overlay announces group sizes. Native camera icons stay number-free
+            // even during transitions between a group and its individual sites.
+            markers = markers.map { if (it.groupCount > 1) it.copy(groupCount = 1) else it },
             registeredImages = registeredIncidentImages,
             idsByAnnotation = incidentIdsByAnnotation,
             annotations = incidentAnnotations,
