@@ -2,6 +2,22 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 78,
+      "versionName": "1.1.23",
+      "releaseDate": "2026-11-22",
+      "highlights": [
+        "Smidigare körhistorik och bilval",
+        "Aktuell märkesprogress och personbästa på profilen",
+        "Tydligare information om ändringar av medlemskapet"
+      ],
+      "changes": [
+        "Körhistoriken laddas om efter att du har raderat en körning.",
+        "Dina bilar visas direkt inför en körning. Bilvalet uppdateras med de senast körda bilarna när historiken är klar.",
+        "Profilen visar aktuell märkesprogress och personbästa.",
+        "Medlemskapssidan visar när en schemalagd nedgradering träder i kraft."
+      ]
+    },
+    {
       "versionCode": 77,
       "versionName": "1.1.22",
       "releaseDate": "2026-11-18",
