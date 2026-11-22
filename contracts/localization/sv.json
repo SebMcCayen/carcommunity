@@ -2303,7 +2303,12 @@
     "release016Build17Profile": "Din profilbild och klubblogotyp visas nu i kartans profilmeny och uppdateras när profilen ändras.",
     "release016Build17Clubs": "Klubblogotyper visas på liveförare och konvojens kantindikatorer när klubbinformation är tillgänglig.",
     "release016Build17Compass": "Kompassknappen visar om kartan följer norr eller färdriktningen.",
-    "release016Build17Wave": "Vågknappen ligger under kartverktygen så att de behåller sin plats när knappen visas."
+    "release016Build17Wave": "Vågknappen ligger under kartverktygen så att de behåller sin plats när knappen visas.",
+    "release017Build18Highlight": "Smidigare karta och chatt, tydligare medlemskap och mer information på profilen.",
+    "release017Build18Map": "Du kan zooma med två fingrar över trafikmarkörer och välja om Crown Hunt ska visas under kartlager.",
+    "release017Build18Chat": "Emoji-reaktioner i chatten visas direkt och reaktionsväljaren öppnas centrerad.",
+    "release017Build18Profile": "Profilen visar aktuell märkesprogress och personbästa.",
+    "release017Build18Membership": "Medlemskapssidan visar när en schemalagd nedgradering träder i kraft."
   },
   "driver": {
     "feed": {

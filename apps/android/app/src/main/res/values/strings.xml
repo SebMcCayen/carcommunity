@@ -2153,6 +2153,11 @@
     <string name="whatsNew_release016Build17Clubs">Klubblogotyper visas på liveförare och konvojens kantindikatorer när klubbinformation är tillgänglig.</string>
     <string name="whatsNew_release016Build17Compass">Kompassknappen visar om kartan följer norr eller färdriktningen.</string>
     <string name="whatsNew_release016Build17Wave">Vågknappen ligger under kartverktygen så att de behåller sin plats när knappen visas.</string>
+    <string name="whatsNew_release017Build18Highlight">Smidigare karta och chatt, tydligare medlemskap och mer information på profilen.</string>
+    <string name="whatsNew_release017Build18Map">Du kan zooma med två fingrar över trafikmarkörer och välja om Crown Hunt ska visas under kartlager.</string>
+    <string name="whatsNew_release017Build18Chat">Emoji-reaktioner i chatten visas direkt och reaktionsväljaren öppnas centrerad.</string>
+    <string name="whatsNew_release017Build18Profile">Profilen visar aktuell märkesprogress och personbästa.</string>
+    <string name="whatsNew_release017Build18Membership">Medlemskapssidan visar när en schemalagd nedgradering träder i kraft.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>

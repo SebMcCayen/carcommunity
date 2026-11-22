@@ -2153,6 +2153,11 @@
     <string name="whatsNew_release016Build17Clubs">Club logos appear on live drivers and convoy edge indicators when club information is available.</string>
     <string name="whatsNew_release016Build17Compass">The compass button shows whether the map follows north or your direction of travel.</string>
     <string name="whatsNew_release016Build17Wave">The wave button sits below the map tools so they stay in place when it appears.</string>
+    <string name="whatsNew_release017Build18Highlight">Smoother maps and chat, clearer membership details, and more information on profiles.</string>
+    <string name="whatsNew_release017Build18Map">You can pinch to zoom over traffic markers and choose whether Crown Hunt appears in the map layers.</string>
+    <string name="whatsNew_release017Build18Chat">Emoji reactions appear immediately in chat, and the reaction picker opens in the center.</string>
+    <string name="whatsNew_release017Build18Profile">Profiles show current badge progress and personal bests.</string>
+    <string name="whatsNew_release017Build18Membership">The membership screen shows when a scheduled downgrade takes effect.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>
