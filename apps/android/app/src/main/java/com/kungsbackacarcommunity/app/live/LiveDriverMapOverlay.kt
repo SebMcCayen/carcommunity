@@ -1,7 +1,8 @@
 package com.kungsbackacarcommunity.app.live
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import com.kungsbackacarcommunity.app.shell.MapMarkerLayer
+import com.kungsbackacarcommunity.app.shell.mapMarkerTap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -27,7 +28,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -117,7 +117,7 @@ fun LiveDriverMapOverlay(
                 Box(
                     Modifier.offset { IntOffset(((placement.photo.x - 24) * density).roundToInt(), ((placement.photo.y - 24) * density).roundToInt()) }
                         .size(48.dp).graphicsLayer { alpha = item.alpha }
-                        .clickable(enabled = item.interactive, role = Role.Button) { onDriverTap(member.uid) }
+                        .mapMarkerTap(MapMarkerLayer.Drivers, enabled = item.interactive) { onDriverTap(member.uid) }
                         .semantics(mergeDescendants = true) { contentDescription = description }
                         .testTag(NEARBY_LIVE_CHIP_TAG + member.uid)
                         .then(if (item.interactive) Modifier else Modifier.clearAndSetSemantics {}),

@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
+import com.kungsbackacarcommunity.app.shell.MapViewportBounds
 import com.kungsbackacarcommunity.app.shell.MapLayersPopup
 import com.kungsbackacarcommunity.app.shell.MapLayersPreferenceStore
 import org.junit.Assert.*
@@ -55,6 +56,20 @@ class RoadCameraLayersTest {
         assertEquals(300, markers.size)
         assertEquals(state.cameras.map { ROAD_CAMERA_MARKER_PREFIX + it.id }.toSet(), markers.map { it.id }.toSet())
         markers.forEach { marker -> assertEquals(1, state.viewsFor(state.selected(marker.id)!!).size) }
+    }
+
+    @Test fun visibleViewportIncludesDistantPhotoSitesAndKeepsDirectionsTogether() {
+        val state = RoadCameraLayerState(MapLayersPreferenceStore(compose.activity), null)
+        val near = RoadCamera("near", RoadCameraType.Traffic, "Near", 57.0, 12.0)
+        val far = near.copy(id = "far", name = "Far", latitude = 57.8, direction = 0.0)
+        val reverse = far.copy(id = "reverse", direction = 180.0)
+        state.cameras = listOf(near, far, reverse, near.copy(id = "offscreen", longitude = 12.3))
+        state.setEnabled(RoadCameraType.Traffic, true)
+        val markers = state.markersNear(57.0, 12.0, 8.0, coordinatedDensity = true,
+            viewport = MapViewportBounds(56.1, 11.8, 57.9, 12.2))
+        assertEquals(setOf("road-camera:near", "road-camera:far"), markers.map { it.id }.toSet())
+        assertTrue(markers.all { it.groupCount == 1 })
+        assertEquals(listOf(far, reverse), state.viewsFor(far))
     }
 
     @Test fun disabledLayersDoNotFetchAndEnablingOnlyLoadsTheCatalog() {

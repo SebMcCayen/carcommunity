@@ -54,6 +54,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.MapDetailSheet
+import com.kungsbackacarcommunity.app.shell.MapViewportBounds
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapLayersPreferenceStore
 import java.time.Instant
@@ -69,6 +70,7 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
     var speedEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.Speed)); private set
     var photoCamerasEnabled by mutableStateOf(store.readRoadCameraLayer(RoadCameraType.Traffic)); private set
     var cameras by mutableStateOf(emptyList<RoadCamera>()); internal set
+    private val camerasById by derivedStateOf { cameras.associateBy { it.id } }
     private val locations by derivedStateOf { groupRoadCameraLocations(cameras) }
     private var displayedGroups: List<RoadCameraMapGroup> = emptyList()
     var catalogFailed by mutableStateOf(false); internal set
@@ -85,7 +87,9 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
         store.writeRoadCameraLayer(type, enabled)
     }
     /** Bound native annotation work; panning reuses the complete local catalog without a network read. */
-    fun markersNear(latitude: Double?, longitude: Double?, zoom: Double = 17.0, coordinatedDensity: Boolean = false): List<MapIncidentMarker> {
+    fun markersNear(latitude: Double?, longitude: Double?, zoom: Double = 17.0, coordinatedDensity: Boolean = false,
+        viewport: MapViewportBounds? = null,
+    ): List<MapIncidentMarker> {
         if (latitude == null || longitude == null) return emptyList()
         val longitudeScale = kotlin.math.cos(Math.toRadians(latitude))
         fun distance(camera: RoadCamera): Double {
@@ -93,18 +97,24 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
             val east = (camera.longitude - longitude) * 111_000 * longitudeScale
             return north * north + east * east
         }
-        val nearby = locations.filter { enabled(it.camera.type) && distance(it.camera) <= 50_000.0 * 50_000.0 }
+        val nearby = locations.filter { site ->
+            val camera = site.camera
+            enabled(camera.type) && (viewport?.contains(camera.latitude, camera.longitude)
+                ?: (distance(camera) <= 50_000.0 * 50_000.0))
+        }
         // Group before the draw cap so counts include every nearby source camera.
-        // Cross-type density is coordinated with hazards and crowns by MapDensityPolicy.
         // Keep every site and its direction views available to that presentation.
         val grouped = if (coordinatedDensity) nearby.map { RoadCameraMapGroup(listOf(it)) } else groupRoadCameraMarkers(nearby, zoom)
-        val ordered = grouped.sortedWith(compareBy<RoadCameraMapGroup> { distance(it.camera) }.thenBy { it.camera.id })
-        displayedGroups = if (coordinatedDensity) ordered else ordered.take(250)
+        displayedGroups = if (coordinatedDensity) grouped else grouped.sortedWith(
+            compareBy<RoadCameraMapGroup> { distance(it.camera) }.thenBy { it.camera.id },
+        ).take(250)
         return displayedGroups.map { group ->
             val camera = group.camera
             MapIncidentMarker(ROAD_CAMERA_MARKER_PREFIX + camera.id, camera.longitude, camera.latitude,
                 cameraColor(camera.type), cameraGlyph(camera.type), cameraGlyphColor(camera.type),
-                groupCount = group.views.size, opposingDirections = group.opposingDirections)
+                // The home map groups sites. Individual directions belong in the camera sheet.
+                groupCount = if (coordinatedDensity) 1 else group.views.size,
+                opposingDirections = group.opposingDirections)
         }
     }
     val markers: List<MapIncidentMarker> get() = locations.map { it.camera }.filter { enabled(it.type) }.map {
@@ -117,7 +127,7 @@ class RoadCameraLayerState(private val store: MapLayersPreferenceStore, val repo
 
     fun selected(markerId: String?): RoadCamera? {
         val id = markerId?.takeIf { it.startsWith(ROAD_CAMERA_MARKER_PREFIX) }?.removePrefix(ROAD_CAMERA_MARKER_PREFIX)
-        return cameras.firstOrNull { it.id == id && enabled(it.type) }
+        return camerasById[id]?.takeIf { enabled(it.type) }
     }
 }
 

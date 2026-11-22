@@ -957,6 +957,32 @@ class MapboxMapSurface(
         }.getOrNull()
     }
 
+    override fun screenPositionsFor(points: List<MapPoint>): List<MapScreenPoint?> {
+        val map = mapViewRef?.mapboxMap ?: return emptyList()
+        if (points.isEmpty()) return emptyList()
+        return runCatching {
+            val camera = map.cameraState
+            val pixels = map.pixelsForCoordinates(points.map { Point.fromLngLat(it.longitude, it.latitude) })
+            // A pitched map can project a point behind the camera back onto the screen.
+            val back = if (camera.pitch > ROUND_TRIP_MAX_FLAT_PITCH_DEGREES) map.coordinatesForPixels(pixels) else null
+            pixels.mapIndexed { index, pixel ->
+                val point = points[index]
+                val trusted = back == null || ConvoyEdgeGeometry.projectionRoundTrips(
+                    point.latitude, point.longitude, back[index].latitude(), back[index].longitude(),
+                    ConvoyEdgeGeometry.metersPerPixel(point.latitude, camera.zoom))
+                MapScreenPoint(pixel.x.toFloat(), pixel.y.toFloat(), trusted)
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    override fun visibleBounds(): MapViewportBounds? = mapViewRef?.mapboxMap?.let { map ->
+        runCatching {
+            val bounds = cameraBounds(map)
+            MapViewportBounds(bounds.southwest.latitude(), bounds.southwest.longitude(),
+                bounds.northeast.latitude(), bounds.northeast.longitude())
+        }.getOrNull()
+    }
+
     override fun visibleRadiusMeters(): Double? =
         mapViewRef?.let { map -> visibleRadiusMeters(map.mapboxMap) }
 
@@ -3191,17 +3217,7 @@ class MapboxMapSurface(
         if (imageId in registeredCrownImages) return imageId
         val bitmap =
             if (style != null && context != null) {
-                CrownMarkerBitmaps.create(
-                    context = context,
-                    iconRes = marker.iconRes,
-                    discColorArgb = marker.discColorArgb,
-                    glyphColorArgb = marker.glyphColorArgb,
-                    glowColorArgb = marker.glowColorArgb,
-                    collectedBadge = marker.collectedByYou,
-                    rarity = marker.rarity,
-                    rewardPoints = marker.rewardPoints,
-                    mapMode = mapMode,
-                )
+                CrownMarkerBitmaps.create(context, marker, mapMode)
             } else {
                 null
             }
@@ -3403,6 +3419,15 @@ class MapboxMapSurface(
      * on both maps, rather than a second implementation that can drift.
      */
     internal companion object {
+        private fun cameraBounds(map: MapboxMap, camera: com.mapbox.maps.CameraState = map.cameraState) =
+            map.coordinateBoundsForCamera(cameraOptions {
+                center(camera.center)
+                zoom(camera.zoom)
+                bearing(camera.bearing)
+                pitch(camera.pitch)
+                padding(camera.padding)
+            })
+
         /**
          * The query radius covering what [map] can currently see, or null when
          * the camera cannot be read.
@@ -3427,16 +3452,7 @@ class MapboxMapSurface(
         fun visibleRadiusMeters(map: MapboxMap): Double? =
             runCatching {
                 val camera = map.cameraState
-                val bounds =
-                    map.coordinateBoundsForCamera(
-                        cameraOptions {
-                            center(camera.center)
-                            zoom(camera.zoom)
-                            bearing(camera.bearing)
-                            pitch(camera.pitch)
-                            padding(camera.padding)
-                        },
-                    )
+                val bounds = cameraBounds(map, camera)
                 ViewportRadius.radiusMetersForBounds(
                     centerLat = camera.center.latitude(),
                     centerLon = camera.center.longitude(),

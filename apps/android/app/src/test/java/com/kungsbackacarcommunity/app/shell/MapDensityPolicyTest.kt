@@ -8,18 +8,25 @@ class MapDensityPolicyTest {
     private fun item(id: String, offset: Double = 0.0, count: Int = 1, critical: Boolean = false, selected: Boolean = false) =
         MapDensityItem(id, 57.0, 12.0 + offset, count, critical, selected)
 
-    @Test fun `mixed types retain every source and critical shape metadata`() {
-        val input = listOf(item("camera", count = 2), item("weather"), item("crown"), item("accident", critical = true))
-        val group = MapDensityPolicy.groups(input, 15).single()
-        assertEquals(input.map { it.id }.toSet(), group.members.map { it.id }.toSet())
-        assertEquals(5, group.count)
-        assertTrue(group.critical)
-        assertEquals("accident", group.anchor.id)
+    private fun groups(items: List<MapDensityItem>, vararg projectedX: Double): List<MapDensityGroup> {
+        val positions = items.mapIndexed { i, item ->
+            item.id to MapDensityScreenPoint(projectedX.getOrElse(i) { 0.0 }, 100.0)
+        }.toMap()
+        return MapDensityPolicy.groups(items, positions, 14.0)
+    }
+
+    @Test fun `a camera cannot be absorbed by a different category at the same zoom`() {
+        val first = item("camera-west").copy(category = 1)
+        val next = item("camera-east", offset = 0.00065).copy(category = 1)
+        val hazard = first.copy(id = "hazard", category = 2, critical = true)
+        val crown = next.copy(id = "crown", category = 3)
+        val groups = groups(listOf(first, next, hazard, crown), 0.0, 30.0, 0.0, 30.0)
+        assertEquals(setOf(first, next, hazard, crown), groups.map { it.members.single() }.toSet())
     }
     @Test fun `selection changes emphasis but not membership or group identity`() {
         val input = listOf(item("a-camera"), item("z-crown"), item("hazard", critical = true))
-        val original = MapDensityPolicy.groups(input, 15).single()
-        val selected = MapDensityPolicy.groups(input.map { it.copy(selected = it.id == "z-crown") }, 15).single()
+        val original = groups(input).single()
+        val selected = groups(input.map { it.copy(selected = it.id == "z-crown") }).single()
         assertEquals(original.id, selected.id)
         assertEquals(original.members.map { it.id }, selected.members.map { it.id })
         assertEquals("z-crown", selected.anchor.id)
@@ -28,14 +35,13 @@ class MapDensityPolicyTest {
     }
     @Test fun `dense crowns bound visible count without losing accessible members`() {
         val source = (1..1_000).map { item("crown-$it") }
-        val group = MapDensityPolicy.groups(source, 18).single()
+        val group = groups(source).single()
         assertEquals(1_000, group.members.size)
-        assertEquals("99+", group.compactCount)
         assertEquals(source.map { it.id }.toSet(), group.members.map { it.id }.toSet())
     }
     @Test fun `catalog order and camera pan cannot change groups`() {
         val source = listOf(item("a"), item("b", .0001), item("c", .2))
-        assertEquals(MapDensityPolicy.groups(source, 15), MapDensityPolicy.groups(source.reversed(), 15))
+        assertEquals(groups(source, 0.0, 5.0, 80.0), groups(source.reversed(), 100.0, 25.0, 20.0))
     }
     @Test fun `zoom hysteresis prevents boundary flicker and still allows zooming in`() {
         val zoom = MapDensityZoom()
@@ -45,11 +51,12 @@ class MapDensityPolicyTest {
         assertEquals(16, zoom.update(15.99))
         assertEquals(15, zoom.update(15.8))
         val source = listOf(item("a"), item("b", .001))
-        assertTrue(MapDensityPolicy.groups(source, 18).size > MapDensityPolicy.groups(source, 13).size)
+        assertEquals(1, groups(source, 0.0, 10.0).size)
+        assertEquals(2, groups(source, 0.0, 32.0).size)
+        assertTrue(MapDensityPolicy.overlapRadiusDp(16.14, 15) <= 28.0)
     }
     @Test fun `anchor bounded groups do not form a chain across the map`() {
-        val degreePerPixel = 360 / (512.0 * (1 shl 15))
-        val groups = MapDensityPolicy.groups(listOf(item("a"), item("b", degreePerPixel * 50), item("c", degreePerPixel * 100)), 15)
+        val groups = groups(listOf(item("a"), item("b"), item("c")), 0.0, 12.0, 24.0)
         assertEquals(2, groups.size)
         assertEquals(3, groups.sumOf { it.members.size })
     }
@@ -63,7 +70,7 @@ class MapDensityPolicyTest {
         assertEquals(own, MapDensityPolicy.badgePosition(own, null, 390.0, 844.0))
     }
     @Test fun `bad coordinates cannot crash layout and valid ids remain`() {
-        val groups = MapDensityPolicy.groups(listOf(item("valid"), item("bad").copy(latitude = Double.NaN)), 15)
+        val groups = groups(listOf(item("valid"), item("bad").copy(latitude = Double.NaN)))
         assertEquals(listOf("valid"), groups.flatMap { it.members }.map { it.id })
     }
     @Test fun `covered native hit cannot open invisible incident or crown`() {

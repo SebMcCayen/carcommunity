@@ -334,6 +334,12 @@ data class MapQueryViewport(
     val radiusMeters: Double,
 )
 
+data class MapViewportBounds(val south: Double, val west: Double, val north: Double, val east: Double) {
+    fun contains(latitude: Double, longitude: Double): Boolean =
+        latitude in south..north &&
+            (if (west <= east) longitude in west..east else longitude >= west || longitude <= east)
+}
+
 /**
  * A settled snapshot of where the camera is.
  *
@@ -577,6 +583,13 @@ interface MapSurface : MapProjection {
      * geometry that turns bounds into a radius is pure and unit-tested off-device.
      */
     fun visibleRadiusMeters(): Double?
+
+    /** Batch projection for static markers that share a camera frame. Results follow input order. */
+    fun screenPositionsFor(points: List<MapPoint>): List<MapScreenPoint?> =
+        points.map { screenPositionFor(it.latitude, it.longitude) }
+
+    /** Bounds of the displayed map for filtering the local road-camera catalog. */
+    fun visibleBounds(): MapViewportBounds? = null
 
     /**
      * Frame [points] (with padding) instead of following the user, or pass null
