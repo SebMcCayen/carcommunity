@@ -35,11 +35,19 @@ enum MapDensityPolicy {
     static let radiusPixels = 56.0
     static func badgePosition(anchor: MapDensityScreenPoint, own: MapDensityScreenPoint?, width: Double, height: Double) -> MapDensityScreenPoint {
         guard let own, hypot(anchor.x - own.x, anchor.y - own.y) < 44 else { return anchor }
-        let candidates = (0...7).map { index in
+        let positions: [MapDensityScreenPoint] = (0...7).map { (index: Int) -> MapDensityScreenPoint in
             let angle = Double(-45 + index * 45) * .pi / 180
             return MapDensityScreenPoint(x: own.x + cos(angle) * 44, y: own.y + sin(angle) * 44)
-        }.filter { $0.x >= 24 && $0.x <= width - 24 && $0.y >= 24 && $0.y <= height - 24 && hypot($0.x - anchor.x, $0.y - anchor.y) <= 88 }
-        return candidates.min { hypot($0.x - anchor.x, $0.y - anchor.y) < hypot($1.x - anchor.x, $1.y - anchor.y) } ?? anchor
+        }
+        let candidates = positions.filter { point in
+            point.x >= 24 && point.x <= width - 24 && point.y >= 24 && point.y <= height - 24
+                && hypot(point.x - anchor.x, point.y - anchor.y) <= 88
+        }
+        return candidates.min { lhs, rhs in
+            let lhsDistance = hypot(lhs.x - anchor.x, lhs.y - anchor.y)
+            let rhsDistance = hypot(rhs.x - anchor.x, rhs.y - anchor.y)
+            return lhsDistance < rhsDistance
+        } ?? anchor
     }
 
     static func groups(_ items: [MapDensityItem], zoomBucket: Int) -> [MapDensityGroup] {
