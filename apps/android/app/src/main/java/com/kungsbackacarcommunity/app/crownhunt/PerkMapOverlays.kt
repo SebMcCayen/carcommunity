@@ -7,7 +7,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import com.kungsbackacarcommunity.app.shell.MapMarkerLayer
+import com.kungsbackacarcommunity.app.shell.mapMarkerTap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -38,7 +39,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -227,7 +227,7 @@ private fun ActiveTrapLayer(
                             // (matching NearbyLiveOverlay). The reverse order can strand
                             // the label on an outer, non-actionable node — TalkBack then
                             // announces an unlabelled button.
-                            .clickable(role = Role.Button) { onTap(trap) }
+                            .mapMarkerTap(MapMarkerLayer.Perks) { onTap(trap) }
                             .semantics { contentDescription = tapLabel },
                 )
             }

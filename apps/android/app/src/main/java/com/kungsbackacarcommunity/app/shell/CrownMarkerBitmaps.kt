@@ -86,6 +86,10 @@ internal object CrownMarkerBitmaps {
         else -> legacyDisc
     }
 
+    fun create(context: Context, marker: MapCrownMarker, mapMode: MapMode): Bitmap? =
+        create(context, marker.iconRes, marker.discColorArgb, marker.glyphColorArgb, marker.glowColorArgb,
+            marker.collectedByYou, marker.rarity, marker.rewardPoints, mapMode)
+
     fun create(
         context: Context,
         @DrawableRes iconRes: Int,

@@ -456,8 +456,11 @@ fun MapHome(
     // giving the toggle a real on/off effect on the map.
     val roadCameraLayers = com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers.current
     val roadCameraViewport by mapSurface.cameraSnapshot.collectAsState()
-    val roadCameraMarkers = roadCameraLayers?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude,
-        roadCameraViewport?.zoom ?: 17.0, coordinatedDensity = true).orEmpty()
+    val roadCameraMarkers = remember(mapSurface, roadCameraViewport, roadCameraLayers, roadCameraLayers?.cameras,
+        roadCameraLayers?.speedEnabled, roadCameraLayers?.photoCamerasEnabled) {
+        roadCameraLayers?.markersNear(roadCameraViewport?.latitude, roadCameraViewport?.longitude,
+            roadCameraViewport?.zoom ?: 17.0, coordinatedDensity = true, viewport = mapSurface.visibleBounds()).orEmpty()
+    }
     val densityIncidents = (if (incidentsLayerEnabled) incidentMarkers else emptyList()) + roadCameraMarkers
 
     // Push the community event pins onto the surface whenever they change (or the
@@ -554,7 +557,6 @@ fun MapHome(
         // at the BOTTOM of the chrome stack: it belongs to the map, so every
         // control composed below this point draws over it rather than being
         // covered by a car photo pinned to a screen edge.
-        MapDensityOverlay(mapSurface, densityIncidents, covered)
         val driverExclusions = driverControlBounds.values.filter { it.width > 0 && it.height > 0 }.map { rect ->
             com.kungsbackacarcommunity.app.map.DriverPhotoRect(
                 (rect.left - chromeOrigin.x).toDouble(), (rect.top - chromeOrigin.y).toDouble(),
@@ -563,15 +565,13 @@ fun MapHome(
         CompositionLocalProvider(
             com.kungsbackacarcommunity.app.live.LocalDriverPhotoExclusions provides driverExclusions,
             LocalMapPresentationActive provides !covered,
+            LocalMapMarkerTaps provides LocalShellMapMarkerTaps.current,
         ) {
+            MapDensityOverlay(mapSurface, densityIncidents, covered)
             convoyOverlay?.invoke()
             nearbyOverlay?.invoke()
+            perkOverlay?.invoke()
         }
-
-        // Kronjakt perk map layer: the placer-only hidden spike-strip markers and
-        // the own-dot shield / double-points effects. Same map layer as the live
-        // overlays, under the floating chrome.
-        perkOverlay?.invoke()
 
         // The long-press place pin: an animated marker on the picked point while
         // the place menu is open, so the menu and the pin reference the SAME spot.

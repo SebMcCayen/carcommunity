@@ -450,6 +450,9 @@ import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
 import com.kungsbackacarcommunity.app.shell.EventMarkerInfoPopup
 import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.LocalShellMapMarkerTaps
+import com.kungsbackacarcommunity.app.shell.MapMarkerTaps
+import com.kungsbackacarcommunity.app.shell.routeMapMarkerTaps
 import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
 import com.kungsbackacarcommunity.app.shell.MapBillboardMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
@@ -4046,7 +4049,9 @@ fun AuthenticatedApp(
 
             var invitationFooterHeightPx by remember { mutableIntStateOf(0) }
             var invitationDockHeightPx by remember { mutableIntStateOf(0) }
+            val markerTaps = remember(mapSurface) { MapMarkerTaps() }
             CompositionLocalProvider(
+                LocalShellMapMarkerTaps provides markerTaps,
                 LocalSnackbarHostState provides snackbarHostState,
                 com.kungsbackacarcommunity.app.roadcameras.LocalRoadCameraLayers provides roadCameraLayers,
                 com.kungsbackacarcommunity.app.shell.LocalAeroOwnerHeader provides
@@ -4183,6 +4188,8 @@ fun AuthenticatedApp(
                 Box(
                     modifier =
                         Modifier.fillMaxSize().then(
+                            if (mapCover == MapCover.None) Modifier.routeMapMarkerTaps(markerTaps) else Modifier,
+                        ).then(
                             // A map the user cannot see must not answer to TalkBack
                             // through the page covering it.
                             if (mapCover != MapCover.None) Modifier.clearAndSetSemantics {} else Modifier,

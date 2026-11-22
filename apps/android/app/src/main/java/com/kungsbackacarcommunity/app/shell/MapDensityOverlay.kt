@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -35,7 +38,7 @@ import com.kungsbackacarcommunity.app.roadcameras.cameraLabel
 import kotlin.math.roundToInt
 
 private data class DensityEntry(val item: MapDensityItem, val sourceId: String,
-    val crown: Boolean, val icon: Int, val color: Int, val glyphColor: Int, val label: String)
+    val crown: MapCrownMarker?, val icon: Int, val color: Int, val glyphColor: Int, val label: String)
 
 private data class DensityVisual(val group: MapDensityGroup, val entry: DensityEntry,
     val anchor: MapDensityScreenPoint, val placed: MapDensityScreenPoint, val slot: Int)
@@ -45,6 +48,7 @@ private data class DensityVisual(val group: MapDensityGroup, val entry: DensityE
 internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentMarker>, covered: Boolean = false) {
     val crowns by surface.crownMarkers.collectAsState()
     val camera by surface.cameraSnapshot.collectAsState()
+    val mapMode by surface.mapMode.collectAsState()
     val selectedIncident by surface.incidentTap.collectAsState()
     val selectedCrown by surface.crownTap.collectAsState()
     val ownPoint by surface.renderedOwnPoint.collectAsState()
@@ -69,28 +73,20 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
             else -> R.string.incidents_markerLabel
         })
         DensityEntry(MapDensityItem("incident:" + marker.id, marker.latitude, marker.longitude,
-            marker.groupCount, critical, selectedIncident == marker.id), marker.id, false,
+            marker.groupCount, critical, selectedIncident == marker.id, category = marker.iconRes), marker.id, null,
             marker.iconRes, marker.colorArgb, marker.glyphColorArgb, label)
     } + crowns.filterNot { it.collectedByYou }.map { marker ->
         val rarity = marker.rarity?.let { text(CrownSpawnMessages.rarityLabelRes(it)) }
         val label = (rarity ?: text(R.string.crownHunt_popupTitle)) +
             (marker.rewardPoints?.let { " · " + text(R.string.crownHunt_spawnReward, it) } ?: "")
         DensityEntry(MapDensityItem("crown:" + marker.id, marker.latitude, marker.longitude,
-            selected = selectedCrown == marker.id), marker.id, true, marker.iconRes,
+            selected = selectedCrown == marker.id, category = marker.iconRes), marker.id, marker, marker.iconRes,
             marker.discColorArgb, marker.glyphColorArgb, label)
     }
     }
-    val items = remember(entries) { entries.map { it.item } }
-    val groups = remember(items, bucket) { MapDensityPolicy.groups(items, bucket) }
+    val items = remember(entries) { entries.map { it.item }.filter { it.hasValidLocation } }
+    val coordinates = remember(items) { items.map { MapPoint(it.longitude, it.latitude) } }
     val byId = remember(entries) { entries.associateBy { it.item.id } }
-    val compactGroups = groups.filter { it.count > 1 }
-    val masked = compactGroups.flatMap { it.members }.mapNotNull { byId[it.id] }
-    val hiddenIncidents = masked.filterNot { it.crown }.map { it.sourceId }.toSet()
-    val hiddenCrowns = masked.filter { it.crown }.map { it.sourceId }.toSet() + crowns.filter { it.collectedByYou }.map { it.id }
-    LaunchedEffect(surface, incidents, hiddenIncidents, hiddenCrowns) {
-        surface.setGroupedMarkerIds(hiddenIncidents, hiddenCrowns)
-        surface.setIncidentMarkers(incidents)
-    }
     DisposableEffect(surface) {
         onDispose { surface.setGroupedMarkerIds(emptySet(), emptySet()) }
     }
@@ -108,13 +104,33 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
         val heightPx = constraints.maxHeight
         val density = LocalDensity.current.density
         val sidePx = 48f * density
+        val positions = remember(surface, camera, items, density, widthPx, heightPx) {
+            val pixels = surface.screenPositionsFor(coordinates)
+            buildMap {
+                items.forEachIndexed { index, item ->
+                    val point = pixels.getOrNull(index) ?: return@forEachIndexed
+                    if (point.trustworthy && point.x in 0f..widthPx.toFloat() && point.y in 0f..heightPx.toFloat()) {
+                        put(item.id, MapDensityScreenPoint(point.x / density.toDouble(), point.y / density.toDouble()))
+                    }
+                }
+            }
+        }
+        val radius = MapDensityPolicy.overlapRadiusDp(camera?.zoom ?: 14.0, bucket)
+        val compactGroups = remember(items, positions, radius) {
+            MapDensityPolicy.groups(items, positions, radius).filter { it.count > 1 }
+        }
+        val masked = compactGroups.flatMap { group -> group.members.mapNotNull { byId[it.id] } }
+        val hiddenIncidents = masked.filter { it.crown == null }.map { it.sourceId }.toSet()
+        val hiddenCrowns = masked.filter { it.crown != null }.map { it.sourceId }.toSet() +
+            crowns.filter { it.collectedByYou }.map { it.id }
+        LaunchedEffect(surface, incidents, hiddenIncidents, hiddenCrowns) {
+            surface.setGroupedMarkerIds(hiddenIncidents, hiddenCrowns)
+            surface.setIncidentMarkers(incidents)
+        }
         val own = ownPoint?.let { surface.screenPositionFor(it.latitude, it.longitude) }?.takeIf { it.trustworthy }
         val visuals = compactGroups.mapNotNull { group ->
             val entry = byId[group.anchor.id] ?: return@mapNotNull null
-            val point = surface.screenPositionFor(group.anchor.latitude, group.anchor.longitude)
-                ?.takeIf { it.trustworthy && it.x >= -sidePx && it.y >= -sidePx && it.x <= widthPx + sidePx && it.y <= heightPx + sidePx }
-                ?: return@mapNotNull null
-            val anchor = MapDensityScreenPoint(point.x / density.toDouble(), point.y / density.toDouble())
+            val anchor = positions[group.anchor.id] ?: return@mapNotNull null
             val ownScreen = own?.let { MapDensityScreenPoint(it.x / density.toDouble(), it.y / density.toDouble()) }
             val placed = MapDensityPolicy.badgePosition(anchor, ownScreen, widthPx / density.toDouble(), heightPx / density.toDouble())
             val slot = if (placed == anchor || ownScreen == null) 0 else 1 + ((kotlin.math.atan2(placed.y-ownScreen.y, placed.x-ownScreen.x) * 180 / Math.PI + 360) / 45).roundToInt() % 8
@@ -136,16 +152,24 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
                 }
                 Box(Modifier.offset { IntOffset((placed.x * density - sidePx / 2).roundToInt(), (placed.y * density - sidePx / 2).roundToInt()) }
                     .size(48.dp).graphicsLayer { alpha = present.alpha }.semantics { contentDescription = description }
-                    .clickable(enabled = present.interactive, role = Role.Button) { selection = group.members.map { it.id } }
+                    .mapMarkerTap(MapMarkerLayer.Static, enabled = present.interactive) {
+                        if (group.members.size == 1) surface.emitIncidentTap(entry.sourceId)
+                        else selection = group.members.map { it.id }
+                    }
                     .then(if (present.interactive) Modifier else Modifier.clearAndSetSemantics {})
                     .testTag("map_density_group_${group.id}")) {
-                    Box(Modifier.align(Alignment.Center).size(34.dp)
+                    if (entry.crown != null) {
+                        val marker = entry.crown
+                        val context = LocalContext.current
+                        val bitmap = remember(context, marker, mapMode, density) {
+                            CrownMarkerBitmaps.create(context, marker, mapMode)?.asImageBitmap()
+                        }
+                        if (bitmap != null) Image(bitmap, null, Modifier.align(Alignment.Center)
+                            .size((bitmap.width / density).dp))
+                    } else Box(Modifier.align(Alignment.Center).size(34.dp)
                         .background(Color(entry.color), CircleShape)
                         .border(if (group.selected) 3.dp else 1.dp, Color.White, CircleShape), contentAlignment = Alignment.Center) {
                         Icon(painterResource(entry.icon), null, Modifier.size(20.dp), tint = Color(entry.glyphColor))
-                    }
-                    Surface(Modifier.align(Alignment.TopEnd), shape = CircleShape, color = Color(0xFF111827), contentColor = Color.White) {
-                        Text(group.compactCount, Modifier.padding(horizontal = 4.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall)
                     }
                     if (group.critical) Icon(Icons.Default.Warning, null, Modifier.align(Alignment.BottomStart).size(16.dp)
                         .background(Color(0xFF111827), CircleShape), tint = Color(0xFFFFD166))
@@ -171,7 +195,7 @@ internal fun MapDensityOverlay(surface: MapSurface, incidents: List<MapIncidentM
             pageEntries.forEach { entry ->
                 Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("map_density_item_${entry.item.id}").clickable(role = Role.Button) {
                     selection = null
-                    if (entry.crown) surface.emitCrownTap(entry.sourceId) else surface.emitIncidentTap(entry.sourceId)
+                    if (entry.crown != null) surface.emitCrownTap(entry.sourceId) else surface.emitIncidentTap(entry.sourceId)
                 }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(painterResource(entry.icon), null, Modifier.size(28.dp), tint = Color(entry.color))
