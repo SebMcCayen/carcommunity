@@ -2303,7 +2303,12 @@
     "release016Build17Profile": "Your profile photo and club logo now appear in the map profile menu and update when your profile changes.",
     "release016Build17Clubs": "Club logos appear on live drivers and convoy edge indicators when club information is available.",
     "release016Build17Compass": "The compass button shows whether the map follows north or your direction of travel.",
-    "release016Build17Wave": "The wave button sits below the map tools so they stay in place when it appears."
+    "release016Build17Wave": "The wave button sits below the map tools so they stay in place when it appears.",
+    "release017Build18Highlight": "Smoother maps and chat, clearer membership details, and more information on profiles.",
+    "release017Build18Map": "You can pinch to zoom over traffic markers and choose whether Crown Hunt appears in the map layers.",
+    "release017Build18Chat": "Emoji reactions appear immediately in chat, and the reaction picker opens in the center.",
+    "release017Build18Profile": "Profiles show current badge progress and personal bests.",
+    "release017Build18Membership": "The membership screen shows when a scheduled downgrade takes effect."
   },
   "driver": {
     "feed": {

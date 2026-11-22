@@ -42246,6 +42246,91 @@
         }
       }
     },
+    "whatsNew.release017Build18Chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emoji-reaktioner i chatten visas direkt och reaktionsväljaren öppnas centrerad."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emoji reactions appear immediately in chat, and the reaction picker opens in the center."
+          }
+        }
+      }
+    },
+    "whatsNew.release017Build18Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smidigare karta och chatt, tydligare medlemskap och mer information på profilen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smoother maps and chat, clearer membership details, and more information on profiles."
+          }
+        }
+      }
+    },
+    "whatsNew.release017Build18Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan zooma med två fingrar över trafikmarkörer och välja om Crown Hunt ska visas under kartlager."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can pinch to zoom over traffic markers and choose whether Crown Hunt appears in the map layers."
+          }
+        }
+      }
+    },
+    "whatsNew.release017Build18Membership": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medlemskapssidan visar när en schemalagd nedgradering träder i kraft."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The membership screen shows when a scheduled downgrade takes effect."
+          }
+        }
+      }
+    },
+    "whatsNew.release017Build18Profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profilen visar aktuell märkesprogress och personbästa."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profiles show current badge progress and personal bests."
+          }
+        }
+      }
+    },
     "whatsNew.title": {
       "extractionState": "manual",
       "localizations": {
