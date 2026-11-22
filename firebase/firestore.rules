@@ -73,6 +73,19 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') in ['admin', 'owner']);
     }
 
+    // Private Partner reads require current authority even during preparation.
+    // Revoking refresh tokens alone cannot invalidate an already-issued ID token.
+    function isCurrentPartnerAdmin() {
+      return isAdmin() && currentPartnerAdminProfileAllows();
+    }
+    function currentPartnerAdminProfileAllows() {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return profile != null
+        && profile.data.get('role', 'user') in ['admin', 'owner']
+        && profile.data.get('suspended', false) != true
+        && profile.data.get('deleted', false) != true;
+    }
+
     // Active member: subscription entitlement verified by backend and stored
     // as a custom claim. Clients must not self-elevate this claim.
     // Suspension always overrides entitlement (canAccessMemberFeatures).
@@ -1432,15 +1445,16 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // partnerApplications – contact data, never client-readable (Phase 9i)
+    // partnerApplications – private contact data, current admins only
     // Written via partners.submitApplication; reviewed via
-    // partners.reviewApplication (admin). No client access at all.
+    // partners.reviewApplication (admin). No client writes.
     // -------------------------------------------------------------------------
     match /partnerApplications/{applicationId} {
       // Contact data — admins read it for the application review queue
       // (Phase 13f); written via partners.submitApplication and reviewed via
-      // partners.reviewApplication. No non-admin client access.
-      allow read: if isAdmin();
+      // partners.reviewApplication. Retained claims cannot bypass a revoked
+      // canonical role, suspension or deletion, including in preparation mode.
+      allow read: if isCurrentPartnerAdmin();
       // No client writes.
     }
 
@@ -2751,6 +2765,6 @@ service cloud.firestore {
     match /partnerPortalRateLimits/{document=**} { allow read, write: if false; }
     match /partnerApplicationOwners/{document=**} { allow read, write: if false; }
     match /partnerApplicationEmails/{document=**} { allow read, write: if false; }
-    match /partnerBillboardRequests/{requestId} { allow read: if isAdmin(); }
+    match /partnerBillboardRequests/{requestId} { allow read: if isCurrentPartnerAdmin(); }
   }
 }
