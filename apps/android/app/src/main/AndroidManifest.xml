@@ -4,6 +4,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- The QR scanner requests portrait for its activity. The app also supports landscape-only devices. -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
+
     <!-- Read-only connectivity check (normal permission, no runtime grant, no
          user-visible prompt). Used ONLY to suppress feature-health reports while
          the device is offline: a user in a tunnel or out of data cannot load map
