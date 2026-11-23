@@ -2158,6 +2158,8 @@
     <string name="whatsNew_release017Build18Chat">Emoji reactions appear immediately in chat, and the reaction picker opens in the center.</string>
     <string name="whatsNew_release017Build18Profile">Profiles show current badge progress and personal bests.</string>
     <string name="whatsNew_release017Build18Membership">The membership screen shows when a scheduled downgrade takes effect.</string>
+    <string name="whatsNew_release017Build19Highlight">iOS build update</string>
+    <string name="whatsNew_release017Build19SDK">The app is built with the iOS 27 SDK and still supports iOS 17 and later.</string>
     <string name="driver_feed_title">Driver posts</string>
     <string name="driver_feed_source">From Driver</string>
     <string name="driver_feed_loading">Loading posts…</string>

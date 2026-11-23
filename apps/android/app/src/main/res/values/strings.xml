@@ -2158,6 +2158,8 @@
     <string name="whatsNew_release017Build18Chat">Emoji-reaktioner i chatten visas direkt och reaktionsväljaren öppnas centrerad.</string>
     <string name="whatsNew_release017Build18Profile">Profilen visar aktuell märkesprogress och personbästa.</string>
     <string name="whatsNew_release017Build18Membership">Medlemskapssidan visar när en schemalagd nedgradering träder i kraft.</string>
+    <string name="whatsNew_release017Build19Highlight">Bygguppdatering för iOS</string>
+    <string name="whatsNew_release017Build19SDK">Appen är byggd med iOS 27 SDK och stöder fortfarande iOS 17 och senare.</string>
     <string name="driver_feed_title">Driver-inlägg</string>
     <string name="driver_feed_source">Från Driver</string>
     <string name="driver_feed_loading">Hämtar inlägg…</string>

@@ -1,0 +1,103 @@
+name: Archive iOS for App Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient_certificate:
+        description: Base64 DER certificate for encrypting the archive
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archive-ios-app-store
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    if: github.ref == 'refs/heads/main' && github.event.repository.private == false
+    runs-on: xcode-27
+    timeout-minutes: 120
+    environment: production
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Verify the SDK and prepare the archive recipient
+        env:
+          RECIPIENT_CERTIFICATE: ${{ inputs.recipient_certificate }}
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          sdk=$(xcrun --sdk iphoneos --show-sdk-version)
+          test "${sdk%%.*}" -ge 27
+          printf '%s' "$RECIPIENT_CERTIFICATE" | base64 -D > "$RUNNER_TEMP/recipient.der"
+          openssl x509 -inform DER -in "$RUNNER_TEMP/recipient.der" \
+            -out "$RUNNER_TEMP/recipient.pem"
+      - name: Generate the navigation release project
+        run: |
+          python3 apps/ios/scripts/release-preflight.py
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          python3 apps/ios/scripts/navigation-project.py
+      - name: Prepare verified Turf binary cache
+        timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 apps/ios/scripts/prepare-turf-cache.py
+      - name: Resolve pinned SDKs and archive the unsigned app
+        env:
+          MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          token = os.environ.get('MAPBOX_DOWNLOADS_TOKEN', '')
+          if not token or any(c.isspace() for c in token):
+              raise SystemExit('Missing or invalid Mapbox SDK download credential')
+          fd = os.open(Path.home() / '.netrc', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(fd, 'w') as stream:
+              stream.write('machine api.mapbox.com\nlogin mapbox\npassword ' + token + '\n')
+          PY
+          unset MAPBOX_DOWNLOADS_TOKEN
+          trap 'rm -f "$HOME/.netrc"' EXIT
+          args=(-project apps/ios/KCCNavigation.xcodeproj -scheme KCC
+                -derivedDataPath "$RUNNER_TEMP/ios-release")
+          xcodebuild "${args[@]}" -resolvePackageDependencies -onlyUsePackageVersionsFromResolvedFile
+          cmp apps/ios/NavigationSDK/Package.resolved \
+            apps/ios/KCCNavigation.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          xcodebuild "${args[@]}" -configuration Release -destination 'generic/platform=iOS' \
+            -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO \
+            -archivePath "$RUNNER_TEMP/KCC.xcarchive" archive
+      - name: Verify the archive and encrypt it for local signing
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/KCC.xcarchive"
+          app="$archive/Products/Applications/KCC.app"
+          test ! -e "$app/GoogleService-Info.plist"
+          test ! -e "$app/embedded.mobileprovision"
+          test -z "$(/usr/libexec/PlistBuddy -c 'Print :MBXAccessToken' "$app/Info.plist")"
+          xcrun vtool -show-build "$app/KCC" | awk '
+            $1 == "platform" && $2 == "IOS" { device = 1 }
+            $1 == "sdk" && $2 + 0 >= 27 { sdk = 1 }
+            END { exit !(device && sdk) }
+          '
+          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$app/Info.plist"
+          printf '%s\n' "$GITHUB_SHA" > "$archive/source-revision"
+          ditto -c -k --keepParent "$archive" "$RUNNER_TEMP/archive.zip"
+          openssl cms -encrypt -binary -aes256 -outform DER \
+            -in "$RUNNER_TEMP/archive.zip" -out "$RUNNER_TEMP/KCC.xcarchive.zip.cms" \
+            "$RUNNER_TEMP/recipient.pem"
+          rm -f "$RUNNER_TEMP/archive.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: encrypted-ios-archive-${{ github.sha }}
+          path: ${{ runner.temp }}/KCC.xcarchive.zip.cms
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
