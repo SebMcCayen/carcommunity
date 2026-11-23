@@ -42331,6 +42331,40 @@
         }
       }
     },
+    "whatsNew.release017Build19Highlight": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bygguppdatering för iOS"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS build update"
+          }
+        }
+      }
+    },
+    "whatsNew.release017Build19SDK": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appen är byggd med iOS 27 SDK och stöder fortfarande iOS 17 och senare."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app is built with the iOS 27 SDK and still supports iOS 17 and later."
+          }
+        }
+      }
+    },
     "whatsNew.title": {
       "extractionState": "manual",
       "localizations": {

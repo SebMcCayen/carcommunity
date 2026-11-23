@@ -2308,7 +2308,9 @@
     "release017Build18Map": "You can pinch to zoom over traffic markers and choose whether Crown Hunt appears in the map layers.",
     "release017Build18Chat": "Emoji reactions appear immediately in chat, and the reaction picker opens in the center.",
     "release017Build18Profile": "Profiles show current badge progress and personal bests.",
-    "release017Build18Membership": "The membership screen shows when a scheduled downgrade takes effect."
+    "release017Build18Membership": "The membership screen shows when a scheduled downgrade takes effect.",
+    "release017Build19Highlight": "iOS build update",
+    "release017Build19SDK": "The app is built with the iOS 27 SDK and still supports iOS 17 and later."
   },
   "driver": {
     "feed": {
