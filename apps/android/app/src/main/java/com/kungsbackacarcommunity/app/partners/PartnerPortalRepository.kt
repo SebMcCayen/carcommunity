@@ -14,7 +14,9 @@ data class PartnerApplicationSummary(
     val applicationId: String, val status: String, val reviewReason: String?,
     val fields: Map<String, Any?>,
 )
-data class PartnerWorkspace(val companies: List<PartnerWorkspaceCompany>, val application: PartnerApplicationSummary?)
+data class PartnerWorkspace(val companies: List<PartnerWorkspaceCompany>, val application: PartnerApplicationSummary?) {
+    val activeCompanies: List<PartnerWorkspaceCompany> get() = companies.filter { it.status == "active" }
+}
 data class ManagedPartnerOffer(
     val offerId: String, val companyId: String, val title: String, val teaserText: String,
     val description: String, val terms: String, val status: String, val capacity: Int?,

@@ -253,6 +253,7 @@
     "manageSubscription": "Hantera medlemskap",
     "savedPlaces": "Sparade platser",
     "defaultMapApp": "Ange KCC som standardkartapp",
+    "notificationInbox": "Inkorg",
     "notificationSettings": "Aviseringsinställningar",
     "partnerStats": "Partnerstatistik",
     "feedback": "Rapportera ett problem",
@@ -2537,7 +2538,7 @@
     "membershipRing": "Guldring för medlemskap"
   },
   "partnerPortal": {
-    "manage": "Hantera företag",
+    "manage": "Mitt företag",
     "reservations": "Mina reservationer",
     "apply": "Bli företagspartner",
     "application": "Min partneransökan",

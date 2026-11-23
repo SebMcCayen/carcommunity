@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PartnerPortalPolicyTest {
+    @Test fun `only active companies qualify for the business workspace`() {
+        val active = PartnerWorkspaceCompany("active", "Partner", "", "redeemer", "active", null, null, null)
+        val inactive = active.copy(companyId = "old", role = "manager", status = "inactive")
+        val application = PartnerApplicationSummary("app", "approved", null, emptyMap())
+        assertTrue(PartnerWorkspace(listOf(inactive), application).activeCompanies.isEmpty())
+        assertEquals(listOf(active), PartnerWorkspace(listOf(inactive, active), null).activeCompanies)
+    }
+
     @Test fun `QR countdown expires using elapsed time and never extends beyond sixty seconds`() {
         assertEquals(60, partnerQrSecondsRemaining(160_000, 100_000))
         assertEquals(1, partnerQrSecondsRemaining(160_000, 159_000))

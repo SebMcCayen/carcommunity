@@ -226,6 +226,7 @@
     <string name="settingsMenu_manageSubscription">Manage subscription</string>
     <string name="settingsMenu_savedPlaces">Saved places</string>
     <string name="settingsMenu_defaultMapApp">Set KCC as default map app</string>
+    <string name="settingsMenu_notificationInbox">Inbox</string>
     <string name="settingsMenu_notificationSettings">Notification settings</string>
     <string name="settingsMenu_partnerStats">Partner statistics</string>
     <string name="settingsMenu_feedback">Report a problem</string>
@@ -2364,7 +2365,7 @@
     <string name="mapDensity_next">Next</string>
     <string name="mapDensity_page">Showing %1$d–%2$d of %3$d</string>
     <string name="liveDriverPhoto_membershipRing">Membership gold ring</string>
-    <string name="partnerPortal_manage">Manage business</string>
+    <string name="partnerPortal_manage">My business</string>
     <string name="partnerPortal_reservations">My reservations</string>
     <string name="partnerPortal_apply">Become a business partner</string>
     <string name="partnerPortal_application">My partner application</string>

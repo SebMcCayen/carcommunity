@@ -226,6 +226,7 @@
     <string name="settingsMenu_manageSubscription">Hantera medlemskap</string>
     <string name="settingsMenu_savedPlaces">Sparade platser</string>
     <string name="settingsMenu_defaultMapApp">Ange KCC som standardkartapp</string>
+    <string name="settingsMenu_notificationInbox">Inkorg</string>
     <string name="settingsMenu_notificationSettings">Aviseringsinställningar</string>
     <string name="settingsMenu_partnerStats">Partnerstatistik</string>
     <string name="settingsMenu_feedback">Rapportera ett problem</string>
@@ -2364,7 +2365,7 @@
     <string name="mapDensity_next">Nästa</string>
     <string name="mapDensity_page">Visar %1$d–%2$d av %3$d</string>
     <string name="liveDriverPhoto_membershipRing">Guldring för medlemskap</string>
-    <string name="partnerPortal_manage">Hantera företag</string>
+    <string name="partnerPortal_manage">Mitt företag</string>
     <string name="partnerPortal_reservations">Mina reservationer</string>
     <string name="partnerPortal_apply">Bli företagspartner</string>
     <string name="partnerPortal_application">Min partneransökan</string>

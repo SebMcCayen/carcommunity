@@ -7,6 +7,7 @@ import SwiftUI
 struct SettingsActions {
     let onManageSubscription: (() -> Void)?
     let onSavedPlaces: (() -> Void)?
+    let onNotifications: (() -> Void)?
     let onNotificationSettings: (() -> Void)?
     let onBlockedUsers: (() -> Void)?
     let onPartnerStats: (() -> Void)?
@@ -17,6 +18,7 @@ struct SettingsActions {
     init(
         onManageSubscription: (() -> Void)? = nil,
         onSavedPlaces: (() -> Void)? = nil,
+        onNotifications: (() -> Void)? = nil,
         onNotificationSettings: (() -> Void)? = nil,
         onBlockedUsers: (() -> Void)? = nil,
         onPartnerStats: (() -> Void)? = nil,
@@ -26,6 +28,7 @@ struct SettingsActions {
     ) {
         self.onManageSubscription = onManageSubscription
         self.onSavedPlaces = onSavedPlaces
+        self.onNotifications = onNotifications
         self.onNotificationSettings = onNotificationSettings
         self.onBlockedUsers = onBlockedUsers
         self.onPartnerStats = onPartnerStats
@@ -42,6 +45,7 @@ struct SettingsActions {
         switch destination {
         case .subscription: return onManageSubscription
         case .savedPlaces: return onSavedPlaces
+        case .notifications: return onNotifications
         case .notificationSettings: return onNotificationSettings
         case .blockedUsers: return onBlockedUsers
         case .partnerStats: return onPartnerStats
@@ -55,6 +59,7 @@ struct SettingsActions {
 enum SettingsDestination: CaseIterable, Hashable, Sendable {
     case subscription
     case savedPlaces
+    case notifications
     case notificationSettings
     case blockedUsers
     case partnerStats
@@ -88,24 +93,6 @@ struct SettingsScreen: View {
                             identifier: "settings.savedPlaces"
                         )
                         destinationRow(
-                            destination: .notificationSettings,
-                            key: "settingsMenu.notificationSettings",
-                            icon: "bell.badge",
-                            identifier: "settings.notificationSettings"
-                        )
-                        destinationRow(
-                            destination: .blockedUsers,
-                            key: "settings.blockedUsers",
-                            icon: "person.crop.circle.badge.xmark",
-                            identifier: "settings.blockedUsers"
-                        )
-                        destinationRow(
-                            destination: .partnerStats,
-                            key: "settingsMenu.partnerStats",
-                            icon: "chart.bar",
-                            identifier: "settings.partnerStats"
-                        )
-                        destinationRow(
                             destination: .feedback,
                             key: "settingsMenu.feedback",
                             icon: "exclamationmark.bubble",
@@ -117,6 +104,40 @@ struct SettingsScreen: View {
                             icon: "trash",
                             identifier: "settings.accountDeletion",
                             role: .destructive
+                        )
+                    }
+                }
+
+                if actions.onNotifications != nil || actions.onNotificationSettings != nil {
+                    Section("notifications.title") {
+                        destinationRow(
+                            destination: .notifications,
+                            key: "settingsMenu.notificationInbox",
+                            icon: "bell",
+                            identifier: "settings.notifications"
+                        )
+                        destinationRow(
+                            destination: .notificationSettings,
+                            key: "settingsMenu.notificationSettings",
+                            icon: "bell.badge",
+                            identifier: "settings.notificationSettings"
+                        )
+                    }
+                }
+
+                if actions.onBlockedUsers != nil || actions.onPartnerStats != nil {
+                    Section("privacySettings.title") {
+                        destinationRow(
+                            destination: .blockedUsers,
+                            key: "settings.blockedUsers",
+                            icon: "person.crop.circle.badge.xmark",
+                            identifier: "settings.blockedUsers"
+                        )
+                        destinationRow(
+                            destination: .partnerStats,
+                            key: "privacySettings.partnerStatsTitle",
+                            icon: "chart.bar",
+                            identifier: "settings.partnerStats"
                         )
                     }
                 }
@@ -189,8 +210,7 @@ struct SettingsScreen: View {
     }
 
     private let accountDestinations: Set<SettingsDestination> = [
-        .subscription, .savedPlaces, .notificationSettings, .blockedUsers,
-        .partnerStats, .feedback, .accountDeletion,
+        .subscription, .savedPlaces, .feedback, .accountDeletion,
     ]
 
     @ViewBuilder

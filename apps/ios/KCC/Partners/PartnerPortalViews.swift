@@ -44,13 +44,13 @@ struct PartnerWorkspaceScreen: View {
                 if coordinator.busy { ProgressView() }
                 PortalError(key: coordinator.errorKey)
                 if let workspace = coordinator.workspace {
-                    if workspace.companies.isEmpty {
+                    if workspace.activeCompanies.isEmpty && workspace.application == nil {
                         Section {
                             PortalText("portal.noCompany")
                             Button(action: onApply) { PortalText("portal.apply") }.frame(minHeight: 48)
                         }
                     }
-                    ForEach(workspace.companies) { company in
+                    ForEach(workspace.activeCompanies) { company in
                         NavigationLink {
                             PartnerCompanyWorkspace(company: company, coordinator: coordinator)
                         } label: {
@@ -68,7 +68,9 @@ struct PartnerWorkspaceScreen: View {
                             Text(application.companyName).font(.headline)
                             PortalText("portal.application.\(application.status)")
                             if let reason = application.reviewReason { Text(reason) }
-                            if application.status == "changes_requested" {
+                            if application.status == "rejected" {
+                                Button(action: onApply) { PortalText("portal.apply") }.frame(minHeight: 48)
+                            } else if application.status == "changes_requested" {
                                 Button(action: onApply) { PortalText("portal.completeApplication") }.frame(minHeight: 48)
                             }
                         } header: { PortalText("portal.application") }
@@ -76,7 +78,8 @@ struct PartnerWorkspaceScreen: View {
                 }
             }
             .refreshable { await coordinator.load() }
-            .navigationTitle(portalString("portal.workspace"))
+            .navigationTitle(coordinator.workspace?.menuEntry == .application
+                ? String(localized: "partnerPortal.application") : portalString("portal.workspace"))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: onBack) { Label("shell.back", systemImage: "chevron.backward") }.frame(minHeight: 48)

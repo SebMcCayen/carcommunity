@@ -704,13 +704,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mina erbjudanden"
+            "value": "Mina reservationer"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "My offers"
+            "value": "My reservations"
           }
         }
       }

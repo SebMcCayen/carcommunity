@@ -32,7 +32,7 @@ fun PartnerApplicationRoute(coordinator: PartnerApplicationCoordinator?, onBack:
         if (status != PartnerApplicationStatus.Submitting) operation.run { workspace = repository?.workspace() }
     }
     val application = workspace?.application
-    if (repository != null && workspace?.companies?.isNotEmpty() == true && !editing && status != PartnerApplicationStatus.Done) {
+    if (repository != null && workspace?.activeCompanies?.isNotEmpty() == true && !editing && status != PartnerApplicationStatus.Done) {
         PartnerWorkspaceRoute(repository, onBack); return
     }
     if (operation.busy || operation.error != null) {
@@ -45,6 +45,7 @@ fun PartnerApplicationRoute(coordinator: PartnerApplicationCoordinator?, onBack:
         AeroPage(title = stringResource(R.string.partnerPortal_application), ownerShortcutEnabled = false, compactTitleWithBack = true) {
             Text(application.fields.text("companyName")); PortalStatus(application.status)
             application.reviewReason?.let { Text(it) }
+            if (application.status == "rejected") KccButton(onClick = { editing = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.shell_morePartnerApplication)) }
             if (application.status == "changes_requested") KccButton(onClick = { editing = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_resubmit)) }
         }; return
     }

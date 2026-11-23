@@ -253,6 +253,7 @@
     "manageSubscription": "Manage subscription",
     "savedPlaces": "Saved places",
     "defaultMapApp": "Set KCC as default map app",
+    "notificationInbox": "Inbox",
     "notificationSettings": "Notification settings",
     "partnerStats": "Partner statistics",
     "feedback": "Report a problem",
@@ -2537,7 +2538,7 @@
     "membershipRing": "Membership gold ring"
   },
   "partnerPortal": {
-    "manage": "Manage business",
+    "manage": "My business",
     "reservations": "My reservations",
     "apply": "Become a business partner",
     "application": "My partner application",

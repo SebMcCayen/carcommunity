@@ -288,6 +288,8 @@ import com.kungsbackacarcommunity.app.notifications.currentPushPermissionStatus
 import com.kungsbackacarcommunity.app.notifications.openAppNotificationSettings
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
+import com.kungsbackacarcommunity.app.partners.FirebasePartnerPortalRepository
+import com.kungsbackacarcommunity.app.partners.PartnerReservationsRoute
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationRoute
 import com.kungsbackacarcommunity.app.partners.PartnerOfferAccess
 import com.kungsbackacarcommunity.app.partners.PartnersRepository
@@ -478,6 +480,7 @@ import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.MapCover
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
+import com.kungsbackacarcommunity.app.shell.partnerMenuLabel
 import com.kungsbackacarcommunity.app.shell.profileMenuEntries
 import com.kungsbackacarcommunity.app.shell.ShellTab
 import com.kungsbackacarcommunity.app.shell.TranslucentShellPanel
@@ -6555,8 +6558,11 @@ fun AuthenticatedApp(
                                             profileAvailable = profileEditCoordinator != null,
                                             friendsAvailable = friendsRepository != null,
                                             partnerApplicationAvailable = partnerApplicationCoordinator != null,
-                                            notificationsAvailable = notificationsRepository != null,
-                                            notificationsUnread = notificationsUnread,
+                                            partnerLabel = if (partnerApplicationCoordinator != null) {
+                                                partnerMenuLabel(uid)
+                                            } else R.string.shell_morePartnerApplication,
+                                            reservationsAvailable = partnersEnabled && partnerApplicationCoordinator != null,
+                                            notificationsUnread = notificationsRepository != null && notificationsUnread,
                                             // Top-level entries from the map-home
                                             // profile popup: each starts a fresh
                                             // stack, so Back returns to the map.
@@ -9428,6 +9434,15 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
+        ShellRoute.PartnerReservations -> {
+            val portal = remember(context, uid) { FirebasePartnerPortalRepository.createIfAvailable(context) }
+            if (partnersEnabled && portal != null) {
+                key(uid) { PartnerReservationsRoute(portal, onBack = onClose) }
+            } else {
+                LaunchedEffect(Unit) { onClose() }
+            }
+        }
+
         ShellRoute.PartnerApplication ->
             if (partnerApplicationCoordinator != null) {
                 PartnerApplicationRoute(
@@ -9531,6 +9546,8 @@ private fun RouteHost(
                         null
                     },
                 onSavedPlaces = { onOpenRoute(ShellRoute.SavedPlaces) },
+                onNotifications = if (notificationsRepository != null) ({ onOpenRoute(ShellRoute.Notifications) }) else null,
+                notificationsUnread = notificationsUnread,
                 onNotificationSettings =
                     if (notificationSettingsRepository != null) {
                         { onOpenRoute(ShellRoute.NotificationSettings) }

@@ -45,6 +45,7 @@ final class SettingsScreenTests: XCTestCase {
         let actions = SettingsActions(
             onManageSubscription: {},
             onSavedPlaces: {},
+            onNotifications: {},
             onNotificationSettings: {},
             onBlockedUsers: {},
             onPartnerStats: {},
@@ -54,7 +55,7 @@ final class SettingsScreenTests: XCTestCase {
         )
 
         XCTAssertEqual(actions.availableDestinations, [
-            .subscription, .savedPlaces, .notificationSettings, .blockedUsers,
+            .subscription, .savedPlaces, .notifications, .notificationSettings, .blockedUsers,
             .partnerStats, .feedback, .accountDeletion, .whatsNew,
         ])
         for destination in SettingsDestination.allCases {

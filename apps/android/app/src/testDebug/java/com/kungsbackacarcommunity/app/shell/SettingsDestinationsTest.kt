@@ -34,6 +34,7 @@ class SettingsDestinationsTest {
                     SettingsScreen(
                         onManageSubscription = if (available) ({ onDestination("membership") }) else null,
                         onSavedPlaces = { onDestination("places") },
+                        onNotifications = if (available) ({ onDestination("inbox") }) else null,
                         onNotificationSettings = if (available) ({ onDestination("notifications") }) else null,
                         onBlockedUsers = if (available) ({ onDestination("blocking") }) else null,
                         onPartnerStats = if (available) ({ onDestination("privacy") }) else null,
@@ -52,9 +53,10 @@ class SettingsDestinationsTest {
         render(false) { calls += it }
         listOf(
             R.string.settingsMenu_manageSubscription,
+            R.string.settingsMenu_notificationInbox,
             R.string.settingsMenu_notificationSettings,
             R.string.settings_blockedUsers,
-            R.string.settingsMenu_partnerStats,
+            R.string.privacySettings_partnerStatsTitle,
             R.string.settingsMenu_feedback,
             R.string.settingsMenu_deleteAccount,
         ).forEach {
@@ -72,12 +74,13 @@ class SettingsDestinationsTest {
         render(true) { calls += it }
         listOf(
             R.string.settingsMenu_manageSubscription,
+            R.string.settingsMenu_notificationInbox,
             R.string.settingsMenu_notificationSettings,
             R.string.settings_blockedUsers,
-            R.string.settingsMenu_partnerStats,
+            R.string.privacySettings_partnerStatsTitle,
             R.string.settingsMenu_feedback,
             R.string.settingsMenu_deleteAccount,
         ).forEach { compose.onNodeWithText(str(it)).performScrollTo().performClick() }
-        assertEquals(listOf("membership", "notifications", "blocking", "privacy", "feedback", "delete"), calls)
+        assertEquals(listOf("membership", "inbox", "notifications", "blocking", "privacy", "feedback", "delete"), calls)
     }
 }

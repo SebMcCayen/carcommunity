@@ -97,6 +97,7 @@ enum class ShellRoute {
      */
     Points,
     PartnerApplication,
+    PartnerReservations,
 
     /**
      * Digital billboards.

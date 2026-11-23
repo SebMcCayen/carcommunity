@@ -112,6 +112,8 @@ struct ShellView: View {
     @State private var feedbackCoordinator: FeedbackCoordinator?
     @State private var openTicketsCoordinator: OpenTicketsCoordinator?
     @State private var partnerApplicationCoordinator: PartnerApplicationCoordinator?
+    @State private var partnerMenuAccount: String?
+    @State private var partnerMenuEntry = PortalMenuEntry.apply
     @State private var partnerCompanyDestination: String?
     @State private var accountDeletionCoordinator: AccountDeletionCoordinator
     @State private var subscriptionCoordinator: SubscriptionCoordinator
@@ -1302,12 +1304,6 @@ struct ShellView: View {
                     Label("shell.friendsTitle", systemImage: "person.2")
                 }
             }
-            if notificationsAvailable {
-                Button { routes = routes.opening(.notifications) } label: {
-                    Label("notifications.title", systemImage: "bell")
-                }
-                .accessibilityIdentifier("shell.notifications")
-            }
             Button {
                 routes = routes.opening(.settings)
             } label: {
@@ -1322,15 +1318,19 @@ struct ShellView: View {
                 }
             }
             if partnerApplicationCoordinator != nil {
-                Button {
-                    routes = routes.opening(.partnerApplication)
-                } label: {
-                    PortalText("portal.apply")
-                }
-                Button {
-                    routes = routes.opening(.partnerWorkspace)
-                } label: {
-                    Label(portalString("portal.workspace"), systemImage: "building.2.crop.circle")
+                switch partnerMenuAccount == signedInUid ? partnerMenuEntry : .apply {
+                case .business:
+                    Button { routes = routes.opening(.partnerWorkspace) } label: {
+                        Label(portalString("portal.workspace"), systemImage: "building.2")
+                    }
+                case .application:
+                    Button { routes = routes.opening(.partnerWorkspace) } label: {
+                        Label("partnerPortal.application", systemImage: "doc.text")
+                    }
+                case .apply:
+                    Button { routes = routes.opening(.partnerApplication) } label: {
+                        Label("shell.morePartnerApplication", systemImage: "briefcase")
+                    }
                 }
                 if featureFlags.isEnabled(.partners) {
                     Button {
@@ -1340,19 +1340,19 @@ struct ShellView: View {
                     }
                 }
             }
-            if partnerStatsEntryAvailable {
-                Button {
-                    routes = routes.opening(.partnerStats)
-                } label: {
-                    Label(portalString("portal.privacySettings"), systemImage: "hand.raised")
-                }
-            }
         } label: {
             MapProfileAvatar(
                 avatarURL: profile?.avatarURL,
                 clubBadge: profile?.clubBadge,
                 signedIn: signedInUid != nil
             )
+        }
+        .task(id: scenePhase == .active ? signedInUid : nil) {
+            guard scenePhase == .active, let uid = signedInUid else { return }
+            let workspace = try? await PartnerPortalClient.createIfAvailable()?.call("workspace", as: PortalWorkspace.self)
+            guard !Task.isCancelled, signedInUid == uid else { return }
+            partnerMenuAccount = uid
+            partnerMenuEntry = workspace?.menuEntry ?? .apply
         }
         .accessibilityIdentifier("shell.menu")
         .driverPhotoObstacle("profile", update: recordDriverControl)
@@ -2091,6 +2091,7 @@ struct ShellView: View {
             onManageSubscription: { routes = routes.opening(.subscription) },
             onSavedPlaces: savedPlacesCoordinator != nil
                 ? { routes = routes.opening(.savedPlaces) } : nil,
+            onNotifications: notificationsAvailable ? { routes = routes.opening(.notifications) } : nil,
             onNotificationSettings: notificationSettingsAvailable
                 ? { routes = routes.opening(.notificationSettings) } : nil,
             onBlockedUsers: blockedUsersAvailable

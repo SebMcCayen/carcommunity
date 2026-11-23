@@ -36,9 +36,19 @@ struct PortalApplication: Decodable, Sendable {
     let logoPreviewBase64: String?
 }
 
+enum PortalMenuEntry {
+    case apply, application, business
+}
+
 struct PortalWorkspace: Decodable, Sendable {
     let companies: [PortalCompany]
     let application: PortalApplication?
+
+    var activeCompanies: [PortalCompany] { companies.filter { $0.status == "active" } }
+    var menuEntry: PortalMenuEntry {
+        if !activeCompanies.isEmpty { return .business }
+        return application == nil ? .apply : .application
+    }
 }
 
 struct PortalOffer: Decodable, Identifiable, Sendable {
