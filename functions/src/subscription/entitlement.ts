@@ -20,6 +20,10 @@ import { adminAuth, db } from '../firebase';
 import { applyPrivilegeChange, computeUpdatedClaims } from '../admin/claims-core';
 import { supporterBadgeEligible } from './supporter-badge-core';
 import { membershipMapRingProjection } from './map-ring-core';
+import {
+  reserveAppleReconciliation,
+  releasePurchaseVerification,
+} from './purchase-token-ownership';
 import type { AppleEventVersion } from './apple-state-core';
 import {
   buildSubscriptionDocument,
@@ -28,6 +32,8 @@ import {
 } from './subscription-core';
 
 export interface ApplyEntitlementOptions {
+  /** Internal lease already held by the verified Apple purchase/notification. */
+  appleReservation?: string;
   /** Optional audit event committed atomically with the Firestore entitlement records. */
   auditEvent?: Record<string, unknown>;
   /** Committed with the records, so retries never advance ahead of an applied Apple state. */
@@ -38,6 +44,15 @@ export async function applyEntitlement(
   input: EntitlementRecordInput,
   options: ApplyEntitlementOptions = {},
 ): Promise<void> {
+  if (input.platform === 'apple' && !options.appleReservation) {
+    const reservation = await reserveAppleReconciliation(input, new Date());
+    try {
+      await applyEntitlement(input, { ...options, appleReservation: reservation });
+    } finally {
+      await releasePurchaseVerification(input.userId, input.purchaseTokenHash!, reservation);
+    }
+    return;
+  }
   const active = grantsLegacyActiveMember(input);
   const targetUser = await adminAuth.getUser(input.userId);
 

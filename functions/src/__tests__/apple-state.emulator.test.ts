@@ -4,7 +4,16 @@ import { initializeTestEnvironment, assertFails } from '@firebase/rules-unit-tes
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { adminAuth, db } from '../firebase';
 import { applyAppleSubscriptionState } from '../subscription/apple-state';
-import { appleAppAccountTokenForUid } from '../subscription/apple-store-core';
+import {
+  appleAppAccountTokenForUid,
+  applePurchaseTokenHash,
+  appleProductionAccountMarkerId,
+} from '../subscription/apple-store-core';
+import { applyEntitlement } from '../subscription/entitlement';
+import {
+  reservePurchaseVerification,
+  releasePurchaseVerification,
+} from '../subscription/purchase-token-ownership';
 import { appleNotificationState, appleTransactionState } from '../subscription/apple-state-core';
 import { hashPurchaseToken } from '../subscription/subscription-core';
 
@@ -23,6 +32,7 @@ let uid: string;
 let chain: string;
 function transaction(overrides: Record<string, unknown> = {}) {
   return {
+    environment: 'Sandbox',
     type: 'Auto-Renewable Subscription',
     inAppOwnershipType: 'PURCHASED',
     productId: 'plus_monthly',
@@ -50,13 +60,240 @@ afterEach(async () => {
     ...['users', 'subscriptions', 'subscriptionPurchaseVerifications'].map((c) =>
       db.collection(c).doc(uid).delete(),
     ),
-    ...['subscriptionPurchaseTokens', 'subscriptionAppleEvents'].map((c) =>
-      db.collection(c).doc(hashPurchaseToken(chain)).delete(),
+    ...['subscriptionPurchaseTokens', 'subscriptionAppleEvents'].flatMap((c) =>
+      ['sandbox', 'production'].map((env) =>
+        db
+          .collection(c)
+          .doc(applePurchaseTokenHash(chain, env as 'sandbox' | 'production'))
+          .delete(),
+      ),
     ),
+    db.collection('subscriptionAppleEvents').doc(appleProductionAccountMarkerId(uid)).delete(),
   ]);
 });
 
 describe('Apple lifecycle writes across Firestore and Auth', () => {
+  it('keeps a sweep out of an in-flight purchase verification lease', async () => {
+    await applyAppleSubscriptionState(
+      uid,
+      appleTransactionState(
+        transaction({ environment: 'Production' }),
+        appleAppAccountTokenForUid(uid),
+        NOW,
+      ),
+      NOW,
+    );
+    const record = await current();
+    const tokenHash = applePurchaseTokenHash(chain, 'production');
+    const lease = await reservePurchaseVerification(
+      tokenHash,
+      { uid, productId: 'plus_monthly', appleEnvironment: 'production' },
+      new Date(),
+    );
+    try {
+      await expect(
+        applyEntitlement({
+          userId: uid,
+          platform: 'apple',
+          purchaseTokenHash: tokenHash,
+          tier: record!.tier,
+          expiresAt: record!.expiresAt.toDate(),
+          status: 'expired',
+          entitlement: 'none',
+        }),
+      ).rejects.toMatchObject({ reason: 'verification_in_progress' });
+      expect((await adminAuth.getUser(uid)).customClaims?.activeMember).toBe(true);
+    } finally {
+      await releasePurchaseVerification(uid, tokenHash, lease);
+    }
+  });
+  it('does not replace a different active production chain', async () => {
+    await applyAppleSubscriptionState(
+      uid,
+      appleTransactionState(
+        transaction({ environment: 'Production' }),
+        appleAppAccountTokenForUid(uid),
+        NOW,
+      ),
+      NOW,
+    );
+    const before = await current();
+    await expect(
+      applyAppleSubscriptionState(
+        uid,
+        appleTransactionState(
+          transaction({ environment: 'Production', originalTransactionId: `${chain}-different` }),
+          appleAppAccountTokenForUid(uid),
+          NOW,
+        ),
+        NOW,
+      ),
+    ).rejects.toMatchObject({ reason: 'different_active_token' });
+    expect(await current()).toEqual(before);
+  });
+  it('does not let another Firebase account claim an existing production chain', async () => {
+    await applyAppleSubscriptionState(
+      uid,
+      appleTransactionState(
+        transaction({ environment: 'Production' }),
+        appleAppAccountTokenForUid(uid),
+        NOW,
+      ),
+      NOW,
+    );
+    await expect(
+      reservePurchaseVerification(
+        applePurchaseTokenHash(chain, 'production'),
+        {
+          uid: 'unrelated-local-test-account',
+          productId: 'plus_monthly',
+          appleEnvironment: 'production',
+        },
+        NOW,
+      ),
+    ).rejects.toMatchObject({ reason: 'different_user' });
+    expect(
+      (
+        await db
+          .collection('subscriptionPurchaseTokens')
+          .doc(applePurchaseTokenHash(chain, 'production'))
+          .get()
+      ).get('uid'),
+    ).toBe(uid);
+  });
+  it('lets a real purchase replace active sandbox access and ignores late test notifications', async () => {
+    const sandbox = appleTransactionState(
+      transaction({ productId: 'supporter_monthly' }),
+      appleAppAccountTokenForUid(uid),
+      NOW,
+    );
+    await applyAppleSubscriptionState(uid, sandbox, NOW);
+    const real = appleTransactionState(
+      transaction({ environment: 'Production', purchaseDate: NOW.getTime() - 2000 }),
+      appleAppAccountTokenForUid(uid),
+      NOW,
+    );
+    await applyAppleSubscriptionState(uid, real, NOW);
+    const expected = await current();
+    expect(expected).toMatchObject({
+      tier: 'plus',
+      purchaseTokenHash: applePurchaseTokenHash(chain, 'production'),
+      entitlement: 'member_monthly',
+    });
+    expect(
+      (
+        await db
+          .collection('subscriptionAppleEvents')
+          .doc(appleProductionAccountMarkerId(uid))
+          .get()
+      ).data(),
+    ).toMatchObject({ uid, kind: 'production-account' });
+    expect(await applyAppleSubscriptionState(uid, sandbox, NOW, true)).toBeNull();
+    await expect(applyAppleSubscriptionState(uid, sandbox, NOW)).rejects.toMatchObject({
+      reason: 'environment_conflict',
+    });
+    expect(await current()).toEqual(expected);
+    expect((await adminAuth.getUser(uid)).customClaims?.activeMember).toBe(true);
+    expect((await db.collection('users').doc(uid).get()).get('supporterBadgeEligible')).toBe(false);
+  });
+  it('never revives sandbox access after the real purchase expires', async () => {
+    const real = appleTransactionState(
+      transaction({ environment: 'Production', expiresDate: NOW.getTime() - 1 }),
+      appleAppAccountTokenForUid(uid),
+      NOW,
+    );
+    await applyAppleSubscriptionState(uid, real, NOW);
+    const sandbox = appleTransactionState(transaction(), appleAppAccountTokenForUid(uid), NOW);
+    await expect(applyAppleSubscriptionState(uid, sandbox, NOW)).rejects.toMatchObject({
+      reason: 'environment_conflict',
+    });
+    expect(await current()).toMatchObject({ entitlement: 'none', status: 'expired' });
+    expect((await adminAuth.getUser(uid)).customClaims?.activeMember).not.toBe(true);
+  });
+  it('retries a first production grant that failed before committing entitlement', async () => {
+    const sandbox = appleTransactionState(transaction(), appleAppAccountTokenForUid(uid), NOW);
+    await applyAppleSubscriptionState(uid, sandbox, NOW);
+    const real = appleTransactionState(
+      transaction({ environment: 'Production' }),
+      appleAppAccountTokenForUid(uid),
+      NOW,
+    );
+    const fail = vi
+      .spyOn(adminAuth, 'getUser')
+      .mockRejectedValueOnce(new Error('local transient Auth failure'));
+    try {
+      await expect(applyAppleSubscriptionState(uid, real, NOW)).rejects.toThrow('local transient');
+    } finally {
+      fail.mockRestore();
+    }
+    expect(await current()).toMatchObject({ purchaseTokenHash: hashPurchaseToken(chain) });
+    await applyAppleSubscriptionState(uid, real, NOW);
+    expect(await current()).toMatchObject({
+      purchaseTokenHash: applePurchaseTokenHash(chain, 'production'),
+    });
+    expect((await adminAuth.getUser(uid)).customClaims?.activeMember).toBe(true);
+  });
+  it('serializes concurrent environments and converges to production on retry', async () => {
+    const sandbox = appleTransactionState(transaction(), appleAppAccountTokenForUid(uid), NOW);
+    const real = appleTransactionState(
+      transaction({ environment: 'Production' }),
+      appleAppAccountTokenForUid(uid),
+      NOW,
+    );
+    await Promise.allSettled([
+      applyAppleSubscriptionState(uid, sandbox, NOW),
+      applyAppleSubscriptionState(uid, real, NOW),
+    ]);
+    await applyAppleSubscriptionState(uid, real, NOW);
+    await expect(applyAppleSubscriptionState(uid, sandbox, NOW)).rejects.toMatchObject({
+      reason: 'environment_conflict',
+    });
+    expect(await current()).toMatchObject({
+      purchaseTokenHash: applePurchaseTokenHash(chain, 'production'),
+      entitlement: 'member_monthly',
+    });
+  });
+  it('blocks a stale sandbox expiry sweep before it can revoke a newer real claim', async () => {
+    await applyAppleSubscriptionState(
+      uid,
+      appleTransactionState(transaction(), appleAppAccountTokenForUid(uid), NOW),
+      NOW,
+    );
+    const old = await current();
+    await applyAppleSubscriptionState(
+      uid,
+      appleTransactionState(
+        transaction({ environment: 'Production' }),
+        appleAppAccountTokenForUid(uid),
+        NOW,
+      ),
+      NOW,
+    );
+    await expect(
+      applyEntitlement({
+        userId: uid,
+        platform: 'apple',
+        purchaseTokenHash: old!.purchaseTokenHash,
+        tier: old!.tier,
+        expiresAt: old!.expiresAt.toDate(),
+        status: 'expired',
+        entitlement: 'none',
+      }),
+    ).rejects.toMatchObject({ reason: 'different_active_token' });
+    expect((await adminAuth.getUser(uid)).customClaims?.activeMember).toBe(true);
+    const currentReal = await current();
+    await applyEntitlement({
+      userId: uid,
+      platform: 'apple',
+      purchaseTokenHash: currentReal!.purchaseTokenHash,
+      tier: currentReal!.tier,
+      expiresAt: currentReal!.expiresAt.toDate(),
+      status: 'expired',
+      entitlement: 'none',
+    });
+    expect((await adminAuth.getUser(uid)).customClaims?.activeMember).not.toBe(true);
+    expect(await current()).toMatchObject({ entitlement: 'none' });
+  });
   it('grants records and claims, and repairs an interrupted claim write on duplicate delivery', async () => {
     const state = appleTransactionState(transaction(), appleAppAccountTokenForUid(uid), NOW);
     await applyAppleSubscriptionState(uid, state, NOW);
@@ -213,7 +450,11 @@ describe('Apple lifecycle writes across Firestore and Auth', () => {
   it('denies marker reads and writes even to the owner and an admin client', async () => {
     await applyAppleSubscriptionState(
       uid,
-      appleTransactionState(transaction(), appleAppAccountTokenForUid(uid), NOW),
+      appleTransactionState(
+        transaction({ environment: 'Production' }),
+        appleAppAccountTokenForUid(uid),
+        NOW,
+      ),
       NOW,
     );
     const env = await initializeTestEnvironment({
@@ -222,13 +463,18 @@ describe('Apple lifecycle writes across Firestore and Auth', () => {
     });
     try {
       for (const claims of [{}, { admin: true }]) {
-        const ref = doc(
-          env.authenticatedContext(uid, claims).firestore(),
-          'subscriptionAppleEvents',
-          hashPurchaseToken(chain),
-        );
-        await assertFails(getDoc(ref));
-        await assertFails(setDoc(ref, { signedDateMillis: NOW.getTime() + 1000 }));
+        for (const marker of [
+          applePurchaseTokenHash(chain, 'production'),
+          appleProductionAccountMarkerId(uid),
+        ]) {
+          const ref = doc(
+            env.authenticatedContext(uid, claims).firestore(),
+            'subscriptionAppleEvents',
+            marker,
+          );
+          await assertFails(getDoc(ref));
+          await assertFails(setDoc(ref, { signedDateMillis: NOW.getTime() + 1000 }));
+        }
       }
     } finally {
       await env.cleanup();

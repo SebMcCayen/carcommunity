@@ -7,7 +7,7 @@ import {
   VerificationStatus,
   type JWSTransactionDecodedPayload,
 } from '@apple/app-store-server-library';
-import { APPLE_BUNDLE_ID, AppleVerificationError } from './apple-store-core';
+import { APPLE_BUNDLE_ID, AppleVerificationError, type AppleEnvironment } from './apple-store-core';
 import type { AppleSubscriptionProviderConfig } from './provider-config';
 import { appleTransactionState, type AppleSubscriptionState } from './apple-state-core';
 
@@ -27,14 +27,37 @@ export class AppleSignedDataError extends Error {
 
 export async function appleSignedDataVerifier(
   config: AppleSubscriptionProviderConfig,
+  environment: AppleEnvironment = config.environment === 'sandbox' ? 'sandbox' : 'production',
 ): Promise<SignedDataVerifier> {
   return new SignedDataVerifier(
     [await loadAppleRootCertificate()],
     true,
-    config.environment === 'production' ? Environment.PRODUCTION : Environment.SANDBOX,
+    environment === 'production' ? Environment.PRODUCTION : Environment.SANDBOX,
     APPLE_BUNDLE_ID,
     config.appAppleId,
   );
+}
+
+/** Retry only Apple's authenticated environment mismatch, never other failures. */
+export async function verifyAppleSignedData<T>(
+  config: AppleSubscriptionProviderConfig,
+  verify: (verifier: SignedDataVerifier) => Promise<T>,
+): Promise<T> {
+  try {
+    try {
+      return await verify(await appleSignedDataVerifier(config));
+    } catch (error) {
+      if (
+        config.environment !== 'production-and-sandbox' ||
+        !(error instanceof VerificationException) ||
+        error.status !== VerificationStatus.INVALID_ENVIRONMENT
+      )
+        throw error;
+      return await verify(await appleSignedDataVerifier(config, 'sandbox'));
+    }
+  } catch (error) {
+    rethrowAppleVerificationError(error);
+  }
 }
 
 export function rethrowAppleVerificationError(error: unknown): never {
@@ -53,12 +76,9 @@ async function verifiedTransaction(
   signedTransaction: string,
   config: AppleSubscriptionProviderConfig,
 ): Promise<JWSTransactionDecodedPayload> {
-  try {
-    const verifier = await appleSignedDataVerifier(config);
-    return await verifier.verifyAndDecodeTransaction(signedTransaction);
-  } catch (error) {
-    rethrowAppleVerificationError(error);
-  }
+  return verifyAppleSignedData(config, (verifier) =>
+    verifier.verifyAndDecodeTransaction(signedTransaction),
+  );
 }
 
 export async function verifyAppleTransactionState(

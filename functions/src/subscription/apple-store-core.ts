@@ -11,6 +11,19 @@ export const APPLE_BUNDLE_ID = 'com.kungsbackacarcommunity.app' as const;
 export const APPLE_PRODUCT_IDS = [PLUS_MONTHLY_PRODUCT_ID, SUPPORTER_MONTHLY_PRODUCT_ID] as const;
 
 export type AppleProductId = (typeof APPLE_PRODUCT_IDS)[number];
+export type AppleEnvironment = 'sandbox' | 'production';
+
+/** Preserve all existing sandbox ownership/watermarks; production has its own namespace. */
+export function applePurchaseTokenHash(originalId: string, environment: AppleEnvironment): string {
+  return createHash('sha256')
+    .update(environment === 'sandbox' ? originalId : `apple:production:${originalId}`)
+    .digest('hex');
+}
+
+/** Backend-only account fence in the existing UID-purged Apple event collection. */
+export function appleProductionAccountMarkerId(uid: string): string {
+  return `production-account-${createHash('sha256').update(uid).digest('hex')}`;
+}
 
 export type AppleVerificationErrorCode =
   'malformed_response' | 'account_mismatch' | 'unsupported_product' | 'unsupported_transaction';
@@ -26,6 +39,7 @@ export class AppleVerificationError extends Error {
 }
 
 export interface AppleEntitlementOutcome {
+  environment: AppleEnvironment;
   productId: AppleProductId;
   tier: SubscriptionTier;
   status: SubscriptionStatus;
@@ -87,6 +101,9 @@ export function parseAppleTransaction(
     malformed('Apple transaction must be an object.');
   }
   const transaction = value as UnknownRecord;
+  if (transaction.environment !== 'Sandbox' && transaction.environment !== 'Production') {
+    malformed('Apple transaction environment is unsupported.');
+  }
   if (transaction.type !== 'Auto-Renewable Subscription') {
     throw new AppleVerificationError(
       'unsupported_transaction',
@@ -123,6 +140,7 @@ export function parseAppleTransaction(
   const inactive = revokedAt !== null || transaction.isUpgraded === true || expiresAt <= now;
 
   return {
+    environment: transaction.environment === 'Production' ? 'production' : 'sandbox',
     productId,
     tier: productId === SUPPORTER_MONTHLY_PRODUCT_ID ? 'supporter' : 'plus',
     status: revokedAt !== null ? 'revoked' : inactive ? 'expired' : 'active',

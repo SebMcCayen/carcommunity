@@ -5,7 +5,8 @@ import {
   reservePurchaseVerification,
   releasePurchaseVerification,
 } from './purchase-token-ownership';
-import { hashPurchaseToken, type EntitlementRecordInput } from './subscription-core';
+import { type EntitlementRecordInput } from './subscription-core';
+import { applePurchaseTokenHash } from './apple-store-core';
 import {
   isNewerAppleState,
   readAppleEventVersion,
@@ -20,14 +21,14 @@ export async function applyAppleSubscriptionState(
   notificationsOnly = false,
 ): Promise<EntitlementRecordInput | null> {
   const { outcome } = state;
-  const tokenHash = hashPurchaseToken(outcome.originalTransactionId);
+  const tokenHash = applePurchaseTokenHash(outcome.originalTransactionId, outcome.environment);
   if (notificationsOnly) {
     const current = (await db.collection('subscriptions').doc(uid).get()).data();
     if (current?.platform !== 'apple' || current.purchaseTokenHash !== tokenHash) return null;
   }
   const reservation = await reservePurchaseVerification(
     tokenHash,
-    { uid, productId: outcome.productId },
+    { uid, productId: outcome.productId, appleEnvironment: outcome.environment },
     now,
   );
   try {
@@ -63,7 +64,7 @@ export async function applyAppleSubscriptionState(
         startsAt: current.startsAt instanceof Timestamp ? current.startsAt.toDate() : null,
         expiresAt,
       };
-      await applyEntitlement(input);
+      await applyEntitlement(input, { appleReservation: reservation });
       return input;
     }
     const input: EntitlementRecordInput = {
@@ -77,6 +78,7 @@ export async function applyAppleSubscriptionState(
       expiresAt: outcome.expiresAt,
     };
     await applyEntitlement(input, {
+      appleReservation: reservation,
       appleEvent: { purchaseTokenHash: tokenHash, version: state.version },
     });
     return input;

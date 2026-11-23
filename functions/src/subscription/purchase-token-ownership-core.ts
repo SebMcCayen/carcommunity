@@ -10,7 +10,8 @@ export class PurchaseTokenOwnershipError extends Error {
       | 'different_product'
       | 'different_active_token'
       | 'verification_in_progress'
-      | 'malformed_record',
+      | 'malformed_record'
+      | 'environment_conflict',
   ) {
     super('Purchase token ownership conflict.');
     this.name = 'PurchaseTokenOwnershipError';
@@ -53,6 +54,8 @@ export function assertNoDifferentActiveToken(
 export interface PurchaseTokenOwnershipRecord {
   uid: string;
   productId: StoreProductId;
+  /** Set only from a cryptographically verified Apple payload. */
+  appleEnvironment?: 'sandbox' | 'production';
 }
 
 /** Pure decision used by transaction code and focused replay tests. */
@@ -76,6 +79,13 @@ export function validateTokenOwnership(
   }
   if (record.uid !== expected.uid) {
     throw new PurchaseTokenOwnershipError('different_user');
+  }
+  if (
+    record.appleEnvironment !== undefined &&
+    expected.appleEnvironment !== undefined &&
+    record.appleEnvironment !== expected.appleEnvironment
+  ) {
+    throw new PurchaseTokenOwnershipError('malformed_record');
   }
   if (record.productId !== expected.productId) {
     // A deferred replacement keeps the new purchase token while its effective

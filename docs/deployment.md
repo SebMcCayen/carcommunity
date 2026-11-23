@@ -377,8 +377,16 @@ server library, the bundled Apple Root CA G3 certificate, bundle ID
 `com.kungsbackacarcommunity.app`, and online revocation checks. It also requires
 the verified `appAccountToken` to match the signed-in Firebase UID's one-way
 UUID binding. TestFlight transactions still use Apple's sandbox environment;
-set `environment: production` and the real numeric `appAppleId` only for live
-App Store transactions. A malformed or incomplete configuration fails closed.
+`environment: production` accepts only live App Store transactions. For launch
+alongside TestFlight and App Review, use the explicit
+`environment: production-and-sandbox` mode and the real numeric `appAppleId`.
+Only Apple's verified environment mismatch permits sandbox fallback; every
+signature, app/account binding and revocation check remains enforced. Production
+chain identities and a persistent account marker prevent sandbox receipts or
+notifications from replacing a real membership. Use separate Firebase accounts
+for further sandbox tests once a real purchase is registered. A malformed or
+incomplete configuration fails closed. Follow the four-function deployment and
+activation order in [the subscription test guide](testing/ios-subscriptions.md#controlled-production-rollout-after-merge).
 
 The app displays StoreKit's localized price, supports purchase and restore,
 and finishes a verified StoreKit transaction only after the backend applies the

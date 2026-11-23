@@ -5,19 +5,18 @@ import {
   getAppleSubscriptionProviderConfig,
   type AppleSubscriptionProviderConfig,
 } from './provider-config';
+import { verifyAppleSignedData, AppleSignedDataError } from './apple-store';
 import {
-  appleSignedDataVerifier,
-  AppleSignedDataError,
-  rethrowAppleVerificationError,
-} from './apple-store';
-import { appleAppAccountTokenForUid, AppleVerificationError } from './apple-store-core';
+  appleAppAccountTokenForUid,
+  applePurchaseTokenHash,
+  AppleVerificationError,
+} from './apple-store-core';
 import {
   appleNotificationState,
   appleTransactionState,
   type AppleSubscriptionState,
 } from './apple-state-core';
 import { applyAppleSubscriptionState } from './apple-state';
-import { hashPurchaseToken } from './subscription-core';
 import { PurchaseTokenOwnershipError } from './purchase-token-ownership-core';
 
 const LIFECYCLE_TYPES = new Set([
@@ -50,8 +49,7 @@ export async function verifyAppleNotification(
   signedPayload: string,
   config: AppleSubscriptionProviderConfig,
 ): Promise<VerifiedAppleNotification> {
-  try {
-    const verifier = await appleSignedDataVerifier(config);
+  return verifyAppleSignedData<VerifiedAppleNotification>(config, async (verifier) => {
     const notification = await verifier.verifyAndDecodeNotification(signedPayload);
     if (notification.version !== '2.0') throw new AppleSignedDataError('invalid_signature');
     if (notification.notificationType === 'TEST') return { kind: 'test' };
@@ -69,9 +67,7 @@ export async function verifyAppleNotification(
       status: data.status,
       signedDate: notification.signedDate,
     };
-  } catch (error) {
-    rethrowAppleVerificationError(error);
-  }
+  });
 }
 
 export interface AppleNotificationDeps {
@@ -96,7 +92,11 @@ export async function runAppleNotification(
     const originalId = notification.transaction.originalTransactionId;
     if (typeof originalId !== 'string' || originalId.length === 0 || originalId.length > 128)
       return 400;
-    const uid = await deps.resolveOwner(hashPurchaseToken(originalId));
+    const environment = notification.transaction.environment;
+    if (environment !== 'Production' && environment !== 'Sandbox') return 400;
+    const uid = await deps.resolveOwner(
+      applePurchaseTokenHash(originalId, environment === 'Production' ? 'production' : 'sandbox'),
+    );
     // First purchase can arrive before the device callable creates ownership.
     // Acknowledge only after that race can be retried, rather than losing renewal state.
     if (uid === null) return 503;
@@ -128,6 +128,7 @@ export async function runAppleNotification(
     if (error instanceof AppleSignedDataError)
       return error.reason === 'invalid_signature' ? 400 : 503;
     if (error instanceof PurchaseTokenOwnershipError) {
+      if (error.reason === 'environment_conflict') return 200;
       return error.reason === 'verification_in_progress' ||
         error.reason === 'different_active_token'
         ? 503

@@ -207,7 +207,7 @@
         "purchaseTokenHash": {
           "type": ["string", "null"],
           "pattern": "^[a-f0-9]{64}$",
-          "description": "SHA-256 of the purchase token; null for manual grants. The raw token never exists in storage."
+          "description": "SHA-256 of the store purchase identity; null for manual grants. Apple sandbox retains the legacy originalTransactionId hash; Apple production hashes apple:production:<originalTransactionId>. The raw token or ID never exists in storage."
         },
         "startsAt": {
           "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",

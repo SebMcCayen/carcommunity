@@ -11,6 +11,7 @@ const TOKEN = appleAppAccountTokenForUid(UID);
 
 function transaction(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    environment: 'Sandbox',
     type: 'Auto-Renewable Subscription',
     inAppOwnershipType: 'PURCHASED',
     appAccountToken: TOKEN,
@@ -33,6 +34,7 @@ describe('appleAppAccountTokenForUid', () => {
 describe('parseAppleTransaction', () => {
   it('maps a verified active Plus transaction', () => {
     expect(parseAppleTransaction(transaction(), TOKEN, NOW)).toEqual({
+      environment: 'sandbox',
       productId: 'plus_monthly',
       tier: 'plus',
       status: 'active',

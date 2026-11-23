@@ -24,6 +24,7 @@ const UID = 'apple-test';
 const TOKEN = appleAppAccountTokenForUid(UID);
 function transaction(overrides: Record<string, unknown> = {}) {
   return {
+    environment: 'Sandbox',
     type: 'Auto-Renewable Subscription',
     inAppOwnershipType: 'PURCHASED',
     productId: 'plus_monthly',

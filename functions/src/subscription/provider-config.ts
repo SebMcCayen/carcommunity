@@ -15,7 +15,7 @@ import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 
 export interface AppleSubscriptionProviderConfig {
-  environment: 'sandbox' | 'production';
+  environment: 'sandbox' | 'production' | 'production-and-sandbox';
   appAppleId?: number;
 }
 
@@ -41,22 +41,34 @@ export async function isSubscriptionProviderEnabled(
 export async function getAppleSubscriptionProviderConfig(): Promise<AppleSubscriptionProviderConfig | null> {
   try {
     const snap = await db.collection('config').doc('subscriptionProviders').get();
-    const apple = snap.data()?.apple as Record<string, unknown> | undefined;
-    if (apple?.enabled !== true) return null;
-    if (apple.environment !== 'sandbox' && apple.environment !== 'production') return null;
-    const appAppleId = apple.appAppleId;
-    if (
-      appAppleId !== undefined &&
-      (typeof appAppleId !== 'number' || !Number.isSafeInteger(appAppleId) || appAppleId <= 0)
-    ) {
-      return null;
-    }
-    if (apple.environment === 'production' && appAppleId === undefined) return null;
-    return { environment: apple.environment, ...(appAppleId === undefined ? {} : { appAppleId }) };
+    return parseAppleSubscriptionProviderConfig(snap.data()?.apple);
   } catch (error) {
     logger.warn('Apple subscription provider config read failed; failing closed', {
       error: String(error),
     });
     return null;
   }
+}
+
+/** Explicit opt-in; existing sandbox-only configuration keeps its exact behavior. */
+export function parseAppleSubscriptionProviderConfig(
+  value: unknown,
+): AppleSubscriptionProviderConfig | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const apple = value as Record<string, unknown>;
+  if (apple.enabled !== true) return null;
+  if (!['sandbox', 'production', 'production-and-sandbox'].includes(apple.environment as string))
+    return null;
+  const appAppleId = apple.appAppleId;
+  if (
+    appAppleId !== undefined &&
+    (typeof appAppleId !== 'number' || !Number.isSafeInteger(appAppleId) || appAppleId <= 0)
+  ) {
+    return null;
+  }
+  if (apple.environment !== 'sandbox' && appAppleId === undefined) return null;
+  return {
+    environment: apple.environment as AppleSubscriptionProviderConfig['environment'],
+    ...(appAppleId === undefined ? {} : { appAppleId: appAppleId as number }),
+  };
 }
