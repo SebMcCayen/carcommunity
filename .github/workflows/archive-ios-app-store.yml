@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 120
     environment: production
     env:
+      NAVIGATION_LOCK: apps/ios/NavigationSDK/Xcode27/Package.resolved
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v5
@@ -42,7 +43,7 @@ jobs:
         run: |
           python3 apps/ios/scripts/release-preflight.py
           if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
-          python3 apps/ios/scripts/navigation-project.py
+          python3 apps/ios/scripts/navigation-project.py --lockfile "$NAVIGATION_LOCK"
       - name: Prepare verified Turf binary cache
         timeout-minutes: 5
         env:
@@ -69,7 +70,7 @@ jobs:
           args=(-project apps/ios/KCCNavigation.xcodeproj -scheme KCC
                 -derivedDataPath "$RUNNER_TEMP/ios-release")
           xcodebuild "${args[@]}" -resolvePackageDependencies -onlyUsePackageVersionsFromResolvedFile
-          cmp apps/ios/NavigationSDK/Package.resolved \
+          cmp "$NAVIGATION_LOCK" \
             apps/ios/KCCNavigation.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
           xcodebuild "${args[@]}" -configuration Release -destination 'generic/platform=iOS' \
             -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO \
