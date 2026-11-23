@@ -380,8 +380,10 @@ UUID binding. TestFlight transactions still use Apple's sandbox environment;
 `environment: production` accepts only live App Store transactions. For launch
 alongside TestFlight and App Review, use the explicit
 `environment: production-and-sandbox` mode and the real numeric `appAppleId`.
-Only Apple's verified environment mismatch permits sandbox fallback; every
-signature, app/account binding and revocation check remains enforced. Production
+Apple's verified environment mismatch permits complete sandbox revalidation;
+notifications also handle the library's app-ID-first check when the sandbox
+app ID is omitted. Every signature, app/account binding and revocation check
+remains enforced by the selected verifier. Production
 chain identities and a persistent account marker prevent sandbox receipts or
 notifications from replacing a real membership. Use separate Firebase accounts
 for further sandbox tests once a real purchase is registered. A malformed or

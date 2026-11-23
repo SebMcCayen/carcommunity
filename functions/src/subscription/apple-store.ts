@@ -38,10 +38,14 @@ export async function appleSignedDataVerifier(
   );
 }
 
-/** Retry only Apple's authenticated environment mismatch, never other failures. */
+/** Revalidate sandbox completely after a verified environment mismatch. Apple's
+ * notification verifier checks the optional sandbox app ID before environment,
+ * so that path also needs a retry on INVALID_APP_IDENTIFIER. The sandbox
+ * verifier still enforces the signature, bundle and environment independently. */
 export async function verifyAppleSignedData<T>(
   config: AppleSubscriptionProviderConfig,
   verify: (verifier: SignedDataVerifier) => Promise<T>,
+  kind: 'transaction' | 'notification' = 'transaction',
 ): Promise<T> {
   try {
     try {
@@ -50,7 +54,10 @@ export async function verifyAppleSignedData<T>(
       if (
         config.environment !== 'production-and-sandbox' ||
         !(error instanceof VerificationException) ||
-        error.status !== VerificationStatus.INVALID_ENVIRONMENT
+        !(
+          error.status === VerificationStatus.INVALID_ENVIRONMENT ||
+          (kind === 'notification' && error.status === VerificationStatus.INVALID_APP_IDENTIFIER)
+        )
       )
         throw error;
       return await verify(await appleSignedDataVerifier(config, 'sandbox'));

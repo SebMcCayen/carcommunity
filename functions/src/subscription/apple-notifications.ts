@@ -49,25 +49,29 @@ export async function verifyAppleNotification(
   signedPayload: string,
   config: AppleSubscriptionProviderConfig,
 ): Promise<VerifiedAppleNotification> {
-  return verifyAppleSignedData<VerifiedAppleNotification>(config, async (verifier) => {
-    const notification = await verifier.verifyAndDecodeNotification(signedPayload);
-    if (notification.version !== '2.0') throw new AppleSignedDataError('invalid_signature');
-    if (notification.notificationType === 'TEST') return { kind: 'test' };
-    if (!LIFECYCLE_TYPES.has(notification.notificationType ?? '')) return { kind: 'ignored' };
-    const data = notification.data;
-    if (!data?.signedTransactionInfo) throw new AppleSignedDataError('invalid_signature');
-    const transaction = await verifier.verifyAndDecodeTransaction(data.signedTransactionInfo);
-    const renewal = data.signedRenewalInfo
-      ? await verifier.verifyAndDecodeRenewalInfo(data.signedRenewalInfo)
-      : null;
-    return {
-      kind: 'subscription',
-      transaction: transaction as Record<string, unknown>,
-      renewal: renewal as Record<string, unknown> | null,
-      status: data.status,
-      signedDate: notification.signedDate,
-    };
-  });
+  return verifyAppleSignedData<VerifiedAppleNotification>(
+    config,
+    async (verifier) => {
+      const notification = await verifier.verifyAndDecodeNotification(signedPayload);
+      if (notification.version !== '2.0') throw new AppleSignedDataError('invalid_signature');
+      if (notification.notificationType === 'TEST') return { kind: 'test' };
+      if (!LIFECYCLE_TYPES.has(notification.notificationType ?? '')) return { kind: 'ignored' };
+      const data = notification.data;
+      if (!data?.signedTransactionInfo) throw new AppleSignedDataError('invalid_signature');
+      const transaction = await verifier.verifyAndDecodeTransaction(data.signedTransactionInfo);
+      const renewal = data.signedRenewalInfo
+        ? await verifier.verifyAndDecodeRenewalInfo(data.signedRenewalInfo)
+        : null;
+      return {
+        kind: 'subscription',
+        transaction: transaction as Record<string, unknown>,
+        renewal: renewal as Record<string, unknown> | null,
+        status: data.status,
+        signedDate: notification.signedDate,
+      };
+    },
+    'notification',
+  );
 }
 
 export interface AppleNotificationDeps {

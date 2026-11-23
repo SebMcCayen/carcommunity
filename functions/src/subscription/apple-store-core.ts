@@ -22,7 +22,9 @@ export function applePurchaseTokenHash(originalId: string, environment: AppleEnv
 
 /** Backend-only account fence in the existing UID-purged Apple event collection. */
 export function appleProductionAccountMarkerId(uid: string): string {
-  return `production-account-${createHash('sha256').update(uid).digest('hex')}`;
+  // UID is the canonical account identifier (also present in the record), not
+  // a password or purchase secret. No credential hashing is performed here.
+  return `production-account-${encodeURIComponent(uid)}`;
 }
 
 export type AppleVerificationErrorCode =

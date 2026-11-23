@@ -148,6 +148,97 @@ describe('Apple environment configuration and verification', () => {
 });
 
 describe('Apple notification environment boundaries', () => {
+  // Model an already authenticated JWT only; retain the pinned SDK's actual
+  // verifyAndDecodeNotification/Transaction/RenewalInfo application checks.
+  function verifiedJWTs(envelope: Record<string, unknown>, nested = Environment.SANDBOX) {
+    const environments: Environment[] = [];
+    const internals = SignedDataVerifier.prototype as unknown as {
+      verifyJWT: (signed: string, ...args: unknown[]) => Promise<unknown>;
+    };
+    const spy = vi.spyOn(internals, 'verifyJWT').mockImplementation(async function (
+      this: SignedDataVerifier,
+      signed: string,
+    ) {
+      environments.push(environmentOf(this));
+      if (signed === 'envelope') return envelope;
+      if (signed === 'transaction') return payload(nested);
+      if (signed === 'renewal')
+        return { environment: nested, originalTransactionId: '123', productId: 'plus_monthly' };
+      throw new Error('Unexpected local JWT fixture');
+    });
+    return { spy, environments };
+  }
+  function envelope(
+    environment: Environment,
+    appAppleId?: number,
+    bundleId = 'com.kungsbackacarcommunity.app',
+  ) {
+    return {
+      version: '2.0',
+      notificationType: 'DID_RENEW',
+      signedDate: NOW.getTime(),
+      data: {
+        environment,
+        bundleId,
+        ...(appAppleId === undefined ? {} : { appAppleId }),
+        signedTransactionInfo: 'transaction',
+        signedRenewalInfo: 'renewal',
+        status: 1,
+      },
+    };
+  }
+  it('accepts a sandbox notification without appAppleId using the real SDK check order', async () => {
+    const { environments } = verifiedJWTs(envelope(Environment.SANDBOX));
+    const result = await verifyAppleNotification('envelope', CONFIG);
+    expect(result.kind).toBe('subscription');
+    expect(environments).toEqual([
+      Environment.PRODUCTION,
+      Environment.SANDBOX,
+      Environment.SANDBOX,
+      Environment.SANDBOX,
+    ]);
+  });
+  it('still rejects a production notification with the wrong numeric app identifier', async () => {
+    const { environments } = verifiedJWTs(
+      envelope(Environment.PRODUCTION, CONFIG.appAppleId + 1),
+      Environment.PRODUCTION,
+    );
+    await expect(verifyAppleNotification('envelope', CONFIG)).rejects.toMatchObject({
+      reason: 'invalid_signature',
+    });
+    expect(environments).toEqual([Environment.PRODUCTION, Environment.SANDBOX]);
+  });
+  it('still rejects a sandbox notification for a different bundle', async () => {
+    verifiedJWTs(envelope(Environment.SANDBOX, undefined, 'com.unrelated.app'));
+    await expect(verifyAppleNotification('envelope', CONFIG)).rejects.toMatchObject({
+      reason: 'invalid_signature',
+    });
+  });
+  it.each(['transaction', 'renewal'] as const)(
+    'rejects mixed environments through the real SDK %s check',
+    async (mismatch) => {
+      const { spy } = verifiedJWTs(envelope(Environment.SANDBOX));
+      spy.mockImplementation(async (signed) => {
+        if (signed === 'envelope') return envelope(Environment.SANDBOX);
+        const environment = signed === mismatch ? Environment.PRODUCTION : Environment.SANDBOX;
+        if (signed === 'transaction') return payload(environment);
+        return { environment, originalTransactionId: '123', productId: 'plus_monthly' };
+      });
+      await expect(verifyAppleNotification('envelope', CONFIG)).rejects.toMatchObject({
+        reason: 'invalid_signature',
+      });
+    },
+  );
+  it('does not fall back on an online certificate failure for a notification', async () => {
+    const { spy } = verifiedJWTs(envelope(Environment.SANDBOX));
+    spy.mockRejectedValue(
+      new VerificationException(VerificationStatus.RETRYABLE_VERIFICATION_FAILURE),
+    );
+    await expect(verifyAppleNotification('envelope', CONFIG)).rejects.toMatchObject({
+      reason: 'unavailable',
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
   it.each([Environment.PRODUCTION, Environment.SANDBOX])(
     'uses one verified environment for the entire %s notification',
     async (environment) => {

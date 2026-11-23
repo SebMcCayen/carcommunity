@@ -154,17 +154,21 @@ Keep public billing disabled until sandbox acceptance is complete. Existing
 `environment: sandbox` and `environment: production` remain strict single-environment
 modes. To support App Store customers alongside TestFlight and App Review, use the
 explicit `production-and-sandbox` mode with the real numeric `appAppleId`.
-Production verification runs first. Only Apple's authenticated
-`INVALID_ENVIRONMENT` result permits a second verification against sandbox;
-signature, bundle/app identifier and online certificate failures never do.
-An entire notification (envelope, transaction and renewal) uses one verifier.
+Production verification runs first. Apple's authenticated `INVALID_ENVIRONMENT`
+result permits complete sandbox revalidation. Notifications also retry on
+`INVALID_APP_IDENTIFIER`, because Apple's library checks the optional sandbox
+app ID before environment. The sandbox verifier independently checks the full
+signature, bundle ID and sandbox environment: a production notification with a
+wrong app ID, or any notification with a wrong bundle, remains rejected. Signature
+and online certificate failures never permit fallback. An entire notification
+(envelope, transaction and renewal) uses one verifier.
 
 Sandbox chain hashes remain unchanged. Production chain hashes are SHA-256 of
 `apple:production:<originalTransactionId>`, so an overlapping test identifier
 cannot share ownership or ordering markers with a real purchase. The raw ID/JWS
 is never persisted. A real purchase may replace the same account's sandbox
 membership. Registration of that real purchase atomically adds a backend-only
-`production-account-<SHA256(uid)>` marker to `subscriptionAppleEvents`, carrying
+`production-account-<encoded uid>` marker to `subscriptionAppleEvents`, carrying
 the UID for the existing account-erasure query. Sandbox callables are then rejected
 for that account, even after real access expires; late test notifications cannot
 modify the real subscription. Use a separate CarCommunity account for subsequent
