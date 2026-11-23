@@ -668,23 +668,36 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(runtime.canonicalTarget, inFlight)
     }
 
-    func testCameraRuntimeExtendsOneIdleTimerAcrossGestureFrames() async throws {
+    func testIdleReturnAppliesToOrdinaryMapAndConvoyMe() {
+        XCTAssertTrue(MapHomeMeFollowPolicy.canResumeAfterGesture(
+            compassFollowRequested: true, convoyMeEnabled: false, suspended: true, convoyFocusEnabled: false))
+        XCTAssertTrue(MapHomeMeFollowPolicy.canResumeAfterGesture(
+            compassFollowRequested: false, convoyMeEnabled: true, suspended: true, convoyFocusEnabled: false))
+        XCTAssertFalse(MapHomeMeFollowPolicy.canResumeAfterGesture(
+            compassFollowRequested: true, convoyMeEnabled: false, suspended: true, convoyFocusEnabled: true))
+    }
+
+    func testIdleReturnWaitsForLastGestureAndRestartsAfterAnotherSwipe() async throws {
         let runtime = MapHomeCameraRuntime()
-        var calls = 0
-        runtime.scheduleIdleReturn(after: .seconds(10)) { calls += 1 }
-        let task = try XCTUnwrap(runtime.idleReturnTask)
-        let token = try XCTUnwrap(runtime.idleReturnToken)
-        let originalDeadline = try XCTUnwrap(runtime.idleReturnDeadline)
-        for _ in 0..<120 {
-            runtime.scheduleIdleReturn(after: .seconds(20)) { calls += 1 }
-            XCTAssertEqual(runtime.idleReturnToken, token, "Do not allocate one Task per camera frame")
-        }
-        XCTAssertGreaterThan(try XCTUnwrap(runtime.idleReturnDeadline), originalDeadline)
-        runtime.cancelIdleReturn()
-        await task.value
-        XCTAssertEqual(calls, 0)
-        XCTAssertNil(runtime.idleReturnToken)
-        XCTAssertNil(runtime.idleReturnDeadline)
+        var returns = 0
+        XCTAssertFalse(runtime.beginGesture(.singleTap))
+        XCTAssertTrue(runtime.beginGesture(.pan))
+        XCTAssertTrue(runtime.beginGesture(.pinch))
+        XCTAssertFalse(runtime.endGesture(.pan))
+        runtime.scheduleIdleReturn(after: .zero) { returns += 1 }
+        XCTAssertNil(runtime.idleReturnTask)
+        XCTAssertTrue(runtime.endGesture(.pinch))
+        runtime.scheduleIdleReturn(after: .seconds(10)) { returns += 1 }
+        let firstTimer = try XCTUnwrap(runtime.idleReturnTask)
+
+        XCTAssertTrue(runtime.beginGesture(.pan))
+        await firstTimer.value
+        XCTAssertEqual(returns, 0)
+        XCTAssertTrue(runtime.endGesture(.pan))
+        runtime.scheduleIdleReturn(after: .zero) { returns += 1 }
+        let secondTimer = try XCTUnwrap(runtime.idleReturnTask)
+        await secondTimer.value
+        XCTAssertEqual(returns, 1)
     }
 
     func testCameraRuntimeIdleReturnFiresOnceAndReadsCurrentState() async throws {
@@ -697,7 +710,6 @@ final class MapSurfaceTests: XCTestCase {
         await task.value
         XCTAssertEqual(appliedZoom, 17)
         XCTAssertNil(runtime.idleReturnTask)
-        XCTAssertNil(runtime.idleReturnDeadline)
     }
 
     func testCameraRuntimeRearmsAfterInactivityWithoutAnotherCameraFrame() async throws {
