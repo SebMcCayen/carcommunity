@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 120
     environment: production
     env:
+      NAVIGATION_LOCK: apps/ios/NavigationSDK/Xcode27/Package.resolved
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v5
@@ -42,7 +43,7 @@ jobs:
         run: |
           python3 apps/ios/scripts/release-preflight.py
           if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
-          python3 apps/ios/scripts/navigation-project.py
+          python3 apps/ios/scripts/navigation-project.py --lockfile "$NAVIGATION_LOCK"
       - name: Prepare verified Turf binary cache
         timeout-minutes: 5
         env:
@@ -68,34 +69,12 @@ jobs:
           trap 'rm -f "$HOME/.netrc"' EXIT
           args=(-project apps/ios/KCCNavigation.xcodeproj -scheme KCC
                 -derivedDataPath "$RUNNER_TEMP/ios-release")
-          xcodebuild "${args[@]}" -resolvePackageDependencies
-          lock=apps/ios/KCCNavigation.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-          python3 - "$lock" <<'PYTHON'
-          import json
-          from pathlib import Path
-          import sys
-          resolved = json.loads(Path(sys.argv[1]).read_text())
-          previous = json.loads(Path("apps/ios/NavigationSDK/Package.resolved").read_text())
-          old_pins = {p["identity"]:p for p in previous["pins"]}
-          for pin in resolved["pins"]:
-              assert pin["location"].startswith("https://github.com/")
-              old = old_pins.pop(pin["identity"], None)
-              if old != pin:
-                  print("Resolved change:", pin["identity"], pin["state"])
-          print("Removed:", sorted(old_pins))
-          PYTHON
-          cp "$lock" "$RUNNER_TEMP/Package.resolved"
+          xcodebuild "${args[@]}" -resolvePackageDependencies -onlyUsePackageVersionsFromResolvedFile
+          cmp "$NAVIGATION_LOCK" \
+            apps/ios/KCCNavigation.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
           xcodebuild "${args[@]}" -configuration Release -destination 'generic/platform=iOS' \
             -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO \
             -archivePath "$RUNNER_TEMP/KCC.xcarchive" archive
-      - name: Save the resolved public package lock
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: xcode27-package-lock
-          path: ${{ runner.temp }}/Package.resolved
-          if-no-files-found: ignore
-          retention-days: 1
       - name: Verify the archive and encrypt it for local signing
         run: |
           set -euo pipefail
