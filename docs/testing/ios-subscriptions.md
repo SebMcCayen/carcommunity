@@ -150,11 +150,60 @@ expiry and representation sweeps remain recovery paths, not a replacement for
 testing Apple delivery. This implementation does not fetch missed notification
 history automatically; investigate failed deliveries and replay them before launch.
 
-Keep public billing disabled until sandbox acceptance is complete. For real App
-Store purchases, configure the Production Server URL, production environment and
-real app ID separately from the sandbox test run. The provider configuration
-selects one environment at a time; do not switch a live production backend to
-sandbox while customers are using it.
+Keep public billing disabled until sandbox acceptance is complete. Existing
+`environment: sandbox` and `environment: production` remain strict single-environment
+modes. To support App Store customers alongside TestFlight and App Review, use the
+explicit `production-and-sandbox` mode with the real numeric `appAppleId`.
+Production verification runs first. Apple's authenticated `INVALID_ENVIRONMENT`
+result permits complete sandbox revalidation. Notifications also retry on
+`INVALID_APP_IDENTIFIER`, because Apple's library checks the optional sandbox
+app ID before environment. The sandbox verifier independently checks the full
+signature, bundle ID and sandbox environment: a production notification with a
+wrong app ID, or any notification with a wrong bundle, remains rejected. Signature
+and online certificate failures never permit fallback. An entire notification
+(envelope, transaction and renewal) uses one verifier.
+
+Sandbox chain hashes remain unchanged. Production chain hashes are SHA-256 of
+`apple:production:<originalTransactionId>`, so an overlapping test identifier
+cannot share ownership or ordering markers with a real purchase. The raw ID/JWS
+is never persisted. A real purchase may replace the same account's sandbox
+membership. Registration of that real purchase atomically adds a backend-only
+`production-account-<encoded uid>` marker to `subscriptionAppleEvents`, carrying
+the UID for the existing account-erasure query. Sandbox callables are then rejected
+for that account, even after real access expires; late test notifications cannot
+modify the real subscription. Use a separate CarCommunity account for subsequent
+sandbox testing. This is an account policy, not a receipt field chosen by a client.
+
+Expiry and representation repairs take the same per-account lease as purchase
+verification and recheck the canonical token/expiry before changing records or
+claims. A stale sandbox sweep cannot revoke a replacement production membership.
+
+### Controlled production rollout after merge
+
+1. Keep the existing sandbox configuration during deployment. Deploy exactly
+   `functions:default:subscription.verify,functions:default:subscription.handleAppleNotification,functions:default:subscription.expireLapsed,functions:default:subscription.reconcileEntitlements`.
+   Both sweep functions are included because the shared entitlement writer now
+   serializes their Apple updates with receipt verification. Do not enable the
+   new mode while an older writer is still deployed.
+2. Verify revisions, source, traffic, IAM/runtime preservation and the unchanged
+   inventory outside that allowlist. No new services, secrets, schedules or indexes
+   are required. There is one extra account-marker read per Apple verification,
+   and production registration writes that marker inside the existing transaction.
+3. Update only the Apple map in `config/subscriptionProviders`, preserving Google
+   and other existing settings: `enabled: true`,
+   `environment: production-and-sandbox`, and the verified numeric `appAppleId`.
+4. Configure **both** Production and Sandbox Server URLs as V2 in App Store Connect,
+   pointing to the verified Apple notification endpoint. Confirm signed delivery
+   and keep sandbox/App Review on separate accounts from real customers.
+5. Validate TestFlight purchase/restore/renewal again after activation, then review
+   and release the existing tested app build. This backend contract change does
+   not require an iOS or Android rebuild. After release, verify a real purchase,
+   production notification and server entitlement before expanding rollout.
+
+Rollback may disable Apple billing to investigate a defect, but must not erase
+production-account markers or overwrite established real purchases with sandbox
+data. Existing single-environment modes remain available; do not replace a live
+production configuration with sandbox-only mode.
 
 ## Scope and native parity
 

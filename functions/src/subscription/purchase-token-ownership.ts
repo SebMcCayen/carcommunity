@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
+import { appleProductionAccountMarkerId } from './apple-store-core';
 import {
   PurchaseTokenOwnershipError,
   assertNoDifferentActiveToken,
@@ -22,6 +23,7 @@ import {
   type SubscriptionEntitlement,
   type SubscriptionStatus,
   type SubscriptionTier,
+  type EntitlementRecordInput,
 } from './subscription-core';
 
 const COLLECTION = 'subscriptionPurchaseTokens';
@@ -84,6 +86,9 @@ export async function reservePurchaseVerification(
   const tokenRef = db.collection(COLLECTION).doc(purchaseTokenHash);
   const verificationRef = db.collection(VERIFICATION_COLLECTION).doc(expected.uid);
   const subscriptionRef = db.collection('subscriptions').doc(expected.uid);
+  const productionRef = db
+    .collection('subscriptionAppleEvents')
+    .doc(appleProductionAccountMarkerId(expected.uid));
   const leaseExpiresAt = new Date(now.getTime() + PURCHASE_VERIFICATION_LEASE_MS);
   const reservationId = randomUUID();
 
@@ -91,6 +96,20 @@ export async function reservePurchaseVerification(
     const tokenSnap = await transaction.get(tokenRef);
     const verificationSnap = await transaction.get(verificationRef);
     const subscriptionSnap = await transaction.get(subscriptionRef);
+    const productionSnap = expected.appleEnvironment ? await transaction.get(productionRef) : null;
+    const productionAccount = productionSnap?.data();
+    if (
+      productionSnap?.exists &&
+      (productionAccount?.kind !== 'production-account' ||
+        productionAccount.uid !== expected.uid ||
+        typeof productionAccount.purchaseTokenHash !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(productionAccount.purchaseTokenHash))
+    ) {
+      throw new PurchaseTokenOwnershipError('malformed_record');
+    }
+    if (expected.appleEnvironment === 'sandbox' && productionSnap?.exists) {
+      throw new PurchaseTokenOwnershipError('environment_conflict');
+    }
 
     const tokenDecision = validateTokenOwnership(
       tokenSnap.exists ? tokenSnap.data() : null,
@@ -115,7 +134,14 @@ export async function reservePurchaseVerification(
     }
 
     const current = subscriptionSnap.data();
-    if (current) {
+    // A real first purchase replaces the account's test membership. The marker
+    // also permits retry after a partial production grant, but never a different
+    // active real chain. All decisions share the per-UID verification lease.
+    const replacesSandbox =
+      expected.appleEnvironment === 'production' &&
+      current?.platform === 'apple' &&
+      (!productionSnap?.exists || productionAccount?.purchaseTokenHash === purchaseTokenHash);
+    if (current && !replacesSandbox) {
       const entitlement = storedEntitlement(current.entitlement);
       const status = storedStatus(current.status);
       const tier = storedTier(current.tier);
@@ -138,12 +164,23 @@ export async function reservePurchaseVerification(
         tokenHash: purchaseTokenHash,
         uid: expected.uid,
         productId: expected.productId,
+        ...(expected.appleEnvironment ? { appleEnvironment: expected.appleEnvironment } : {}),
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
     } else {
       transaction.update(tokenRef, {
+        ...(expected.appleEnvironment ? { appleEnvironment: expected.appleEnvironment } : {}),
         ...(tokenDecision === 'update_product' ? { productId: expected.productId } : {}),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    if (expected.appleEnvironment === 'production') {
+      transaction.set(productionRef, {
+        kind: 'production-account',
+        uid: expected.uid,
+        purchaseTokenHash,
+        ...(!productionSnap?.exists ? { createdAt: FieldValue.serverTimestamp() } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
@@ -157,6 +194,44 @@ export async function reservePurchaseVerification(
     });
   });
 
+  return reservationId;
+}
+
+/** Serialize expiry/repair writes with purchases; stale test snapshots cannot
+ * revoke a real purchase that replaced them while a sweep was running. */
+export async function reserveAppleReconciliation(
+  input: EntitlementRecordInput,
+  now: Date,
+): Promise<string> {
+  if (input.platform !== 'apple' || input.purchaseTokenHash === null) {
+    throw new PurchaseTokenOwnershipError('malformed_record');
+  }
+  const ref = db.collection(VERIFICATION_COLLECTION).doc(input.userId);
+  const reservationId = randomUUID();
+  await db.runTransaction(async (transaction) => {
+    const lease = await transaction.get(ref);
+    const subscription = await transaction.get(db.collection('subscriptions').doc(input.userId));
+    const current = subscription.data();
+    if (
+      current?.platform !== 'apple' ||
+      current.purchaseTokenHash !== input.purchaseTokenHash ||
+      storedDate(current.expiresAt)?.getTime() !== input.expiresAt?.getTime()
+    ) {
+      throw new PurchaseTokenOwnershipError('different_active_token');
+    }
+    if (lease.exists) {
+      const until = storedDate(lease.data()?.leaseExpiresAt);
+      if (!until) throw new PurchaseTokenOwnershipError('malformed_record');
+      if (until > now) throw new PurchaseTokenOwnershipError('verification_in_progress');
+    }
+    transaction.set(ref, {
+      uid: input.userId,
+      purchaseTokenHash: input.purchaseTokenHash,
+      reservationId,
+      leaseExpiresAt: Timestamp.fromMillis(now.getTime() + PURCHASE_VERIFICATION_LEASE_MS),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
   return reservationId;
 }
 

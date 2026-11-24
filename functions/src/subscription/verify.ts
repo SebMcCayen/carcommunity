@@ -149,6 +149,12 @@ export const verify = onCall(
           if (error.reason === 'verification_in_progress') {
             throw new HttpsError('aborted', 'Subscription verification is already in progress.');
           }
+          if (error.reason === 'environment_conflict') {
+            throw new HttpsError(
+              'failed-precondition',
+              'Sandbox purchases cannot change an account registered for production purchases.',
+            );
+          }
           throw new HttpsError(
             'failed-precondition',
             'Apple purchase conflicts with active access.',
