@@ -28278,13 +28278,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hantera företag"
+            "value": "Mitt företag"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Manage business"
+            "value": "My business"
           }
         }
       }
@@ -28856,13 +28856,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mina reservationer"
+            "value": "Erbjudanden"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "My reservations"
+            "value": "Offers"
           }
         }
       }
@@ -36530,6 +36530,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manage subscription"
+          }
+        }
+      }
+    },
+    "settingsMenu.notificationInbox": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inkorg"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inbox"
           }
         }
       }

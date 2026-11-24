@@ -14,7 +14,7 @@ import org.junit.runner.RunWith
 class ProfileMenuEntriesTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun accountOrderAndActionsIncludeStandaloneInbox() {
+    @Test fun accountOrderAndActionsIncludeReservationsAndSettings() {
         var entries: List<HubEntry> = emptyList()
         val opened = mutableListOf<ShellRoute>()
         var signedOut = 0
@@ -26,21 +26,21 @@ class ProfileMenuEntriesTest {
         }
         compose.runOnIdle {
             val routes = listOf(ShellRoute.Profile, ShellRoute.Friends, ShellRoute.MyDrives,
-                ShellRoute.PartnerApplication, ShellRoute.Notifications, ShellRoute.Settings)
+                ShellRoute.PartnerApplication, ShellRoute.PartnerReservations, ShellRoute.Settings)
             assertEquals(routes.map { it.name } + "sign_out", entries.map { it.id })
-            assertEquals(listOf(ShellRoute.Notifications.name), entries.filter { it.hasUnread }.map { it.id })
+            assertEquals(listOf(ShellRoute.Settings.name), entries.filter { it.hasUnread }.map { it.id })
             entries.forEach { it.onClick!!.invoke() }
             assertEquals(routes, opened)
             assertEquals(1, signedOut)
             val withPlaces = withSavedPlacesEntry(entries, HubEntry("Saved places", Icons.Filled.Place, {}, id = "saved_places"))
-            assertEquals(listOf("Profile", "Friends", "MyDrives", "saved_places", "PartnerApplication", "Notifications", "Settings", "sign_out"), withPlaces.map { it.id })
+            assertEquals(listOf("Profile", "Friends", "MyDrives", "saved_places", "PartnerApplication", "PartnerReservations", "Settings", "sign_out"), withPlaces.map { it.id })
         }
     }
 
     @Test fun unavailableDestinationsDoNotGetAnUnreadOrClickableEntry() {
         var entries: List<HubEntry> = emptyList()
         compose.setContent {
-            KccTheme { entries = profileMenuEntries(false, false, false, false, true, {}, {}) }
+            KccTheme { entries = profileMenuEntries(false, false, false, false, false, {}, {}) }
         }
         compose.runOnIdle {
             assertEquals(listOf("MyDrives", "Settings", "sign_out"), entries.filter { it.onClick != null }.map { it.id })

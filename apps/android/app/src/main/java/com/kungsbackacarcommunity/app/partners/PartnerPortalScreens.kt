@@ -271,8 +271,8 @@ fun PartnerWorkspaceRoute(repository: PartnerPortalRepository, onBack: () -> Uni
     AeroPage(title = stringResource(R.string.partnerPortal_manage), ownerShortcutEnabled = false, compactTitleWithBack = true) {
         PortalOperationFeedback(operation)
         if (operation.error != null) Button(onClick = { scope.launch { operation.run { workspace = repository.workspace() } } }) { Text(stringResource(R.string.partnerPortal_retry)) }
-        if (workspace?.companies?.isEmpty() == true) Text(stringResource(R.string.partnerPortal_noBusinesses))
-        workspace?.companies.orEmpty().forEach { row ->
+        if (workspace?.activeCompanies?.isEmpty() == true) Text(stringResource(R.string.partnerPortal_noBusinesses))
+        workspace?.activeCompanies.orEmpty().forEach { row ->
             OutlinedCard(onClick = { company = row }, modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     PartnerLogo(row.logoPath)

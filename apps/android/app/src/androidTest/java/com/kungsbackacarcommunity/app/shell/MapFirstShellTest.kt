@@ -1378,7 +1378,7 @@ class MapFirstShellTest {
     }
 
     @Test
-    fun notifications_moveToAvatarMenu_andOpeningInboxClearsOnlyItsBadge() {
+    fun notifications_openFromSettings_andOpeningInboxClearsOnlyItsBadge() {
         val repository = MenuNotificationsRepository()
         setShell(notificationsRepository = repository)
         composeTestRule.onNodeWithTag(MAP_HOME_NOTIFICATIONS_UNREAD_TAG).assertIsDisplayed()
@@ -1395,7 +1395,9 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_back)).performClick()
 
         composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
-        val inbox = composeTestRule.onNodeWithTag("profile_menu_Notifications")
+        composeTestRule.onNodeWithTag("profile_menu_Notifications").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("profile_menu_Settings").performScrollTo().performClick()
+        val inbox = composeTestRule.onNodeWithText(str(R.string.settingsMenu_notificationInbox))
         inbox.performScrollTo().assertIsDisplayed()
         inbox.performClick()
         composeTestRule.onNodeWithText(str(R.string.notifications_title)).assertIsDisplayed()
@@ -1404,6 +1406,8 @@ class MapFirstShellTest {
             assertEquals(1, repository.inboxSubscriptions)
             assertEquals(1, repository.seenCalls)
         }
+        androidx.test.espresso.Espresso.pressBack()
+        composeTestRule.onNodeWithText(str(R.string.settingsMenu_notificationInbox)).assertExists()
         androidx.test.espresso.Espresso.pressBack()
         // System Back schedules the Activity's transition outside Compose's
         // clock; wait for the actual visible destination rather than retrying
@@ -1440,7 +1444,7 @@ class MapFirstShellTest {
         }
         composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
         var previousBottom = 0f
-        for (id in listOf("Profile", "Friends", "MyDrives", "saved_places", "PartnerApplication", "Notifications", "Settings", "sign_out")) {
+        for (id in listOf("Profile", "Friends", "MyDrives", "saved_places", "PartnerApplication", "PartnerReservations", "Settings", "sign_out")) {
             val row = composeTestRule.onNodeWithTag("profile_menu_$id")
             row.assertIsDisplayed()
             val bounds = row.fetchSemanticsNode().boundsInRoot

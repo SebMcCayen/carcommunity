@@ -22,6 +22,21 @@ final class PartnersModelTests: XCTestCase {
         XCTAssertEqual(offer?.offerType, .discountCode)
     }
 
+    func testBusinessMenuRequiresAnActiveCompanyEvenWithAnApprovedApplication() throws {
+        let company = PortalCompany(companyId: "company", name: "Partner", description: nil, phone: nil,
+                                   website: nil, logoPath: nil, status: "active", role: "redeemer")
+        let inactive = PortalCompany(companyId: "other", name: "Old partner", description: nil, phone: nil,
+                                    website: nil, logoPath: nil, status: "inactive", role: "manager")
+        let application = PortalApplication(applicationId: "app", companyName: "Partner", category: "other",
+            organizationNumber: nil, contactName: "Contact", contactEmail: "contact@example.com",
+            contactPhone: nil, website: nil, description: nil, address: nil, publicPhone: nil,
+            selfServiceRequested: true, billboardRequested: false, billboardPlacementRequest: nil,
+            message: nil, status: "approved", reviewReason: nil, logoPreviewBase64: nil)
+        XCTAssertEqual(PortalWorkspace(companies: [], application: nil).menuEntry, .apply)
+        XCTAssertEqual(PortalWorkspace(companies: [inactive], application: application).menuEntry, .application)
+        XCTAssertEqual(PortalWorkspace(companies: [inactive, company], application: nil).menuEntry, .business)
+    }
+
     func testUnknownEnumsDegradeToOther() {
         XCTAssertEqual(PartnerCategory(wireValue: "new-category"), .other)
         XCTAssertEqual(PartnerOfferType(wireValue: nil), .other)

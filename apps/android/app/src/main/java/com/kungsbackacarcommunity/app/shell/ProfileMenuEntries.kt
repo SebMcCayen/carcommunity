@@ -5,7 +5,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -15,8 +15,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import com.google.firebase.FirebaseApp
-import com.google.firebase.auth.FirebaseAuth
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.kungsbackacarcommunity.app.partners.FirebasePartnerPortalRepository
 import kotlinx.coroutines.CancellationException
 import androidx.compose.ui.res.stringResource
@@ -28,10 +29,11 @@ internal fun profileMenuEntries(
     profileAvailable: Boolean,
     friendsAvailable: Boolean,
     partnerApplicationAvailable: Boolean,
-    notificationsAvailable: Boolean,
+    reservationsAvailable: Boolean,
     notificationsUnread: Boolean,
     onOpenRoute: (ShellRoute) -> Unit,
     onSignOut: () -> Unit,
+    partnerLabel: Int = R.string.shell_morePartnerApplication,
 ): List<HubEntry> = listOf(
     HubEntry(stringResource(R.string.shell_moreProfile), Icons.Filled.Person,
         if (profileAvailable) ({ onOpenRoute(ShellRoute.Profile) }) else null, id = ShellRoute.Profile.name),
@@ -39,14 +41,14 @@ internal fun profileMenuEntries(
         if (friendsAvailable) ({ onOpenRoute(ShellRoute.Friends) }) else null, id = ShellRoute.Friends.name),
     HubEntry(stringResource(R.string.shell_moreDrives), Icons.Filled.History,
         { onOpenRoute(ShellRoute.MyDrives) }, id = ShellRoute.MyDrives.name),
-    HubEntry(stringResource(partnerMenuLabel()), Icons.Filled.BusinessCenter,
+    HubEntry(stringResource(partnerLabel), Icons.Filled.BusinessCenter,
         if (partnerApplicationAvailable) ({ onOpenRoute(ShellRoute.PartnerApplication) }) else null,
         id = ShellRoute.PartnerApplication.name),
-    HubEntry(stringResource(R.string.notifications_title), Icons.Filled.Notifications,
-        if (notificationsAvailable) ({ onOpenRoute(ShellRoute.Notifications) }) else null,
-        id = ShellRoute.Notifications.name, hasUnread = notificationsAvailable && notificationsUnread),
+    HubEntry(stringResource(R.string.partnerPortal_reservations), Icons.Filled.QrCode,
+        if (reservationsAvailable) ({ onOpenRoute(ShellRoute.PartnerReservations) }) else null,
+        id = ShellRoute.PartnerReservations.name),
     HubEntry(stringResource(R.string.shell_moreSettings), Icons.Filled.Settings,
-        { onOpenRoute(ShellRoute.Settings) }, id = ShellRoute.Settings.name),
+        { onOpenRoute(ShellRoute.Settings) }, id = ShellRoute.Settings.name, hasUnread = notificationsUnread),
     HubEntry(stringResource(R.string.shell_moreSignOut), Icons.AutoMirrored.Filled.Logout,
         onSignOut, id = "sign_out"),
 )
@@ -59,20 +61,24 @@ internal fun withSavedPlacesEntry(entries: List<HubEntry>, savedPlaces: HubEntry
 }
 
 @Composable
-private fun partnerMenuLabel(): Int {
+internal fun partnerMenuLabel(uid: String): Int {
     val context = LocalContext.current
-    val uid = if (FirebaseApp.getApps(context).isEmpty()) null else FirebaseAuth.getInstance().currentUser?.uid
-    var label by remember(uid) { mutableStateOf(R.string.partnerPortal_apply) }
-    LaunchedEffect(context, uid) {
-        if (uid != null) {
-            try {
-                val workspace = FirebasePartnerPortalRepository.createIfAvailable(context)?.workspace()
-                label = when {
-                    workspace?.companies?.isNotEmpty() == true -> R.string.partnerPortal_manage
-                    workspace?.application != null -> R.string.partnerPortal_application
-                    else -> R.string.partnerPortal_apply
-                }
-            } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var label by remember(uid) { mutableStateOf(R.string.shell_morePartnerApplication) }
+    LaunchedEffect(context, uid, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val workspace = try {
+                FirebasePartnerPortalRepository.createIfAvailable(context)?.workspace()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            label = when {
+                workspace?.activeCompanies?.isNotEmpty() == true -> R.string.partnerPortal_manage
+                workspace?.application != null -> R.string.partnerPortal_application
+                else -> R.string.shell_morePartnerApplication
+            }
         }
     }
     return label

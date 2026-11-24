@@ -224,7 +224,7 @@ fun PartnersRoute(
             onBack = onBack,
             portalActions = {
                 if (portal != null && canAccessMemberOffers) KccOutlinedButton(onClick = { portalPage = "reservations" }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_reservations)) }
-                if (portal != null && workspace?.companies?.isNotEmpty() == true) KccButton(onClick = { portalPage = "workspace" }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_manage)) }
+                if (portal != null && workspace?.activeCompanies?.isNotEmpty() == true) KccButton(onClick = { portalPage = "workspace" }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.partnerPortal_manage)) }
             },
         )
         return

@@ -28,8 +28,10 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material3.Badge
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +52,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -86,6 +89,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     supporterBadgeSetting: @Composable () -> Unit = {},
     membershipMapRingSetting: @Composable () -> Unit = {},
+    onNotifications: (() -> Unit)? = null,
+    notificationsUnread: Boolean = false,
 ) {
     val context = LocalContext.current
     val instagramUrl = stringResource(R.string.url_instagram)
@@ -123,27 +128,6 @@ fun SettingsScreen(
                 Icons.Filled.Map,
                 onClick = { openDefaultMapAppSettings(context) },
             )
-            if (onNotificationSettings != null) {
-                SettingsDestinationRow(
-                    stringResource(R.string.settingsMenu_notificationSettings),
-                    Icons.Filled.NotificationsActive,
-                    onNotificationSettings,
-                )
-            }
-            if (onBlockedUsers != null) {
-                SettingsDestinationRow(
-                    stringResource(R.string.settings_blockedUsers),
-                    Icons.Filled.Block,
-                    onBlockedUsers,
-                )
-            }
-            if (onPartnerStats != null) {
-                SettingsDestinationRow(
-                    stringResource(R.string.settingsMenu_partnerStats),
-                    Icons.Filled.BarChart,
-                    onPartnerStats,
-                )
-            }
             if (onFeedback != null) {
                 SettingsDestinationRow(
                     stringResource(R.string.settingsMenu_feedback),
@@ -158,6 +142,44 @@ fun SettingsScreen(
                     onDeleteAccount,
                     destructive = true,
                 )
+            }
+        }
+
+        if (onNotifications != null || onNotificationSettings != null) {
+            SettingsGroup(stringResource(R.string.notifications_title)) {
+                if (onNotifications != null) {
+                    SettingsDestinationRow(
+                        stringResource(R.string.settingsMenu_notificationInbox),
+                        Icons.Filled.Notifications,
+                        onNotifications,
+                        hasUnread = notificationsUnread,
+                    )
+                }
+                if (onNotificationSettings != null) {
+                    SettingsDestinationRow(
+                        stringResource(R.string.settingsMenu_notificationSettings),
+                        Icons.Filled.NotificationsActive,
+                        onNotificationSettings,
+                    )
+                }
+            }
+        }
+        if (onBlockedUsers != null || onPartnerStats != null) {
+            SettingsGroup(stringResource(R.string.privacySettings_title)) {
+                if (onBlockedUsers != null) {
+                    SettingsDestinationRow(
+                        stringResource(R.string.settings_blockedUsers),
+                        Icons.Filled.Block,
+                        onBlockedUsers,
+                    )
+                }
+                if (onPartnerStats != null) {
+                    SettingsDestinationRow(
+                        stringResource(R.string.privacySettings_partnerStatsTitle),
+                        Icons.Filled.BarChart,
+                        onPartnerStats,
+                    )
+                }
             }
         }
 
@@ -349,6 +371,7 @@ private fun SettingsDestinationRow(
     icon: ImageVector,
     onClick: () -> Unit,
     destructive: Boolean = false,
+    hasUnread: Boolean = false,
 ) {
     val tint =
         if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
@@ -365,6 +388,10 @@ private fun SettingsDestinationRow(
                 style = MaterialTheme.typography.bodyLarge,
                 color = tint,
             )
+            if (hasUnread) {
+                val unread = stringResource(R.string.chatHub_tabUnread)
+                Badge(Modifier.semantics { contentDescription = unread })
+            }
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
